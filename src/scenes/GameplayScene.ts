@@ -13,7 +13,8 @@ import { Scene } from '../core/Scene';
 import type { InputManager } from '../core/input/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { frameTime } from '../utils';
-import { followCamera, type WorldRect } from './interiorCamera';
+import { followCamera } from './interiorCamera';
+import type { WorldRect } from '../core/rendering/worldRect';
 import type { ArrivalLoader } from './ArrivalLoader';
 import { intoxicationCameraOffset } from '../core/combat/Intoxication';
 import type { GameMap } from '../map/GameMap';
@@ -351,6 +352,21 @@ export abstract class GameplayScene extends Scene {
       geometry.hotbar.strip,
       ...frame.dock.values(),
     ].map((rect) => toCssRect(rect, frame.uiScale));
+  }
+
+  /**
+   * The HUD's fixed chrome in CSS pixels (the unit frames, the minimap and
+   * the hotbar), as last drawn: what a camera framing keeps the world it must
+   * show clear of. The dock's buttons are left out, since they pulse and
+   * bounce and a framing that followed them would never settle.
+   */
+  protected hudFramingKeepoutsCss(): Rect[] {
+    const frame = this.hud.frame;
+    if (frame === null) return [];
+    const { geometry } = frame;
+    return [geometry.framesBlock, geometry.miniMap, geometry.hotbar.strip].map((rect) =>
+      toCssRect(rect, frame.uiScale),
+    );
   }
 
   /** Where flying coins and items land: the coin pill and the Bag button as last drawn. */

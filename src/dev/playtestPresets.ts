@@ -4,6 +4,7 @@ import type { StatId } from '../core/party/stats';
 import type { SkillId } from '../core/skills/SkillManager';
 import type { AbilityId } from '../core/skills/AbilityManager';
 import type { MobKind } from '../levels/mobKinds';
+import type { GauntletBossType } from '../map/bossRoomSizes';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { MercenaryTemplateId } from '../core/party/mercenaryTemplates';
@@ -107,12 +108,22 @@ export interface PlaytestContractsSetup {
   readonly lastSpotAt?: BriarHollowBuildingId;
 }
 
+/** Deinonychus not yet earned, earned but waiting on a summon, or already out. */
+export type PlaytestDeinonychus = 'locked' | 'unlocked' | 'out';
+
 export interface PlaytestPreset {
   readonly id: string;
   /** Printed by the npm script when it lists what can be played. */
   readonly description: string;
   readonly levelId: LevelId;
   readonly spawn: PlaytestSpawn;
+  /**
+   * Where Deinonychus stands on the first frame. He comes from the chest the
+   * `dungeon_kills_200` achievement awards, so a preset says whether the run
+   * it stands in for has earned him yet, and `out` puts him beside the cat
+   * rather than waiting on a summon.
+   */
+  readonly deinonychus: PlaytestDeinonychus;
   /** Applied to `Settings` before the floor is built. Omitted presets keep the player's own choice. */
   readonly difficulty?: Difficulty;
   /** Ability levels, shared by both crawlers through one AbilityManager. */
@@ -125,7 +136,7 @@ export interface PlaytestPreset {
    * Its room seals shut on skip like any other win: revealed on the minimap,
    * no chest guard, no hard-mode healer spawned for a boss that was never there.
    */
-  readonly preDefeatedBossTypes?: readonly MobKind[];
+  readonly preDefeatedBossTypes?: readonly GauntletBossType[];
   /**
    * Drops the party into the doomsday finale at this stage, with a full
    * countdown and the Krasue Murders closed behind it at the Lich's death.
@@ -135,8 +146,6 @@ export interface PlaytestPreset {
   readonly spiderQuestAwaitingHacking?: boolean;
   /** A Barracks hire already under contract for this floor, standing beside the party. */
   readonly hire?: MercenaryTemplateId;
-  /** Deinonychus already out beside the cat on the first frame, rather than waiting on a summon. */
-  readonly deinonychusOut?: boolean;
   /** The party put down on the circus grounds instead of at `spawn`. */
   readonly spawnAtCircus?: boolean;
   /**
@@ -172,6 +181,7 @@ const TRASH_GREMLIN: PlaytestPreset = {
   id: 'trash_gremlin',
   description: 'Safe room just before the Trash Gremlin',
   levelId: 'level1',
+  deinonychus: 'locked',
   spawn: { kind: 'safeRoomBefore', bossType: 'trash_gremlin' },
   abilityLevels: { seismic_stomp: 3, magic_missile: 3, energy_shield: 3 },
   human: {
@@ -203,11 +213,13 @@ const TRASH_GREMLIN: PlaytestPreset = {
   },
 };
 
-const BIG_ROOSTER: PlaytestPreset = {
-  id: 'big_rooster',
-  description: 'Safe room just before Big Rooster',
+const KRAKEN: PlaytestPreset = {
+  id: 'kraken',
+  description: 'Safe room just before the Kraken',
   levelId: 'level1',
-  spawn: { kind: 'safeRoomBefore', bossType: 'big_rooster' },
+  deinonychus: 'locked',
+  spawn: { kind: 'safeRoomBefore', bossType: 'kraken' },
+  preDefeatedBossTypes: ['trash_gremlin'],
   abilityLevels: { seismic_stomp: 4, magic_missile: 4, energy_shield: 3 },
   human: {
     level: 11,
@@ -245,6 +257,7 @@ const LEVEL2: PlaytestPreset = {
   id: 'level2',
   description: 'Start of the second floor',
   levelId: 'level2',
+  deinonychus: 'unlocked',
   spawn: { kind: 'mapStart' },
   abilityLevels: { seismic_stomp: 5, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -265,9 +278,7 @@ const LEVEL2: PlaytestPreset = {
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
-      { id: 'gym_bench_press', quantity: 2 },
-      { id: 'gym_treadmill', quantity: 2 },
+      { id: 'fire_axe', quantity: 1 },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -285,20 +296,28 @@ const LEVEL2: PlaytestPreset = {
     ],
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
-      { id: 'gym_bench_press', quantity: 1 },
-      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'ink_dipped_claws', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'plumed_coat', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
     ],
   },
 };
 
-const KRAKAREN: PlaytestPreset = {
-  id: 'krakaren',
-  description: 'Safe room just before the Krakaren Clone',
+/** Floor 2's opening party, put down in the safe room guarding the power lab. */
+const ELECTRIC_GOBLIN: PlaytestPreset = {
+  ...LEVEL2,
+  id: 'electric_goblin',
+  description: 'Safe room just before the Current Goblin',
+  spawn: { kind: 'safeRoomBefore', bossType: 'electric_goblin' },
+};
+
+const BIG_ROOSTER: PlaytestPreset = {
+  id: 'big_rooster',
+  description: 'Safe room just before Big Rooster',
   levelId: 'level2',
-  spawn: { kind: 'safeRoomBefore', bossType: 'krakaren_clone' },
+  deinonychus: 'unlocked',
+  spawn: { kind: 'safeRoomBefore', bossType: 'big_rooster' },
+  preDefeatedBossTypes: ['electric_goblin'],
   abilityLevels: { seismic_stomp: 6, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 17,
@@ -312,15 +331,14 @@ const KRAKAREN: PlaytestPreset = {
       { id: 'goblin_dynamite', quantity: 24 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
-      { id: 'gym_bench_press', quantity: 2 },
-      { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
+      { id: 'fire_axe', quantity: 1 },
+      { id: 'lineman_boots', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -338,20 +356,25 @@ const KRAKAREN: PlaytestPreset = {
     ],
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
-      { id: 'gym_bench_press', quantity: 1 },
-      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'ink_dipped_claws', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'plumed_coat', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
     ],
   },
 };
 
+/**
+ * The spider lab hangs off the chain of rooms between the Current Goblin and
+ * Big Rooster's gym, so this party has beaten floor 1's two bosses and the
+ * Current Goblin, and carries none of Big Rooster's rewards or gym equipment.
+ */
 const SPIDER: PlaytestPreset = {
   id: 'spider',
   description: "In the spider lab's station, Dr. Moult waiting at his terminal",
   levelId: 'level2',
+  deinonychus: 'unlocked',
   spawn: { kind: 'spiderLabStation' },
+  preDefeatedBossTypes: ['electric_goblin'],
   spiderQuestAwaitingHacking: true,
   abilityLevels: { seismic_stomp: 6, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -366,15 +389,14 @@ const SPIDER: PlaytestPreset = {
       { id: 'health_potion', quantity: 34 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
-      { id: 'gym_bench_press', quantity: 2 },
-      { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
+      { id: 'fire_axe', quantity: 1 },
+      { id: 'lineman_boots', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -392,11 +414,9 @@ const SPIDER: PlaytestPreset = {
     ],
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
-      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'ink_dipped_claws', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'plumed_coat', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
-      { id: 'gym_bench_press', quantity: 1 },
     ],
   },
 };
@@ -405,6 +425,7 @@ const LEVEL3: PlaytestPreset = {
   id: 'level3',
   description: 'Third floor town',
   levelId: 'level3',
+  deinonychus: 'unlocked',
   spawn: { kind: 'mapStart' },
   abilityLevels: { seismic_stomp: 7, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -455,68 +476,6 @@ const LEVEL3: PlaytestPreset = {
 };
 
 /**
- * The antechamber outside the Iron Colosseum, with the party that would plausibly
- * be standing in it.
- *
- * Levelled and kitted past the Krakaren, because that is the only order in which
- * this fight can be reached — the arena is sited in the free region past the
- * gauntlet — and carrying gym barriers, which are the item half of the ball's
- * counterplay and are otherwise several rooms behind on floor 1.
- */
-const SWINE: PlaytestPreset = {
-  id: 'swine',
-  description: 'Antechamber outside the Ball of Swine arena',
-  levelId: 'level2',
-  spawn: { kind: 'safeRoomBefore', bossType: 'ball_of_swine' },
-  abilityLevels: { seismic_stomp: 7, magic_missile: 7, energy_shield: 4 },
-  human: {
-    level: 18,
-    xpProgress: 0.5,
-    coins: 1620,
-    baseStats: { melee: 13, health: 24, evasiveness: 11, explosivesHandling: 1 },
-    skillLevels: { pugilism: 3 },
-    hotbar: [
-      { id: 'seismic_stomp_tome', quantity: 1 },
-      { id: 'rattlestick_sling', quantity: 1 },
-      { id: 'health_potion', quantity: 30 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
-      { id: 'gym_bench_press', quantity: 4 },
-    ],
-    bag: [
-      { id: 'scrapmail_vest', quantity: 1, equipped: true },
-      { id: 'patched_duster', quantity: 1, equipped: true },
-      { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
-      { id: 'gym_treadmill', quantity: 4 },
-      { id: 'gym_dumbbell', quantity: 4 },
-      { id: 'goblin_dynamite', quantity: 8 },
-      { id: 'jugg_juice', quantity: 2 },
-      { id: 'speed_fizz', quantity: 2 },
-    ],
-  },
-  cat: {
-    level: 19,
-    xpProgress: 0.5,
-    coins: 1620,
-    baseStats: { melee: 3, magic: 20, health: 2, evasiveness: 61 },
-    skillLevels: { nine_lives: 1 },
-    hotbar: [
-      { id: 'magic_missile_tome', quantity: 1 },
-      { id: 'health_potion', quantity: 30 },
-      { id: 'gym_treadmill', quantity: 4 },
-    ],
-    bag: [
-      { id: 'scroll_of_confusing_fog', quantity: 6 },
-      { id: 'cockscomb_crest', quantity: 1, equipped: true },
-      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'plumed_coat', quantity: 1, equipped: true },
-      { id: 'nimble_bangle', quantity: 1, equipped: true },
-      { id: 'gym_bench_press', quantity: 4 },
-    ],
-  },
-};
-
-/**
  * Third floor town with both crawlers already carrying the full enchanted
  * gear set, so every new piece — plus the slingshot — can be equipped, compared
  * in the Equipment tab, and tooltip-checked in one boot without farming drops.
@@ -525,6 +484,7 @@ const GEAR: PlaytestPreset = {
   id: 'gear',
   description: 'Third floor town, both crawlers kitted in the enchanted gear',
   levelId: 'level3',
+  deinonychus: 'unlocked',
   spawn: { kind: 'mapStart' },
   abilityLevels: { seismic_stomp: 7, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -652,67 +612,59 @@ const CLUB_STAT_BOOST: PlaytestPreset = {
 /**
  * The nursery, on floor 1, where the defense quest now sits.
  *
- * Its own preset rather than a note to walk there from the `big_rooster` one: the
+ * Its own preset rather than a note to walk there from the `kraken` one: the
  * nursery is a room every crawler walks through between the two bosses, and its
  * whole shape — the grates, the wave the goblin mother offers, the boards that
  * go up only for a party that takes it — is visible only from inside the room.
  * Finding it from the gateway safe room is several minutes of walking every
- * time. The loadout is the `big_rooster` party, which is who meets it.
+ * time. The loadout is the `kraken` party, which is who meets it.
  */
 const NURSERY: PlaytestPreset = {
-  ...BIG_ROOSTER,
+  ...KRAKEN,
   id: 'nursery',
-  description: 'Inside the goblin mother’s nursery, between the Trash Gremlin and Big Rooster',
+  description: 'Inside the goblin mother’s nursery, between the Trash Gremlin and the Kraken',
   spawn: { kind: 'questRoomEntrance' },
 };
 
 /**
  * Inside the first clogged bathroom on floor 2, by its way in, with the
- * floor's opening party. The bathrooms sit halfway along the pre-Krakaren
- * branches, a few rooms' walk from the start, and the queue, the plumber and
+ * floor's opening party. The bathrooms sit halfway along the branches to the
+ * Current Goblin, a few rooms' walk from the start, and the queue, the plumber and
  * the pipe wall are only visible from inside.
  */
 const BATHROOM: PlaytestPreset = {
   ...LEVEL2,
   id: 'bathroom',
-  description: 'Inside the clogged bathroom halfway to the Krakaren Clone, plumbing still broken',
+  description: 'Inside the clogged bathroom halfway to the Current Goblin, plumbing still broken',
   spawn: { kind: 'bathroomEntrance' },
 };
 
 /**
  * Floor 2's stealth gate room, standing in front of the gate guard with the
  * gate locked and the prison door in the north wall. The room sits halfway
- * between the Krakaren and the swine gauntlet, so the party is the `krakaren`
- * one with the Krakaren skipped and marked won.
+ * between the Current Goblin and Big Rooster's gym, so the party is the
+ * `big_rooster` one with the Current Goblin skipped and marked won.
  */
 const PRISON: PlaytestPreset = {
-  ...KRAKAREN,
+  ...BIG_ROOSTER,
   id: 'prison',
-  description: 'Stealth gate room past the Krakaren, in front of the gate guard, gate locked',
+  description: 'Stealth gate room past the Current Goblin, in front of the gate guard, gate locked',
   spawn: { kind: 'stealthGateRoom' },
-  preDefeatedBossTypes: ['krakaren_clone'],
 };
 
 /**
- * Floor 2, past the Krakaren, hard difficulty: the fairy encounter band the
- * fairness doc gates against. Reuses the `krakaren` party rather than a fresh
- * one — that gear and level is what a crawler actually has by this point in
- * the floor, and the fairies are meant to be fought with it, not a party
- * built to make them trivial.
- *
- * The Krakaren's own safe room only ever guards the room before it, so
- * "past" it is expressed by the safe room the swine gauntlet keeps at its own
- * gate — the nearest landmark inside the post-Krakaren region — with the
- * Krakaren itself skipped and marked won so its room reads the same as it
- * would to a crawler who actually beat it.
+ * Floor 2, past the Current Goblin, hard difficulty: the fairy encounter band
+ * the fairness doc gates against. Reuses the `big_rooster` party rather than a
+ * fresh one — that gear and level is what a crawler actually has by this point
+ * in the floor, and the fairies are meant to be fought with it, not a party
+ * built to make them trivial. The Current Goblin is skipped and marked won so
+ * his room reads the same as it would to a crawler who actually beat him.
  */
 const FAIRIES: PlaytestPreset = {
-  ...KRAKAREN,
+  ...BIG_ROOSTER,
   id: 'fairies',
-  description: 'Floor 2, past the Krakaren, hard difficulty — the fairy encounter band',
-  spawn: { kind: 'safeRoomBefore', bossType: 'ball_of_swine' },
+  description: 'Floor 2, past the Current Goblin, hard difficulty — the fairy encounter band',
   difficulty: 'hard',
-  preDefeatedBossTypes: ['krakaren_clone'],
 };
 
 /**
@@ -739,7 +691,7 @@ const COMPANIONS_INDOORS: PlaytestPreset = {
     'Third floor town, a hire under contract and Deinonychus out, for taking both indoors',
   abilityLevels: { ...LEVEL3.abilityLevels, deinonychus: 5 },
   hire: 'crush',
-  deinonychusOut: true,
+  deinonychus: 'out',
 };
 
 /** How many of each raw/refined resource the Briar Hollow preset starts with. */
@@ -1089,19 +1041,28 @@ const SPIDER_HALLWAY: PlaytestPreset = {
   spiderQuestAwaitingHacking: false,
 };
 
-/** Floor 1 from its own start, with the `big_rooster` preset's party to survive what comes. */
+/**
+ * Floor 1 from its own start, with the `kraken` preset's party to survive what
+ * comes, less the Trash Gremlin's drop, since he is still ahead of them.
+ */
 const LEVEL1: PlaytestPreset = {
-  ...BIG_ROOSTER,
+  ...KRAKEN,
   id: 'level1',
-  description: "Start of the first floor, the big_rooster preset's party",
+  description:
+    "Start of the first floor, the kraken preset's party without the Trash Gremlin's drop",
   spawn: { kind: 'mapStart' },
+  preDefeatedBossTypes: [],
+  human: {
+    ...KRAKEN.human,
+    bag: KRAKEN.human.bag.filter((stack) => stack.id !== 'scrapmail_vest'),
+  },
 };
 
-/** Floor 1 a few steps short of its stairwell, with the `big_rooster` preset's party, for watching a descent. */
+/** Floor 1 a few steps short of its stairwell, with the `kraken` preset's party, for watching a descent. */
 const STAIRWELL: PlaytestPreset = {
-  ...BIG_ROOSTER,
+  ...KRAKEN,
   id: 'stairwell',
-  description: "A few tiles short of the first floor's stairwell, the big_rooster preset's party",
+  description: "A few tiles short of the first floor's stairwell, the kraken preset's party",
   spawn: { kind: 'stairwellApproach' },
 };
 
@@ -1123,13 +1084,13 @@ const CASINO_FLOOR: PlaytestPreset = {
 
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   TRASH_GREMLIN,
-  BIG_ROOSTER,
+  KRAKEN,
   NURSERY,
   LEVEL2,
   BATHROOM,
-  KRAKAREN,
   PRISON,
-  SWINE,
+  ELECTRIC_GOBLIN,
+  BIG_ROOSTER,
   SPIDER,
   SPIDER_HALLWAY,
   LEVEL3,

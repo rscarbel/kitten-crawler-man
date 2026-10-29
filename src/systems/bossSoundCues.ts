@@ -1,13 +1,19 @@
 /**
- * Which recordings play for each sound Big Rooster's flock and the Trash
- * Gremlin raise. Each play picks one of the cue's takes at random; a cue with
- * no takes is silent for that creature. Both bosses live on floor 1, so every
- * id here is in the `level1` group of `src/audio/sfxGroups.ts`.
+ * Which recordings play for each sound Big Rooster's flock, the Trash Gremlin
+ * and the Current Goblin raise. Each play picks one of the cue's takes at
+ * random; a cue with no takes is silent for that creature. The Trash Gremlin's
+ * ids are in the `level1` group of `src/audio/sfxGroups.ts`, and the roosters'
+ * and the Current Goblin's in `level2`.
  */
 
 import type { SoundId } from '../audio/sounds';
-import type { RoosterSoundCue, TrashGremlinSoundCue } from '../creatures/creatureSoundCues';
+import type {
+  ElectricGoblinSoundCue,
+  RoosterSoundCue,
+  TrashGremlinSoundCue,
+} from '../creatures/creatureSoundCues';
 import type { RoosterBuild } from '../sprites/roosterSprite';
+import { GYM_CUES } from './bossRooms/gymSoundCues';
 
 const ROOSTER_PECKS = [
   'rooster_peck_1',
@@ -56,6 +62,7 @@ function minionCues(
     clubImpact: [],
     ruffle: ROOSTER_RUFFLES,
     step: ROOSTER_STEPS,
+    kick: GYM_CUES.dynamiteKick.takes,
   } satisfies Record<RoosterSoundCue, readonly SoundId[]>;
 }
 
@@ -75,6 +82,7 @@ export const ROOSTER_CUES = {
     clubImpact: ['dumbbell_club_impact_1', 'dumbbell_club_impact_2', 'dumbbell_club_impact_3'],
     ruffle: ROOSTER_RUFFLES,
     step: ROOSTER_STEPS,
+    kick: GYM_CUES.dynamiteKick.takes,
   },
   little: minionCues(LITTLE_CLUCKS),
   bent: minionCues(BENT_CLUCKS),
@@ -105,6 +113,37 @@ export const TRASH_GREMLIN_CUES = {
   shriek: ['trash_gremlin_summon_shriek_1', 'trash_gremlin_summon_shriek_2'],
   cackle: ['trash_gremlin_cackle_1', 'trash_gremlin_cackle_2', 'trash_gremlin_cackle_3'],
 } as const satisfies Record<TrashGremlinSoundCue, readonly SoundId[]>;
+
+/**
+ * What the Current Goblin plays for each of his cues, plus the two that play
+ * on `bossDefeated`: his dying cry and the lab's power going down with him.
+ */
+export const ELECTRIC_GOBLIN_CUES = {
+  grenadeBurst: ['shock_grenade_burst_1', 'shock_grenade_burst_2', 'shock_grenade_burst_3'],
+  chargeWindup: ['puddle_charge_windup'],
+  // Played once from the plunge rather than looped: the charge lasts three
+  // seconds and the recording four, so its last second outlasts the charge.
+  puddleCharged: ['puddle_electrified_loop'],
+  swipe: ['rod_swipe_shock_1', 'rod_swipe_shock_2', 'rod_swipe_shock_3'],
+  block: ['rod_block_spark_1', 'rod_block_spark_2'],
+  slam: ['rod_slam_wave_1', 'rod_slam_wave_2', 'rod_slam_wave_3'],
+  chargeSparks: ['electric_goblin_spark_buzz'],
+  puddleArc: ['electric_goblin_arc_burst'],
+  laugh: [
+    'electric_goblin_laugh_1',
+    'electric_goblin_laugh_2',
+    'electric_goblin_laugh_3',
+    'electric_goblin_laugh_4',
+  ],
+  hurt: [
+    'electric_goblin_hurt_1',
+    'electric_goblin_hurt_2',
+    'electric_goblin_hurt_3',
+    'electric_goblin_hurt_4',
+  ],
+  death: ['electric_goblin_death'],
+  labPowerDown: ['electric_goblin_power_down'],
+} as const satisfies Record<ElectricGoblinSoundCue | 'death' | 'labPowerDown', readonly SoundId[]>;
 
 /** A trash pile bursting open as its roach comes out, played at the pile. */
 export const TRASH_PILE_ROACH_BURST = [

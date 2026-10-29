@@ -6,6 +6,7 @@ import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
 import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
 import { TILE_SIZE } from '../core/constants';
+import { DYN_FRICTION, launchSpeedFor, slideDistance } from './dynamiteSlide';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { gearModifiers } from '../gear/gearHooks';
@@ -36,6 +37,13 @@ import {
   SCORCH_TOTAL_FRAMES,
 } from '../sprites/dynamiteExplosion';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type {
+  ExplosiveSource,
+  ExplosiveVelocity,
+  LiveBombId,
+  LiveExplosive,
+  LiveStickId,
+} from './ExplosiveSource';
 import {
   GAS_CYLINDER_CRAWLER_DAMAGE,
   GAS_CYLINDER_MOB_DAMAGE_FRACTION,
@@ -87,21 +95,6 @@ const CHARGE_TICK_THICKNESS = 1;
 const CHARGE_POWER_LABEL = ['Throw', 'Power'] as const;
 const CHARGE_DANGER_LABEL = ['⚠', 'Danger'] as const;
 
-/**
- * How far a stick launched at `speed` px/frame slides before it stops, on open
- * floor. Friction takes the same share of its speed every frame, so the
- * distance is a geometric series; the last sliver below {@link DYN_STOP} is
- * under a pixel and ignored.
- */
-function slideDistance(speed: number): number {
-  return speed / (1 - DYN_FRICTION);
-}
-
-/** The launch speed that slides a stick `distance` px on open floor; the inverse of {@link slideDistance}. */
-function launchSpeedFor(distance: number): number {
-  return distance * (1 - DYN_FRICTION);
-}
-
 /** Frames of charge after which the stick goes off in the thrower's hand. */
 const DYN_EXPLODE_HAND = 300;
 /** Frames a thrown or dropped stick burns before it goes off. */
@@ -112,7 +105,6 @@ const DYN_SPEED_MIN = 2.0;
 const DYN_SPEED_MAX = 23.1;
 /** Share of its speed a stick keeps off a wall. */
 const DYN_BOUNCE = 0.6;
-const DYN_FRICTION = 0.88;
 /** Speed (px/frame) below which a stick comes to rest. */
 const DYN_STOP = 0.08;
 /** Speed (px/frame) below which dynamite transitions from flying to sliding. */
@@ -288,6 +280,7 @@ export function dynamiteDamageToMob(
 }
 
 interface LiveDynamite {
+  readonly id: LiveStickId;
   x: number;
   y: number;
   vx: number;
@@ -325,6 +318,7 @@ type BlastCharge = Pick<
  * the way, and it goes off on the frame it gets there.
  */
 interface LiveBomb {
+  readonly id: LiveBombId;
   /** Where its ground point starts: the thrower's centre, the same as a stick's body. */
   readonly fromX: number;
   readonly fromY: number;
@@ -405,7 +399,7 @@ const BLAST_LIGHT_REACH_SCALE = 1.5;
 /** The least a blast lights, in tiles, however small its radius. */
 const BLAST_LIGHT_MIN_REACH_TILES = 3;
 
-export class DynamiteSystem implements GameSystem {
+export class DynamiteSystem implements GameSystem, ExplosiveSource {
   private _charging:
     | (HeldExplosive & {
         hotbarIdx: number;
@@ -426,6 +420,11 @@ export class DynamiteSystem implements GameSystem {
   private scorches: ScorchMark[] = [];
   private blastCount = 0;
   private bombsThrown = 0;
+  private sticksLit = 0;
+  /** {@link liveExplosives}' answer, rebuilt at most once a frame however many mobs ask. */
+  private explosivesSeen: LiveExplosive[] = [];
+  /** The {@link frame} {@link explosivesSeen} was built on, or null once a kick has moved a stick since. */
+  private explosivesSeenFrame: number | null = null;
   /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
   /** The kind of the latest blast, for whatever sounds {@link explosionSoundPending}. */
@@ -489,6 +488,7 @@ export class DynamiteSystem implements GameSystem {
     this.explosions = [];
     this.scorches = [];
     this.lastBlastFrame = new WeakMap<Mob, number>();
+    this.explosivesSeenFrame = null;
   }
 
   /**
@@ -536,6 +536,55 @@ export class DynamiteSystem implements GameSystem {
       });
     }
     return points;
+  }
+
+  liveExplosives(): readonly LiveExplosive[] {
+    if (this.explosivesSeenFrame === this.frame) return this.explosivesSeen;
+    const seen: LiveExplosive[] = [];
+    for (const stick of this.liveDynamites) {
+      seen.push({
+        kind: 'stick',
+        id: stick.id,
+        x: stick.x,
+        y: stick.y,
+        fuseFramesLeft: stick.fuseFrames,
+        blastRadiusPx: DYN_RADIUS + stick.radiusBonusPx,
+        owner: 'party',
+        grounded: stick.lobFrom === null || stick.lobFrame >= LOB_FRAMES,
+      });
+    }
+    for (const bomb of this.liveBombs) {
+      seen.push({
+        kind: 'bomb',
+        id: bomb.id,
+        x: bomb.landX,
+        y: bomb.landY,
+        fuseFramesLeft: bomb.flightFrames - bomb.frame,
+        blastRadiusPx: DYN_RADIUS + bomb.radiusBonusPx,
+        owner: 'party',
+      });
+    }
+    this.explosivesSeen = seen;
+    this.explosivesSeenFrame = this.frame;
+    return seen;
+  }
+
+  /**
+   * Sends a lit stick off again from where it lies, drawn in the air the way a
+   * thrown one is, sliding and bouncing on the same physics, its fuse still
+   * burning toward the same blast.
+   */
+  kick(id: LiveStickId, velocity: ExplosiveVelocity): boolean {
+    const stick = this.liveDynamites.find((dyn) => dyn.id === id);
+    if (stick === undefined) return false;
+    stick.vx = velocity.vx;
+    stick.vy = velocity.vy;
+    stick.state = 'flying';
+    stick.lobFrom = { x: stick.x, y: stick.y };
+    stick.lobFrame = 0;
+    stick.lobArc = lobArcTiles(velocity.vx, velocity.vy);
+    this.explosivesSeenFrame = null;
+    return true;
   }
 
   /** A blast lights the room it goes off in, dying away with its fireball. */
@@ -664,7 +713,9 @@ export class DynamiteSystem implements GameSystem {
   private stickFrom(thrower: Crawler, speed: number): LiveDynamite {
     const handling = thrower.explosivesHandling;
     const thrown = speed > 0;
+    this.sticksLit++;
     return {
+      id: `stick_${this.sticksLit}`,
       x: thrower.x + HALF_TILE,
       y: thrower.y + HALF_TILE,
       vx: thrown ? thrower.facingX * speed : 0,
@@ -734,6 +785,7 @@ export class DynamiteSystem implements GameSystem {
     const seed = this.bombsThrown * BLAST_SEED_STRIDE;
     this.throwFromHand(thrower, landing, (_ticksPending, hand) => {
       this.liveBombs.push({
+        id: `bomb_${this.bombsThrown}`,
         fromX,
         fromY,
         landX: landing.x,

@@ -114,6 +114,14 @@ Hard rules. Every one of these is asserted by `verify:difficulty`.
 - **Avoidance by movement alone must always remain possible.** Scaling may shrink the
   margin; it may never close it. Damage that is undodgeable once you are already inside
   it — flame patches, radial bursts — stays flat and does not scale at all.
+- **Every ground warning is red.** A telegraph on the floor (a landing ring, a lane,
+  a cone, a charge zone, a travelling band) is drawn through the painters in
+  `src/sprites/dangerTelegraph.ts`, which take no colour and paint in
+  `GROUND_WARNING_INK` (`src/ui/theme/worldInk.ts`). A player who has learned one
+  warning can read every other: a boss's own colour (the Current Goblin's electric
+  blue, a fire fairy's orange) belongs on the effect drawn over the warning, never on
+  the warning itself. A shadow can say where something falls, but it is not the
+  warning; a red one is drawn as well.
 
 **Statuses that scale incoming damage.** A status changes the damage its carrier
 takes only through the `incomingDamageScale` of its entry in `STATUS_DEFS`
@@ -146,7 +154,7 @@ limits on it live in `scripts/verify-difficulty.ts`, under _explosives handling_
 - **`ON_CURVE_BLAST_MAX_OVERKILL`** — one stick at on-curve Explosives Handling deals
   at most this many times a same-floor regular's health. It keeps a trained stick a
   heavy hit rather than a blast that clears a room several times over.
-- **`BOSS_MIN_STICKS_ON_CURVE`** — every arena boss and bounty mark takes at least
+- **`BOSS_MIN_STICKS_ON_CURVE`** — every boss and bounty mark takes at least
   this many separate blasts to kill at on-curve Explosives Handling, across the
   party levels from floor 2 to past the boss level cap. A boss fight is decided by
   how it is played, not by how many sticks were bought.
@@ -355,7 +363,7 @@ healers and flight.
   Hover goals never land on marked ground, walls, or ground a fairy may not be placed
   on (inside the town wall, the town's safe radius, the circus grounds) — except a
   healer bound to a boss (`Fairy.isHoverGoalAllowed`), which is exempt from that
-  ground restriction, since its boss's own room or arena may sit on it.
+  ground restriction, since its boss's own room may sit on it.
 - **A fairy left alone runs for the next room.** With no living non-fairy hostile
   within `FAIRY_ALLY_SEARCH_TILES` (other fairies do not count) and the party in
   sight, a fairy runs for another room (`chooseFairyRefuge`): one within the path
@@ -368,15 +376,13 @@ healers and flight.
   `FAIRY_REFUGE_JOIN_TILES`, and gives a refuge up if it stalls. With nowhere to run
   it keeps `FAIRY_LONE_RANGE_TILES` from the party, inside the reach of its own casts.
   A running fairy still casts, on the move. A boss's healer never runs: it keeps its
-  distance inside its boss's sealed room or arena, within
+  distance inside its boss's sealed room, within
   `FAIRY_BOUND_HEALER_LEASH_TILES` of the boss. A checkpoint rewind returns a fairy
   that ran to its spawn.
 - **A boss-room healer never leaves the room, whatever else is true of it.** Every
-  healer standing in a boss room or the colosseum arena is confined to it
+  healer standing in a boss room is confined to it
   (`Fairy.confineTo`/`respectsConfinement`) by whichever room owns it — `BossRoomSystem`
-  for a gauntlet boss's room, `ArenaSystem` for the ring (a circle, not a rectangle: see
-  `docs/town.md`'s cousin note on the colosseum's own shape), `SpiderQuestSystem` for
-  the lab. Positional, not
+  for a gauntlet boss's room, `SpiderQuestSystem` for the lab. Positional, not
   bond-based: a healer stripped of its bond to a dead boss, or with no bond at all, is
   held exactly the same as one still healing a live fight — before, during and after,
   whether the boss is alive or dead. Confinement rules out every way a healer could
@@ -470,7 +476,7 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   the same curve, so the share holds at every level — boss healers and cheat-spawned
   fairies included.
 - **Fairy chances sit 15 points above their design rates.** Every enabled fairy chance —
-  room rates per region and difficulty, the Ball of Swine's upgrade, the room healer, and
+  room rates per region and difficulty, Big Rooster's upgrade, the room healer, and
   floor 3's scatter fairy and scatter healer — is its design rate plus 0.15, held to 1;
   a chance designed off (floor 1 before the Trash Gremlin, floor 1's healer) stays off, and no
   count range moves (`verify:fairies` spawn rules).
@@ -479,12 +485,11 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   shield fairy, one more shield fairy is added (`needsGuaranteedShield`), on every
   difficulty alike, outside the rolled count and `MAX_FAIRIES_PER_ROOM`. A boss's
   healer never brings one.
-- **The Ball of Swine's upgrade reaches only the rooms past it.** Its upgraded rates
-  apply only to the rooms the floor's start cannot reach without crossing the safe room
-  guarding the Swine (`onlyPastItsSafeRoom`, `pastSafeRoomTest`) — the pocket behind
-  the arena. Every earlier room keeps its base rate for good. The Swine is optional:
-  the pocket is reachable round the arena, and its rooms keep their base rates until
-  the Swine dies.
+- **Big Rooster's upgrade reaches only the rooms past him.** On floor 2 his upgraded
+  rates apply only to the rooms the floor's start cannot reach without crossing the safe
+  room guarding his gym (`onlyPastItsSafeRoom`, `pastSafeRoomTest`). Every earlier room
+  keeps its base rate for good, and the rooms past him keep their base rates until he
+  dies.
 - **The Seismic Stomp never hurts a fairy.** A fairy inside the blast takes no damage, stun,
   knockback or status, and shows "Dodge" instead.
 - **Freeze never guarantees a fireball.** `FROZEN_FRAMES + ceil(blast radius px /

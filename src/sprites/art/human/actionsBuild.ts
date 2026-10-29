@@ -15,11 +15,19 @@
 
 import { mixPt, pt } from '../biped/geometry';
 import { handGrip } from '../biped/limbs';
-import { SHIN_LENGTH, THIGH_LENGTH } from '../biped/proportions';
+import { FOREARM_LENGTH, SHIN_LENGTH, THIGH_LENGTH, UPPER_ARM_LENGTH } from '../biped/proportions';
 import { FLOOR_BOARD } from '../biped/props/board';
-import { buildSkeleton, type BipedPose, restingPose, setArmAngles, VIEWS } from '../biped/rig';
+import {
+  type ArmAngles,
+  buildSkeleton,
+  type BipedPose,
+  type BodySide,
+  restingPose,
+  setArmAngles,
+  VIEWS,
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { clamp01, easeInOut, lerp, type Pt } from '../bipedArt';
+import { clamp01, deg, easeInOut, lerp, type Pt } from '../bipedArt';
 import {
   ankleOverPivot,
   type PathKey,
@@ -926,4 +934,209 @@ export function repairMend(frame: number, view: CardinalView): BipedPose {
     return kneelBlend(view, repairAtWork(view, 0), t, t >= 1 - GEAR_OUT_FROM);
   }
   return repairAtWork(view, turnAt(frame - REPAIR_KNEEL_FRAMES));
+}
+
+// ── Hauling a valve wheel ────────────────────────────────────────────────────
+
+/**
+ * One heave on a valve wheel standing in front of him at chest height: a fist
+ * on either side of the rim, one high and one low, and a quarter turn hauled
+ * round — the high fist dragged down its side while the low one drives up
+ * the other — then both walked back to take a fresh grip. Each fist works
+ * its own side of the wheel, so neither arm crosses his body.
+ *
+ * It starts and ends on that grip rather than on the idle, because it is
+ * played once a press and presses come quicker than a hand can drop to his
+ * side and come back.
+ *
+ * Only his hands are drawn: the wheel belongs to whatever he is turning.
+ */
+export const TURN_VALVE_FRAMES = 8;
+export const TURN_VALVE_TICKS_PER_FRAME = 3;
+const TURN_VALVE_LAST = TURN_VALVE_FRAMES - 1;
+/** The frame the quarter turn is fully hauled round. */
+const VALVE_HAULED_FRAME = 5;
+
+/**
+ * The rim in profile, in figure units: a wheel about twenty pixels across at
+ * the 32 px tile, centred at his chest a forearm's reach in front of him.
+ */
+const VALVE_RADIUS = 0.3;
+const VALVE_CENTRE_Y = -1.25;
+const VALVE_SIDE_CENTRE_X = 0.52;
+/**
+ * Head-on the fists ride in front of the elbows, forearms raised at the
+ * camera, and the turn shows as one fist rising while the other sinks.
+ * The rim is drawn smaller and higher than in profile so both fists stay
+ * above the elbows: a fist below its elbow hangs off a straight arm and
+ * reads as a hand at rest, not one on a wheel.
+ */
+const VALVE_FACING_RADIUS = 0.26;
+const VALVE_FACING_CENTRE_Y = -1.28;
+/**
+ * The right fist's clock angle on the rim at the start of a haul (0 at the
+ * top, clockwise as he sees it): half past one, high on the right; the
+ * left takes the opposite point, low on the left.
+ */
+const VALVE_GRIP_ANGLE = QUARTER_TURN / 2;
+const VALVE_OPPOSITE = Math.PI;
+/**
+ * Through the row, how much of the quarter turn the fists have carried round:
+ * a small set back against the haul, the haul itself, then the hands walking
+ * back to the grip they started from.
+ */
+const VALVE_TURN: Track = [
+  [0, 0],
+  [1, -0.06],
+  [2, 0.3],
+  [3, 0.72],
+  [4, 0.95],
+  [VALVE_HAULED_FRAME, 1],
+  [6, 0.55],
+  [TURN_VALVE_LAST, 0.15],
+];
+/**
+ * Walking back to the grip, the fists come off the rim toward him. The last
+ * frame stops just short of the grip, so a press played straight after
+ * another closes onto frame 0 rather than holding the same pose twice.
+ */
+const VALVE_REGRIP_LIFT: Track = [
+  [0, 0],
+  [VALVE_HAULED_FRAME, 0],
+  [6, 1],
+  [TURN_VALVE_LAST, 0.4],
+];
+/** How far in from the rim the fists ride while they walk back. */
+const VALVE_REGRIP_INSET = 0.06;
+/** The effort of the haul: 0 set on the grip, 1 straining at its hardest. */
+const VALVE_EFFORT: Track = [
+  [0, 0.2],
+  [1, 0.5],
+  [2, 1],
+  [3, 1],
+  [4, 0.8],
+  [VALVE_HAULED_FRAME, 0.5],
+  [6, 0.1],
+  [TURN_VALVE_LAST, 0.2],
+];
+/** His weight drops into the haul. */
+const VALVE_CROUCH = 0.12;
+/** Head-on, his hips shift toward the side the wheel is turning to. */
+const VALVE_FACING_SWAY = 0.03;
+const VALVE_FACING_TWIST = 0.15;
+/** Head-on the shoulders tip toward the fist dragging down the rim. */
+const VALVE_FACING_LEAN = deg(6);
+/** In profile he leans into the wheel and the near fist's pull drags his shoulders down to it. */
+const VALVE_SIDE_LEAN_SET = deg(6);
+const VALVE_SIDE_LEAN_HAUL = deg(10);
+/** The far fist on the rim is a hair behind the near one, edge-on. */
+const VALVE_SIDE_FAR_BACK = 0.03;
+const VALVE_FIST = 0.95;
+const VALVE_MOUTH = 0.35;
+const VALVE_FACING_CHIN = -0.25;
+/**
+ * Head-on the rim is in front of his chest, toward the camera, which only
+ * joint angles can draw: the elbow hangs from the shoulder drawn short, as
+ * if coming forward, and the forearm rises at the camera, drawn as short as
+ * the reach to the fist leaves it. Placed by hand target instead, the fists
+ * drag the elbows out level with the shoulders into a chicken wing.
+ */
+const VALVE_FACING_UPPER_ARM = 0.85;
+/** The fist sits this far inboard of its elbow, the forearms toeing in a touch toward the hub. */
+const VALVE_FIST_INBOARD = 0.1;
+/**
+ * How far out from hanging each elbow is carried, and how much further it
+ * swings out with its fist at the top of the rim: driving a rim up lifts the
+ * elbow with it. From behind the fists are hidden by his back and the elbows
+ * are all that show the haul, so they carry it further.
+ */
+const VALVE_ELBOW_OUT: Readonly<Record<'front' | 'back', number>> = {
+  front: deg(5),
+  back: deg(10),
+};
+const VALVE_ELBOW_LIFT: Readonly<Record<'front' | 'back', number>> = {
+  front: deg(6),
+  back: deg(14),
+};
+
+/** A point on a rim of `radius` about `centre` at clock angle `angle`, inset toward the hub by `inset`. */
+function rimPoint(centre: Pt, radius: number, angle: number, inset: number): Pt {
+  const reach = radius - inset;
+  return pt(centre.x + reach * Math.sin(angle), centre.y - reach * Math.cos(angle));
+}
+
+/**
+ * Poses `side`'s arm head-on by joint angles: the elbow hanging out from the
+ * shoulder, carried further out by `rise` (its fist's height up the rim, -1
+ * to 1), and the fist in front of it where `fist` puts it: `x` is how far
+ * outboard of the grip's start the rim has carried it, `y` its height.
+ */
+function reachRim(
+  pose: BipedPose,
+  view: 'front' | 'back',
+  side: BodySide,
+  fist: Pt,
+  rise: number,
+): void {
+  const skeleton = buildSkeleton(pose, VIEWS[view]);
+  const shoulder = side === 'right' ? skeleton.rightShoulder : skeleton.leftShoulder;
+  const sign = side === 'right' ? 1 : -1;
+  const outward = sign * (VALVE_ELBOW_OUT[view] + rise * VALVE_ELBOW_LIFT[view]);
+  const upperReach = UPPER_ARM_LENGTH * VALVE_FACING_UPPER_ARM;
+  const elbow = pt(
+    shoulder.x + upperReach * Math.sin(outward),
+    shoulder.y + upperReach * Math.cos(outward),
+  );
+  const toFist = pt(sign * (fist.x - VALVE_FIST_INBOARD), fist.y - elbow.y);
+  const angles: ArmAngles = {
+    upper: outward,
+    fore: Math.atan2(toFist.x, toFist.y),
+    foreScale: Math.hypot(toFist.x, toFist.y) / FOREARM_LENGTH,
+  };
+  setArmAngles(pose, side, angles, VALVE_FACING_UPPER_ARM);
+}
+
+export function turnValve(frame: number, view: CardinalView): BipedPose {
+  const pose = standingPose(view);
+  const turn = trackAt(frame, VALVE_TURN) * QUARTER_TURN;
+  const inset = trackAt(frame, VALVE_REGRIP_LIFT) * VALVE_REGRIP_INSET;
+  const effort = trackAt(frame, VALVE_EFFORT);
+  const rightAngle = VALVE_GRIP_ANGLE + turn;
+  const leftAngle = rightAngle + VALVE_OPPOSITE;
+  pose.leftFootPlanted = true;
+  pose.rightFootPlanted = true;
+  pose.crouch += effort * VALVE_CROUCH;
+  pose.brow = CONCENTRATION_BROW;
+  pose.mouth = effort * VALVE_MOUTH;
+  pose.leftFist = VALVE_FIST;
+  pose.rightFist = VALVE_FIST;
+  if (view === 'side') {
+    const centre = pt(VALVE_SIDE_CENTRE_X, VALVE_CENTRE_Y);
+    pose.leftArmAngles = null;
+    pose.rightArmAngles = null;
+    pose.rightHand = pt(centre.x, rimPoint(centre, VALVE_RADIUS, rightAngle, inset).y);
+    pose.leftHand = pt(
+      centre.x - VALVE_SIDE_FAR_BACK,
+      rimPoint(centre, VALVE_RADIUS, leftAngle, inset).y,
+    );
+    pose.lean = VALVE_SIDE_LEAN_SET + effort * VALVE_SIDE_LEAN_HAUL;
+    pose.elbowFlare = SIDE_IDLE.elbowFlare;
+    return pose;
+  }
+  pose.sway = effort * VALVE_FACING_SWAY;
+  pose.twist = effort * VALVE_FACING_TWIST;
+  pose.lean = effort * VALVE_FACING_LEAN;
+  pose.chinLift = VALVE_FACING_CHIN;
+  if (view === 'back') {
+    pose.leftArmBehind = true;
+    pose.rightArmBehind = true;
+  }
+  const centre = pt(0, VALVE_FACING_CENTRE_Y);
+  const gripX = Math.sin(VALVE_GRIP_ANGLE) * VALVE_FACING_RADIUS;
+  const right = rimPoint(centre, VALVE_FACING_RADIUS, rightAngle, inset);
+  const left = rimPoint(centre, VALVE_FACING_RADIUS, leftAngle, inset);
+  const outboard = (p: Pt, sign: number): Pt => pt(sign * p.x - gripX, p.y);
+  reachRim(pose, view, 'right', outboard(right, 1), (centre.y - right.y) / VALVE_FACING_RADIUS);
+  reachRim(pose, view, 'left', outboard(left, -1), (centre.y - left.y) / VALVE_FACING_RADIUS);
+  return pose;
 }

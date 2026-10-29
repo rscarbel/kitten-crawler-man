@@ -18,17 +18,17 @@
  *
  * Floor 1 is split by its two gauntlet bosses because that is where the
  * difficulty curve is supposed to bend — a single "floor 1" number would average
- * the tutorial-adjacent opening together with the free region past Big Rooster and
+ * the tutorial-adjacent opening together with the free region past the Kraken and
  * say nothing about either.
  */
 import { settings } from '../input/Settings';
-import { BIG_ROOSTER_BOSS_TYPE } from '../mobs/bossTypes';
+import { KRAKEN_BOSS_TYPE, TRASH_GREMLIN_BOSS_TYPE } from '../mobs/bossTypes';
 import type { Difficulty } from './difficultyProfiles';
 
 export const DIFFICULTY_SEGMENTS = [
   'floor1-pre-gremlin',
   'floor1-post-gremlin',
-  'floor1-post-rooster',
+  'floor1-post-kraken',
   'floor2',
   'floor3',
 ] as const;
@@ -133,12 +133,6 @@ function emptyTally(difficulty: Difficulty): MutableTally {
   };
 }
 
-/**
- * Spawn keys of the two floor-1 gauntlet bosses, as `bossDefeated` reports
- * them — the same names the level definitions and the boss music use.
- */
-const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';
-
 const FIRST_FLOOR = 1;
 const SECOND_FLOOR = 2;
 /** Also the deepest named segment: anything below folds into it. */
@@ -148,7 +142,7 @@ export class DifficultyStats {
   private readonly tallies = new Map<DifficultySegment, MutableTally>();
   private floorNumber = FIRST_FLOOR;
   private trashGremlinDefeated = false;
-  private bigRoosterDefeated = false;
+  private krakenDefeated = false;
 
   /** Completed stairwell-hunt lengths, in frames, keyed by floor number. */
   private readonly huntFramesByFloor = new Map<number, number>();
@@ -164,7 +158,7 @@ export class DifficultyStats {
   get segment(): DifficultySegment {
     if (this.floorNumber >= THIRD_FLOOR) return 'floor3';
     if (this.floorNumber === SECOND_FLOOR) return 'floor2';
-    if (this.bigRoosterDefeated) return 'floor1-post-rooster';
+    if (this.krakenDefeated) return 'floor1-post-kraken';
     if (this.trashGremlinDefeated) return 'floor1-post-gremlin';
     return 'floor1-pre-gremlin';
   }
@@ -177,7 +171,7 @@ export class DifficultyStats {
   /** Called from the `bossDefeated` handler; unknown boss types are ignored. */
   noteBossDefeated(bossType: string): void {
     if (bossType === TRASH_GREMLIN_BOSS_TYPE) this.trashGremlinDefeated = true;
-    if (bossType === BIG_ROOSTER_BOSS_TYPE) this.bigRoosterDefeated = true;
+    if (bossType === KRAKEN_BOSS_TYPE) this.krakenDefeated = true;
   }
 
   private current(): MutableTally {
@@ -330,13 +324,13 @@ export class DifficultyStats {
    *
    * The boss flags matter as much as the tallies: they latch, so a second
    * playthrough in the same page session would begin on floor 1 already
-   * classified `floor1-post-rooster` — and the pre-Trash Gremlin baseline this is
+   * classified `floor1-post-kraken` — and the pre-Trash Gremlin baseline this is
    * meant to capture would be unreachable without reloading the page.
    */
   beginRun(): void {
     this.tallies.clear();
     this.trashGremlinDefeated = false;
-    this.bigRoosterDefeated = false;
+    this.krakenDefeated = false;
     this.floorNumber = FIRST_FLOOR;
     this.huntFramesByFloor.clear();
     this.openHunt = null;

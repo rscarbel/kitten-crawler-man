@@ -38,7 +38,7 @@ import {
   type PrisonLight,
   type PrisonState,
 } from '../src/systems/stealthKeySnatch/prisonPatrols.js';
-import { PRISON_TRAIL_SPACING_TILES } from '../src/systems/stealthKeySnatch/prisonTuning.js';
+import { PARTY_TRAIL_SPACING_TILES } from '../src/systems/partyTrail.js';
 
 export const SOLVER_QUANTUM_FRAMES = 4;
 const FRAMES_PER_TILE = TILE_SIZE / PLAYER_SPEED;
@@ -451,7 +451,7 @@ export function walkPathWithSuspicion(
   const suspicion = compiled.tuning.suspicion;
   const lengthPx = (path.length - 1) * TILE_SIZE;
   const walkFrames = Math.ceil(lengthPx / PLAYER_SPEED);
-  const spacing = PRISON_TRAIL_SPACING_TILES * TILE_SIZE;
+  const spacing = PARTY_TRAIL_SPACING_TILES * TILE_SIZE;
   const values = new Map<string, number>();
   for (let k = 0; k <= walkFrames; k++) {
     const clock = (startFrame + k) % cycle;

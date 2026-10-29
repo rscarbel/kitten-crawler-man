@@ -22,7 +22,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import { Mob, type MobDamageSource } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { drawLitDynamiteStick } from '../sprites/dynamiteSprite';
 import { type FuseBurnOptions, paintFuseFloorGlow } from '../sprites/fuseEffects';
 import {
@@ -39,7 +39,7 @@ import {
   drawBlackPowderExplosion,
   drawThrownBombShadow,
 } from '../sprites/blackPowderBombSprite';
-import { DANGER_CIRCLE_PALETTE, drawDangerCircle } from '../sprites/dangerTelegraph';
+import { drawDangerCircle } from '../sprites/dangerTelegraph';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -630,8 +630,8 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     // A siege leaves scorches across the whole village for twenty seconds at a
     // time, each a couple of dozen blits, so only those in view are drawn.
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
     for (const mark of this.scorches) {
       const screenX = mark.x - camX;
       const screenY = mark.y - camY;
@@ -670,7 +670,6 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
         locked.y - camY,
         BLACK_POWDER_BLAST_RADIUS_PX,
         LOCKED_CIRCLE_FADE,
-        DANGER_CIRCLE_PALETTE,
         { fillProgress: locked.progress, locked: true },
       );
     }
@@ -681,15 +680,9 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
       const burntFrames = stick.fuse.frames - stick.fuseFramesLeft;
       const wave = (Math.sin((burntFrames / pulseFrames) * FULL_TURN) + 1) / 2;
       const fade = CIRCLE_PULSE_MIN_FADE + (1 - CIRCLE_PULSE_MIN_FADE) * wave;
-      drawDangerCircle(
-        ctx,
-        stick.x - camX,
-        stick.y - camY,
-        GOBLIN_DYNAMITE_BLAST_RADIUS_PX,
-        fade,
-        DANGER_CIRCLE_PALETTE,
-        { fillProgress: burnt },
-      );
+      drawDangerCircle(ctx, stick.x - camX, stick.y - camY, GOBLIN_DYNAMITE_BLAST_RADIUS_PX, fade, {
+        fillProgress: burnt,
+      });
     }
   }
 

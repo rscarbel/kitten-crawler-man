@@ -12,7 +12,6 @@ import {
 } from '../sprites/gymEquipmentSprite';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { PLACE_ROWS } from '../sprites/art/humanFigure';
 import { PLACE_RELEASE_TICKS } from '../sprites/art/human/actionsBuild';
@@ -336,18 +335,15 @@ export class BarrierSystem implements GameSystem {
     });
   }
 
-  /**
-   * Render the construct progress indicator around the player's feet.
-   * Draw this on top of the HUD layer.
-   */
-  renderConstructUI(ctx: CanvasRenderingContext2D): void {
+  /** Render the construct progress arc around the placing crawler, in the world view's units. */
+  renderConstructUI(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.pending) return;
 
     const ratio = 1 - this.pending.framesLeft / CONSTRUCT_FRAMES;
-    const cx = viewportWidth() * TILE_CENTER_FRACTION;
-    const cy = viewportHeight() * TILE_CENTER_FRACTION;
+    const placer = this.pending.player;
+    const cx = placer.x + TILE_SIZE * TILE_CENTER_FRACTION - camX;
+    const cy = placer.y + TILE_SIZE * TILE_CENTER_FRACTION - camY;
 
-    // Small progress arc near screen center (represents player's feet area)
     const radius = TILE_SIZE * CONSTRUCT_ARC_RADIUS_MULT;
     const startAngle = -Math.PI / 2;
     const endAngle = startAngle + Math.PI * 2 * ratio;

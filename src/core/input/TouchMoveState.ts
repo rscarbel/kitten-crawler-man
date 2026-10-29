@@ -1,9 +1,4 @@
-import { platform } from './Platform';
-import { TILE_SIZE } from '../constants';
 import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE } from '../../ui/core/pointer';
-
-const TOUCH_HOLD_THRESHOLD_MS = 150;
-const MOVEMENT_SNAP_DISTANCE_PX = 8;
 
 interface FingerDown {
   x: number;
@@ -28,7 +23,7 @@ function wasTap(start: FingerDown, x: number, y: number): boolean {
 export class TouchMoveState {
   /** Touch identifier for the game-world movement finger. */
   moveTouchId: number | null = null;
-  /** Current movement target in screen coordinates. */
+  /** Current movement target in screen coordinates (canvas CSS pixels), not zoomed into the world. */
   moveTarget: { x: number; y: number } | null = null;
   /** Tap start info (used to distinguish taps from drags). */
   tapStart: { x: number; y: number; time: number } | null = null;
@@ -45,38 +40,6 @@ export class TouchMoveState {
    * at once with two thumbs.
    */
   private readonly extraFingers = new Map<number, FingerDown & { eventMs: number }>();
-
-  /**
-   * Compute movement delta from the current touch state.
-   * Returns `{dx, dy, isMobile}` where dx/dy are normalized direction components,
-   * or `{dx: 0, dy: 0}` if no mobile movement is active.
-   *
-   * @param playerX Active player's world X position
-   * @param playerY Active player's world Y position
-   * @param cameraX Camera offset X
-   * @param cameraY Camera offset Y
-   */
-  getMoveInput(
-    playerX: number,
-    playerY: number,
-    cameraX: number,
-    cameraY: number,
-  ): { dx: number; dy: number; isMobile: boolean } {
-    if (!platform.isMobile || !this.moveTarget) return { dx: 0, dy: 0, isMobile: false };
-
-    const touchHoldMs = this.tapStart ? Date.now() - this.tapStart.time : 0;
-    if (touchHoldMs < TOUCH_HOLD_THRESHOLD_MS) return { dx: 0, dy: 0, isMobile: false };
-
-    const wx = this.moveTarget.x + cameraX;
-    const wy = this.moveTarget.y + cameraY;
-    const ddx = wx - (playerX + TILE_SIZE / 2);
-    const ddy = wy - (playerY + TILE_SIZE / 2);
-    const dist = Math.hypot(ddx, ddy);
-
-    if (dist <= MOVEMENT_SNAP_DISTANCE_PX) return { dx: 0, dy: 0, isMobile: false };
-
-    return { dx: ddx / dist, dy: ddy / dist, isMobile: true };
-  }
 
   /** Whether the finger lifted at `(x, y)` stayed close to where it landed. */
   heldInPlace(x: number, y: number): boolean {

@@ -5,17 +5,12 @@
  *   boss; on easy and normal, none does.
  * - The healer is levelled to the boss's own level, on the boss's own curve.
  * - A boss room the save already counts as won gets no healer on reload.
- * - The arena's healer only arrives as the door locks on the Ball of Swine, a
- *   whole entry window after a crawler walks in, inside the ring; the ring
- *   holds it in every frame, and a respawn's re-lock never brings a second.
  * - While a bound healer lives, a boss room whose boss has fallen stays locked
- *   and unwon, and the arena's stairwell stays shut after the last Tuskling;
- *   both resolve once the healer dies.
- * - A bound healer whose boss has fallen never leaves its boss room or the
- *   arena ring, nor sets off for another room, however long a crawler chases
+ *   and unwon; it resolves once the healer dies.
+ * - A bound healer whose boss has fallen never leaves its boss room, nor sets off for another room, however long a crawler chases
  *   it through the real mob loop.
  *
- * The floor bosses are spawned the way the dungeon scene builds a floor; the
+ * The bosses are spawned the way the dungeon scene builds a floor; the
  * rest come out of the systems that start their fights. Every boss is found
  * before its healer is counted, so a path that silently spawned nothing reads
  * as a failure rather than as "no healer". Each rule is also run against a
@@ -23,8 +18,7 @@
  * to break it from outside is reported as such rather than counted.
  */
 
-import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../../src/core/constants';
-import { SpatialGrid } from '../../src/core/world/SpatialGrid';
+import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
 import { settings } from '../../src/core/input/Settings';
 import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficulty/difficultyProfiles';
@@ -32,14 +26,12 @@ import { createMurderQuestProgress } from '../../src/core/quests/MurderQuestProg
 import { createDoomsdayProgress } from '../../src/core/quests/DoomsdayProgress';
 import { withWorldSeed } from '../../src/core/world/WorldRandom';
 import { GameMap, TOWER_FLOOR_COUNT } from '../../src/map/GameMap';
-import { ARENA_INTERIOR_RADIUS_TILES } from '../../src/map/arenaGeometry';
 import { roomDoorways } from '../../src/map/roomDoorways';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mob } from '../../src/creatures/Mob';
-import { BallOfSwine } from '../../src/creatures/BallOfSwine';
-import { Tuskling } from '../../src/creatures/Tuskling';
 import { GrotesqueSpider } from '../../src/creatures/GrotesqueSpider';
+import { Kraken } from '../../src/creatures/Kraken';
 import { MissQuill } from '../../src/creatures/MissQuill';
 import { TheLich } from '../../src/creatures/TheLich';
 import { HealingFairy } from '../../src/creatures/fairies/HealingFairy';
@@ -48,7 +40,7 @@ import { dungeonOptionsForLevel } from '../../src/levels/dungeonOptions';
 import { level1 } from '../../src/levels/level1';
 import { level2 } from '../../src/levels/level2';
 import type { LevelDef } from '../../src/levels/types';
-import { partyLevelOf, spawnExtraMobs, spawnForLevel } from '../../src/levels/spawner';
+import { partyLevelOf, spawnForLevel } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { isStandaloneMobKind } from '../../src/levels/mobKinds';
 import {
@@ -58,7 +50,6 @@ import {
   spawnBossRoomHealers,
   spawnRoomFairies,
 } from '../../src/levels/fairySpawner';
-import { ArenaSystem } from '../../src/systems/ArenaSystem';
 import { BossRoomSystem, type BossRoomMiniMap } from '../../src/systems/BossRoomSystem';
 import { QuillConfrontationSystem } from '../../src/systems/QuillConfrontationSystem';
 import { SpiderQuestSystem } from '../../src/systems/SpiderQuestSystem';
@@ -72,9 +63,9 @@ import { mulberry32 } from '../../src/sprites/person/rng';
 import type { FairyGateReport } from './report';
 import { ARENA_TILES, makeArena } from './stage';
 import { Conversation } from '../../src/dialog/Conversation';
+import type { GauntletBossType } from '../../src/map/bossRoomSizes';
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
-const SWINE_BOSS_TYPE = 'ball_of_swine';
 const HEALER_DIFFICULTY: Difficulty = 'hard';
 
 /** Seeds the floors and every roll along each spawn path, so a red run replays. */
@@ -83,8 +74,6 @@ const BOSS_HEALER_SEED = 0x0b_05_5e_ed;
 const FLOOR1_PARTY_LEVEL = 5;
 const FLOOR2_PARTY_LEVEL = 12;
 const FLOOR3_PARTY_LEVEL = 24;
-/** Frames the arena runs with nobody inside before the door is walked through. */
-const ARENA_IDLE_FRAMES = 60;
 /**
  * Frames of the spider cutscene run after the hack completes. The spider is
  * spawned on the cutscene's camera pan, which lands well inside this.
@@ -193,7 +182,7 @@ function contextFor(
   };
 }
 
-// ── The floor bosses: spawned with the floor, healers placed by the room pass ──
+// ── The bosses: spawned with the floor, healers placed by the room pass ──────
 
 interface FloorBuild {
   readonly map: GameMap;
@@ -265,279 +254,6 @@ function floorBossSightings(
       };
     });
   });
-}
-
-// ── The Ball of Swine: the healer arrives as the arena door seals ──
-
-interface ArenaRun {
-  /** Taken after the arena has run with nobody inside. */
-  readonly beforeEntry: BossSighting;
-  /** The most healers seen on any frame after a crawler entered while the door still stood open. */
-  readonly mostWhileOpen: number;
-  /** Arena updates from the crawler's entry to the door locking, or -1 if it never locked. */
-  readonly framesToLock: number;
-  /** Taken on the frame the door locks. */
-  readonly afterSeal: BossSighting;
-  /** Whether every Swine healer present on the lock frame is inside the ring. */
-  readonly placedInside: boolean;
-  /** Frames the hold was watched with a Swine healer present. */
-  readonly holdFramesWatched: number;
-  /** Frames a healer carried out past the wall was still outside the ring after the update. */
-  readonly holdFramesEscaped: number;
-  /** Frames the mob grid could not find a pulled-back healer where it now hovers. */
-  readonly holdGridMisses: number;
-  /** Whether the door locked again after a checkpoint respawn reopened it. */
-  readonly relocked: boolean;
-  /** Healers bound to the Swine once the door has locked the second time. */
-  readonly healersAfterRelock: number;
-  /**
-   * The Tuskling phase run on to its end, killing the Swine's healer; only for
-   * a run asked to, since it leaves no healer for the counts above.
-   */
-  readonly stairwell: StairwellPhase | null;
-}
-
-/** A deliberately broken arena, one defect at a time, for the negatives. */
-interface ArenaBreakage {
-  /** The healer is spawned the moment a crawler first enters. */
-  readonly spawnOnEntry?: boolean;
-  /** The ring stops holding its healer in. */
-  readonly noConfinement?: boolean;
-  /** Every question about a living Swine healer is answered "none". */
-  readonly forgetsLivingHealer?: boolean;
-  /** The ring pulls its healer back but moves it in a grid nothing reads. */
-  readonly noGridUpdate?: boolean;
-  /** The healer is placed on the door locking whatever the difficulty. */
-  readonly ignoresDifficulty?: boolean;
-  /** The door locks and no healer is ever placed. */
-  readonly neverSpawnsHealer?: boolean;
-}
-
-/** Frames the healer is carried out past the wall, one frame at a time, and must be pulled back each time. */
-const HOLD_WATCH_FRAMES = 120;
-/** How far past the ring's inner edge the healer is carried each frame of the hold. */
-const HOLD_ESCAPE_TILES = 2;
-/** Radians the carry direction turns each frame, so the hold is tried all the way round the ring. */
-const HOLD_TURN_RADIANS = 0.37;
-/** Arena updates allowed for the door to lock after an entry: several entry windows over. */
-const LOCK_BUDGET_FRAMES = 6000;
-
-/** An arena broken as `breakage` says, through the members the arena lets a subclass replace. */
-class BrokenArena extends ArenaSystem {
-  private readonly strayGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
-
-  constructor(
-    private readonly arenaMap: GameMap,
-    bus: EventBus,
-    getMobs: () => Mob[],
-    private readonly addToScene: (mob: Mob) => void,
-    bossRoom: BossRoomSystem,
-    private readonly breakage: ArenaBreakage,
-  ) {
-    super(arenaMap, bus, getMobs, addToScene, bossRoom);
-  }
-
-  protected override spawnSwineHealer(bos: BallOfSwine, mobs: readonly Mob[]): void {
-    if (this.breakage.neverSpawnsHealer === true) return;
-    if (this.breakage.ignoresDifficulty !== true) {
-      super.spawnSwineHealer(bos, mobs);
-      return;
-    }
-    if (this.hasLivingSwineHealer(mobs)) return;
-    spawnBossHealer(
-      bos,
-      this.arenaMap,
-      this.addToScene,
-      level2.floorNumber,
-      settings.difficulty,
-      (tileX, tileY) => this.isInsideArena({ x: tileX * TILE_SIZE, y: tileY * TILE_SIZE }),
-    );
-  }
-
-  protected override hasLivingSwineHealer(mobs: readonly Mob[]): boolean {
-    return this.breakage.forgetsLivingHealer === true ? false : super.hasLivingSwineHealer(mobs);
-  }
-
-  protected override confineSwineHealers(mobs: readonly Mob[], grid: SpatialGrid<Mob>): void {
-    if (this.breakage.noConfinement === true) return;
-    super.confineSwineHealers(mobs, this.breakage.noGridUpdate === true ? this.strayGrid : grid);
-  }
-
-  /** The Swine's healer, spawned now rather than when the door locks. */
-  spawnHealerEarly(bos: BallOfSwine, mobs: readonly Mob[]): void {
-    this.spawnSwineHealer(bos, mobs);
-  }
-}
-
-function swineHealersIn(mobs: readonly Mob[], bos: Mob | null): HealingFairy[] {
-  return healersIn(mobs).filter((healer) => bos !== null && bossOfHealer(healer) === bos);
-}
-
-function arenaRun(
-  difficulty: Difficulty,
-  seed: number,
-  breakage: ArenaBreakage = {},
-  runsStairwell = false,
-): ArenaRun {
-  return underDifficulty(difficulty, seed, () => {
-    const map = buildDungeon(level2, seed);
-    const profile = DIFFICULTY_PROFILES[difficulty];
-    const roster = new MobRoster(map, new SpellSystem());
-    for (const mob of spawnExtraMobs(level2, map, FLOOR2_PARTY_LEVEL, profile, Math.random)) {
-      roster.add(mob);
-    }
-    const bossRoom = new BossRoomSystem(
-      map,
-      undrawnMiniMap,
-      new EventBus(),
-      (level2.bossRooms ?? []).map((rule) => rule.type),
-    );
-    const getMobs = (): Mob[] => roster.mobs;
-    const addMob = (mob: Mob): void => roster.add(mob);
-    const bus = new EventBus();
-    const broken = Object.values(breakage).some((flag) => flag === true);
-    const arena = broken
-      ? new BrokenArena(map, bus, getMobs, addMob, bossRoom, breakage)
-      : new ArenaSystem(map, bus, getMobs, addMob, bossRoom);
-    const party = partyAt(map.startTile.x, map.startTile.y, FLOOR2_PARTY_LEVEL);
-    const ctx = contextFor(party, roster, map);
-    const bos = roster.mobs.find((mob): mob is BallOfSwine => mob instanceof BallOfSwine) ?? null;
-    const sighting = (): BossSighting => ({
-      name: SWINE_BOSS_TYPE,
-      boss: bos,
-      healers: healersIn(roster.mobs),
-    });
-
-    for (let frame = 0; frame < ARENA_IDLE_FRAMES; frame++) arena.update(ctx);
-    const beforeEntry = sighting();
-
-    const exterior = map.arenaExteriors.length > 0 ? map.arenaExteriors[0] : undefined;
-    if (exterior !== undefined) {
-      party.human.x = exterior.centre.x * TILE_SIZE;
-      party.human.y = exterior.centre.y * TILE_SIZE;
-    }
-
-    let mostWhileOpen = 0;
-    /** Runs the arena until its door locks, counting healers on every frame it stood open. */
-    const runToLock = (): number => {
-      for (let frame = 1; frame <= LOCK_BUDGET_FRAMES; frame++) {
-        arena.update(ctx);
-        if (frame === 1 && breakage.spawnOnEntry === true && bos !== null) {
-          if (arena instanceof BrokenArena) arena.spawnHealerEarly(bos, roster.mobs);
-        }
-        if (map.arenaDoorLocked) return frame;
-        mostWhileOpen = Math.max(mostWhileOpen, swineHealersIn(roster.mobs, bos).length);
-      }
-      return -1;
-    };
-
-    const framesToLock = runToLock();
-    const mostBeforeFirstLock = mostWhileOpen;
-    const afterSeal = sighting();
-    const placedInside = swineHealersIn(roster.mobs, bos).every((healer) =>
-      arena.isInsideArena(healer),
-    );
-
-    let holdFramesWatched = 0;
-    let holdFramesEscaped = 0;
-    let holdGridMisses = 0;
-    if (exterior !== undefined) {
-      const centreX = exterior.centre.x * TILE_SIZE;
-      const centreY = exterior.centre.y * TILE_SIZE;
-      const carryPx = (ARENA_INTERIOR_RADIUS_TILES + HOLD_ESCAPE_TILES) * TILE_SIZE;
-      for (let frame = 0; frame < HOLD_WATCH_FRAMES; frame++) {
-        const healers = swineHealersIn(roster.mobs, bos);
-        const angle = frame * HOLD_TURN_RADIANS;
-        for (const healer of healers) {
-          const oldX = healer.x;
-          const oldY = healer.y;
-          healer.x = centreX + Math.cos(angle) * carryPx;
-          healer.y = centreY + Math.sin(angle) * carryPx;
-          roster.grid.move(healer, oldX, oldY);
-        }
-        arena.update(ctx);
-        if (healers.length === 0) continue;
-        holdFramesWatched++;
-        if (healers.some((healer) => !arena.isInsideArena(healer))) holdFramesEscaped++;
-        const lostToGrid = healers.some(
-          (healer) => !roster.grid.queryCircle(healer.x, healer.y, TILE_SIZE).has(healer),
-        );
-        if (lostToGrid) holdGridMisses++;
-      }
-    }
-
-    arena.resetForCheckpoint();
-    const relocked = !map.arenaDoorLocked && runToLock() > 0;
-    const healersAfterRelock = swineHealersIn(roster.mobs, bos).length;
-    const stairwell = runsStairwell
-      ? runStairwellPhase({ arena, bus, roster, bos, party, ctx, map })
-      : null;
-    return {
-      beforeEntry,
-      mostWhileOpen: mostBeforeFirstLock,
-      framesToLock,
-      afterSeal,
-      placedInside,
-      holdFramesWatched,
-      holdFramesEscaped,
-      holdGridMisses,
-      relocked,
-      healersAfterRelock,
-      stairwell,
-    };
-  });
-}
-
-/** How the arena's way out behaved across the Tuskling phase with the Swine's healer alive, then dead. */
-interface StairwellPhase {
-  /** Whether the Swine fell, Tusklings came and every one was killed, with a bound healer flying. */
-  readonly staged: boolean;
-  /** Whether the stairwell stayed shut and the door locked through the settle with the healer alive. */
-  readonly heldWhileHealerLived: boolean;
-  /** Whether the stairwell opened and the door unlocked once the healer died. */
-  readonly openedAfterHealerDied: boolean;
-}
-
-/**
- * Kills the Swine (its `bossDefeated` event, which the arena listens for, on
- * the arena's own bus), then every Tuskling of the second phase, then — once
- * the settle has been watched — the Swine's healer.
- */
-function runStairwellPhase(scene: {
-  readonly arena: ArenaSystem;
-  readonly bus: EventBus;
-  readonly roster: MobRoster;
-  readonly bos: BallOfSwine | null;
-  readonly party: Party;
-  readonly ctx: SystemContext;
-  readonly map: GameMap;
-}): StairwellPhase {
-  const { arena, bus, roster, bos, party, ctx, map } = scene;
-  const healers = swineHealersIn(roster.mobs, bos);
-  if (bos === null || healers.length === 0) {
-    return { staged: false, heldWhileHealerLived: false, openedAfterHealerDied: false };
-  }
-  bos.takeDamageFrom(OVERKILL_DAMAGE, party.human);
-  bus.emit('bossDefeated', { bossType: SWINE_BOSS_TYPE, mob: bos });
-  const tusklings = roster.mobs.filter((mob) => mob instanceof Tuskling);
-  for (const tuskling of tusklings) tuskling.takeDamageFrom(OVERKILL_DAMAGE, party.human);
-  let heldWhileHealerLived = true;
-  for (let frame = 0; frame < SEAL_SETTLE_FRAMES; frame++) {
-    arena.update(ctx);
-    if (arena.stairwellUnlocked || !map.arenaDoorLocked) heldWhileHealerLived = false;
-  }
-  const staged =
-    arena.phase2Active &&
-    tusklings.length > 0 &&
-    tusklings.every((tuskling) => !tuskling.isAlive) &&
-    healers.every((healer) => healer.isAlive);
-  for (const healer of healers) healer.takeDamageFrom(OVERKILL_DAMAGE, party.human);
-  for (let frame = 0; frame < SEAL_SETTLE_FRAMES; frame++) arena.update(ctx);
-  return {
-    staged,
-    heldWhileHealerLived,
-    openedAfterHealerDied: arena.stairwellUnlocked && !map.arenaDoorLocked,
-  };
 }
 
 // ── The Grotesque Spider: spawned on the cutscene the lab hack starts ──
@@ -630,7 +346,6 @@ function collectSightings(): SightingsByDifficulty {
     byDifficulty.set(difficulty, [
       ...floorBossSightings(level1, difficulty, FLOOR1_PARTY_LEVEL, seed),
       ...floorBossSightings(level2, difficulty, FLOOR2_PARTY_LEVEL, seed),
-      arenaRun(difficulty, seed).afterSeal,
       spiderSighting(difficulty, seed),
       towerSighting(difficulty, seed, 'confrontation'),
       towerSighting(difficulty, seed, 'quill_slain'),
@@ -690,8 +405,7 @@ const bringsNoHealer = (sighting: BossSighting): boolean =>
 
 /**
  * The spawn paths that can be broken to skip the difficulty gate from outside:
- * the floor's boss-room pass, swapped for a copy without its gate, and the
- * arena, whose healer placement a subclass replaces.
+ * the floor's boss-room pass, swapped for a copy without its gate.
  */
 function sightingsIgnoringDifficulty(difficulty: Difficulty, seed: number): BossSighting[] {
   return [
@@ -711,7 +425,6 @@ function sightingsIgnoringDifficulty(difficulty: Difficulty, seed: number): Boss
       undefined,
       roomPassIgnoringDifficulty,
     ),
-    arenaRun(difficulty, seed, { ignoresDifficulty: true }).afterSeal,
   ];
 }
 
@@ -851,91 +564,6 @@ function checkDefeatedRoomsOnReload(report: FairyGateReport, seed: number): void
   }
 }
 
-function checkArenaSeal(report: FairyGateReport, seed: number): void {
-  const run = arenaRun(HEALER_DIFFICULTY, seed);
-  report.check(
-    run.beforeEntry.boss !== null && run.beforeEntry.healers.length === 0,
-    'hard: no healer drifts about the concourse before a crawler enters the arena',
-  );
-  report.check(
-    run.framesToLock > 1 && run.mostWhileOpen === 0,
-    'hard: no Swine healer arrives while the door stands open after a crawler enters',
-    `door locked ${run.framesToLock} frames after entry; ${run.mostWhileOpen} healers while open`,
-  );
-  const early = arenaRun(HEALER_DIFFICULTY, seed, { spawnOnEntry: true });
-  report.checkCatches(
-    early.framesToLock > 1 && early.mostWhileOpen === 0,
-    'a Swine healer spawned on first entry is caught by the open-door count',
-    `${early.mostWhileOpen} healers while open`,
-  );
-  const bound = boundHealers(run.afterSeal);
-  report.check(
-    bound.length === 1 && run.placedInside,
-    'hard: exactly one Swine healer arrives on the frame the door locks, inside the ring',
-    `${bound.length} bound, inside: ${run.placedInside}`,
-  );
-  const healerless = arenaRun(HEALER_DIFFICULTY, seed, { neverSpawnsHealer: true });
-  const healerlessBound = boundHealers(healerless.afterSeal);
-  report.checkCatches(
-    healerlessBound.length === 1 && healerless.placedInside,
-    'an arena that locks its door and never places a healer is caught by the one-healer count',
-    `${healerlessBound.length} bound`,
-  );
-  report.check(
-    run.holdFramesWatched === HOLD_WATCH_FRAMES &&
-      run.holdFramesEscaped === 0 &&
-      run.holdGridMisses === 0,
-    'hard: a Swine healer carried out past the wall is pulled back inside, and the mob grid follows it',
-    `${run.holdFramesWatched} frames watched, ${run.holdFramesEscaped} outside, ` +
-      `${run.holdGridMisses} lost to the grid`,
-  );
-  const unconfined = arenaRun(HEALER_DIFFICULTY, seed, { noConfinement: true });
-  report.checkCatches(
-    unconfined.holdFramesWatched === HOLD_WATCH_FRAMES && unconfined.holdFramesEscaped === 0,
-    'a ring that stops holding its healer in is caught with the healer outside',
-    `${unconfined.holdFramesEscaped} of ${unconfined.holdFramesWatched} frames outside`,
-  );
-  report.check(
-    run.relocked && run.healersAfterRelock === 1,
-    'hard: a checkpoint respawn that re-locks the door still leaves exactly one Swine healer',
-    `relocked: ${run.relocked}, ${run.healersAfterRelock} healers`,
-  );
-  const gridless = arenaRun(HEALER_DIFFICULTY, seed, { noGridUpdate: true });
-  report.checkCatches(
-    gridless.holdFramesWatched === HOLD_WATCH_FRAMES && gridless.holdGridMisses === 0,
-    'a ring that pulls its healer back without moving it in the mob grid is caught',
-    `${gridless.holdGridMisses} of ${gridless.holdFramesWatched} frames lost to the grid`,
-  );
-  const forgetful = arenaRun(HEALER_DIFFICULTY, seed, { forgetsLivingHealer: true });
-  report.checkCatches(
-    forgetful.relocked && forgetful.healersAfterRelock === 1,
-    'an arena that forgets its living healer is caught spawning a second on the re-lock',
-    `${forgetful.healersAfterRelock} healers`,
-  );
-  const stairwell = arenaRun(HEALER_DIFFICULTY, seed, {}, true).stairwell;
-  const stairwellHeld = (phase: StairwellPhase | null): boolean =>
-    phase !== null && phase.staged && phase.heldWhileHealerLived && phase.openedAfterHealerDied;
-  report.check(
-    stairwellHeld(stairwell),
-    "hard: after the last Tuskling the stairwell stays shut and the door locked while the Swine's healer lives, and both open once it dies",
-    describeStairwell(stairwell),
-  );
-  const healerBlind = arenaRun(HEALER_DIFFICULTY, seed, { forgetsLivingHealer: true }, true);
-  report.checkCatches(
-    stairwellHeld(healerBlind.stairwell),
-    'an arena whose seal ignores the living healer is caught opening the stairwell with it still flying',
-    describeStairwell(healerBlind.stairwell),
-  );
-}
-
-function describeStairwell(phase: StairwellPhase | null): string {
-  if (phase === null) return 'not run';
-  return (
-    `staged ${phase.staged}, held while it lived ${phase.heldWhileHealerLived}, ` +
-    `opened once it died ${phase.openedAfterHealerDied}`
-  );
-}
-
 /** A boss-room system whose seal never asks whether a boss's healer still flies. */
 class HealerBlindBossRoom extends BossRoomSystem {
   protected override hasLivingHealer(): boolean {
@@ -943,11 +571,20 @@ class HealerBlindBossRoom extends BossRoomSystem {
   }
 }
 
-type BossRoomFactory = (map: GameMap, bossTypes: string[]) => BossRoomSystem;
+type BossRoomFactory = (map: GameMap, bossTypes: readonly GauntletBossType[]) => BossRoomSystem;
 const realBossRoom: BossRoomFactory = (map, bossTypes) =>
   new BossRoomSystem(map, undrawnMiniMap, new EventBus(), bossTypes);
 const healerBlindBossRoom: BossRoomFactory = (map, bossTypes) =>
   new HealerBlindBossRoom(map, undrawnMiniMap, new EventBus(), bossTypes);
+
+/**
+ * Opens the boss to the killing blow these stagings deal. The Kraken refuses
+ * damage until her room is drained, and these runs have no pump room dressing
+ * to drain it, so she is told directly, as her room would tell her.
+ */
+function readyForTheKill(boss: Mob): void {
+  if (boss instanceof Kraken) boss.setRoomDrained(true);
+}
 
 /** How one boss room behaved with its boss dead and its bound healer alive, then dead. */
 interface RoomSeal {
@@ -1003,6 +640,7 @@ function bossRoomSeals(
       const ctx = contextFor(party, roster, floor.map);
       bossRoom.update(ctx);
       const lockedOnEntry = state.locked;
+      readyForTheKill(boss);
       boss.takeDamageFrom(OVERKILL_DAMAGE, party.human);
       let heldWhileHealerLived = true;
       for (let frame = 0; frame < SEAL_SETTLE_FRAMES; frame++) {
@@ -1069,9 +707,7 @@ const STRAY_CHASE_PACE_FRACTION = 0.6;
  * chase to count as one: a crawler that never closed in never pressed it to run.
  */
 const CHASE_CLOSE_TILES = 2;
-/** Frames the Ball of Swine is given to finish coming apart after the killing blow: its burst several times over. */
-const BURST_BUDGET_FRAMES = 600;
-/** How far inside the arena door, towards the ring's centre, the chased healer starts. */
+/** How far inside a boss room's door, towards its centre, the chased healer starts. */
 const DOORSIDE_INSET_TILES = 3;
 
 interface TilePoint {
@@ -1156,8 +792,8 @@ class UnleashedHealingFairy extends HealingFairy {
 
 /**
  * The same unleashed stand-in, plus confinement itself switched off: the
- * defect under test in the "confinement disabled" negative — a boss-room or
- * arena healer must be held to its room by something, and this proves it is
+ * defect under test in the "confinement disabled" negative — a boss-room
+ * healer must be held to its room by something, and this proves it is
  * the confinement mechanism doing that work, not some other coincidence (the
  * ordinary leash is already broken by {@link UnleashedHealingFairy} alone).
  */
@@ -1291,6 +927,7 @@ function bossRoomChases(
       const party = partyAt(centre.x, centre.y, partyLevel);
       const ctx = contextFor(party, roster, floor.map, bossRoom);
       bossRoom.update(ctx);
+      readyForTheKill(boss);
       boss.takeDamageFrom(OVERKILL_DAMAGE, party.human);
       const chase = chaseHealer({
         name: rule.type,
@@ -1313,13 +950,11 @@ function bossRoomChases(
 }
 
 /**
- * Puts `healer` just inside a boss room's or the arena's door, with the
+ * Puts `healer` just inside a boss room's door, with the
  * crawler chasing from the centre behind it. A fairy never runs back through
  * the party, so a healer staged with the crawler between it and the only door
  * stays put whether or not anything holds it; from the doorside a healer free
  * to run has somewhere to run to and a line out to it that clears the party.
- * In the arena it is also the one spot from which a room of the floor lies
- * within a fleeing fairy's reach.
  */
 function moveToDoorside(
   healer: HealingFairy,
@@ -1339,86 +974,6 @@ function moveToDoorside(
   roster.grid.move(healer, oldX, oldY);
 }
 
-/**
- * The arena on hard: the door locks and the Swine's healer arrives, the Swine
- * falls and every Tuskling it sheds is killed, and a crawler chases the healer
- * — or, per `variant`, a stand-in for one of the defects under test — round
- * the ring.
- */
-function arenaChase(seed: number, variant: HealerVariant): HealerChase {
-  return underDifficulty(HEALER_DIFFICULTY, seed, () => {
-    const map = buildDungeon(level2, seed);
-    const profile = DIFFICULTY_PROFILES[HEALER_DIFFICULTY];
-    const roster = new MobRoster(map, new SpellSystem());
-    // The floor's own rooms as well as the arena: a healer with no fight left
-    // near it runs for the next room holding one, and a floor with none would
-    // leave nowhere to run to.
-    const floorMobs = spawnForLevel(
-      level2,
-      map,
-      FLOOR2_PARTY_LEVEL,
-      profile,
-      new Set(),
-      Math.random,
-    );
-    const arenaMobs = spawnExtraMobs(level2, map, FLOOR2_PARTY_LEVEL, profile, Math.random);
-    for (const mob of [...floorMobs, ...arenaMobs]) roster.add(mob);
-    const bossRoom = realBossRoom(
-      map,
-      (level2.bossRooms ?? []).map((rule) => rule.type),
-    );
-    const bus = new EventBus();
-    const arena = new ArenaSystem(
-      map,
-      bus,
-      () => roster.mobs,
-      (mob) => roster.add(mob),
-      bossRoom,
-    );
-    const party = partyAt(map.startTile.x, map.startTile.y, FLOOR2_PARTY_LEVEL);
-    const ctx = contextFor(party, roster, map, bossRoom);
-    const bos = roster.mobs.find((mob): mob is BallOfSwine => mob instanceof BallOfSwine) ?? null;
-    const exterior = map.arenaExteriors.length > 0 ? map.arenaExteriors[0] : undefined;
-    if (bos === null || exterior === undefined) return unstagedChase(SWINE_BOSS_TYPE);
-    party.human.x = exterior.centre.x * TILE_SIZE;
-    party.human.y = exterior.centre.y * TILE_SIZE;
-    for (let frame = 0; frame < LOCK_BUDGET_FRAMES && !map.arenaDoorLocked; frame++) {
-      arena.update(ctx);
-    }
-    const sealed = swineHealersIn(roster.mobs, bos);
-    const bound = sealed.length > 0 ? sealed[0] : undefined;
-    if (bound === undefined) return unstagedChase(SWINE_BOSS_TYPE);
-    // Held while the ball comes apart: a healer left free would heal the
-    // bursting ball, which still reads as alive at 0 HP, and it would never fall.
-    bound.aiHeld = true;
-    bos.takeDamageFrom(OVERKILL_DAMAGE, party.human);
-    const burstLoop = new MobUpdateLoop();
-    for (let frame = 0; frame < BURST_BUDGET_FRAMES && bos.isAlive; frame++) {
-      burstLoop.update(ctx);
-      arena.update(ctx);
-    }
-    bound.aiHeld = false;
-    bus.emit('bossDefeated', { bossType: SWINE_BOSS_TYPE, mob: bos });
-    for (const mob of roster.mobs) {
-      if (mob instanceof Tuskling) mob.takeDamageFrom(OVERKILL_DAMAGE, party.human);
-    }
-    moveToDoorside(bound, exterior, roster);
-    const healer = swapForHealerVariant(bound, map, roster, variant);
-    if (healer === null) return unstagedChase(SWINE_BOSS_TYPE);
-    return chaseHealer({
-      name: SWINE_BOSS_TYPE,
-      healer,
-      party,
-      map,
-      ctx,
-      updateFight: () => arena.update(ctx),
-      holds: (chased) => arena.isInsideArena(chased),
-      bossFell: !bos.isAlive,
-      crawlerPaceFraction: variant === 'bound' ? 1 : STRAY_CHASE_PACE_FRACTION,
-    });
-  });
-}
-
 function describeChase(chase: HealerChase): string {
   return (
     `boss dead ${chase.bossDead}, healer alive ${chase.healerAlive}, ` +
@@ -1431,7 +986,7 @@ const heldThroughChase = (chase: HealerChase): boolean =>
   chase.staged && chase.framesOutside === 0 && chase.framesFleeing === 0;
 
 /**
- * Every boss room and the arena, each run three ways: the healer the fight
+ * Every boss room, each run three ways: the healer the fight
  * actually spawned, an otherwise-identical healer with no bond to the boss,
  * and that same unbonded healer with confinement itself switched off besides.
  * A boss room belongs to whoever stands in it, bond or no bond — so the first
@@ -1450,11 +1005,6 @@ function checkHealerStaysInFight(report: FairyGateReport, seed: number): void {
     const broken = bossRoomChases(def, partyLevel, seed, 'unconfined');
     chases.forEach((chase, index) => pairs.push([chase, strays[index], broken[index]]));
   }
-  pairs.push([
-    arenaChase(seed, 'bound'),
-    arenaChase(seed, 'unbound'),
-    arenaChase(seed, 'unconfined'),
-  ]);
   for (const [chase, stray, broken] of pairs) {
     report.check(
       heldThroughChase(chase),
@@ -1494,7 +1044,6 @@ export function verifyBossHealers(report: FairyGateReport): void {
   checkUnboundHealerCaught(report, BOSS_HEALER_SEED);
   checkUnlevelledHealerCaught(report, hard);
   checkDefeatedRoomsOnReload(report, BOSS_HEALER_SEED);
-  checkArenaSeal(report, BOSS_HEALER_SEED);
   checkBossRoomSeals(report, BOSS_HEALER_SEED);
   checkHealerStaysInFight(report, BOSS_HEALER_SEED);
 }

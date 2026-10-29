@@ -898,12 +898,12 @@ export class Deinonychus extends Mob {
     if (ownerInsideWalls && this.map?.isInsideTownWall(mob.x, mob.y) !== true) {
       return false;
     }
-    // A body that has to be dodged rather than fought — the rolling Ball of
-    // Swine — tramples for a large share of its victim's health a pass, and he
-    // has no dodge. Charging it would spend him before the fight's second
-    // phase, and the wounded hold would then keep him out of every fight left
-    // in the room. The same test drops a held ball the moment it starts rolling
-    // again; it is fair game once it stops, the window it is meant to be hit in.
+    // A body that has to be dodged rather than fought — the rolled Rock Golem
+    // boss — tramples for a large share of its victim's health a pass, and he
+    // has no dodge. Charging it would spend him early, and the wounded hold
+    // would then keep him out of every fight left. The same test drops a held
+    // target the moment it starts rolling again; it is fair game once it
+    // stops, the window it is meant to be hit in.
     if (mob.avoidInstead) return false;
     const fromCat = this.catDistanceTo(mob);
     const admitted =

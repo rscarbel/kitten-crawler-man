@@ -11,7 +11,7 @@
  *    explainer read and takes the key; both come back out with the party;
  *  - the phase follows the key in the inventory, both ways;
  *  - handing the key over opens the gate, completes the quest, takes the key
- *    and pays; the antechamber can then be reached and could not before;
+ *    and pays; Big Rooster's gateway can then be reached and could not before;
  *  - Space at the gate with the key does the same;
  *  - the guard is not hurt, moved or held by anything the party does;
  *  - a save at every phase reloads into that phase with the gate to match,
@@ -143,7 +143,8 @@ const RATTLE_COOLDOWN_WAIT_FRAMES = 120;
 const SHOVE_PX = TILE_SIZE * 2;
 const KNOCKBACK_FRAMES = 20;
 const BLOW_DAMAGE = 50;
-const ARENA_BOSS_TYPE = 'ball_of_swine';
+/** The boss whose safe room lies past the stealth gate. */
+const BOSS_PAST_GATE = 'big_rooster';
 /** Frames spent inside the prison after the capture: more than a minute of a running clock. */
 const FRAMES_INSIDE = 4000;
 /** More frames than a whole capture takes. */
@@ -298,13 +299,13 @@ function insideBesideGate(room: Room, map: LiveMap): { stand: Tile; gate: Tile }
 }
 
 /**
- * Whether the arena antechamber can be walked to from `from`, with the
+ * Whether the gateway safe room before Big Rooster's gym can be walked to from `from`, with the
  * nursery's exit and the bathroom queue out of the question: only the gate
  * is being asked about.
  */
-function antechamberReachable(map: LiveMap, from: Tile): boolean {
-  const antechamber = map.safeRooms.find((room) => room.guardsBossType === ARENA_BOSS_TYPE);
-  if (antechamber === undefined) return false;
+function gatewayReachable(map: LiveMap, from: Tile): boolean {
+  const gateway = map.safeRooms.find((room) => room.guardsBossType === BOSS_PAST_GATE);
+  if (gateway === undefined) return false;
   const questExit = map.captureCheckpoint().questExitDoorState;
   map.setQuestExitDoorState('smashed');
   const seen = new Set<number>();
@@ -312,7 +313,7 @@ function antechamberReachable(map: LiveMap, from: Tile): boolean {
   const queue: Tile[] = [from];
   seen.add(from.y * width + from.x);
   let reached = false;
-  const { bounds } = antechamber;
+  const { bounds } = gateway;
   while (queue.length > 0) {
     const tile = queue.shift();
     if (tile === undefined) break;
@@ -385,8 +386,17 @@ function companionsOf(scene: Scene): {
   };
 }
 
-/** With the party walked off, both companions come back to it. */
+/**
+ * With the party walked off, both companions come back to it.
+ *
+ * The floor's own hostiles are cleared first: the companions wait at the edge
+ * of the gate room, and a pack spawned in the room next door picks a fight
+ * with them, which a hire rightly answers instead of walking back. This
+ * measures the walk back, not that fight.
+ */
 function verifyCompanionsRejoin(scene: Scene, partyTile: Tile, label: string): void {
+  const roster = scene['world'].roster;
+  roster.replaceAll(roster.mobs.filter((mob) => !mob.isHostileTarget));
   placeParty(scene, partyTile);
   const party = scene.pm.active();
   for (let frame = 0; frame < REJOIN_FRAMES; frame++) {
@@ -568,8 +578,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
     `${label}: the locked gate cannot be walked through`,
   );
   check(
-    !antechamberReachable(map, talkTile),
-    `${label}: the antechamber cannot be reached while the gate is locked`,
+    !gatewayReachable(map, talkTile),
+    `${label}: Big Rooster's gateway cannot be reached while the gate is locked`,
   );
   check(
     outside['sealedBuildingMessage'](entry) === PRISON_DOOR_UNBRIEFED_REFUSAL,
@@ -797,8 +807,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
     `${label}: the open gate can be walked through`,
   );
   check(
-    antechamberReachable(map, talkTile),
-    `${label}: the antechamber can be reached once the gate is open`,
+    gatewayReachable(map, talkTile),
+    `${label}: Big Rooster's gateway can be reached once the gate is open`,
   );
   back.update();
   check(guardMarker(back) === 'none', `${label}: the guard's marker goes once the gate is open`);

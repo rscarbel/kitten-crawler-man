@@ -80,7 +80,7 @@ import {
   type FairyFireballSystemDeps,
   type FireHazardZone,
 } from '../../src/systems/FairyFireballSystem';
-import { drawLandingReticle } from '../../src/sprites/art/fairyEffectsArt';
+import { drawLandingReticle } from '../../src/sprites/fairyTelegraphs';
 import { gameContext } from '../nodeGameContext';
 import type { FairyGateReport } from './report';
 import {
@@ -607,8 +607,12 @@ function checkFlightOutlastsTheDodge(report: FairyGateReport): void {
 
 /** Side of the square the ground is rendered into, centred on the landing. */
 const WARNING_VIEW_PX = 160;
-/** Where inside the blast radius the danger circle is sampled: past the reticle's reach. */
-const WARNING_INSIDE_SHARE = 0.9;
+/**
+ * How far inside the blast radius the danger circle is sampled, in pixels: on
+ * its outline, which sits at the full reach from the throw while the fill is
+ * still growing toward it, and past the reticle's reach.
+ */
+const WARNING_OUTLINE_INSET_PX = 1;
 /** Where outside the blast radius nothing may be drawn: past the danger circle's outline. */
 const WARNING_OUTSIDE_SHARE = 1.2;
 /** Least opacity, of 255, that counts as something drawn. */
@@ -651,7 +655,7 @@ function landingWarningRun(fireballs: FireballsFactory): LandingWarningRun {
       framesInFlight++;
       ctx.clearRect(0, 0, WARNING_VIEW_PX, WARNING_VIEW_PX);
       s.fireballs.renderGround(ctx, ball.toX - half, ball.toY - half);
-      const inside = ctx.getImageData(half + BLAST_PX * WARNING_INSIDE_SHARE, half, 1, 1).data;
+      const inside = ctx.getImageData(half + BLAST_PX - WARNING_OUTLINE_INSET_PX, half, 1, 1).data;
       const outside = ctx.getImageData(half + BLAST_PX * WARNING_OUTSIDE_SHARE, half, 1, 1).data;
       const red = inside[RED_CHANNEL];
       const insideIsRed =

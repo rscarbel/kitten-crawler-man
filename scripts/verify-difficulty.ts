@@ -37,7 +37,12 @@ import {
   ROOSTER_PECK_WINDUP_FRAMES,
   ROOSTER_PUNCH_WINDUP_FRAMES,
 } from '../src/sprites/bigRoosterAttackTiming';
-import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/mobs/bossTypes';
+import type { GauntletBossType } from '../src/map/bossRoomSizes';
+import {
+  BIG_ROOSTER_BOSS_TYPE,
+  ELECTRIC_GOBLIN_BOSS_TYPE,
+  KRAKEN_BOSS_TYPE,
+} from '../src/core/mobs/bossTypes';
 import { BOLT_SPEED_CAP, lavaBoltSpeedForLevel } from '../src/systems/LavaBallSystem';
 import { GOBLIN_BOW_SHOTS, goblinArrowReleaseFrame } from '../src/sprites/goblinSprite';
 import {
@@ -78,8 +83,6 @@ import {
   WAYFINDER_MOTE_LIFE_FRAMES,
 } from '../src/systems/StairwellSystem';
 import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
-import { BallOfSwine } from '../src/creatures/BallOfSwine';
-import { makePoison } from '../src/core/combat/StatusEffect';
 import {
   BigRooster,
   type BigRoosterState,
@@ -178,9 +181,6 @@ import { EventBus } from '../src/core/EventBus';
 import { MissQuill } from '../src/creatures/MissQuill';
 import { Remex } from '../src/creatures/Remex';
 import { DarkKnight } from '../src/creatures/DarkKnight';
-
-/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
-const LASTING_POISON_TICKS = 999999;
 
 /**
  * Levels probed past {@link MAX_MOB_LEVEL} for the shape checks. A curve that is
@@ -292,12 +292,6 @@ const ARCHER_TEST_LOCK_MARGIN_FRAMES = 12;
 const ARCHER_TEST_DODGE_STEP_PX = 6;
 
 /** Mid-band level the boss re-levelling checks are run at. */
-/** Frames allowed for a permanent status tick to grind a levelled boss to zero. */
-const POISON_SETTLE_FRAMES = 400000;
-/** Enough over max HP to kill through the damage reduction a rolling ball carries. */
-const KILLING_BLOW_MULTIPLE = 20;
-/** Frames given to the burst to play out and settle, comfortably past its length. */
-const BURST_SETTLE_FRAMES = 400;
 const BOSS_TEST_LEVEL = 7;
 
 /** Floating-point slack for comparisons between two computed reals. */
@@ -1223,74 +1217,6 @@ section('re-levelling');
   check(boss.isAlive, 'a boss killed after the checkpoint is alive again after a revive');
   check(boss.hp === bossMaxHp, 'a revived boss comes back at its levelled max HP');
   check(boss.moveSpeed === levelledSpeed, 'a revive keeps a levelled boss’s speed');
-
-  // The Ball of Swine gets its own pass at all of the above, because it is the one
-  // boss that overrides `isAlive` — it reports itself alive through its death burst
-  // so the fight cannot end mid-animation. Every check above is written against a
-  // boss whose `isAlive` is just `hp > 0`, so none of them can see the failure that
-  // override makes possible: a burst with nowhere to finish leaves the creature
-  // permanently "alive", re-latching `justDied` every frame. That re-resolves the
-  // kill sixty times a second — re-awarding the whole XP split, re-emitting
-  // `bossDefeated` into another eight Tusklings — and it makes the revive above
-  // unreachable, because `rewindMobsToCheckpoint` only revives what reads as dead.
-  const ball = new BallOfSwine(0, 0, TILE_SIZE);
-  ball.setArena(0, 0);
-  ball.applyMobLevel(BOSS_TEST_LEVEL);
-  // The ball is inert until ArenaSystem opens the fight; this harness has no arena.
-  ball.fightStarted = true;
-  const ballMaxHp = ball.maxHp;
-  // Multiplied up past the reduction a rolling ball applies to everything that hits
-  // it, so this is a killing blow rather than a scratch — at double its max HP it
-  // survived, which is the reduction doing its job.
-  ball.takeDamageFrom(ballMaxHp * KILLING_BLOW_MULTIPLE, null, 'melee');
-  check(ball.isAlive, 'the ball reports itself alive while its death burst plays');
-
-  let latches = 0;
-  for (let frame = 0; frame < BURST_SETTLE_FRAMES; frame++) {
-    ball.updateAI([]);
-    if (ball.justDied) {
-      latches++;
-      ball.justDied = false;
-    }
-  }
-  check(latches === 1, `the ball's death resolves exactly once (saw ${latches})`);
-  check(!ball.isAlive, 'the ball reads as dead once its burst has finished');
-
-  ball.reviveForCheckpoint();
-  check(ball.isAlive, 'a ball killed after the checkpoint is alive again after a revive');
-  check(ball.hp === ballMaxHp, 'a revived ball comes back at its levelled max HP');
-
-  // The other way a mob can reach zero: a status tick, which lands in
-  // `Player.takeDamage` and does none of a mob's death bookkeeping. Left alone, a ball
-  // finished off by a permanent poison tick drops to zero without `justDied`, so
-  // `resolveKills` skips it: no loot, no XP, no `bossDefeated`, and therefore no
-  // phase-2 Tusklings and no stairwell out.
-  const poisoned = new BallOfSwine(0, 0, TILE_SIZE);
-  poisoned.setArena(0, 0);
-  poisoned.applyMobLevel(BOSS_TEST_LEVEL);
-  poisoned.fightStarted = true;
-  poisoned.applyStatus(makePoison(null, LASTING_POISON_TICKS));
-  let poisonedTicks = 0;
-  while (poisoned.hp > 0 && poisonedTicks < POISON_SETTLE_FRAMES) {
-    poisoned.tickTimers();
-    poisonedTicks++;
-  }
-  check(poisoned.hp === 0, `poison alone can finish the ball off (took ${poisonedTicks} frames)`);
-  check(
-    poisoned.isAlive,
-    'a ball killed by a status effect still bursts rather than just stopping',
-  );
-
-  let poisonedLatches = 0;
-  for (let frame = 0; frame < BURST_SETTLE_FRAMES; frame++) {
-    poisoned.updateAI([]);
-    if (poisoned.justDied) {
-      poisonedLatches++;
-      poisoned.justDied = false;
-    }
-  }
-  check(poisonedLatches === 1, `a status death resolves exactly once (saw ${poisonedLatches})`);
-  check(poisoned.droppedLoot !== null, 'a status death still drops the boss loot');
 }
 
 // ── Speed caps ───────────────────────────────────────────────────────────────
@@ -1687,7 +1613,7 @@ section('progression regions');
   check(tagsMatchGeometry, 'each room’s region matches the gauntlet whose bounds contain it');
 }
 
-// ── Floor 1's bombers wait behind Big Rooster ─────────────────────────────────
+// ── Floor 1's bombers wait behind the Kraken ──────────────────────────────────
 
 /** Floor-1 maps generated and populated for the bomber check. */
 const BOMBER_MAP_SEEDS = 6;
@@ -1709,18 +1635,15 @@ function isBomberType(type: StandaloneMobKind): boolean {
   return isBomber(spawnMob(type, { x: 0, y: 0 }, bomberProbeMap, liveSpawnContext('dev:spawn')));
 }
 
-section("floor 1's bombers wait behind Big Rooster");
+section("floor 1's bombers wait behind the Kraken");
 {
   const def = level1;
   const profile = DIFFICULTY_PROFILES.normal;
-  const bigRoosterGauntlet = def.progression?.gauntlets.findIndex(
-    (gauntlet) => gauntlet.bossType === BIG_ROOSTER_BOSS_TYPE,
+  const krakenGauntlet = def.progression?.gauntlets.findIndex(
+    (gauntlet) => gauntlet.bossType === KRAKEN_BOSS_TYPE,
   );
-  check(
-    bigRoosterGauntlet !== undefined && bigRoosterGauntlet >= 0,
-    'floor 1 still has a Big Rooster gauntlet',
-  );
-  const postRoosterRegion = (bigRoosterGauntlet ?? 0) + 1;
+  check(krakenGauntlet !== undefined && krakenGauntlet >= 0, 'floor 1 still has a Kraken gauntlet');
+  const postKrakenRegion = (krakenGauntlet ?? 0) + 1;
 
   // Every rule that is not a room's own escort has no region to gate on, so
   // none may name a bomber at all.
@@ -1750,7 +1673,7 @@ section("floor 1's bombers wait behind Big Rooster");
           Math.random,
         );
         const bombers = escorts.filter((escort) => isBomberType(escort.type)).length;
-        if (region < postRoosterRegion) earlyRolled += bombers;
+        if (region < postKrakenRegion) earlyRolled += bombers;
         else lateRolled += bombers;
       }
     }
@@ -1792,7 +1715,7 @@ section("floor 1's bombers wait behind Big Rooster");
         );
       });
       if (room === undefined) unplaced++;
-      else if (room.region < postRoosterRegion) earlySpawned++;
+      else if (room.region < postKrakenRegion) earlySpawned++;
       else lateSpawned++;
     }
   }
@@ -1800,11 +1723,11 @@ section("floor 1's bombers wait behind Big Rooster");
 
   check(
     earlyRolled === 0 && earlySpawned === 0 && unplaced === 0,
-    `no bomber spawns before Big Rooster (${earlyRolled} rolled, ${earlySpawned} on ${BOMBER_MAP_SEEDS} maps, ${unplaced} outside a room)`,
+    `no bomber spawns before the Kraken (${earlyRolled} rolled, ${earlySpawned} on ${BOMBER_MAP_SEEDS} maps, ${unplaced} outside a room)`,
   );
   check(
     lateRolled > 0 && lateSpawned > 0,
-    `bombers do spawn past Big Rooster (${lateRolled} rolled, ${lateSpawned} on ${BOMBER_MAP_SEEDS} maps)`,
+    `bombers do spawn past the Kraken (${lateRolled} rolled, ${lateSpawned} on ${BOMBER_MAP_SEEDS} maps)`,
   );
 }
 
@@ -3126,6 +3049,18 @@ function collectProbeSpawn(mob: Mob): void {
   probeSpawns.push(mob);
 }
 
+/** The Kraken with her room drained: under the flood she refuses every blow. */
+function surfacedKraken(): Mob {
+  const boss = spawnMob(
+    'kraken',
+    { x: BOSS_PROBE_TILE, y: BOSS_PROBE_TILE },
+    explosiveMap,
+    liveSpawnContext('dev:spawn'),
+  );
+  boss.setRoomDrained(true);
+  return boss;
+}
+
 function registeredMob(id: StandaloneMobKind): () => Mob {
   return () =>
     spawnMob(
@@ -3141,11 +3076,13 @@ function registeredMob(id: StandaloneMobKind): () => Mob {
  * outside the kind registry (`MOB_KINDS`) are constructed directly, exactly as their own
  * systems build them.
  */
-const ARENA_BOSSES: readonly (readonly [string, () => Mob])[] = [
-  ['trash_gremlin', registeredMob('trash_gremlin')],
-  [BIG_ROOSTER_BOSS_TYPE, registeredMob(BIG_ROOSTER_BOSS_TYPE)],
-  ['krakaren_clone', registeredMob('krakaren_clone')],
-  ['ball_of_swine', registeredMob('ball_of_swine')],
+const GAUNTLET_BOSSES = {
+  trash_gremlin: registeredMob('trash_gremlin'),
+  kraken: surfacedKraken,
+  electric_goblin: registeredMob(ELECTRIC_GOBLIN_BOSS_TYPE),
+  big_rooster: registeredMob(BIG_ROOSTER_BOSS_TYPE),
+} as const satisfies Record<GauntletBossType, () => Mob>;
+const STORY_BOSSES: readonly (readonly [string, () => Mob])[] = [
   ['grotesque_spider', registeredMob('grotesque_spider')],
   ['the_lich', registeredMob('the_lich')],
   [
@@ -3153,6 +3090,10 @@ const ARENA_BOSSES: readonly (readonly [string, () => Mob])[] = [
     () => new MissQuill(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE, collectProbeSpawn),
   ],
   ['remex', () => new Remex(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
+];
+const BOSS_ROOM_BOSSES: readonly (readonly [string, () => Mob])[] = [
+  ...Object.entries(GAUNTLET_BOSSES),
+  ...STORY_BOSSES,
 ];
 const BOUNTY_MARKS: readonly (readonly [string, () => Mob])[] = [
   ['evil_clown', registeredMob('evil_clown')],
@@ -3244,7 +3185,7 @@ section('explosives handling');
   );
 
   const bossRows = [
-    ...ARENA_BOSSES.map(
+    ...BOSS_ROOM_BOSSES.map(
       ([name, make]) =>
         [name, make, (pl: number) => resolveBossLevel(openBand, pl, normalProfile)] as const,
     ),

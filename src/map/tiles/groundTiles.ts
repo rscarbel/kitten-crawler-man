@@ -33,14 +33,12 @@
  */
 
 import type { TileContent } from '../tileTypes';
-import { drawColosseumRim, isColosseumRingTile } from './bossRooms/colosseumTiles';
 import {
   BUILDING_WALL,
   FloorTypeValue,
   INTERIOR_COUNTER,
   INTERIOR_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   ROOF_GREEN,
   ROOF_RED,
   ROOF_SLATE,
@@ -92,6 +90,7 @@ import {
 } from './overworldMacroTone';
 import type { MacroField } from '../overworld/macroField';
 import { drawRiverWaterColumn, warmRiverWaterColumn } from './riverWaterColumn';
+import { drawDungeonShoreBake, warmDungeonWater } from './dungeonWaterShore';
 
 /**
  * The ground material that is a river bed: the water over it is laid by
@@ -1404,11 +1403,13 @@ export function groundMacroFieldFor(structure: TileContent[][]): MacroField | un
 
 /**
  * Builds the ground tone `structure` will be baked with ahead of its first
- * bake. Call once the floor's art seed is set; a no-op off the overworld.
+ * bake, and any water standing on it. Call once the floor's art seed and its
+ * dungeon theme are set.
  */
 export function prepareGroundTone(structure: TileContent[][]): void {
   warmOverworldMacroTone(structure, periodicToneAt);
   warmRiverWaterColumn(structure);
+  warmDungeonWater(structure);
 }
 
 // ---------------------------------------------------------------------------
@@ -1431,7 +1432,6 @@ const GROUND_OCCLUDER_TYPES = new Set<number>([
   INTERIOR_COUNTER,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   RUINED_WALL,
   ROOF_THATCH,
   ROOF_SLATE,
@@ -1724,17 +1724,12 @@ function drawOcclusion(
   // one per tile, which is only invisible for as long as its art is opaque.
   if (occluderAt(structure, tx, ty)) return;
 
-  // The colosseum's round wall paints its own curved shadow; a square band cast
-  // from any of its tiles would cut straight across the curve.
-  const nearColosseum = drawColosseumRim(ctx, structure, sx, sy, ts, tx, ty);
-
   for (const side of OCCLUSION_SIDES) {
     if (!occluderAt(structure, tx + side.dx, ty + side.dy)) continue;
     const againstDungeonWall =
       structure[ty + side.dy]?.[tx + side.dx]?.type === FloorTypeValue.wall ||
       isFaceMountedSign(structure, tx + side.dx, ty + side.dy);
     const strength = againstDungeonWall ? side.dungeonWall : side;
-    if (nearColosseum && isColosseumRingTile(structure, tx + side.dx, ty + side.dy)) continue;
 
     // The band runs along the axis the occluder is not on; it needs a taper at
     // either end where the next tile along has no occluder to continue it.
@@ -1909,5 +1904,8 @@ export function drawGroundTile(
   applyGroundTone(ctx, structure, sx, sy, ts, tx, ty);
   drawFloorSurface(ctx, structure, sx, sy, ts, tx, ty);
   drawLabHallwayFloor(ctx, structure, sx, sy, ts, tx, ty);
+  // Over everything laid on the floor and under the walls' contact shade: the
+  // floor's marks are under the water, and the wall's shadow falls on its surface.
+  drawDungeonShoreBake(ctx, structure, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
 }

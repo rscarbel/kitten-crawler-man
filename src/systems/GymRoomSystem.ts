@@ -5,18 +5,45 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
   BigRooster,
+  COMPANION_KETTLEBELL_DAMAGE_SHARE,
   PLATE_ROLL_COOLDOWN_FRAMES,
   PLATE_ROLL_HIT_RADIUS_TILES,
   type PlateLane,
 } from '../creatures/BigRooster';
+import { RoosterMinion } from '../creatures/RoosterMinion';
+import type { RoosterFlockView } from '../creatures/roosterKicks';
+import type { Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
-import { GYM_CABLE_STACK, GYM_RACK, GYM_SQUAT_RACK, GYM_TREADMILL_BELT } from '../map/tileTypes';
+import {
+  GYM_CABLE_STACK,
+  GYM_KETTLEBELL_RACK,
+  GYM_RACK,
+  GYM_SQUAT_RACK,
+  GYM_TREADMILL_BELT,
+} from '../map/tileTypes';
 import { gymLayoutOf, type GymLayout, type GymTreadmill } from '../map/tiles/bossRooms/gymLayout';
 import {
   resetGymPropState,
+  setGymKettlebellRackStocked,
   setGymRackFill,
   setGymSquatRackLoaded,
 } from '../map/tiles/bossRooms/gymPropState';
+import {
+  KETTLEBELL_FALL_FRAMES,
+  KETTLEBELL_IMPACT_RADIUS_PX,
+  KETTLEBELL_RAIN_FRAMES,
+  KettlebellRain,
+  type FallingKettlebell,
+  type KettlebellRainRoom,
+} from './bossRooms/gymKettlebellRain';
+import {
+  EXERCISE_BALL_RADIUS_PX,
+  ExerciseBalls,
+  type ExerciseBallFloor,
+} from './bossRooms/gymExerciseBalls';
+import { GYM_CUES } from './bossRooms/gymSoundCues';
+import { escapeFromCircleZones } from './circleHazardEscape';
+import { GYM_EXERCISE_BALL_COLOURS, drawKettlebellShadow } from '../sprites/art/gymKettlebellArt';
 import { SPRITE_BUILDING_OVERLAY_FPS } from '../map/tiles/overlayAnimation';
 import {
   GYM_CHALK_FRAMES,
@@ -31,6 +58,8 @@ import {
   drawGymBoomboxSprite,
   drawGymChalkPuffSprite,
   drawGymConsoleSprite,
+  drawGymExerciseBallSprite,
+  drawGymFallingKettlebellSprite,
   drawGymMirrorCrackSprite,
   drawGymPickupSprite,
   gymPickupInkTop,
@@ -39,6 +68,7 @@ import {
   drawGymShutterSprite,
 } from '../sprites/gymRoomSprites';
 import { drawSlamShockwave } from '../sprites/slamShockwave';
+import { drawDangerCircle, drawDangerPath } from '../sprites/dangerTelegraph';
 import { drawThrownDumbbell } from '../sprites/roosterSprite';
 import { frameTime } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -97,15 +127,40 @@ const BIG_ROOSTER_RACK_DETECT_TILES = 1;
 /** How far a console or the boombox can be hit from, as a share of the attacker's melee reach. */
 const PROP_HIT_REACH_SHARE = 1;
 
-/** Plate-lane chalk: a translucent band as wide as the plate's reach, and a dashed centre line. */
-const LANE_BAND = 'rgba(245,245,235,0.14)';
-const LANE_LINE = 'rgba(250,250,240,0.85)';
-const LANE_LINE_PX = 2;
-const LANE_DASH_PX = 6;
-const LANE_GAP_PX = 4;
+/** A plate lane shows at full strength from the wind-up: the lane is fixed then and never moves. */
+const PLATE_LANE_FADE = 1;
+/**
+ * A falling kettlebell's ring shows at full strength from the moment it is
+ * dropped; its fill growing to the edge is what counts down to the impact.
+ */
+const KETTLEBELL_WARNING_FADE = 1;
 /** Companions step this much further off a plate lane than its reach, in px. */
 const LANE_ESCAPE_MARGIN_TILES = 0.3;
 const LANE_ESCAPE_MARGIN_PX = TILE_SIZE * LANE_ESCAPE_MARGIN_TILES;
+
+/** A heaved kettlebell rack stands bare for the length of the rain it fed. */
+const KETTLEBELL_RACK_RESTOCK_FRAMES = KETTLEBELL_RAIN_FRAMES;
+/** Chalk shaken up where a kettlebell lands. */
+const CHALK_PUFFS_PER_KETTLEBELL = 2;
+/** How high a kettlebell starts above its shadow, in tiles. */
+const KETTLEBELL_DROP_HEIGHT_TILES = 7;
+/** Where a falling bell's sheet frame is anchored, as a share of a tile down from its landing centre. */
+const KETTLEBELL_ART_CENTRE_SHARE = 0.62;
+/** Companions keep this far clear of a shadow's reach, in tiles. */
+const KETTLEBELL_ESCAPE_MARGIN_TILES = 0.4;
+const KETTLEBELL_ESCAPE_RADIUS_PX =
+  KETTLEBELL_IMPACT_RADIUS_PX + TILE_SIZE * KETTLEBELL_ESCAPE_MARGIN_TILES;
+/** A crawler's body, for a ball running into it, in tiles from its centre. */
+const CRAWLER_BODY_RADIUS_TILES = 0.35;
+/** Frames before the same ball can hit the same crawler again. */
+const BALL_REHIT_FRAMES = 45;
+/** How far a ball pushes the AI-driven companion aside, and over how many frames. */
+const BALL_SHOVE_TILES = 1.5;
+const BALL_SHOVE_FRAMES = 10;
+/** Frames each picture of a ball's roll is held. */
+const BALL_SPIN_FRAME_HOLD = 4;
+/** Where a ball's sheet frame is anchored, as a share of a tile down from its centre. */
+const BALL_ART_CENTRE_SHARE = 0.58;
 
 /** Peak camera shake in px, on the frame his fists land. */
 const SHAKE_PEAK_PX = 6;
@@ -149,6 +204,13 @@ interface Treadmill {
   shutoffFrames: number;
 }
 
+interface KettlebellRack {
+  readonly tile: TilePoint;
+  /** Where Big Rooster stands to heave from it, as a mob's top-left. */
+  readonly standAt: { readonly x: number; readonly y: number };
+  heavedFrames: number;
+}
+
 interface ChalkPuff {
   x: number;
   y: number;
@@ -185,6 +247,14 @@ export class GymRoomSystem
   private readonly squatRacks: SquatRack[] = [];
   private readonly treadmills: Treadmill[] = [];
   private readonly puffs: ChalkPuff[] = [];
+  private readonly kettlebellRacks: KettlebellRack[] = [];
+  private readonly rain = new KettlebellRain();
+  private readonly balls: ExerciseBalls;
+  /** Frames until each ball may hit each crawler again, keyed by ball and crawler. */
+  private readonly ballHitCooldowns = new Map<string, number>();
+  /** Every bird of the flock this gym has seen alive, so one killed is counted as lost. */
+  private readonly knownFlock = new Set<RoosterMinion>();
+  private ballAgeFrames = 0;
   private readonly renderables: DressingRenderable[] = [];
   /** Each entry is one cue's takes; the scene plays one of them at random. */
   private readonly pendingSounds: Array<readonly SoundId[]> = [];
@@ -220,11 +290,13 @@ export class GymRoomSystem
     resetGymPropState();
     this.layout = gameMap === null ? null : gymLayoutOf(gameMap.structure);
     this.stripLights = this.layout === null ? [] : gymStripLights(this.layout);
+    this.balls = new ExerciseBalls(this.layout?.exerciseBalls ?? []);
     const layout = this.layout;
     if (gameMap === null || layout === null) return;
 
     stampProps(gameMap, [
       ...layout.racks.map((tile) => ({ ...tile, type: GYM_RACK })),
+      ...layout.kettlebellRacks.map((tile) => ({ ...tile, type: GYM_KETTLEBELL_RACK })),
       ...layout.squatRacks.map((tile) => ({ ...tile, type: GYM_SQUAT_RACK })),
       ...layout.cableStacks.map((tile) => ({ ...tile, type: GYM_CABLE_STACK })),
       ...layout.treadmills.flatMap((treadmill) =>
@@ -237,6 +309,13 @@ export class GymRoomSystem
         reach: tileCentre(this.frontTile(gameMap, layout, tile)),
         standAt: tileCorner(this.frontTile(gameMap, layout, tile)),
         slots: Array.from({ length: GYM_RACK_SLOTS }, () => ({ filled: true, respawnTimer: 0 })),
+      });
+    }
+    for (const tile of layout.kettlebellRacks) {
+      this.kettlebellRacks.push({
+        tile,
+        standAt: tileCorner(this.frontTile(gameMap, layout, tile)),
+        heavedFrames: 0,
       });
     }
     for (const tile of layout.benches) this.benches.push({ tile, active: true, respawnTimer: 0 });
@@ -273,6 +352,9 @@ export class GymRoomSystem
     for (const squat of this.squatRacks) {
       setGymSquatRackLoaded(squat.tile.x, squat.tile.y, squat.strippedFrames <= 0);
     }
+    for (const rack of this.kettlebellRacks) {
+      setGymKettlebellRackStocked(rack.tile.x, rack.tile.y, rack.heavedFrames <= 0);
+    }
   }
 
   // ── Fight hooks ──────────────────────────────────────────────────────────
@@ -291,6 +373,9 @@ export class GymRoomSystem
     // after the fight is over.
     for (const treadmill of this.treadmills) treadmill.shutoffFrames = 0;
     this.bigRooster?.clearAirborneAttacks();
+    // Bells already in the air still land, harmless now; balls roll to a stop and stay.
+    this.rain.stopNewBells();
+    this.balls.stopAll();
   }
 
   override onFightAborted(): void {
@@ -306,6 +391,10 @@ export class GymRoomSystem
     }
     for (const squat of this.squatRacks) squat.strippedFrames = 0;
     for (const treadmill of this.treadmills) treadmill.shutoffFrames = 0;
+    for (const rack of this.kettlebellRacks) rack.heavedFrames = 0;
+    this.rain.clear();
+    this.balls.rest();
+    this.ballHitCooldowns.clear();
     this.puffs.length = 0;
     this.publishPropState();
   }
@@ -320,6 +409,8 @@ export class GymRoomSystem
       benches: this.benches.map((bench) => (bench.active ? 0 : Math.max(1, bench.respawnTimer))),
       squatRackStrippedFrames: this.squatRacks.map((squat) => squat.strippedFrames),
       consoleShutoffFrames: this.treadmills.map((treadmill) => treadmill.shutoffFrames),
+      kettlebellRackHeavedFrames: this.kettlebellRacks.map((rack) => rack.heavedFrames),
+      exerciseBalls: [...this.balls.all],
       boomboxHp: this.boomboxHp,
       sealed: this.sealed,
       defeated: this.defeated,
@@ -346,6 +437,11 @@ export class GymRoomSystem
     this.treadmills.forEach((treadmill, index) => {
       treadmill.shutoffFrames = snapshot.consoleShutoffFrames[index] ?? 0;
     });
+    this.kettlebellRacks.forEach((rack, index) => {
+      rack.heavedFrames = snapshot.kettlebellRackHeavedFrames[index] ?? 0;
+    });
+    this.balls.restore(snapshot.exerciseBalls);
+    this.ballHitCooldowns.clear();
     this.boomboxHp = snapshot.boomboxHp;
     this.sealed = snapshot.sealed;
     this.defeated = snapshot.defeated;
@@ -362,6 +458,7 @@ export class GymRoomSystem
     this.stopShake();
     this.puffs.length = 0;
     this.pendingSounds.length = 0;
+    this.rain.clear();
   }
 
   /**
@@ -532,6 +629,10 @@ export class GymRoomSystem
     this.tickConsoles();
     this.resolvePropHits(ctx);
     this.pushBodiesOnBelts(ctx);
+    this.publishFlock(ctx, bigRooster);
+    this.tickKettlebellRacks(bigRooster);
+    this.tickRain(ctx, bigRooster);
+    this.tickBalls(ctx, bigRooster);
     this.tickPuffs();
 
     if (bigRooster !== null) {
@@ -542,6 +643,220 @@ export class GymRoomSystem
         this.mirrorCracked = true;
       }
     }
+  }
+
+  /** Raises a cue for the scene to play, when it has any takes yet. */
+  private raiseCue(takes: readonly SoundId[]): void {
+    if (takes.length > 0) this.pendingSounds.push(takes);
+  }
+
+  /**
+   * Hands every rooster in the gym what it needs to know about the room and
+   * the rest of the flock: Big Rooster his racks, balls and losses, and every
+   * bird the view its dynamite kicks are aimed by.
+   */
+  private publishFlock(ctx: SystemContext, bigRooster: BigRooster | null): void {
+    const layout = this.layout;
+    const map = this.gameMap;
+    if (layout === null || map === null) return;
+    const minions = ctx.roster.mobs.filter(
+      (mob): mob is RoosterMinion => mob instanceof RoosterMinion,
+    );
+    for (const minion of minions) {
+      if (minion.isAlive) this.knownFlock.add(minion);
+    }
+    const half = TILE_SIZE * TILE_CENTER;
+    const living = [
+      ...minions.filter((minion) => minion.isAlive),
+      ...(bigRooster?.isAlive === true ? [bigRooster] : []),
+    ];
+    const view: RoosterFlockView = {
+      members: living.map((bird) => ({ x: bird.x + half, y: bird.y + half })),
+      active: ctx.active.isAlive ? ctx.active : null,
+      crawlers: [ctx.human, ctx.cat],
+      room: layout.bounds,
+      isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY),
+    };
+    for (const minion of minions) minion.flockView = view;
+    if (bigRooster === null) return;
+    bigRooster.flockView = view;
+    const lost = [...this.knownFlock].filter(
+      (minion) => !minion.isAlive || !ctx.roster.mobs.includes(minion),
+    ).length;
+    bigRooster.flockLosses = { known: this.knownFlock.size, lost };
+    bigRooster.kettlebellRackStands = this.heaveableKettlebellRacks().map((rack) => rack.standAt);
+    bigRooster.restingExerciseBalls = this.balls.all.flatMap((state, index) => {
+      if (state.phase !== 'resting') return [];
+      const centre = this.balls.centreOf(index);
+      return [{ index, x: centre.x, y: centre.y }];
+    });
+  }
+
+  /** Restocks heaved racks, and starts a rain where he heaved one. */
+  private tickKettlebellRacks(bigRooster: BigRooster | null): void {
+    let changed = false;
+    for (const rack of this.kettlebellRacks) {
+      if (rack.heavedFrames <= 0) continue;
+      rack.heavedFrames--;
+      if (rack.heavedFrames <= 0) changed = true;
+    }
+    const request = bigRooster?.heaveRequest ?? null;
+    if (bigRooster !== null && request !== null) {
+      bigRooster.heaveRequest = null;
+      const rack = this.nearestKettlebellRack(request);
+      if (rack !== null) {
+        rack.heavedFrames = KETTLEBELL_RACK_RESTOCK_FRAMES;
+        this.spawnPuffs(tileCentre(rack.tile), CHALK_PUFFS_PER_PLATE);
+        changed = true;
+      }
+      if (!this.defeated) {
+        this.rain.start();
+        this.raiseCue(GYM_CUES.kettlebellHeave.takes);
+      }
+    }
+    if (changed) this.publishPropState();
+  }
+
+  /**
+   * The racks he may heave from: the stocked ones, or every rack while all of
+   * them are restocking, so his fury's rain is never stranded for want of one.
+   */
+  private heaveableKettlebellRacks(): readonly KettlebellRack[] {
+    const stocked = this.kettlebellRacks.filter((rack) => rack.heavedFrames <= 0);
+    return stocked.length > 0 ? stocked : this.kettlebellRacks;
+  }
+
+  private nearestKettlebellRack(at: { x: number; y: number }): KettlebellRack | null {
+    let best: KettlebellRack | null = null;
+    let bestDistance = Infinity;
+    for (const rack of this.heaveableKettlebellRacks()) {
+      const distance = Math.hypot(rack.standAt.x - at.x, rack.standAt.y - at.y);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = rack;
+    }
+    return best;
+  }
+
+  private rainRoom(): KettlebellRainRoom | null {
+    const layout = this.layout;
+    const map = this.gameMap;
+    if (layout === null || map === null) return null;
+    return { ...layout.bounds, isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY) };
+  }
+
+  /**
+   * Lowers the rain and lands what comes down. A bell hits the active crawler
+   * in full and the AI-driven companion at a share of it; it never touches a
+   * rooster, and once he is dead it touches nobody.
+   */
+  private tickRain(ctx: SystemContext, bigRooster: BigRooster | null): void {
+    const room = this.rainRoom();
+    if (room === null) return;
+    const active = ctx.active;
+    const activeTile = active.isAlive
+      ? {
+          x: Math.floor((active.x + TILE_SIZE * TILE_CENTER) / TILE_SIZE),
+          y: Math.floor((active.y + TILE_SIZE * TILE_CENTER) / TILE_SIZE),
+        }
+      : null;
+    const frame = this.rain.tick(room, activeTile);
+    for (const bell of frame.landed) {
+      this.raiseCue(GYM_CUES.kettlebellImpact.takes);
+      this.spawnPuffs(bell, CHALK_PUFFS_PER_KETTLEBELL);
+      if (this.defeated || bigRooster?.isAlive !== true) continue;
+      for (const crawler of [ctx.human, ctx.cat]) {
+        if (!crawler.isAlive || !this.bellHits(bell, crawler)) continue;
+        const share = crawler === active ? 1 : COMPANION_KETTLEBELL_DAMAGE_SHARE;
+        bigRooster.landKettlebell(crawler, share);
+      }
+    }
+  }
+
+  private bellHits(bell: FallingKettlebell, body: Player): boolean {
+    const cx = body.x + TILE_SIZE * TILE_CENTER;
+    const cy = body.y + TILE_SIZE * TILE_CENTER;
+    return Math.hypot(cx - bell.x, cy - bell.y) < KETTLEBELL_IMPACT_RADIUS_PX;
+  }
+
+  private ballFloor(): ExerciseBallFloor | null {
+    const layout = this.layout;
+    const map = this.gameMap;
+    if (layout === null || map === null) return null;
+    return { room: layout.bounds, isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY) };
+  }
+
+  /**
+   * Kicks the ball he booted, rolls every ball, and lands the rolling ones on
+   * the crawlers they run into: the active crawler takes the blow, the
+   * AI-driven companion is only pushed aside. The flock is never touched, and
+   * a ball slowing to a stop after his death touches nobody.
+   */
+  private tickBalls(ctx: SystemContext, bigRooster: BigRooster | null): void {
+    const floor = this.ballFloor();
+    if (floor === null) return;
+    const kick = bigRooster?.ballKickRequest ?? null;
+    if (bigRooster !== null && kick !== null) {
+      bigRooster.ballKickRequest = null;
+      if (!this.defeated && this.balls.kick(kick.index, kick.dx, kick.dy)) {
+        this.raiseCue(GYM_CUES.ballKick.takes);
+      }
+    }
+    this.ballAgeFrames++;
+    for (const [key, frames] of this.ballHitCooldowns) {
+      if (frames <= 1) this.ballHitCooldowns.delete(key);
+      else this.ballHitCooldowns.set(key, frames - 1);
+    }
+    const rolled = this.balls.tick(floor);
+    if (rolled.bounced.length > 0) this.raiseCue(GYM_CUES.ballBounce.takes);
+    const reach = EXERCISE_BALL_RADIUS_PX + TILE_SIZE * CRAWLER_BODY_RADIUS_TILES;
+    this.balls.all.forEach((state, index) => {
+      if (state.phase !== 'rolling') return;
+      for (const crawler of [ctx.human, ctx.cat]) {
+        if (!crawler.isAlive) continue;
+        const cooldownKey = `${index}:${crawler === ctx.human ? 'human' : 'cat'}`;
+        if (this.ballHitCooldowns.has(cooldownKey)) continue;
+        const dx = state.x - (crawler.x + TILE_SIZE * TILE_CENTER);
+        const dy = state.y - (crawler.y + TILE_SIZE * TILE_CENTER);
+        const distance = Math.hypot(dx, dy);
+        if (distance >= reach) continue;
+        this.ballHitCooldowns.set(cooldownKey, BALL_REHIT_FRAMES);
+        this.raiseCue(GYM_CUES.ballBounce.takes);
+        if (distance > 0) this.balls.reflect(index, dx / distance, dy / distance);
+        if (crawler === ctx.active && bigRooster !== null && !this.defeated) {
+          bigRooster.landExerciseBall(crawler, state.vx, state.vy);
+        } else {
+          // Square to the ball's run, on whichever side the companion already stands.
+          const speed = Math.hypot(state.vx, state.vy);
+          const sideX = speed === 0 ? 1 : -state.vy / speed;
+          const sideY = speed === 0 ? 0 : state.vx / speed;
+          const sign = -dx * sideX - dy * sideY >= 0 ? 1 : -1;
+          crawler.applyKnockback(
+            sideX * sign,
+            sideY * sign,
+            TILE_SIZE * BALL_SHOVE_TILES,
+            BALL_SHOVE_FRAMES,
+          );
+        }
+      }
+    });
+  }
+
+  // ── Fight state, for gates ─────────────────────────────────────────────────
+
+  /** Every bell in the air. */
+  get fallingKettlebells(): readonly FallingKettlebell[] {
+    return this.rain.falling;
+  }
+
+  /** True while bells are still due to go up. */
+  get kettlebellsRaining(): boolean {
+    return this.rain.raining;
+  }
+
+  /** Every exercise ball's phase and motion, in the layout's order. */
+  get exerciseBalls(): ExerciseBalls['all'] {
+    return this.balls.all;
   }
 
   private shutterWantsClosed(): boolean {
@@ -804,11 +1119,24 @@ export class GymRoomSystem
   // ── Hazard ground ────────────────────────────────────────────────────────
 
   /**
-   * Running belts are soft ground — a companion steps off one rather than
-   * riding it — and a plate lane is live from the first chalk mark until the
-   * plate stops. Both answer with a step square to their run.
+   * A kettlebell's shadow is ground to leave before the bell lands, and a
+   * rolling ball's path is ground to step out of. Running belts are soft
+   * ground — a companion steps off one rather than riding it — and a plate
+   * lane is live from the first chalk mark until the plate stops. Lanes,
+   * paths and belts all answer with a step square to their run.
    */
   override getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
+    if (this.gameMap !== null && this.rain.falling.length > 0) {
+      const zones = this.rain.falling.map((bell) => ({
+        x: bell.x,
+        y: bell.y,
+        radiusPx: KETTLEBELL_ESCAPE_RADIUS_PX,
+      }));
+      const escape = escapeFromCircleZones(this.gameMap, zones, x, y);
+      if (escape !== null) return escape;
+    }
+    const ballEscape = this.balls.escapeFrom(x, y);
+    if (ballEscape !== null) return ballEscape;
     const lane = this.bigRooster?.plateRollLane ?? null;
     if (lane !== null) {
       const reach = TILE_SIZE * PLATE_ROLL_HIT_RADIUS_TILES + LANE_ESCAPE_MARGIN_PX;
@@ -872,9 +1200,6 @@ export class GymRoomSystem
       });
     }
 
-    const lane = this.bigRooster?.plateRollLane ?? null;
-    if (lane !== null && lane.length >= 2) this.drawPlateLane(ctx, lane, camX, camY);
-
     for (const bench of this.benches) {
       if (!bench.active) continue;
       drawGymPickupSprite(ctx, 'bench', bench.tile.x * ts - camX, bench.tile.y * ts - camY, ts);
@@ -896,6 +1221,31 @@ export class GymRoomSystem
     );
   }
 
+  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.layout === null) return;
+    const lane = this.bigRooster?.plateRollLane ?? null;
+    if (lane !== null && lane.length >= 2) this.drawPlateLane(ctx, lane, camX, camY);
+
+    for (const bell of this.rain.falling) {
+      const progress = 1 - bell.framesLeft / KETTLEBELL_FALL_FRAMES;
+      drawKettlebellShadow(
+        ctx,
+        bell.x - camX,
+        bell.y - camY,
+        KETTLEBELL_IMPACT_RADIUS_PX,
+        progress,
+      );
+      drawDangerCircle(
+        ctx,
+        bell.x - camX,
+        bell.y - camY,
+        KETTLEBELL_IMPACT_RADIUS_PX,
+        KETTLEBELL_WARNING_FADE,
+        { fillProgress: progress },
+      );
+    }
+  }
+
   private drawMirrorCrack(
     ctx: CanvasRenderingContext2D,
     layout: GymLayout,
@@ -914,28 +1264,16 @@ export class GymRoomSystem
     );
   }
 
+  /** The plate's whole run as a ground warning: every tile its hit circle sweeps on the way. */
   private drawPlateLane(
     ctx: CanvasRenderingContext2D,
     lane: PlateLane,
     camX: number,
     camY: number,
   ): void {
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    lane.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point.x - camX, point.y - camY);
-      else ctx.lineTo(point.x - camX, point.y - camY);
-    });
-    ctx.strokeStyle = LANE_BAND;
-    ctx.lineWidth = TILE_SIZE * PLATE_ROLL_HIT_RADIUS_TILES * 2;
-    ctx.stroke();
-    ctx.strokeStyle = LANE_LINE;
-    ctx.lineWidth = LANE_LINE_PX;
-    ctx.setLineDash([LANE_DASH_PX, LANE_GAP_PX]);
-    ctx.stroke();
-    ctx.restore();
+    const onScreen = lane.map((point) => ({ x: point.x - camX, y: point.y - camY }));
+    const hitRadiusPx = TILE_SIZE * PLATE_ROLL_HIT_RADIUS_TILES;
+    drawDangerPath(ctx, onScreen, hitRadiusPx, PLATE_LANE_FADE, { locked: true });
   }
 
   override renderEntities(): ReadonlyArray<DressingRenderable> {
@@ -993,6 +1331,21 @@ export class GymRoomSystem
       }
     }
 
+    const spinFrame = Math.floor(this.ballAgeFrames / BALL_SPIN_FRAME_HOLD);
+    this.balls.all.forEach((state, index) => {
+      const centre = this.balls.centreOf(index);
+      const colour = GYM_EXERCISE_BALL_COLOURS[index % GYM_EXERCISE_BALL_COLOURS.length];
+      const frame = state.phase === 'rolling' || state.phase === 'stopping' ? spinFrame + index : 0;
+      const left = centre.x - TILE_SIZE * TILE_CENTER;
+      const top = centre.y - TILE_SIZE * BALL_ART_CENTRE_SHARE;
+      this.renderables.push({
+        x: left,
+        y: top,
+        render: (ctx, camX, camY, ts) =>
+          drawGymExerciseBallSprite(ctx, left - camX, top - camY, ts, colour, frame),
+      });
+    });
+
     const plate = this.bigRooster?.bowledPlate ?? null;
     if (plate !== null) {
       const frame = Math.floor(plate.age / PLATE_SPIN_FRAME_HOLD) % GYM_PLATE_FRAMES;
@@ -1023,6 +1376,17 @@ export class GymRoomSystem
         thrown.vx,
         thrown.vy,
         thrown.age,
+      );
+    }
+    for (const bell of this.rain.falling) {
+      const height =
+        TILE_SIZE * KETTLEBELL_DROP_HEIGHT_TILES * (bell.framesLeft / KETTLEBELL_FALL_FRAMES);
+      drawGymFallingKettlebellSprite(
+        ctx,
+        bell.x - TILE_SIZE * TILE_CENTER - camX,
+        bell.y - TILE_SIZE * KETTLEBELL_ART_CENTRE_SHARE - height - camY,
+        TILE_SIZE,
+        bell.band,
       );
     }
     for (const puff of this.puffs) {

@@ -87,7 +87,7 @@ export const SPIT_ANIM_CYCLE_FRAMES = 8;
 /** Keeps the glob's reach at roughly the lab's width. */
 const SPIT_TTL = 110;
 /**
- * Frames of glob flight the spit aim line covers. Past that stretch the glob has
+ * Frames of glob flight the spit aim lane covers. Past that stretch the glob has
  * flown long enough that stepping aside is easy, so a longer line would only
  * clutter the floor.
  */
@@ -2350,7 +2350,7 @@ export class GrotesqueSpider extends Mob {
   }
 
   /**
-   * Her floor telegraphs: the slam cone, screech disk, spit aim line, roar ring
+   * Her floor telegraphs: the slam cone, screech disk, spit aim lane, roar ring
    * and punish-window halo. Called in the ground pass, before entities, because
    * they are floor paint: drawn with her body they would sort over anyone north
    * of her, be cut by her silhouette composite, and vanish when her tile is
@@ -2360,7 +2360,10 @@ export class GrotesqueSpider extends Mob {
     if (!this.isAlive) return;
     const cx = this.x - camX + this.tileSize * TILE_CENTER;
     const cy = this.y - camY + this.tileSize * TILE_CENTER;
-    drawSpiderGroundTelegraphs(ctx, this, cx, cy, SPIT_AIM_LINE_PX);
+    drawSpiderGroundTelegraphs(ctx, this, cx, cy, {
+      lengthPx: SPIT_AIM_LINE_PX,
+      halfWidthPx: this.tileSize * SPIT_HIT_RADIUS_FRACTION,
+    });
   }
 
   /**

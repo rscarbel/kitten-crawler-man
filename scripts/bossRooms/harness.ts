@@ -52,7 +52,13 @@ import type { BossRoomAssetGroup } from '../../src/sprites/sheets/bossRoomSheets
 import type { FrameEdge } from '../../src/sprites/sheets/propSheetPlan.js';
 import { asGameContext, type NodeContext } from '../nodeGameContext.js';
 
-export const BOSS_ROOM_IDS = ['trashGremlin', 'gym', 'krakaren', 'spider', 'swine'] as const;
+export const BOSS_ROOM_IDS = [
+  'trashGremlin',
+  'gym',
+  'powerLab',
+  'floodedPumpRoom',
+  'spider',
+] as const;
 export type BossRoomId = (typeof BOSS_ROOM_IDS)[number];
 
 export const BOSS_ROOM_STATES = [
@@ -106,6 +112,7 @@ export interface RoomInvariantTiles {
 export interface RoomUnderTest {
   /** Advances the room one frame. */
   update(): void;
+  /** The room's whole floor layer: its ground, then its ground warnings over it. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
   /** Live objects merged into the Y-sorted pass with the map's own decorations. */
   renderEntities(): ReadonlyArray<DressingRenderable>;
@@ -172,7 +179,7 @@ export interface BossRoomHarness {
   /** Builds the room's live systems on the floor. May stamp props into the map. */
   build(env: RoomEnvironment): RoomUnderTest;
   /** The tiles the shared layout invariants check; defaults to `defaultInvariantTiles`. */
-  invariantTiles?(room: LocatedRoom): RoomInvariantTiles;
+  invariantTiles?(room: LocatedRoom, gameMap: GameMap): RoomInvariantTiles;
   /** Room-specific checks run on every generated floor of the sweep. */
   gates?(context: RoomGateContext): void;
 }
@@ -590,6 +597,7 @@ export function dressingUnderTest(
     renderGround: (ctx, camX, camY) => {
       extra.renderGround?.(ctx, camX, camY);
       dressing.renderGround(ctx, camX, camY, env.frame.active);
+      dressing.renderGroundWarnings(ctx, camX, camY);
     },
     renderEntities: () => dressing.renderEntities(),
     renderAbove: (ctx, camX, camY) => {

@@ -372,6 +372,8 @@ export interface StageCue {
 /** What is lit this frame, as the maze sees it. Every tile is in tile units. */
 export interface LiveLights {
   readonly ventFlames: Iterable<{ readonly tile: MazeTile; readonly burn: number }>;
+  /** Vents warning they are about to light, by how far through the warning each is. */
+  readonly ventKindles: Iterable<{ readonly tile: MazeTile; readonly heat: number }>;
   readonly spotlightBeams: Iterable<{ readonly tile: MazeTile; readonly burn: number }>;
   readonly beamSteps: Iterable<{ readonly tile: MazeTile; readonly hot: boolean }>;
   readonly stars: Iterable<{ readonly tile: MazeTile; readonly lit: number }>;
@@ -392,6 +394,21 @@ const VENT_FLARE: GlowStyle = {
   radiusTiles: 1.2,
   stops: [
     { offset: 0, color: 'rgba(255,214,160,0.4)' },
+    { offset: 0.5, color: 'rgba(255,190,130,0.12)' },
+    { offset: 1, color: 'rgba(255,170,110,0)' },
+  ],
+};
+/**
+ * The warmth a grate gives off while its eyes and grin kindle, building with
+ * the warning. The red ground warning darkens tan sawdust, so on a dim stage a
+ * warning with no light of its own sinks into the floor it marks; lit from
+ * the grate, it stands out of the dark instead. Tighter than the flare, so it
+ * never reaches the next grille.
+ */
+const VENT_KINDLE: GlowStyle = {
+  radiusTiles: 1.2,
+  stops: [
+    { offset: 0, color: 'rgba(255,214,160,0.45)' },
     { offset: 0.5, color: 'rgba(255,190,130,0.12)' },
     { offset: 1, color: 'rgba(255,170,110,0)' },
   ],
@@ -618,6 +635,7 @@ export class StarlightTentLighting {
         drawRadialGlow(ctx, x, y, radius, style.stops);
       };
       for (const vent of live.ventFlames) glowAt(vent.tile, VENT_FLARE, vent.burn);
+      for (const vent of live.ventKindles) glowAt(vent.tile, VENT_KINDLE, vent.heat);
       for (const cell of live.spotlightBeams) glowAt(cell.tile, SPOTLIGHT_POOL, cell.burn);
       let step = 0;
       for (const beam of live.beamSteps) {

@@ -41,12 +41,12 @@ export const WELL = 21;
 export const GRASSY_WEED = 22;
 /** Tile type for a dirt patch decoration — walkable road tile with pebbles and soil texture. */
 export const DIRT_PATCH = 23;
-/** Tile type for the metal arena exterior walls — dark riveted steel panels, not walkable. */
+/** Riveted steel panels, not walkable: the goblin prison's bars. */
 export const METAL_WALL = 24;
-/** Tile type for the arena interior floor — dark steel grating, walkable combat surface. */
-export const ARENA_FLOOR = 25;
-/** Tile type for the Krakaren Clone boss room — dark wet cavern floor. */
-export const KRAKAREN_BOSS_ROOM_FLOOR = 26;
+/** Tile type for the power lab boss room — dark wet floor. */
+export const POWER_LAB_FLOOR = 26;
+/** The Kraken's flooded pump room: bare service concrete under its standing water. */
+export const FLOODED_PUMP_ROOM_FLOOR = 27;
 /** Tile type for interior stairs going up — walkable trigger tile. */
 export const STAIRS_UP = 30;
 /** Tile type for interior stairs going down — walkable trigger tile. */
@@ -333,17 +333,6 @@ export const GOBLIN_TENT = 91;
 /** The gnawed hollow at the centre of a troglodyte den. Walkable ground decal. */
 export const DEN_HOLLOW = 92;
 
-/**
- * A barred alcove set into the arena's wall, holding what is left of a spectator.
- *
- * Structurally a `METAL_WALL` — same thickness, same solidity, same shadow — so it
- * is registered everywhere that one is. It exists for what it says: the Ball of
- * Swine is studded with scraps of tuxedos and red sequin dresses, and
- * these are where they came from. Without them the clothing on the boss has no
- * source anywhere in the game.
- */
-export const ARENA_CAGE = 93;
-
 // ── Town interiors, second set ────────────────────────────────────────────────
 //
 // More floors and more furniture for the town's buildings, declared here rather
@@ -428,7 +417,7 @@ export const BROKEN_BOOKSHELF = 109;
  * everything past this room is reachable, and a wall here would fail that
  * check before the quest system ever runs. Passage is instead denied by a
  * `GameMap` block flag raised for the duration of the encounter — the same
- * pattern the arena door uses — which the validator does not see and the
+ * pattern the bathroom queue uses — which the validator does not see and the
  * player's live movement does.
  */
 export const QUEST_EXIT_DOOR_CLOSED = 110;
@@ -482,14 +471,14 @@ export const GYM_CABLE_STACK = 119;
 /** A treadmill's belt, walkable, and a conveyor when powered. */
 export const GYM_TREADMILL_BELT = 120;
 
-/** Shallow flood water in the Krakaren clone lab. Walkable, slows crawlers. */
-export const KRAKAREN_WADE = 121;
+/** A knee-high kettlebell rack Big Rooster heaves his rain from. Solid, does not block sight. */
+export const GYM_KETTLEBELL_RACK = 188;
 
-/** A clone vat, two tiles tall. Solid, blocks sight. */
-export const KRAKAREN_TANK = 122;
+/** A specimen vat, two tiles tall. Solid, blocks sight. */
+export const POWER_LAB_TANK = 122;
 
 /** A waist-high control console. Solid, does not block sight. */
-export const KRAKAREN_CONSOLE = 123;
+export const POWER_LAB_CONSOLE = 123;
 
 /** A waist-high lab bench in the Grotesque Spider's lab. Solid, does not block sight. */
 export const LAB_BENCH = 124;
@@ -500,9 +489,6 @@ export const LAB_SHELF = 125;
 /** Web spun across the lab floor. Walkable, slows crawlers. */
 export const LAB_WEB = 126;
 
-/** A mud wallow on the Iron Colosseum's sand. Walkable, slows crawlers. */
-export const ARENA_MUD = 127;
-
 /** Every solid boss-room prop; each is drawn in the Y-sorted decoration pass. */
 export const BOSS_ROOM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
   TRASH_PILE,
@@ -511,8 +497,9 @@ export const BOSS_ROOM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
-  KRAKAREN_TANK,
-  KRAKAREN_CONSOLE,
+  GYM_KETTLEBELL_RACK,
+  POWER_LAB_TANK,
+  POWER_LAB_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
 ]);
@@ -521,9 +508,7 @@ export const BOSS_ROOM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
 export const BOSS_ROOM_FLAT_TILE_TYPES: ReadonlySet<number> = new Set([
   TRASH_RUBBLE,
   GYM_TREADMILL_BELT,
-  KRAKAREN_WADE,
   LAB_WEB,
-  ARENA_MUD,
 ]);
 
 /**
@@ -596,7 +581,7 @@ export const HOLLOW_PALISADE_GAP = 135;
 
 /**
  * The village gate. Walkable by tile type — a hostile mob is turned away by a
- * runtime block flag, the same pattern the arena door uses, never by the tile
+ * runtime block flag, the same pattern the bathroom queue uses, never by the tile
  * type itself, so the offline reachability validator sees straight through it.
  * Solid for `TileGrid`, and Y-sorted.
  */
@@ -839,7 +824,7 @@ export const LAB_STATION_PROP_TILE_TYPES: ReadonlyArray<number> = [
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 188;
+export const TILE_TYPE_COUNT = 189;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -1011,6 +996,20 @@ export type TileContent = {
    */
   waterDepth?: number;
   /**
+   * Set only on flooded dungeon floor: the tile exactly as it was before the
+   * water came in, which draining puts back. Its presence is what marks water
+   * as standing on a dungeon floor rather than being the river; see
+   * `isDungeonWater`.
+   */
+  drainsTo?: DrainedFloor;
+  /**
+   * Set on dry dungeon floor that stands in the water under a float (a raft, a
+   * landing) whose art covers the whole tile. The water's art runs under it as
+   * though it were water, so a float gets no beach of soaked floor and foam
+   * around it.
+   */
+  underFloat?: true;
+  /**
    * Which way a `BRIDGE` tile's deck runs: one of the `BRIDGE_AXIS_*` constants.
    *
    * Recorded by the river painter as it lays each deck, because the renderer is
@@ -1098,11 +1097,26 @@ export const FLOW_DIR_VECTORS: ReadonlyArray<{ readonly x: number; readonly y: n
  */
 export function isRiverChannel(cell: TileContent | undefined): boolean {
   if (cell === undefined) return false;
+  if (isDungeonWater(cell)) return false;
   if (cell.type === FloorTypeValue.water || cell.type === RIVER_ROCK) return true;
   return cell.type === BRIDGE && cell.groundType === FloorTypeValue.water;
 }
 
-/** The deepest `waterDepth` a channel tile records. */
+/** What a flooded dungeon tile was before the water, and returns to when it drains. */
+export interface DrainedFloor {
+  readonly type: number;
+  readonly groundType: number | undefined;
+}
+
+/**
+ * Whether a tile is water standing over a dungeon floor rather than the river:
+ * the river is the ground itself and has nothing to drain back down to.
+ */
+export function isDungeonWater(cell: TileContent | undefined): boolean {
+  return cell?.type === FloorTypeValue.water && cell.drainsTo !== undefined;
+}
+
+/** The deepest `waterDepth` a water tile records, in the river or on a dungeon floor. */
 export const MAX_WATER_DEPTH = 3;
 
 /** Packs a heading in radians into the nearest `FLOW_DIR_*` index. */

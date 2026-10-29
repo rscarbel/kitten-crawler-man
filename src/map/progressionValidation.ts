@@ -1,6 +1,6 @@
 import type { TileContent } from './tileTypes';
 import { isWalkableTileType } from './walkability';
-import type { DungeonData, QuestChokeData } from './DungeonGenerator';
+import type { DungeonData, QuestChokeData, SafeRoomData } from './DungeonGenerator';
 import { QUEST_EXIT_DOOR_CLOSED } from './tileTypes';
 import { roomDoorways } from './roomDoorways';
 import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS, stealthGateChainIndex } from './spineLayout';
@@ -8,10 +8,15 @@ import { SAFE_ACCESS_RUN_LIMIT, bathroomBranchIndex } from './gauntletLayout';
 import { bathroomBlockedTiles, bathroomImpassableTiles, plumberTalkTiles } from './bathroomLayout';
 import { tileCoordKey } from './tileIndex';
 import { STEALTH_GATE_CLOSED } from './tileTypes';
-import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
-
-/** Boss the arena's antechamber warns the player about. */
-export const ARENA_BOSS_TYPE = 'ball_of_swine';
+import type { GauntletBossType } from './bossRoomSizes';
+import { FloorTypeValue, MAX_WATER_DEPTH } from './tileTypes';
+import {
+  corridorWallOf,
+  floodedTileDepths,
+  isBarrelSeatWall,
+  TRIGGER_SECTIONS_PAST_SEAT,
+  type FloodedApproachSpec,
+} from './floodedApproach';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -24,7 +29,6 @@ export interface InvariantFailure {
 export interface ProgressionExpectations {
   mapSize: number;
   gauntletCount: number;
-  hasArena: boolean;
   /**
    * Whether this floor is supposed to seat the defense quest as a mandatory
    * choke. Stated by the caller rather than read off the layout, so a floor that
@@ -47,7 +51,7 @@ export interface ProgressionExpectations {
    * it. Stated by the caller for the reason {@link hasQuestChoke} is.
    */
   hasStealthGate: boolean;
-  /** Whether this floor replaces its free region with a forced spine. */
+  /** Whether one of this floor's gauntlets is reached by a forced spine. */
   hasSpine: boolean;
   /**
    * The shortest chain the floor's own definition accepts, so a spine that came
@@ -78,6 +82,16 @@ export interface ProgressionExpectations {
    * free region, which today is floor 1 alone.
    */
   outskirtsSafeRoomHops: boolean;
+  /**
+   * Every gauntlet whose corridor into its boss room is flooded, and the spec
+   * it was asked for. Stated by the caller for the reason {@link hasQuestChoke}
+   * is: a floor that built none must fail rather than pass with nothing checked.
+   */
+  floodedApproaches: ReadonlyArray<{
+    readonly gauntletIndex: number;
+    readonly bossType: GauntletBossType;
+    readonly spec: FloodedApproachSpec;
+  }>;
 }
 
 /** How far `startTile` may sit from the exact map centre (I1). */
@@ -86,14 +100,6 @@ const CENTER_SPAWN_TOLERANCE_TILES = 3;
 const MIN_START_ROOM_DOORWAYS = 2;
 /** Pairwise stairwell distance in the free region (I4). */
 export const STAIRWELL_MIN_SEPARATION = 45;
-/**
- * Pairwise stairwell distance inside the beyond pocket, on an arena floor (I4).
- *
- * `STAIRWELL_MIN_SEPARATION` was tuned for the whole free region; the pocket
- * behind the arena is only tens of tiles across, far too tight to ever hold two
- * stairwells that far apart.
- */
-export const BEYOND_STAIRWELL_MIN_SEPARATION = 20;
 /** Stairwell distance from the last gauntlet's exit safe room bounds (I4). */
 export const STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT = 35;
 /**
@@ -162,8 +168,8 @@ type FloodField = ReadonlyArray<ReadonlyArray<boolean>>;
  *
  * Every cut-vertex invariant is phrased as "block this room, then check what
  * became unreachable", so blocking is expressed as rectangles rather than by
- * mutating a copy of the grid. The predicate exists for I6d, which has to block
- * an annulus (the concourse ring) rather than anything a rectangle can express.
+ * mutating a copy of the grid. The predicate exists for S7, which has to block
+ * single gate tiles rather than anything a rectangle can express.
  */
 function floodFill(
   grid: TileContent[][],
@@ -210,27 +216,6 @@ function isReachable(flood: FloodField, point: Point): boolean {
   const row = flood[point.y];
   if (point.x < 0 || point.x >= row.length) return false;
   return row[point.x];
-}
-
-/**
- * The first walkable tile inside a rectangle that the flood never reached, or null
- * if every one of them is reachable.
- *
- * Reports the tile rather than a count so a failure names a coordinate to go and
- * look at: an orphaned band of floor is a geometry bug a few tiles wide, and
- * "somewhere in the arena" is not enough to find it.
- */
-function firstUnreachableFloor(grid: TileContent[][], flood: FloodField, rect: Rect): Point | null {
-  for (let y = rect.y; y < rect.y + rect.h; y++) {
-    if (y < 0 || y >= grid.length) continue;
-    for (let x = rect.x; x < rect.x + rect.w; x++) {
-      const row = grid[y];
-      if (x < 0 || x >= row.length) continue;
-      if (!isWalkableTileType(row[x])) continue;
-      if (!isReachable(flood, { x, y })) return { x, y };
-    }
-  }
-  return null;
 }
 
 /**
@@ -591,6 +576,15 @@ function reachableWithin(
 
 // ── Invariants ────────────────────────────────────────────────────────────────
 
+/** The tile and its eight neighbours. */
+function chebyshevNeighbourhood(centre: Point): Point[] {
+  const tiles: Point[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) tiles.push({ x: centre.x + dx, y: centre.y + dy });
+  }
+  return tiles;
+}
+
 function isSameTile(a: Point, b: Point): boolean {
   return a.x === b.x && a.y === b.y;
 }
@@ -700,7 +694,7 @@ const STEALTH_GATE_ROOM_DOORWAYS = 2;
  */
 function validateStealthGate(
   data: DungeonData,
-  antechamberBounds: Rect | null,
+  gatewayBounds: Rect | null,
   roomGraph: RoomGraph,
   roomIndexOf: (rect: Rect) => number,
   fail: (id: string, message: string) => void,
@@ -713,8 +707,8 @@ function validateStealthGate(
     fail('S7', 'this floor expects a stealth gate room on its spine and seated none');
     return;
   }
-  if (antechamberBounds === null) {
-    fail('S7', 'a stealth gate room was built on a floor with no antechamber');
+  if (gatewayBounds === null) {
+    fail('S7', 'a stealth gate room was built on a spine that reaches no gateway safe room');
     return;
   }
 
@@ -737,10 +731,10 @@ function validateStealthGate(
   }
 
   // Every route passes through a gate room: with it removed, nothing reaches
-  // the antechamber.
+  // the gateway the spine arrives at.
   const withoutGateRoom = floodFill(grid, startTile, [room.bounds]);
-  if (isRectReachable(withoutGateRoom, antechamberBounds)) {
-    fail('S7', 'the antechamber is reachable without passing through the gate room');
+  if (isRectReachable(withoutGateRoom, gatewayBounds)) {
+    fail('S7', 'the spine’s gateway is reachable without passing through the gate room');
   }
 
   // Locked, as the block flag will hold it, with the guard anchored on his tile.
@@ -750,8 +744,8 @@ function validateStealthGate(
   const locked = floodFill(grid, startTile, [], (point) =>
     lockedKeys.has(tileCoordKey(point.x, point.y)),
   );
-  if (isRectReachable(locked, antechamberBounds)) {
-    fail('S7', 'the antechamber is reachable while the gate is locked');
+  if (isRectReachable(locked, gatewayBounds)) {
+    fail('S7', 'the spine’s gateway is reachable while the gate is locked');
   }
   if (!room.guardTalkTiles.some((tile) => isReachable(locked, tile))) {
     fail('S7', 'the gate guard cannot be talked to while the gate is locked');
@@ -762,8 +756,8 @@ function validateStealthGate(
     }
   }
   const open = floodFill(grid, startTile, []);
-  if (!isRectReachable(open, antechamberBounds)) {
-    fail('S7', 'the antechamber is unreachable even with the gate open');
+  if (!isRectReachable(open, gatewayBounds)) {
+    fail('S7', 'the spine’s gateway is unreachable even with the gate open');
   }
 
   // The exclusions the planner enforces, each measured on what was built.
@@ -824,7 +818,6 @@ export function validateProgression(
   const {
     mapSize,
     gauntletCount,
-    hasArena,
     hasQuestChoke,
     hasBathroomChoke,
     bathroomPlumberBlocks,
@@ -834,6 +827,7 @@ export function validateProgression(
     spineMinRooms,
     scatterSafeRooms: expectedScatterSafeRooms,
     outskirtsSafeRoomHops,
+    floodedApproaches: expectedFloodedApproaches,
   } = expectations;
   const layout = data.progressionLayout;
 
@@ -911,13 +905,8 @@ export function validateProgression(
     return failures;
   }
 
-  // The antechamber also carries a guardsBossType, so a gateway is told apart by
-  // guarding a boss that is not the arena's and by not sitting behind one.
   const gatewaySafeRooms = safeRooms.filter(
-    (room) =>
-      room.guardsBossType !== undefined &&
-      room.guardsBossType !== ARENA_BOSS_TYPE &&
-      room.followsBossType === undefined,
+    (room) => room.guardsBossType !== undefined && room.followsBossType === undefined,
   );
   const exitSafeRooms = safeRooms.filter((room) => room.followsBossType !== undefined);
   if (gatewaySafeRooms.length !== gauntletCount || exitSafeRooms.length !== gauntletCount) {
@@ -927,7 +916,6 @@ export function validateProgression(
     );
     return failures;
   }
-  const antechamber = safeRooms.find((room) => room.guardsBossType === ARENA_BOSS_TYPE);
   // Excludes the mandatory safe-access pockets seated inside gauntlet branches
   // and the spine chain: they carry no guardsBossType/followsBossType either,
   // but they answer to their own path's run-limit rule (I10), not to the free
@@ -949,16 +937,23 @@ export function validateProgression(
   }
 
   const lastExitSafeRoom = exitSafeRooms[gauntletCount - 1];
-  const arena = data.arenaExteriors.length > 0 ? data.arenaExteriors[0] : null;
-  const arenaDoorTile = data.arenaDoorTile;
   const questChoke = layout.questChoke;
+  /** The gateway safe room a spine arrives at, which every spine room stands in front of. */
+  const spineGateway =
+    layout.spine === null ? null : (gatewaySafeRooms[layout.spine.gauntletIndex]?.bounds ?? null);
 
   /** What a choke room stands between the player and, as a rectangle to test. */
   const chokeBlocks = (choke: QuestChokeData): Rect | null => {
-    if (choke.blocks === 'gatewaySafeRoom')
-      return gatewaySafeRooms[choke.gauntletIndex]?.bounds ?? null;
-    if (choke.blocks === 'gatewayBossRoom') return bossRooms[choke.gauntletIndex]?.bounds ?? null;
-    return antechamber?.bounds ?? null;
+    switch (choke.blocks) {
+      case 'gatewaySafeRoom':
+        return gatewaySafeRooms[choke.gauntletIndex]?.bounds ?? null;
+      case 'gatewayBossRoom':
+        return bossRooms[choke.gauntletIndex]?.bounds ?? null;
+      default: {
+        const unhandled: never = choke.blocks;
+        throw new Error(`unknown choke landmark ${String(unhandled)}`);
+      }
+    }
   };
 
   // I3 — each gateway safe room and its boss room are cut vertices: nothing past
@@ -979,9 +974,6 @@ export function validateProgression(
     }
     for (const [index, tile] of stairwellTiles.entries()) {
       laterLandmarks.push({ label: `stairwell ${index}`, rect: stairwellFootprint(tile) });
-    }
-    if (hasArena && arenaDoorTile !== undefined) {
-      laterLandmarks.push({ label: 'arena door', rect: stairwellFootprint(arenaDoorTile) });
     }
 
     // A quest room seated as a choke is not automatically past every gateway: on
@@ -1049,13 +1041,7 @@ export function validateProgression(
 
   // I4 — stairwells are spread out, well past the last gauntlet's exit, and never
   // sitting inside a gauntlet.
-  //
-  // On an arena floor every stairwell seats inside the beyond pocket, which is
-  // far tighter than the free region `STAIRWELL_MIN_SEPARATION` was tuned for —
-  // so the pairwise check uses the pocket's own, tighter minimum there instead.
-  const stairwellSeparationMin = hasArena
-    ? BEYOND_STAIRWELL_MIN_SEPARATION
-    : STAIRWELL_MIN_SEPARATION;
+  const stairwellSeparationMin = STAIRWELL_MIN_SEPARATION;
   if (stairwellTiles.length === 0) {
     fail('I4', 'the floor has no stairwell down');
   }
@@ -1156,8 +1142,7 @@ export function validateProgression(
     }
   }
 
-  // I10 — no pre-planned path (a gauntlet branch, on either floor, or the
-  // floor-2 spine chain) runs SAFE_ACCESS_RUN_LIMIT or more consecutive rooms
+  // I10 — no pre-planned path (a gauntlet branch or a spine chain) runs SAFE_ACCESS_RUN_LIMIT or more consecutive rooms
   // without safe access: the room is itself safe, or a safe dead-end pocket
   // hangs directly off it. Walked against the mandatory pockets' *actual*
   // seated positions rather than their nominal ones, so a host-search drift
@@ -1270,7 +1255,7 @@ export function validateProgression(
     validateBathroomChoke(data, gatewaySafeRooms, bathroomPlumberBlocks, fail);
   }
 
-  // S1–S3 — the forced spine past the last gateway boss.
+  // S1–S3 — the forced spine up to its gauntlet's gateway safe room.
   //
   // Armed from the floor's own definition rather than from what got built, so a
   // floor that fell back to a free region fails red here instead of skipping
@@ -1281,10 +1266,9 @@ export function validateProgression(
     const spine = layout.spine;
     if (spine === null) {
       fail('S1', 'this floor expects a forced spine and generated none');
-    } else if (antechamber === undefined) {
-      fail('S1', 'a spine was built but the floor has no antechamber for it to end at');
+    } else if (spineGateway === null) {
+      fail('S1', 'a spine was built but the gateway safe room it ends at is missing');
     } else {
-      const antechamberBounds = antechamber.bounds;
       const shortestChain = Math.max(MIN_CHAIN_ROOMS, spineMinRooms);
       if (spine.chain.length < shortestChain) {
         fail(
@@ -1294,12 +1278,12 @@ export function validateProgression(
         );
       }
 
-      // S1 — every chain room is a cut vertex: the antechamber is unreachable
+      // S1 — every chain room is a cut vertex: the gateway is unreachable
       // without it. This is what "one way through" means, measured room by room.
       for (const [index, room] of spine.chain.entries()) {
         const withoutRoom = floodFill(grid, startTile, [room]);
-        if (isRectReachable(withoutRoom, antechamberBounds)) {
-          fail('S1', `the antechamber is reachable without spine room ${index}`);
+        if (isRectReachable(withoutRoom, spineGateway)) {
+          fail('S1', `the spine’s gateway is reachable without spine room ${index}`);
         }
       }
 
@@ -1347,7 +1331,7 @@ export function validateProgression(
   // while locked without shutting the party out of its guard or the prison
   // door, and nothing else seated on it or beside it.
   if (hasStealthGate) {
-    validateStealthGate(data, antechamber?.bounds ?? null, roomGraph, roomIndexOf, fail);
+    validateStealthGate(data, spineGateway, roomGraph, roomIndexOf, fail);
   }
 
   // S3 — the spider lab hangs off the route as a dead end, so walking past its
@@ -1358,79 +1342,184 @@ export function validateProgression(
     validateSpiderLabBranch(data, roomGraph, roomIndexOf, fail);
   }
 
-  // I6 — the arena is only reachable through its antechamber, and skipping both
-  // still leaves the rest of the floor open.
-  if (hasArena) {
-    if (antechamber === undefined) {
-      fail('I6', 'arena floor generated without an antechamber safe room');
-    } else if (arenaDoorTile === undefined || arena === null) {
-      fail('I6', 'arena floor generated without an arena door tile');
-    } else {
-      const withoutAntechamber = floodFill(grid, startTile, [antechamber.bounds]);
-      if (isReachable(withoutAntechamber, arenaDoorTile)) {
-        fail('I6', 'the arena door is reachable without passing through the antechamber');
-      }
-
-      // I6c — every stairwell now lives behind the arena, so blocking only the
-      // antechamber has to strand every one of them, not just the door. This is
-      // the inverse of the check this design replaces: the old I6 proved a
-      // stairwell survived without the arena, which was exactly the proof that
-      // the floor was skippable. `withoutAntechamber` already blocks the
-      // antechamber alone, so it is reused rather than flooded twice.
-      for (const [index, tile] of stairwellTiles.entries()) {
-        if (isReachable(withoutAntechamber, tile)) {
-          fail(
-            'I6c',
-            `stairwell ${index} at (${tile.x},${tile.y}) is reachable without the antechamber`,
-          );
-        }
-      }
-
-      // I6d — the viewing walk itself. I6c alone would pass a future corridor
-      // that slipped from the antechamber straight into the beyond pocket
-      // without ever touching the ring; blocking the ring instead makes the
-      // half-circuit — the stretch of route with the drum on screen — the thing
-      // that is machine-checked. Same annulus-minus-antechamber predicate the
-      // concourse-ring carve uses, so drift between carving and checking is
-      // impossible by construction.
-      const isConcourseRingTile = (point: Point): boolean => {
-        const radius = Math.hypot(point.x - arena.centre.x, point.y - arena.centre.y);
-        if (radius <= ARENA_RADIUS || radius > ARENA_CONCOURSE_REACH) return false;
-        return !rectContains(antechamber.bounds, point);
-      };
-      const withoutConcourseRing = floodFill(grid, startTile, [], isConcourseRingTile);
-      for (const [index, tile] of stairwellTiles.entries()) {
-        if (isReachable(withoutConcourseRing, tile)) {
-          fail(
-            'I6d',
-            `stairwell ${index} at (${tile.x},${tile.y}) is reachable without crossing the concourse ring`,
-          );
-        }
-      }
-
-      // I6b — nothing the arena carves is orphaned.
-      //
-      // Measured against the same `fullFlood` every other unblocked check uses: a
-      // second identical BFS is not only a wasted walk of the whole map, it is a
-      // second definition of "reachable with nothing blocked" that can drift.
-      //
-      // The concourse is a ring of floor inside reserved rock whose only ways in
-      // are two links down into the antechamber. Get those wrong by a tile and it
-      // becomes a band of floor nothing in the game can ever walk on — invisible
-      // in a screenshot and invisible in the invariants above. So the whole
-      // footprint is walked: every carved tile the arena owns has to be reachable.
-      const orphan = firstUnreachableFloor(grid, fullFlood, arenaReserveRect(arena.centre));
-      if (orphan !== null) {
-        fail(
-          'I6b',
-          `the arena carves floor at ${orphan.x},${orphan.y} that nothing can reach — the ` +
-            `concourse is not joined to the antechamber`,
-        );
-      }
-    }
-  }
+  // F1 — every flooded approach is the corridor it was asked for: long enough,
+  // never narrower than its width, its water deepening to the door, and its
+  // barrel seat beside the corridor rather than in it, never on its south wall.
+  validateFloodedApproaches(data, expectedFloodedApproaches, gatewaySafeRooms, fail);
 
   return failures;
+}
+
+/**
+ * F1, for {@link validateProgression}: each flooded approach runs from its
+ * gateway safe room into its boss room at least as long as asked and never
+ * narrower than its width; it is dry to its midpoint and deepens from there to
+ * `MAX_WATER_DEPTH` at the door, with every tile it carves (a bend's outer
+ * corner included) holding the water planned for it; and its barrel seat is an alcove beside a full
+ * cross-section, cut into any wall but the south one, with the trigger line spanning the width just
+ * past it.
+ */
+function validateFloodedApproaches(
+  data: DungeonData,
+  expected: ProgressionExpectations['floodedApproaches'],
+  gatewaySafeRooms: ReadonlyArray<SafeRoomData>,
+  fail: (id: string, message: string) => void,
+): void {
+  const { grid } = data;
+  if (data.floodedApproaches.length !== expected.length) {
+    fail(
+      'F1',
+      `${data.floodedApproaches.length} flooded approaches built, expected ${expected.length}`,
+    );
+  }
+  const cellAt = (tile: Point): TileContent | null => {
+    if (tile.y < 0 || tile.y >= grid.length) return null;
+    const row = grid[tile.y];
+    if (tile.x < 0 || tile.x >= row.length) return null;
+    return row[tile.x];
+  };
+  const walkable = (tile: Point): boolean => {
+    const cell = cellAt(tile);
+    return cell !== null && isWalkableTileType(cell);
+  };
+  for (const { gauntletIndex, bossType, spec } of expected) {
+    const approach = data.floodedApproaches.find((built) => built.bossType === bossType);
+    if (approach === undefined) {
+      fail('F1', `gauntlet ${gauntletIndex} (${bossType}) has no flooded approach`);
+      continue;
+    }
+    const label = `the ${bossType} approach`;
+    const sections = approach.crossSections;
+    const tileDepths = floodedTileDepths(approach);
+    if (sections.length < spec.minLengthTiles) {
+      fail('F1', `${label} is ${sections.length} tiles long (min ${spec.minLengthTiles})`);
+    }
+    const hasRooms =
+      gauntletIndex < gatewaySafeRooms.length && gauntletIndex < data.bossRooms.length;
+    if (sections.length === 0 || !hasRooms) {
+      fail('F1', `${label} has no cross-sections or no rooms to run between`);
+      continue;
+    }
+    const first = sections[0];
+    const last = sections[sections.length - 1];
+    const gateway = gatewaySafeRooms[gauntletIndex].bounds;
+    const bossRoom = data.bossRooms[gauntletIndex].bounds;
+    // A corridor's first and last tiles outside the rooms stand one step from
+    // the room they leave and the room they reach.
+    const firstTouchesGateway = distanceToRect(first.centre, gateway) === 1;
+    const lastTouchesBossRoom = distanceToRect(last.centre, bossRoom) === 1;
+    if (!firstTouchesGateway || !lastTouchesBossRoom) {
+      fail('F1', `${label} does not run from its gateway safe room into its boss room`);
+    }
+
+    for (const [index, section] of sections.entries()) {
+      const open = section.tiles.filter(walkable).length;
+      if (section.tiles.length !== spec.widthTiles || open !== spec.widthTiles) {
+        fail(
+          'F1',
+          `${label} is ${open} tiles wide at (${section.centre.x},${section.centre.y}) ` +
+            `(min ${spec.widthTiles})`,
+        );
+        break;
+      }
+      const depth = approach.depths[index] ?? 0;
+      const shouldBeWet = index >= approach.wetFromIndex;
+      if (shouldBeWet !== depth > 0) {
+        fail('F1', `${label} is ${depth > 0 ? 'wet' : 'dry'} at section ${index}`);
+        break;
+      }
+      const previousDepth = index > 0 ? (approach.depths[index - 1] ?? 0) : 0;
+      if (depth < previousDepth) {
+        fail('F1', `${label} gets shallower toward the door at section ${index}`);
+        break;
+      }
+    }
+    const insideEitherRoom = (tile: Point): boolean =>
+      rectContains(gateway, tile) || rectContains(bossRoom, tile);
+    const unplannedOpenTile = sections
+      .flatMap((section) => chebyshevNeighbourhood(section.centre))
+      .find(
+        (tile) =>
+          walkable(tile) &&
+          !insideEitherRoom(tile) &&
+          !tileDepths.has(tileCoordKey(tile.x, tile.y)),
+      );
+    if (unplannedOpenTile !== undefined) {
+      fail(
+        'F1',
+        `${label} carves (${unplannedOpenTile.x},${unplannedOpenTile.y}) beside its centre ` +
+          `line but plans no water for it`,
+      );
+    }
+    for (const { tile, depth: planned } of tileDepths.values()) {
+      const cell = cellAt(tile);
+      const isWater = cell?.type === FloorTypeValue.water;
+      const holdsPlan =
+        cell !== null && (planned > 0 ? isWater && cell.waterDepth === planned : !isWater);
+      if (!holdsPlan) {
+        fail('F1', `${label}'s grid does not hold the water planned at (${tile.x},${tile.y})`);
+        break;
+      }
+    }
+    if (approach.wetFromIndex !== Math.floor(sections.length / 2)) {
+      fail('F1', `${label}'s water starts at section ${approach.wetFromIndex}, not its midpoint`);
+    }
+    if (approach.depths[approach.depths.length - 1] !== MAX_WATER_DEPTH) {
+      fail('F1', `${label} does not reach depth ${MAX_WATER_DEPTH} at the door`);
+    }
+
+    const seatIndex = approach.barrelSeat.crossSectionIndex;
+    const seat = approach.barrelSeat.tile;
+    const triggerIndex = seatIndex + TRIGGER_SECTIONS_PAST_SEAT;
+    if (seatIndex < 0 || triggerIndex >= sections.length) {
+      fail(
+        'F1',
+        `${label}'s barrel seat leaves no room for the trigger line ${TRIGGER_SECTIONS_PAST_SEAT} sections past it`,
+      );
+      continue;
+    }
+    const seatSection = sections[seatIndex];
+    const triggerSection = sections[triggerIndex];
+    if (seatIndex < approach.wetFromIndex) {
+      fail('F1', `${label}'s barrel seat is in the dry half`);
+    }
+    const besideAnEdge = seatSection.tiles
+      .filter((_, position) => position === 0 || position === seatSection.tiles.length - 1)
+      .some((edge) => Math.abs(edge.x - seat.x) + Math.abs(edge.y - seat.y) === 1);
+    const inSection = seatSection.tiles.some((tile) => isSameTile(tile, seat));
+    if (inSection || !besideAnEdge || !walkable(seat)) {
+      fail('F1', `${label}'s barrel seat is not an alcove beside the corridor`);
+    }
+    const seatWall = corridorWallOf(seatSection.centre, seat);
+    if (!isBarrelSeatWall(seatWall)) {
+      fail(
+        'F1',
+        `${label}'s barrel seat is cut into its ${seatWall ?? 'unknown'} wall, where the stack ` +
+          `would be drawn over the corridor`,
+      );
+    } else if (seatWall !== approach.barrelSeat.wall) {
+      fail(
+        'F1',
+        `${label}'s barrel seat stands against its ${seatWall} wall but is recorded against ` +
+          `its ${approach.barrelSeat.wall} wall`,
+      );
+    }
+    if (seatSection.tiles.filter(walkable).length < spec.widthTiles) {
+      fail(
+        'F1',
+        `${label}'s barrel seat leaves fewer than ${spec.widthTiles} tiles free beside it`,
+      );
+    }
+    const triggerMatches =
+      approach.triggerLine.length === triggerSection.tiles.length &&
+      triggerSection.tiles.every((tile) => approach.triggerLine.some((t) => isSameTile(t, tile)));
+    if (!triggerMatches) {
+      fail(
+        'F1',
+        `${label}'s trigger line does not span the corridor ${TRIGGER_SECTIONS_PAST_SEAT} sections past the barrel seat`,
+      );
+    }
+  }
 }
 
 /**

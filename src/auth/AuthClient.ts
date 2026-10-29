@@ -37,7 +37,7 @@ export interface GameProgress {
    * crawler and so have no home in a `PlayerSnapshot`.
    */
   abilityStates: SerializedAbilityState[];
-  /** Whether the Krakaren chest has been opened and Deinonychus is available at all. */
+  /** Whether the `dungeon_kills_200` achievement's chest has been opened and Deinonychus is available at all. */
   deinonychusUnlocked: boolean;
   /** The pet's HP, which persists across summons and sessions. */
   deinonychusPetHp: number;

@@ -11,7 +11,7 @@
  * for; "the crawler plus half a viewport" would be wrong at every map border.
  */
 
-import { viewportHeight, viewportWidth } from './Viewport';
+import { worldViewWidth, worldViewHeight } from './Viewport';
 
 /** A disc outside which the scene draws nothing but fog. */
 export interface WorldSight {
@@ -53,9 +53,9 @@ export function visibleWorldView(): VisibleWorldView | null {
 export function cameraWorldView(
   camera: { readonly x: number; readonly y: number },
   sight: WorldSight | null,
-  heightPx: number = viewportHeight(),
+  heightPx: number = worldViewHeight(),
 ): VisibleWorldView {
-  return { left: camera.x, top: camera.y, width: viewportWidth(), height: heightPx, sight };
+  return { left: camera.x, top: camera.y, width: worldViewWidth(), height: heightPx, sight };
 }
 
 /**

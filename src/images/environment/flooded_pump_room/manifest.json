@@ -1,0 +1,210 @@
+{
+  "flooded_pump_raft": {
+    "frameWidth": 32,
+    "frameHeight": 40,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "states": {
+      "floating_nw": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "floating_n": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "floating_ne": {
+        "row": 2,
+        "frameCount": 3
+      },
+      "floating_w": {
+        "row": 3,
+        "frameCount": 3
+      },
+      "floating_c": {
+        "row": 4,
+        "frameCount": 3
+      },
+      "floating_e": {
+        "row": 5,
+        "frameCount": 3
+      },
+      "floating_sw": {
+        "row": 6,
+        "frameCount": 3
+      },
+      "floating_s": {
+        "row": 7,
+        "frameCount": 3
+      },
+      "floating_se": {
+        "row": 8,
+        "frameCount": 3
+      },
+      "settled_nw": {
+        "row": 9,
+        "frameCount": 3
+      },
+      "settled_n": {
+        "row": 10,
+        "frameCount": 3
+      },
+      "settled_ne": {
+        "row": 11,
+        "frameCount": 3
+      },
+      "settled_w": {
+        "row": 12,
+        "frameCount": 3
+      },
+      "settled_c": {
+        "row": 13,
+        "frameCount": 3
+      },
+      "settled_e": {
+        "row": 14,
+        "frameCount": 3
+      },
+      "settled_sw": {
+        "row": 15,
+        "frameCount": 3
+      },
+      "settled_s": {
+        "row": 16,
+        "frameCount": 3
+      },
+      "settled_se": {
+        "row": 17,
+        "frameCount": 3
+      }
+    }
+  },
+  "flooded_pump_pump": {
+    "frameWidth": 64,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "running": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "off": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "flooded_pump_valve": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "states": {
+      "turn": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "flooded_pump_chute": {
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 64,
+    "tileY": 80,
+    "tileScale": 32,
+    "states": {
+      "pour": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "drip": {
+        "row": 1,
+        "frameCount": 3
+      }
+    }
+  },
+  "flooded_pump_dead_shark": {
+    "frameWidth": 128,
+    "frameHeight": 64,
+    "tileX": 48,
+    "tileY": 16,
+    "tileScale": 32,
+    "states": {
+      "beached": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "flooded_pump_barrel": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "upright": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "floating": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "settled": {
+        "row": 2,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 3,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 4,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 5,
+        "frameCount": 3
+      }
+    }
+  },
+  "flooded_pump_barrel_stack": {
+    "frameWidth": 96,
+    "frameHeight": 224,
+    "tileX": 16,
+    "tileY": 144,
+    "tileScale": 64,
+    "states": {
+      "stack_3": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "stack_4": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "flooded_pump_drain": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "states": {
+      "grate": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "swirl": {
+        "row": 1,
+        "frameCount": 4
+      }
+    }
+  }
+}

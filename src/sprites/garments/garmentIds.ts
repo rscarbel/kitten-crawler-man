@@ -101,7 +101,7 @@ type HumanLimbGarmentId =
   | 'human_hearthguard_bracers'
   | 'human_riot_kneeguards'
   | 'human_hobnail_boots'
-  | 'human_hamhock_boots'
+  | 'human_lineman_boots'
   | 'human_hearthguard_boots';
 
 /** The trinkets on the human crawler: a ring on a hand for each charm, a bangle at the wrist. */

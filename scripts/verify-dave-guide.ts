@@ -83,7 +83,7 @@ type Point = { readonly x: number; readonly y: number };
 type SaveProgress = Parameters<
   NonNullable<ConstructorParameters<typeof DungeonScene>[3]>['saveProgress'] & {}
 >[0];
-type Script = Parameters<InstanceType<typeof CutsceneKit>['director']['play']>[0];
+type Script = Parameters<InstanceType<typeof CutsceneKit<never>>['director']['play']>[0];
 type BeatId = (typeof STORY_BEAT_ORDER)[number];
 
 /** More frames than his arrival delay and teleport-in take together. */
@@ -188,7 +188,7 @@ interface Harness {
   readonly scripts: Script[];
   readonly saves: SaveProgress[];
   readonly dave: InstanceType<typeof DaveGuideSystem>;
-  readonly cutscenes: InstanceType<typeof CutsceneKit>;
+  readonly cutscenes: InstanceType<typeof CutsceneKit<never>>;
   readonly conversation: InstanceType<typeof Conversation>;
   readonly story: InstanceType<typeof StoryDirector>;
 }
@@ -525,7 +525,7 @@ async function verifyCarolineArrivalReads(pauseFirst: boolean): Promise<void> {
   check(conversation.isOpen && cutscenes.isActive, 'her message is up, inside its cutscene');
   const stack = scene.ui.openSurfaceIds();
   check(
-    stack.indexOf(CUTSCENE_SURFACE_ID) !== -1 &&
+    stack.includes(CUTSCENE_SURFACE_ID) &&
       stack.indexOf(CUTSCENE_SURFACE_ID) < stack.indexOf('conversation'),
     `the message stacks above the cutscene holding the party (${stack.join(' < ')})`,
   );
@@ -558,7 +558,7 @@ function verifySkippedRooms(): void {
   const arrival = {
     kind: 'safeRoomArrival',
     floor: 2,
-    defeatedBosses: new Set(['krakaren_clone'] as const),
+    defeatedBosses: new Set(['kraken'] as const),
   } as const;
   const heard: BeatId[] = [];
   for (let visit = 0; visit < FLOOR_TWO_ARRIVALS; visit++) {
@@ -572,9 +572,9 @@ function verifySkippedRooms(): void {
   const expected: BeatId[] = [
     'floor1_dave_how_it_began',
     'floor1_dave_the_morning',
+    'floor1_dave_chosen',
     'floor2_dave_his_story',
     'floor2_dave_how_he_knows',
-    'floor2_dave_chosen',
   ];
   check(
     heard.join() === expected.join(),
@@ -582,8 +582,8 @@ function verifySkippedRooms(): void {
   );
   check(
     story
-      .dueBeats({ kind: 'beatFinished', beat: 'floor2_dave_chosen' })
-      .includes('floor2_caroline_motive'),
+      .dueBeats({ kind: 'beatFinished', beat: 'floor1_dave_chosen' })
+      .includes('floor1_caroline_motive'),
     "Caroline's answer follows the beat she answers",
   );
 }

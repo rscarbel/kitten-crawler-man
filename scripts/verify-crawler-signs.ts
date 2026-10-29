@@ -241,13 +241,6 @@ function rectContains(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
 }
 
-/** Chebyshev gap, in tiles, between a point and the nearest tile of `rect`; zero inside it. */
-function distanceToRectTiles(point: Point, rect: Rect): number {
-  const gapX = Math.max(rect.x - point.x, 0, point.x - (rect.x + rect.w - 1));
-  const gapY = Math.max(rect.y - point.y, 0, point.y - (rect.y + rect.h - 1));
-  return Math.max(gapX, gapY);
-}
-
 /** Room-steps to the goal of the leg `room` lies on, everywhere; all infinite for a room off the forced path. */
 function fieldOf(model: FloorModel, room: number): ReadonlyArray<number> {
   const stage = model.stageOfRoom[room] ?? NO_STAGE;
@@ -364,21 +357,13 @@ function buildFloorModel(map: GameMap, rooms: ReadonlyArray<Rect>): FloorModel {
   const fromStart = startRoom === NO_ROOM ? [] : distancesFrom(startRoom);
   const reachableFromStart = (room: number): number => fromStart[room] ?? Number.POSITIVE_INFINITY;
 
-  // The rooms the player is required to reach: every gateway boss, then the room
-  // that guards the arena's door. Derived from the live map's own boss and arena
-  // records, and ordered by how far each is from the start rather than trusting
+  // The rooms the player is required to reach: every gateway boss. Derived from
+  // the live map's own boss records, and ordered by how far each is from the start rather than trusting
   // the generator's list order.
   const requiredGoals = new Set<number>();
   for (const boss of map.bossRooms) {
     const room = roomAt[at(boss.centre.x, boss.centre.y)];
     if (room !== undefined && room !== NO_ROOM) requiredGoals.add(room);
-  }
-  const arena = map.arenaExteriors[0];
-  if (arena !== undefined) {
-    const nearestToDoor = rooms
-      .map((bounds, index) => ({ index, gap: distanceToRectTiles(arena.doorTile, bounds) }))
-      .sort((a, b) => a.gap - b.gap || a.index - b.index)[0];
-    if (nearestToDoor !== undefined) requiredGoals.add(nearestToDoor.index);
   }
   const stageGoals = [...requiredGoals]
     .filter((room) => reachableFromStart(room) !== Number.POSITIVE_INFINITY)
@@ -564,8 +549,6 @@ function claimLists(map: GameMap): Array<{ name: string; points: Point[] }> {
     { name: 'safeRoom centres', points: map.safeRooms.map((room) => room.centre) },
     { name: 'bossRoom centres', points: map.bossRooms.map((room) => room.centre) },
     { name: 'building entries', points: map.buildingEntries.map((entry) => entry.doorTile) },
-    { name: 'arena doors', points: map.arenaExteriors.map((arena) => arena.doorTile) },
-    { name: 'arena stairwells', points: map.arenaExteriors.map((arena) => arena.stairwellTile) },
     { name: 'quest room tiles', points: questTiles },
     { name: 'quest grates', points: map.questRooms.flatMap((quest) => quest.grateTiles) },
     { name: 'quest exit doors', points: map.questRooms.flatMap((quest) => quest.exitDoorTiles) },
@@ -1866,9 +1849,6 @@ function hallwayOnwardRoom(model: FloorModel, sign: SignTile): number | null {
   return reached[0] ?? null;
 }
 
-/** Tiles beyond an arena's radius the generator keeps sign pockets out of; restated here so the gate does not import the generator's constant. */
-const ARENA_POCKET_MARGIN_TILES = 6;
-
 /** Walkable tiles reachable from the start, split by whether the last required goal room lies in the way. */
 function searchTerritory(model: FloorModel): { near: Set<number>; far: Set<number> } {
   const { map } = model;
@@ -1963,17 +1943,11 @@ function noPocketReason(
     for (const around of [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS, { x: 0, y: 0 }]) {
       if (roomIndexAt(model, pocket.x + around.x, pocket.y + around.y) !== NO_ROOM) return false;
     }
-    const nearArena = map.arenaExteriors.some(
-      (arena) =>
-        Math.hypot(pocket.x - arena.centre.x, pocket.y - arena.centre.y) <=
-        arena.radius + ARENA_POCKET_MARGIN_TILES,
-    );
-    if (nearArena) return false;
     return junctionsBeside(model, pocket).length === 1;
   });
   return legal
     ? null
-    : 'no legal pocket: every wall tile beside it is claimed, beside a room, in the arena margin or touches a second junction';
+    : 'no legal pocket: every wall tile beside it is claimed, beside a room or touches a second junction';
 }
 
 /** Why a trap junction may stand unsigned, or null when nothing excuses it. */
@@ -2399,7 +2373,6 @@ function buildScene(
       startRoom,
       goalRooms,
       claimedTiles: new Set<number>(),
-      keepClear: [],
     },
   };
 }
@@ -3018,12 +2991,6 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
       check(
         !encounterRooms.some((encounter) => rectContains(encounter, x, y)),
         `${where} stands in a start, boss, quest or lab room`,
-      );
-      check(
-        !map.arenaExteriors.some(
-          (arena) => Math.hypot(x - arena.centre.x, y - arena.centre.y) <= arena.radius,
-        ),
-        `${where} stands inside the arena`,
       );
 
       check(!crowdsProp(sign.tile), `${where} stands beside a solid dressing prop`);

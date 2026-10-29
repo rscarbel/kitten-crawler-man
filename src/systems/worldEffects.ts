@@ -22,7 +22,7 @@ import { worldText } from '../ui/world/worldText';
 import { inset, type Rect } from '../ui/core/geom';
 import { paintEntityTooltip, type EntityTooltipContent } from '../ui/hud/entityTooltip';
 import { chromeTarget, chromeTheme } from '../ui/screens/dialogs/canvasChrome';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { viewportWidth, viewportHeight, getWorldZoom } from '../core/rendering/Viewport';
 
 const VIGNETTE_HEALTH_THRESHOLD = 0.25;
 const CRITICAL_HEALTH_THRESHOLD = 0.1;
@@ -279,8 +279,9 @@ export function renderEntityTooltip(
   mobGrid: SpatialGrid<Mob>,
   villagers: readonly Villager[] = [],
 ): void {
-  const wx = mouseX + camX;
-  const wy = mouseY + camY;
+  const zoom = getWorldZoom();
+  const wx = mouseX / zoom + camX;
+  const wy = mouseY / zoom + camY;
 
   // An entity can only be hovered when the cursor is inside its tile square,
   // so every candidate has its origin within that square's diagonal of the

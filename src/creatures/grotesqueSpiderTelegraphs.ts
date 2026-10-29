@@ -1,6 +1,6 @@
 /**
  * What the Grotesque Spider paints on the floor to say where and when she hits:
- * the slam cone, the screech disk, the spit aim line, the phase-change roar ring
+ * the slam cone, the screech disk, the spit aim lane, the phase-change roar ring
  * and the glow that marks her punish window.
  *
  * The timing of every one of them is a pure function of the attack clock in
@@ -10,6 +10,8 @@
  */
 
 import type { GrotesqueSpider } from './GrotesqueSpider';
+import { worldPalette } from '../ui/theme/worldInk';
+import { withAlpha } from '../ui/theme/color';
 import {
   PHASE_ROAR_BUILD_FRAMES,
   SCREECH_RADIUS_PX,
@@ -23,7 +25,7 @@ import {
   type SpiderAttack,
 } from './grotesqueSpiderTimeline';
 import { TILE_SIZE } from '../core/constants';
-import { drawDangerCircle, drawDangerCone } from '../sprites/dangerTelegraph';
+import { drawDangerCircle, drawDangerCone, drawDangerLane } from '../sprites/dangerTelegraph';
 
 /** The attacks drawn as an area on the floor. */
 export type SpiderAreaAttack = Extract<SpiderAttack, 'slam' | 'screech'>;
@@ -33,6 +35,12 @@ export type SpiderTelegraphSource = Pick<
   GrotesqueSpider,
   'currentAttack' | 'attackFrame' | 'lockedAimX' | 'lockedAimY' | 'roarFrame' | 'isExposed'
 >;
+
+/** The reach and half-width of the lane her spit will fly down, in pixels from her centre. */
+export interface SpitAimLane {
+  readonly lengthPx: number;
+  readonly halfWidthPx: number;
+}
 
 /** How an area telegraph looks on one attack frame. */
 export interface SpiderTelegraphState {
@@ -81,93 +89,52 @@ export function spiderTelegraphGeometry(attack: SpiderAreaAttack): SpiderTelegra
   return { radiusPx: SLAM_CONE_RADIUS_PX, halfAngleRad: SLAM_CONE_HALF_ANGLE_RAD };
 }
 
-// ── Spit aim line ───────────────────────────────────────────────────────────
+// ── Spit aim lane ───────────────────────────────────────────────────────────
 
-/** The aim line starts clear of her body so it reads as floor paint, not a limb. */
+/** The lane starts clear of her body so it reads as floor paint, not a limb. */
 const SPIT_AIM_START_TILES = 0.9;
-const SPIT_AIM_DOT_PX = 3;
-const SPIT_AIM_GAP_PX = 7;
-/** Frames per pixel the tracking dots creep outward; they freeze once the aim locks. */
-const SPIT_AIM_CRAWL_FRAMES_PER_PX = 0.5;
-const SPIT_AIM_TRACKING_COLOR = '#bef264';
-const SPIT_AIM_TRACKING_ALPHA = 0.9;
-const SPIT_AIM_TRACKING_WIDTH = 3;
-const SPIT_AIM_LOCKED_COLOR = '#f7fee7';
-const SPIT_AIM_LOCKED_ALPHA = 1;
-const SPIT_AIM_LOCKED_WIDTH = 4;
-/**
- * A dark stroke under each dot, wider than the dot, so the line keeps its
- * contrast on the pale lab tiles as well as the dark ones.
- */
-const SPIT_AIM_UNDER_COLOR = '#14200a';
-const SPIT_AIM_UNDER_EXTRA_WIDTH = 3;
-const SPIT_AIM_UNDER_ALPHA = 0.7;
-/** Opacity left at the far end of the line, which fades out along its length. */
-const SPIT_AIM_TAIL_ALPHA = 0;
+/** The lane is at full strength from the first tell tick; its growing fill is the countdown. */
+const SPIT_AIM_FADE = 1;
 
-/** Whether the spit aim line shows on this frame, and whether it has frozen. */
-export function spitAimStateAt(attackFrame: number): { readonly locked: boolean } | null {
-  if (attackFrame < 0 || attackFrame >= strikeFrame('spit')) return null;
-  return { locked: attackFrame >= SPIDER_ATTACK_TIMELINES.spit.tellFrames };
+/**
+ * Whether the spit aim lane shows on this frame, how far its fill has run and
+ * whether it has frozen. The fill meets the end of the lane on the frame the
+ * glob leaves.
+ */
+export function spitAimStateAt(
+  attackFrame: number,
+): { readonly locked: boolean; readonly fillProgress: number } | null {
+  const strike = strikeFrame('spit');
+  if (attackFrame < 0 || attackFrame >= strike) return null;
+  return {
+    locked: attackFrame >= SPIDER_ATTACK_TIMELINES.spit.tellFrames,
+    fillProgress: attackFrame / strike,
+  };
 }
 
-function drawSpitAimLine(
+/** The red lane her spit will fly down, as wide as the glob's hit either side of its line. */
+function drawSpitAimLane(
   ctx: CanvasRenderingContext2D,
   source: SpiderTelegraphSource,
   cx: number,
   cy: number,
-  lengthPx: number,
+  lane: SpitAimLane,
 ): void {
   const aim = spitAimStateAt(source.attackFrame);
   if (aim === null) return;
   const startPx = TILE_SIZE * SPIT_AIM_START_TILES;
-  if (lengthPx <= startPx) return;
-  const startX = cx + source.lockedAimX * startPx;
-  const startY = cy + source.lockedAimY * startPx;
-  const endX = cx + source.lockedAimX * lengthPx;
-  const endY = cy + source.lockedAimY * lengthPx;
-  const color = aim.locked ? SPIT_AIM_LOCKED_COLOR : SPIT_AIM_TRACKING_COLOR;
-  const width = aim.locked ? SPIT_AIM_LOCKED_WIDTH : SPIT_AIM_TRACKING_WIDTH;
-  const dashPeriod = SPIT_AIM_DOT_PX + SPIT_AIM_GAP_PX;
-  const crawl = aim.locked ? 0 : (source.attackFrame / SPIT_AIM_CRAWL_FRAMES_PER_PX) % dashPeriod;
-  const traceLine = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(endX, endY);
-  };
-
-  const fadeAlong = (stopColor: string): CanvasGradient => {
-    const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
-    gradient.addColorStop(0, stopColor);
-    gradient.addColorStop(1, withAlpha(stopColor, SPIT_AIM_TAIL_ALPHA));
-    return gradient;
-  };
-
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.setLineDash([SPIT_AIM_DOT_PX, SPIT_AIM_GAP_PX]);
-  ctx.lineDashOffset = -crawl;
-  ctx.globalAlpha = SPIT_AIM_UNDER_ALPHA;
-  ctx.strokeStyle = fadeAlong(SPIT_AIM_UNDER_COLOR);
-  ctx.lineWidth = width + SPIT_AIM_UNDER_EXTRA_WIDTH;
-  traceLine();
-  ctx.stroke();
-  ctx.globalAlpha = aim.locked ? SPIT_AIM_LOCKED_ALPHA : SPIT_AIM_TRACKING_ALPHA;
-  ctx.strokeStyle = fadeAlong(color);
-  ctx.lineWidth = width;
-  traceLine();
-  ctx.stroke();
-  ctx.restore();
-}
-
-const HEX_RADIX = 16;
-const HEX_BYTE_MAX = 255;
-const HEX_BYTE_DIGITS = 2;
-
-/** A `#rrggbb` colour with an alpha channel appended, for a gradient stop that fades out. */
-function withAlpha(hexColor: string, alpha: number): string {
-  const alphaByte = Math.round(Math.min(1, Math.max(0, alpha)) * HEX_BYTE_MAX);
-  return `${hexColor}${alphaByte.toString(HEX_RADIX).padStart(HEX_BYTE_DIGITS, '0')}`;
+  if (lane.lengthPx <= startPx) return;
+  drawDangerLane(
+    ctx,
+    cx + source.lockedAimX * startPx,
+    cy + source.lockedAimY * startPx,
+    source.lockedAimX,
+    source.lockedAimY,
+    lane.lengthPx - startPx,
+    lane.halfWidthPx,
+    SPIT_AIM_FADE,
+    { fillProgress: aim.fillProgress, locked: aim.locked },
+  );
 }
 
 // ── Phase-change roar ───────────────────────────────────────────────────────
@@ -179,8 +146,8 @@ function withAlpha(hexColor: string, alpha: number): string {
  * never hidden under her body and never reach the edge a real screech is
  * drawn at.
  */
-const ROAR_RING_COLOR = '#f3e8ff';
-const ROAR_RING_UNDER_COLOR = '#581c87';
+const ROAR_RING_COLOR = worldPalette.grotesqueSpider.roarRing;
+const ROAR_RING_UNDER_COLOR = worldPalette.grotesqueSpider.roarRingUnder;
 const ROAR_RING_WIDTH = 3;
 const ROAR_RING_UNDER_EXTRA_WIDTH = 4;
 const ROAR_RING_UNDER_ALPHA_SHARE = 0.8;
@@ -263,7 +230,7 @@ function drawRoarRing(
 
 // ── Punish-window glow ──────────────────────────────────────────────────────
 
-const EXPOSED_GLOW_COLOR = '#facc15';
+const EXPOSED_GLOW_COLOR = worldPalette.grotesqueSpider.exposedGlow;
 /**
  * The glow is a pool of gold on the floor around her leg tips rather than a
  * filter on her body: a filter over a figure that falls back to live painting
@@ -326,37 +293,27 @@ function drawAreaTelegraph(
     outlineOnly,
   };
   if (geometry.halfAngleRad === null) {
-    drawDangerCircle(ctx, cx, cy, geometry.radiusPx, fade, undefined, options);
+    drawDangerCircle(ctx, cx, cy, geometry.radiusPx, fade, options);
     return;
   }
   const aimAngle = Math.atan2(source.lockedAimY, source.lockedAimX);
-  drawDangerCone(
-    ctx,
-    cx,
-    cy,
-    geometry.radiusPx,
-    aimAngle,
-    geometry.halfAngleRad,
-    fade,
-    undefined,
-    options,
-  );
+  drawDangerCone(ctx, cx, cy, geometry.radiusPx, aimAngle, geometry.halfAngleRad, fade, options);
 }
 
 /**
  * Draws every floor telegraph she currently owns, centred on her screen-space
- * centre (cx, cy): the fills, the strike flash, the spit aim line, the roar
+ * centre (cx, cy): the fills, the strike flash, the spit aim lane, the roar
  * rings and the punish-window glow. Floor paint: call in the ground pass,
  * before any entity.
  *
- * @param spitAimLengthPx How far from her centre the spit aim line reaches.
+ * @param spitAimLane How far from her centre the spit aim lane reaches, and how wide it is.
  */
 export function drawSpiderGroundTelegraphs(
   ctx: CanvasRenderingContext2D,
   source: SpiderTelegraphSource,
   cx: number,
   cy: number,
-  spitAimLengthPx: number,
+  spitAimLane: SpitAimLane,
 ): void {
   if (source.isExposed) drawExposedGlow(ctx, cx, cy);
   const roarFrame = source.roarFrame;
@@ -365,7 +322,7 @@ export function drawSpiderGroundTelegraphs(
     return;
   }
   if (source.currentAttack === 'spit') {
-    drawSpitAimLine(ctx, source, cx, cy, spitAimLengthPx);
+    drawSpitAimLane(ctx, source, cx, cy, spitAimLane);
     return;
   }
   drawAreaTelegraph(ctx, source, cx, cy, false);

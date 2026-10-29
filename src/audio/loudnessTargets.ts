@@ -4,6 +4,8 @@
  * that table so the script can import the targets before the table exists.
  */
 
+import type { SoundId } from './sounds';
+
 export type LoudnessBus = 'music' | 'ambience' | 'sfx';
 
 /** Integrated loudness each bus is levelled to, in LUFS. */
@@ -54,6 +56,23 @@ export const TRIMMED_TRUE_PEAK_CEILING_DBTP = -1;
  * re-export. The peak ceiling still wins over the cap.
  */
 export const MAX_TRIM_DB = 12;
+
+/**
+ * Sound effects that must punch above the sfx bus: a featured moment the
+ * player is meant to feel. Each is levelled to its own integrated target
+ * instead of the bus's.
+ */
+export const FEATURED_SFX_TARGET_LUFS = {
+  shark_breach_bite: -10,
+} as const satisfies Partial<Record<SoundId, number>>;
+
+/**
+ * Peak ceiling for a featured effect. A featured sting leans on the master
+ * limiter on purpose: its transient is allowed past full scale in the trimmed
+ * signal and the brickwall limiter catches it, which is what lets a short,
+ * peaky recording reach a loudness the ordinary ceiling would forbid.
+ */
+export const FEATURED_TRUE_PEAK_CEILING_DBTP = 4;
 
 /** Which measurement a trim was derived from. */
 export type LoudnessBasis = 'integrated' | 'peak';

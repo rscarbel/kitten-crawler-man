@@ -4,7 +4,6 @@
  * and stood in for on the way back.
  */
 
-import type { ArenaCheckpoint } from '../../systems/ArenaSystem';
 import type { BountyCheckpoint } from '../../systems/BountySystem';
 import type { DefendQuestCheckpoint } from '../../systems/DefendQuestSystem';
 import type { MurderMysteryQuestCheckpoint } from '../../systems/MurderMysteryQuestSystem';
@@ -16,28 +15,12 @@ import {
   type TreasureChestProgressSnapshot,
 } from '../../systems/TreasureChestSystem';
 import type {
-  PersistedArenaCheckpoint,
   PersistedBountyCheckpoint,
   PersistedDefendQuestCheckpoint,
   PersistedMurderMysteryQuestCheckpoint,
   PersistedSpiderQuestCheckpoint,
   PersistedTreasureChestCheckpoint,
 } from './PersistedWorldState';
-
-export function toPersistedArenaCheckpoint(cp: ArenaCheckpoint): PersistedArenaCheckpoint {
-  return {
-    arenaLocked: cp.arenaLocked,
-    arenaPhase2Active: cp.arenaPhase2Active,
-    arenaStairwellUnlocked: cp.arenaStairwellUnlocked,
-    entryWindowTimer: cp.entryWindowTimer,
-    humanIsInsider: cp.humanIsInsider,
-    catIsInsider: cp.catIsInsider,
-  };
-}
-
-export function fromPersistedArenaCheckpoint(persisted: PersistedArenaCheckpoint): ArenaCheckpoint {
-  return { ...persisted, arenaLiveTusklings: [] };
-}
 
 export function toPersistedTreasureChestCheckpoint(
   cp: TreasureChestCheckpoint,

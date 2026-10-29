@@ -10,16 +10,16 @@ import type { AssetGroup } from '../../core/spriteAssets/assetGroups';
 import type { PropSheetPlan } from './propSheetPlan';
 import { trashGremlinRoomSheetPlans } from './bossRooms/trashGremlinSheets';
 import { gymRoomSheetPlans } from './bossRooms/gymRoomSheets';
-import { krakarenRoomSheetPlans } from './bossRooms/krakarenSheets';
+import { powerLabSheetPlans } from './bossRooms/powerLabSheets';
+import { floodedPumpRoomSheetPlans } from './bossRooms/floodedPumpRoomSheets';
 import { spiderLabSheetPlans } from './bossRooms/spiderLabSheets';
-import { colosseumSheetPlans } from './bossRooms/colosseumSheets';
 
 const BOSS_ROOM_SHEET_FAMILIES = {
   boss_trash_gremlin: trashGremlinRoomSheetPlans,
   boss_big_rooster: gymRoomSheetPlans,
-  boss_krakaren: krakarenRoomSheetPlans,
+  boss_power_lab: powerLabSheetPlans,
+  boss_flooded_pump_room: floodedPumpRoomSheetPlans,
   boss_grotesque_spider: spiderLabSheetPlans,
-  boss_colosseum: colosseumSheetPlans,
 } as const satisfies Partial<Record<AssetGroup, (artSeed: number) => PropSheetPlan[]>>;
 
 export type BossRoomAssetGroup = keyof typeof BOSS_ROOM_SHEET_FAMILIES;
@@ -27,9 +27,9 @@ export type BossRoomAssetGroup = keyof typeof BOSS_ROOM_SHEET_FAMILIES;
 export const BOSS_ROOM_ASSET_GROUPS: readonly BossRoomAssetGroup[] = [
   'boss_trash_gremlin',
   'boss_big_rooster',
-  'boss_krakaren',
+  'boss_power_lab',
+  'boss_flooded_pump_room',
   'boss_grotesque_spider',
-  'boss_colosseum',
 ];
 
 /** The sheets one boss room's group stands for, at the given art seed. */

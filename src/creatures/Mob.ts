@@ -101,6 +101,15 @@ export const TACTICAL_RETREAT_MAX_SPEED = PLAYER_SPEED * TACTICAL_RETREAT_MAX_SP
 /** The floating label a guarded blow shows over the mob. */
 const GUARD_LABEL = 'Blocked';
 
+/** The floating label a projectile turned aside by {@link Mob.tryBlockProjectile} shows. */
+const PROJECTILE_BLOCKED_LABEL = 'BLOCKED';
+
+/**
+ * The party projectiles a mob may turn aside before they land; see
+ * {@link Mob.tryBlockProjectile}. A member is added only when its hit path asks.
+ */
+export type BlockableProjectile = Extract<PlayerDamageType, 'missile'>;
+
 /** Stagger range for initial wander timer so mobs don't change direction together. */
 const WANDER_TIMER_STAGGER_MAX = 119;
 
@@ -612,6 +621,15 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * A body refusing damage earns nothing for a blow either: an immune phase —
+   * a boss behind a shield, in a fury, or under water — would otherwise be a
+   * dummy that trains skills and fires gear procs forever.
+   */
+  override get blowsEarnNothing(): boolean {
+    return this.refusesDamage;
+  }
+
+  /**
    * The most HP a fairy's heal may lift this mob to. Max HP unless a phased
    * boss overrides it, so healing can never carry a boss back up across a
    * phase threshold the party has already fought it through.
@@ -707,9 +725,9 @@ export abstract class Mob extends Player {
    * Whether killing this counts toward the run's "bosses slain".
    *
    * Separate from {@link isBoss}, which commits a mob to a boss room's lock and
-   * clamp: the Lich, the spider-lab spider and the arena's Ball of Swine are
-   * bosses to the player without being room bosses, and setting the flag on them would drag them into machinery they have no room
-   * for. Each overrides this instead.
+   * clamp: the Lich and the spider-lab spider are bosses to the player without
+   * being room bosses, and setting the flag on them would drag them into
+   * machinery they have no room for. Each overrides this instead.
    */
   get countsAsBossKill(): boolean {
     return this.isBoss;
@@ -808,12 +826,7 @@ export abstract class Mob extends Player {
    * stored flag left each of them able to strand the mob at reduced speed.
    */
   get isSlowed(): boolean {
-    return (
-      this.slowedByBarrier ||
-      this.hitSlowFrames > 0 ||
-      this.hazardSlowFrames > 0 ||
-      this.hasStatus('electrified')
-    );
+    return this.slowedByBarrier || this.hitSlowFrames > 0 || this.hazardSlowFrames > 0;
   }
 
   /** Frames left on a slow laid by standing in hazard ground; see {@link applyHazardSlow}. */
@@ -891,6 +904,17 @@ export abstract class Mob extends Player {
    */
   get collisionRadiusPx(): number {
     return SEPARATION_RADIUS;
+  }
+
+  /**
+   * How far this mob's body reaches from its centre. {@link collisionRadiusPx}
+   * is the centre-to-centre distance it keeps a one-tile crawler at, so the
+   * crawler's own half tile is not part of it; an ordinary mob's body fills
+   * its own tile.
+   */
+  get bodyRadiusPx(): number {
+    const halfTile = this.tileSize / 2;
+    return Math.max(halfTile, this.collisionRadiusPx - halfTile);
   }
 
   /**
@@ -1009,7 +1033,7 @@ export abstract class Mob extends Player {
    * standoff), which a push would knock off the line its attack is timed on.
    * A boss is read off {@link blastDamageScale} as well as {@link isBoss},
    * because the bosses whose own systems leave `isBoss` false on purpose (the
-   * Ball of Swine) still resist blasts.
+   * Lich, the spider-lab spider) still resist blasts.
    */
   get resistsBlastKnockback(): boolean {
     const isAnyBoss = this.isBoss || this.blastDamageScale < 1;
@@ -1505,9 +1529,9 @@ export abstract class Mob extends Player {
 
   /**
    * Set to true when this mob performs its one signature action with a cue of
-   * its own — the Trash Gremlin's vomit, Big Rooster's throw, the Ball of Swine's
-   * roll. Generic rather than per-subclass so the audio pass stays a single
-   * walk over the mob list driven by `audioTag`, with no `instanceof` chain.
+   * its own — the Trash Gremlin's vomit, Big Rooster's throw. Generic rather
+   * than per-subclass so the audio pass stays a single walk over the mob list
+   * driven by `audioTag`, with no `instanceof` chain.
    */
   specialSoundPending = false;
 
@@ -1623,6 +1647,30 @@ export abstract class Mob extends Player {
    */
   get isHostile(): boolean {
     return this.allegiance === 'hostile';
+  }
+
+  /**
+   * Whether anything on the party's side may pick this mob out as an enemy to
+   * fight right now: the crawlers' aim snap and homing, a companion crawler, a
+   * pet, a hire, a soldier or converted ally, a trebuchet, a gear proc.
+   *
+   * This is the one targeting predicate. A targeting path reads it rather than
+   * `isHostile`, so a mob that is an enemy but not yet in its fight (see
+   * {@link awaitingItsFight}) is passed over everywhere at once instead of by a
+   * special case in each system. A blow the player lands on it by hand still
+   * reaches its damage doors.
+   */
+  get isHostileTarget(): boolean {
+    return this.isAlive && this.isHostile && !this.awaitingItsFight;
+  }
+
+  /**
+   * True while this hostile is in the world but its fight has not begun, so
+   * {@link isHostileTarget} passes it over. A boss waiting out a room's
+   * scripted opening overrides it.
+   */
+  protected get awaitingItsFight(): boolean {
+    return false;
   }
 
   /**
@@ -1765,6 +1813,33 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Asked by a projectile's hit path the moment one of `kind` reaches this
+   * mob, before any damage. True means the mob turned it aside: the caller
+   * consumes the projectile and lands nothing, and the mob has already shown
+   * the block (the "BLOCKED" label and its own {@link playProjectileBlock}).
+   */
+  tryBlockProjectile(kind: BlockableProjectile): boolean {
+    if (!this.blocksProjectile(kind)) return false;
+    this.healthBarTimer = HEALTH_BAR_VISIBLE_FRAMES;
+    this.queueFloatingText(PROJECTILE_BLOCKED_LABEL, 'immune');
+    this.playProjectileBlock(kind);
+    return true;
+  }
+
+  /**
+   * This creature's own decision for {@link tryBlockProjectile}, rolled once
+   * per projectile that reaches it. Never, by default.
+   */
+  protected blocksProjectile(_kind: BlockableProjectile): boolean {
+    return false;
+  }
+
+  /** Starts this creature's block visual for a projectile it just turned aside. */
+  protected playProjectileBlock(_kind: BlockableProjectile): void {
+    // Nothing to show by default; a creature that blocks draws its own guard.
+  }
+
+  /**
    * Whether harm from `dealer` is refused by the party ward. Harm nobody is
    * named for is let through: the party's own weapons always name a crawler
    * or the companion that struck.
@@ -1786,6 +1861,7 @@ export abstract class Mob extends Player {
       case 'environmental':
       case 'doomsday':
       case 'wheelPenalty':
+      case 'scripted':
         return false;
     }
   }
@@ -1793,12 +1869,12 @@ export abstract class Mob extends Player {
   /**
    * Whether the cat's pet dinosaur will pick a fight with this mob.
    *
-   * Defaults to {@link isHostile}, which already excludes every quest ally and
-   * summon in the game. Overridden to `true` by mobs that are calm toward
+   * Defaults to {@link isHostileTarget}, which already excludes every quest
+   * ally and summon in the game. Overridden to `true` by mobs that are calm toward
    * players but that Deinonychus hunts anyway — he is an animal, not a diplomat.
    */
   get isPetAttackable(): boolean {
-    return this.isHostile;
+    return this.isHostileTarget;
   }
 
   /**
@@ -1871,8 +1947,9 @@ export abstract class Mob extends Player {
    * not: the thing it is trying to do is get back to the party, so freezing it
    * the moment it falls behind is precisely the failure that leaves a pet stood
    * in an empty corridor with no way to recover. Opt in only for mobs whose
-   * whole existence is following the party — the cost is one permanently active
-   * mob for as long as it is in the world.
+   * whole existence is following the party, or for a rooted boss whose room is
+   * wider than the radius — the cost is one permanently active mob for as long
+   * as it is in the world.
    */
   get exemptFromAiActivationRadius(): boolean {
     // A converted mob follows the crawler who turned it, so it must keep
@@ -2941,8 +3018,9 @@ export abstract class Mob extends Player {
   /**
    * Whether this mob currently refuses all damage.
    *
-   * A scripted boss hiding behind something the party has to destroy first —
-   * Miss Quill behind her capacitor — is the only user. This is
+   * For a scripted boss hiding behind something the party has to destroy or
+   * do first — Miss Quill behind her capacitor, Big Rooster in his fury, the
+   * Kraken under water — and for bodies that may never be hurt. This is
    * *the* switch: every route into this mob's health asks it, the swung one and
    * the damage-over-time one alike. A shield that guarded only the swing let one
    * gear poison proc dissolve the whole "kill the adds first" mechanic and be paid the
@@ -2959,18 +3037,6 @@ export abstract class Mob extends Player {
    */
   protected onDamageBlocked(): void {
     // Nothing to show by default; only a shielded boss has a tell.
-  }
-
-  /**
-   * Fractional damage reduction, applied in `takeDamageFrom` and `takeDamage`
-   * at the same points that consult {@link isDamageImmune}. A mob that wants a
-   * partial guard rather than the all-or-nothing shield above — the Krakaren's
-   * guard tentacles — overrides this instead. Applying it at both entry points
-   * keeps a swung hit and a status/DoT tick under the same guard, for the same
-   * reason `isDamageImmune` is consulted at both.
-   */
-  protected get incomingDamageScale(): number {
-    return 1;
   }
 
   /**
@@ -2993,10 +3059,7 @@ export abstract class Mob extends Player {
    */
   private scaleIncomingDamage(amount: number): number {
     if (amount <= 0) return amount;
-    const scaled = Math.max(
-      1,
-      Math.round(amount * this.incomingDamageScale * this.statusDamageScale),
-    );
+    const scaled = Math.max(1, Math.round(amount * this.statusDamageScale));
     if (!this.cannotBeKilled) return scaled;
     const survivableDamage = Math.max(0, this.hp - 1);
     return Math.min(scaled, survivableDamage);
@@ -3194,7 +3257,7 @@ export abstract class Mob extends Player {
 
   /**
    * Set by the system that stages a boss's own adds — the Trash Gremlin's roaches,
-   * the Krakaren's tentacles, the ball's Tusklings — as it spawns them. Their
+   * the Kraken's tentacles — as it spawns them. Their
    * number and timing are the boss's script, so a necromancer standing one back
    * up would be rewriting that fight.
    */
@@ -3841,9 +3904,6 @@ export abstract class Mob extends Player {
    * that keep rendering after death — their timers stop ticking too, so the
    * fade never starts and a killed spider would burn at full strength under its
    * own corpse until it was culled.
-   *
-   * `BallOfSwine` reports itself alive through its burst, which is why this asks
-   * the getter rather than testing hp.
    */
   protected override get wearsStatusPaint(): boolean {
     return this.isAlive;

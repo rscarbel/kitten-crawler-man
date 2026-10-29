@@ -152,7 +152,7 @@ the station with Dr. Moult already at his terminal; `spider-hallway` starts in t
 host room short of the lab hallway's mouth with him still waiting there. Presets are data in
 `src/dev/playtestPresets.ts`; add one there.
 
-**Story and characters.** `?story=<beatId>` (any key of `STORY_BEATS`, e.g. `?story=floor2_dave_chosen`) boots the floor a story beat belongs to with every earlier beat already heard and plays that beat at once, so any of Dave's talks or Caroline's messages can be read without playing to it; the tutorial's beats open in the tutorial. `?deinonychus` is the pet's preview (every growth stage and row), `?demonliaison` the unplaced Demon Liaison figure, `?ratkin` the ratkin cast. The headless gates beside them:
+**Story and characters.** `?story=<beatId>` (any key of `STORY_BEATS`, e.g. `?story=floor1_dave_chosen`) boots the floor a story beat belongs to with every earlier beat already heard and plays that beat at once, so any of Dave's talks or Caroline's messages can be read without playing to it; the tutorial's beats open in the tutorial. `?deinonychus` is the pet's preview (every growth stage and row), `?demonliaison` the unplaced Demon Liaison figure, `?ratkin` the ratkin cast. The headless gates beside them:
 
 ```bash
 npm run verify:dave-guide              # Dave's arrivals, the story cutscenes, seen beats in the save, Caroline's intel once per objective, the skipped tutorial

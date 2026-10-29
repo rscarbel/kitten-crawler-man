@@ -1,25 +1,25 @@
 /**
- * The Ball of Swine's rate upgrade on a real built floor 2, on the hardest
+ * Big Rooster's rate upgrade on a real built floor 2, on the hardest
  * difficulty, where the upgraded table's minimum of two fairies per room makes
  * "this room would have gained" provable rather than a matter of luck.
  *
- * - The upgrade reaches only the rooms past the safe room guarding the Swine —
- *   the arena's beyond pocket. Which rooms those are is re-derived here by a
+ * - The upgrade reaches only the rooms past the safe room guarding Big
+ *   Rooster. Which rooms those are is re-derived here by a
  *   walk from each room back to the floor's start, never through the
  *   spawner's own test.
- * - Killing the Swine (its `bossDefeated` event, which `FairySystem` listens
- *   for) tops every untouched past room up to the upgraded rate; every
- *   region-1 room before the safe room, the ones between the Krakaren and it
- *   included, gains nothing.
+ * - Killing Big Rooster (its `bossDefeated` event, which `FairySystem` listens
+ *   for) tops every untouched past room up to the upgraded rate; every room
+ *   before the safe room, the power lab's and those leading up to the gym
+ *   alike, gains nothing.
  * - A room with a crawler standing in it, or with a mob already fighting, gains
  *   nothing — and each is a room that provably would have gained otherwise.
  * - A second kill adds nothing.
  * - After the room pass and after the upgrade, every room holding a fairy
  *   holds a shield, and no room ever carries a guaranteed shield beside one
  *   it rolled or gains a second guaranteed one.
- * - The reload path — the dungeon scene's own reading of which upgrade bosses
- *   the restored boss rooms and arena say are dead, and its replay of their
- *   upgrades — yields the upgraded rates for a Swine already dead in the save.
+ * - The reload path — the dungeon scene's replay of the upgrades of every boss
+ *   the restored boss rooms say is dead — yields the upgraded rates for a Big
+ *   Rooster already dead in the save.
  * - On a hand-built room, fairies that fled in from a fallen room count as the
  *   room's own: toward what the top-up already has, and a shield among them
  *   spares the room its guaranteed one.
@@ -52,25 +52,24 @@ import {
 } from '../../src/levels/fairySpawner';
 import type { FairyKind } from '../../src/sprites/art/fairyTiming';
 import { FairySystem } from '../../src/systems/FairySystem';
-import {
-  deadFairyUpgradeBosses,
-  replayFairyRateUpgrades,
-} from '../../src/systems/fairyUpgradeBosses';
+import type { BossRoomSystem } from '../../src/systems/BossRoomSystem';
+import { replayFairyRateUpgrades } from '../../src/systems/fairyUpgradeBosses';
 import type { FairyGateReport } from './report';
 import { makeArena } from './stage';
+import { FLOOR_TWO_UPGRADE_BOSS } from './spawnTables';
+import type { GauntletBossType } from '../../src/map/bossRoomSizes';
 
-const SWINE_BOSS_TYPE = 'ball_of_swine';
 const UPGRADE_DIFFICULTY = 'hard';
 /** A mid-floor party, well inside floor 2's band. */
 const PARTY_LEVEL = 10;
 /** Floors built looking for one with rooms to test; each is a fresh random layout. */
 const MAX_FLOOR_ATTEMPTS = 40;
 /**
- * The fewest counted fairies an untouched past room holds on hard once the
- * Swine is dead. A room holding fewer beforehand is guaranteed to gain if it
+ * The fewest counted fairies an untouched past room holds on hard once Big
+ * Rooster is dead. A room holding fewer beforehand is guaranteed to gain if it
  * is offered the upgrade.
  */
-const HARD_POST_SWINE_MIN_FAIRIES = 2;
+const HARD_UPGRADED_MIN_FAIRIES = 2;
 /** Re-offers of an already-taken upgrade tried before calling the second-run guard vacuous. */
 const REPEAT_UPGRADE_TRIES = 40;
 /** Past rooms that would gain: one occupied, one engaged, and at least one left untouched. */
@@ -150,7 +149,7 @@ function buildFloor2(): BuiltFloor {
 function upgradeRegions(): Set<number> {
   return new Set(
     (level2.fairies?.upgrades ?? [])
-      .filter((upgrade) => upgrade.bossType === SWINE_BOSS_TYPE)
+      .filter((upgrade) => upgrade.bossType === FLOOR_TWO_UPGRADE_BOSS)
       .map((upgrade) => upgrade.region),
   );
 }
@@ -160,23 +159,24 @@ function upgradeRooms(ledger: FairyRoomLedger): FairyLedgerRoom[] {
   return ledger.rooms.filter((room) => regions.has(room.region));
 }
 
-function isPastSwineSafeRoom(room: FairyLedgerRoom): boolean {
-  return room.pastSafeRoomOf.has(SWINE_BOSS_TYPE);
+function isPastUpgradeBossSafeRoom(room: FairyLedgerRoom): boolean {
+  return room.pastSafeRoomOf.has(FLOOR_TWO_UPGRADE_BOSS);
 }
 
 function pastRooms(ledger: FairyRoomLedger): FairyLedgerRoom[] {
-  return upgradeRooms(ledger).filter(isPastSwineSafeRoom);
+  return upgradeRooms(ledger).filter(isPastUpgradeBossSafeRoom);
 }
 
+/** Every room the floor's start reaches without crossing Big Rooster's safe room, in any region. */
 function beforeRooms(ledger: FairyRoomLedger): FairyLedgerRoom[] {
-  return upgradeRooms(ledger).filter((room) => !isPastSwineSafeRoom(room));
+  return ledger.rooms.filter((room) => !isPastUpgradeBossSafeRoom(room));
 }
 
 /** Past rooms the upgrade must top up if left alone: under the minimum, no crawler in them. */
 function roomsThatWouldGain(floor: BuiltFloor): FairyLedgerRoom[] {
   return pastRooms(floor.ledger).filter(
     (room) =>
-      countedFairies(room) < HARD_POST_SWINE_MIN_FAIRIES &&
+      countedFairies(room) < HARD_UPGRADED_MIN_FAIRIES &&
       ![floor.human, floor.cat].some((crawler) => isInRoom(crawler, room)),
   );
 }
@@ -207,16 +207,19 @@ function roomIndex(ledger: FairyRoomLedger, room: FairyLedgerRoom): number {
   return ledger.rooms.indexOf(room);
 }
 
-/** Floor 2 with the Swine's upgrade reaching every region-1 room, safe room or not. */
+/** Floor 2 with Big Rooster's upgrade reaching every room of every region, safe room or not. */
 function everyRoomUpgradeDef(): LevelDef {
   const table = level2.fairies;
   if (table === undefined) throw new Error('level2 has no fairy table');
+  const upgrade = table.upgrades?.find((entry) => entry.bossType === FLOOR_TWO_UPGRADE_BOSS);
+  if (upgrade === undefined) throw new Error('level2 has no Big Rooster upgrade');
   return {
     ...level2,
     fairies: {
       ...table,
-      upgrades: (table.upgrades ?? []).map((upgrade) => ({
+      upgrades: table.roomRatesByRegion.map((_, region) => ({
         ...upgrade,
+        region,
         onlyPastItsSafeRoom: false,
       })),
     },
@@ -279,8 +282,9 @@ function auditPastRooms(
   ledger: FairyRoomLedger,
   isMarkedPast: (room: FairyLedgerRoom) => boolean,
 ): PastAudit {
-  const safeRoom = map.safeRoomGuarding(SWINE_BOSS_TYPE);
-  if (safeRoom === undefined) return { mismatches: -1, cutOff: 0, detail: 'no Swine safe room' };
+  const safeRoom = map.safeRoomGuarding(FLOOR_TWO_UPGRADE_BOSS);
+  if (safeRoom === undefined)
+    return { mismatches: -1, cutOff: 0, detail: 'no safe room guarding Big Rooster' };
   let mismatches = 0;
   let cutOff = 0;
   let walkedPast = 0;
@@ -405,18 +409,17 @@ interface ReloadOutcome {
 }
 
 function hasPastRoomUnderMinimum(floor: BuiltFloor): boolean {
-  return pastRooms(floor.ledger).some((room) => countedFairies(room) < HARD_POST_SWINE_MIN_FAIRIES);
+  return pastRooms(floor.ledger).some((room) => countedFairies(room) < HARD_UPGRADED_MIN_FAIRIES);
 }
 
 /**
  * A fresh floor 2 — the first built with a past room under the upgraded
  * minimum — with the dungeon scene's reload replay run over the boss rooms
- * and arena given. A missing past pocket leaves `lowestPast` at
+ * given. A missing past pocket leaves `lowestPast` at
  * -Infinity, so it fails the positive rather than passing it.
  */
 function reloadFloor(
-  bossRoom: Parameters<typeof deadFairyUpgradeBosses>[0],
-  arena: Parameters<typeof deadFairyUpgradeBosses>[1],
+  bossRoom: Pick<BossRoomSystem, 'defeatedBossTypes'>,
   pastCounts: number[],
 ): ReloadOutcome {
   let floor = buildFloor2();
@@ -433,7 +436,7 @@ function reloadFloor(
   const pastUnderMinimum = hasPastRoomUnderMinimum(floor);
   const before = beforeRooms(floor.ledger);
   const beforeCounts = before.map((room) => room.fairies.length);
-  replayFairyRateUpgrades(floor.fairies, deadFairyUpgradeBosses(bossRoom, arena));
+  replayFairyRateUpgrades(floor.fairies, bossRoom.defeatedBossTypes);
   return {
     lowestPast: past.length === 0 ? -Infinity : Math.min(...past.map(countedFairies)),
     beforeGained: before.filter((room, i) => room.fairies.length !== beforeCounts[i]).length,
@@ -444,7 +447,7 @@ function reloadFloor(
 }
 
 export function verifyRateUpgrade(report: FairyGateReport): void {
-  report.section('Ball of Swine upgrade (real floor 2, hard)');
+  report.section('Big Rooster upgrade (real floor 2, hard)');
 
   const pastCounts: number[] = [];
   let floor: BuiltFloor | null = null;
@@ -463,7 +466,7 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   report.check(
     floor !== null && engagedRoom !== undefined && candidates.length >= NEEDED_TEST_ROOMS,
     'a built floor 2 has past rooms the upgrade must top up, one of them with a hostile to engage',
-    `${candidates.length} past rooms under ${HARD_POST_SWINE_MIN_FAIRIES} counted fairies after ${pastCounts.length} floors`,
+    `${candidates.length} past rooms under ${HARD_UPGRADED_MIN_FAIRIES} counted fairies after ${pastCounts.length} floors`,
   );
   if (floor === null || engagedRoom === undefined || candidates.length < NEEDED_TEST_ROOMS) return;
   const built = floor;
@@ -473,14 +476,14 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   const before = beforeRooms(built.ledger);
   report.precondition(
     past.length > 0 && before.length > 0,
-    'region 1 has rooms on both sides of the safe room guarding the Swine',
-    `${past.length} past, ${before.length} before, of ${upgradeRooms(built.ledger).length}`,
+    'the floor has rooms on both sides of the safe room guarding Big Rooster',
+    `${past.length} past, ${before.length} before, of ${built.ledger.rooms.length}`,
   );
 
-  const pastAudit = auditPastRooms(built.map, built.ledger, isPastSwineSafeRoom);
+  const pastAudit = auditPastRooms(built.map, built.ledger, isPastUpgradeBossSafeRoom);
   report.check(
     pastAudit.mismatches === 0,
-    'every ledger room is marked past the Swine safe room exactly when a walk from it to the start must cross that safe room',
+    "every ledger room is marked past Big Rooster's safe room exactly when a walk from it to the start must cross that safe room",
     pastAudit.detail,
   );
   report.check(
@@ -488,14 +491,18 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
     'every past room reaches the start once the safe room is open: beyond it, not cut off',
     `${pastAudit.cutOff} cut off`,
   );
-  const upgradeRegion = upgradeRegions();
-  const byRegion = auditPastRooms(built.map, built.ledger, (room) =>
-    upgradeRegion.has(room.region),
+  // The rooms leading up to the gym share the upgraded region's rate, so a
+  // verdict read off the rate rather than the route would take them as past.
+  const firstUpgradedRegion = Math.min(...upgradeRegions());
+  const byRate = auditPastRooms(
+    built.map,
+    built.ledger,
+    (room) => room.region >= firstUpgradedRegion - 1,
   );
   report.checkCatches(
-    byRegion.mismatches === 0,
-    'marking every region-1 room past is caught disagreeing with the walk',
-    byRegion.detail,
+    byRate.mismatches === 0,
+    'marking the rooms leading up to the gym past as well is caught disagreeing with the walk',
+    byRate.detail,
   );
 
   const passShields = auditShields(built.ledger);
@@ -526,9 +533,9 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   const occupiedBefore = countedFairies(occupiedRoom);
   const engagedBefore = countedFairies(engaged);
   report.check(
-    occupiedBefore < HARD_POST_SWINE_MIN_FAIRIES && engagedBefore < HARD_POST_SWINE_MIN_FAIRIES,
+    occupiedBefore < HARD_UPGRADED_MIN_FAIRIES && engagedBefore < HARD_UPGRADED_MIN_FAIRIES,
     'the occupied and engaged past rooms would each gain if left untouched',
-    `occupied ${occupiedBefore}, engaged ${engagedBefore}, upgraded minimum ${HARD_POST_SWINE_MIN_FAIRIES}`,
+    `occupied ${occupiedBefore}, engaged ${engagedBefore}, upgraded minimum ${HARD_UPGRADED_MIN_FAIRIES}`,
   );
 
   built.human.x = (occupiedRoom.rect.x + Math.floor(occupiedRoom.rect.w / 2)) * TILE_SIZE;
@@ -542,7 +549,7 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   const crawlerBlind = cloneLedger(built.ledger);
   const crawlerBlindAdded = applyFairyRateUpgrade(
     crawlerBlind,
-    SWINE_BOSS_TYPE,
+    FLOOR_TWO_UPGRADE_BOSS,
     built.map,
     built.mobs,
     [],
@@ -555,7 +562,7 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   );
   engagedMob.currentTarget = null;
   const engagementBlind = cloneLedger(built.ledger);
-  applyFairyRateUpgrade(engagementBlind, SWINE_BOSS_TYPE, built.map, built.mobs, [
+  applyFairyRateUpgrade(engagementBlind, FLOOR_TWO_UPGRADE_BOSS, built.map, built.mobs, [
     built.human,
     built.cat,
   ]);
@@ -570,27 +577,27 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   const crawlers = [built.human, built.cat];
   const beforeWouldGain = before.filter(
     (room) =>
-      countedFairies(room) < HARD_POST_SWINE_MIN_FAIRIES &&
+      countedFairies(room) < HARD_UPGRADED_MIN_FAIRIES &&
       !crawlers.some((crawler) => isInRoom(crawler, room)),
   );
   report.precondition(
     beforeWouldGain.length > 0,
-    'some region-1 room before the safe room is under the upgraded minimum, so gaining there is possible',
+    'some room before the safe room is under the upgraded minimum, so gaining there is possible',
     `${beforeWouldGain.length} of ${before.length}`,
   );
   const everyRoom = cloneLedger(built.ledger, everyRoomUpgradeDef());
-  applyFairyRateUpgrade(everyRoom, SWINE_BOSS_TYPE, built.map, built.mobs, crawlers);
+  applyFairyRateUpgrade(everyRoom, FLOOR_TWO_UPGRADE_BOSS, built.map, built.mobs, crawlers);
   const everyRoomBeforeGained = before.filter(
     (room) => everyRoom.rooms[roomIndex(built.ledger, room)].fairies.length !== room.fairies.length,
   ).length;
   report.checkCatches(
     everyRoomBeforeGained === 0,
-    'an upgrade without onlyPastItsSafeRoom is caught adding to a room before the safe room',
+    'an upgrade reaching every region without onlyPastItsSafeRoom is caught adding to a room before the safe room',
     `${everyRoomBeforeGained} of ${before.length} before rooms gained`,
   );
 
-  const swine = spawnMob(
-    SWINE_BOSS_TYPE,
+  const boss = spawnMob(
+    FLOOR_TWO_UPGRADE_BOSS,
     { x: built.map.startTile.x, y: built.map.startTile.y },
     built.map,
     liveSpawnContext('dev:spawn'),
@@ -600,20 +607,20 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   const untouched = past.filter((room) => room !== occupiedRoom && room !== engaged);
   const untouchedBefore = untouched.map(countedFairies);
   const beforeCounts = before.map((room) => room.fairies.length);
-  built.bus.emit('bossDefeated', { bossType: SWINE_BOSS_TYPE, mob: swine });
+  built.bus.emit('bossDefeated', { bossType: FLOOR_TWO_UPGRADE_BOSS, mob: boss });
   const added = built.mobs.length - rosterBefore;
   const untouchedAfter = untouched.map(countedFairies);
   const gainedRooms = untouchedAfter.filter((after, i) => after > untouchedBefore[i]).length;
   const lowestUntouched = Math.min(...untouchedAfter);
   report.check(
-    gainedRooms > 0 && lowestUntouched >= HARD_POST_SWINE_MIN_FAIRIES,
-    'the Swine kill tops every untouched past room up to the upgraded rate',
+    gainedRooms > 0 && lowestUntouched >= HARD_UPGRADED_MIN_FAIRIES,
+    'the Big Rooster kill tops every untouched past room up to the upgraded rate',
     `${gainedRooms}/${untouched.length} rooms gained, ${added} fairies added, fewest now ${lowestUntouched}`,
   );
   const beforeGained = before.filter((room, i) => room.fairies.length !== beforeCounts[i]).length;
   report.check(
     beforeGained === 0,
-    'region-1 rooms before the safe room, those between the Krakaren and it included, gain nothing',
+    'rooms before the safe room, those leading up to the gym included, gain nothing',
     `${beforeGained} of ${before.length} gained (${beforeWouldGain.length} were under the minimum)`,
   );
   report.check(
@@ -678,9 +685,9 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   }
 
   const rosterBeforeSecond = built.mobs.length;
-  built.bus.emit('bossDefeated', { bossType: SWINE_BOSS_TYPE, mob: swine });
+  built.bus.emit('bossDefeated', { bossType: FLOOR_TWO_UPGRADE_BOSS, mob: boss });
   const secondAdded = built.mobs.length - rosterBeforeSecond;
-  report.check(secondAdded === 0, 'a second Swine kill adds nothing', `${secondAdded} added`);
+  report.check(secondAdded === 0, 'a second Big Rooster kill adds nothing', `${secondAdded} added`);
 
   // The guard against a second run is what stops a re-offer: forget it, and
   // the room left short eventually rolls its missing fairy.
@@ -688,7 +695,7 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
   for (let i = 0; i < REPEAT_UPGRADE_TRIES && unguardedAdded === 0; i++) {
     unguardedAdded = applyFairyRateUpgrade(
       cloneLedger(built.ledger),
-      SWINE_BOSS_TYPE,
+      FLOOR_TWO_UPGRADE_BOSS,
       built.map,
       built.mobs,
       crawlers,
@@ -700,19 +707,18 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
     `${unguardedAdded} added`,
   );
 
-  // The reload path: a save whose arena reached its second phase (the Swine's
-  // death) makes the scene replay the upgrade at build, with no kill event in
-  // this session. The boss rooms and the arena are read through the same
-  // narrow views the scene reads them through.
-  const noRoomsWon = { defeatedBossTypes: new Set<string>() };
-  const reloaded = reloadFloor(noRoomsWon, { phase2Active: true }, pastCounts);
+  // The reload path: a save whose boss room recorded the kill makes the scene
+  // replay the upgrade at build, with no kill event in this session.
+  const bossWon = { defeatedBossTypes: new Set<GauntletBossType>([FLOOR_TWO_UPGRADE_BOSS]) };
+  const noRoomsWon = { defeatedBossTypes: new Set<GauntletBossType>() };
+  const reloaded = reloadFloor(bossWon, pastCounts);
   report.precondition(
     reloaded.pastUnderMinimum,
     'the reloaded floor has a past room the replay must top up',
   );
   report.check(
-    reloaded.lowestPast >= HARD_POST_SWINE_MIN_FAIRIES && reloaded.beforeGained === 0,
-    'a reload with the Swine already dead builds the past rooms at the upgraded rates and no other',
+    reloaded.lowestPast >= HARD_UPGRADED_MIN_FAIRIES && reloaded.beforeGained === 0,
+    'a reload with Big Rooster already dead builds the past rooms at the upgraded rates and no other',
     `fewest ${reloaded.lowestPast} over ${reloaded.pastRooms} past rooms, ${reloaded.beforeGained} before rooms changed`,
   );
   report.check(
@@ -720,20 +726,20 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
     'a reloaded floor keeps a shield in every room holding a fairy',
     describeShieldAudit(reloaded.shields),
   );
-  const swineAlive = reloadFloor(noRoomsWon, { phase2Active: false }, pastCounts);
+  const bossAlive = reloadFloor(noRoomsWon, pastCounts);
   report.precondition(
-    swineAlive.pastUnderMinimum,
-    'the Swine-alive reload has a past room under the upgraded minimum',
+    bossAlive.pastUnderMinimum,
+    'the Big Rooster-alive reload has a past room under the upgraded minimum',
   );
   report.checkCatches(
-    swineAlive.lowestPast >= HARD_POST_SWINE_MIN_FAIRIES,
-    'a reload whose save has the Swine alive is caught building the past rooms at the base rates',
-    `fewest ${swineAlive.lowestPast}`,
+    bossAlive.lowestPast >= HARD_UPGRADED_MIN_FAIRIES,
+    'a reload whose save has Big Rooster alive is caught building the past rooms at the base rates',
+    `fewest ${bossAlive.lowestPast}`,
   );
 
   report.check(
     pastCounts.every((count) => count > 0),
-    'every built floor 2 has rooms past the Swine safe room',
+    'every built floor 2 has rooms past the safe room guarding Big Rooster',
     `past rooms per floor: ${pastCounts.join(', ')}`,
   );
 }

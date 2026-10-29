@@ -146,10 +146,9 @@ const PERCEPTIBLE_CHANNEL_STEP = 12;
  * Derived by measuring every pair of frames of every row of every gated figure.
  * Below the floor, before their idles were rebuilt: the deinonychus profile idle at
  * 0.096% (adult) and 0.180% (adolescent), which is the case this exists to
- * catch. Above it, across the shipped art, the tightest pairs are the Ball of
- * Swine's wallow at 0.300% and the Dark Knight's edge-on idle at 0.374%, so
- * 0.20% clears the worst shipped row by 1.5× and rejects the worst duplicate by
- * 2.1×.
+ * catch. Above it, across the shipped art, the tightest pair is the Dark
+ * Knight's edge-on idle at 0.374%, so 0.20% clears the worst shipped row by
+ * 1.8× and rejects the worst duplicate by 2.1×.
  *
  * It is a duplicate detector and not a measure of how lively a row is: an
  * idle with a hold–move–move–hold–move pattern can still measure 0.22%–0.54%

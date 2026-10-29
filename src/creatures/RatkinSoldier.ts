@@ -730,8 +730,7 @@ export class RatkinSoldier extends Mob {
   private isCandidate(mob: Mob): boolean {
     return (
       mob !== this &&
-      mob.isAlive &&
-      mob.isHostile &&
+      mob.isHostileTarget &&
       !mob.offLimitsToAllies &&
       !mob.isDefendTarget &&
       !this.bans.has(mob)
@@ -778,8 +777,7 @@ export class RatkinSoldier extends Mob {
   private chooseFoe(): Mob | null {
     const held = this.engaged;
     if (held !== null) {
-      const stillValid =
-        held.isAlive && held.isHostile && this.zoneDistancePx(held) <= this.keepRadiusPx();
+      const stillValid = held.isHostileTarget && this.zoneDistancePx(held) <= this.keepRadiusPx();
       if (stillValid && !this.strayedTooFar()) return held;
       if (held.isAlive && !this.isHuntingMe(held)) this.bans.set(held, DROPPED_TARGET_BAN_FRAMES);
       this.dropFight();

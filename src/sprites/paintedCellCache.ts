@@ -4,9 +4,10 @@
  * expensive Canvas2D operations on a phone — runs once per distinct pose
  * instead of once per body per frame.
  *
- * A cell is painted at the destination's own device pixels per world pixel,
- * so it blits 1:1 and a `shadowBlur`, which is measured in device pixels
- * whatever the transform, comes out the same size it would painted live. The
+ * A cell is painted at the destination's own device pixels per world pixel
+ * (never fewer than the render scale's), so at the camera's own framing it
+ * blits 1:1 and a `shadowBlur`, which is measured in device pixels whatever
+ * the transform, comes out the same size it would painted live. The
  * scale is part of each cell's key, so a change of render scale paints fresh
  * cells and the old ones age out. Cells are blitted mirrored for a body
  * facing west, the way the painters themselves flip. Every cell is
@@ -22,6 +23,7 @@ import {
   releaseSurface,
 } from '../core/rendering/canvasSurface';
 import { canvasGeneration, reportCanvasAllocationFailure } from '../core/rendering/canvasRecovery';
+import { getRenderScale } from '../core/rendering/Viewport';
 
 /**
  * Steps per unit the bake scale is rounded to, so a canvas whose backing store
@@ -31,10 +33,15 @@ const BAKE_SCALE_STEPS_PER_UNIT = 4;
 /** The least a cell is baked at, so a shrunken view still gets a usable cell. */
 const MIN_BAKE_SCALE = 1;
 
-/** Device pixels per world pixel on `ctx`, rounded to a step. */
+/**
+ * Device pixels per world pixel on `ctx`, never below the render scale, rounded
+ * to a step. The floor keeps a camera zooming out from painting a fresh set of
+ * cells at every step of its ease: below the render scale a cell is
+ * downsampled instead.
+ */
 function bakeScaleOf(ctx: CanvasRenderingContext2D): number {
   const transform = ctx.getTransform();
-  const deviceScale = Math.hypot(transform.a, transform.b);
+  const deviceScale = Math.max(Math.hypot(transform.a, transform.b), getRenderScale());
   const stepped = Math.round(deviceScale * BAKE_SCALE_STEPS_PER_UNIT) / BAKE_SCALE_STEPS_PER_UNIT;
   return Math.max(MIN_BAKE_SCALE, stepped);
 }

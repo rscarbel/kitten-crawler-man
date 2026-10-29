@@ -45,7 +45,7 @@ export const CAROLINE_OBJECTIVE_INTEL = {
   ),
 
   big_rooster: intel(
-    'Two lesser roosters guard the door. The route to the stairwell passes through him. It is not optional.',
+    'Two lesser roosters guard the door. The gym is equipped with dumbbells, kettlebells and exercise balls; he uses all three. The route to the stairwell passes through him. It is not optional.',
     (direction) => `Big Rooster occupies the gym ${direction} of this room.`,
     'Big Rooster occupies the gym ahead.',
   ),
@@ -56,10 +56,16 @@ export const CAROLINE_OBJECTIVE_INTEL = {
     'A goblin nursery lies on the route forward.',
   ),
 
-  krakaren_clone: intel(
-    'It is a copy of a Krakaren that existed in this dungeon. It stands between you and the stairwell. It is not optional.',
-    (direction) => `The Krakaren Clone is ${direction} of this room.`,
-    'The Krakaren Clone is ahead.',
+  kraken: intel(
+    'Classification: guardian. A deep-water cephalopod, submerged at the centre of a flooded pump room. While the room is flooded it cannot be harmed. Three pumps keep it flooded. A shark patrols the water between the rafts. It holds the route to the stairwell. It is not optional.',
+    (direction) => `The Kraken is ${direction} of this room.`,
+    'The Kraken is ahead.',
+  ),
+
+  electric_goblin: intel(
+    'Classification: guardian. A goblin in insulated armour with a generator on his back, occupying an abandoned power lab. The lab floor holds standing water. It conducts. He holds the route to the stairwell. It is not optional.',
+    (direction) => `The Current Goblin is ${direction} of this room.`,
+    'The Current Goblin is ahead.',
   ),
 
   stealth_gate: intel(
@@ -81,18 +87,6 @@ export const CAROLINE_OBJECTIVE_INTEL = {
 
   spider_lab_station: fixed(
     'This station serves the laboratory at the end of the hallway outside. The scientist there is offering a contract. It is optional.',
-  ),
-
-  ball_of_swine: intel(
-    'Its strength exceeds anything else on this floor. It is optional. Killing it guarantees a stairwell down.',
-    (direction) => `The Ball of Swine occupies the iron arena ${direction} of this room.`,
-    'The Ball of Swine occupies the iron arena ahead.',
-  ),
-
-  ball_of_swine_distant: intel(
-    'Inside is the Ball of Swine. Its strength exceeds anything else on this floor. It is optional. Killing it guarantees a stairwell down.',
-    (direction) => `An iron arena stands ${direction} of here.`,
-    'An iron arena stands on this floor.',
   ),
 
   krasue_murders: intel(

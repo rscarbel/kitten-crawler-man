@@ -237,7 +237,9 @@ const SKIPPED_ON_THE_WAY_TO_FLOOR_3 = [
   'tutorial_island',
   'bg_level_1',
   'bg_level_2',
-  'boss_music_1',
+  'king_of_the_heap',
+  'the_kraken_flooded',
+  'the_kraken_battle',
   'boss_music_2',
   'boss_music_3',
 ] as const satisfies readonly MusicTrackId[];

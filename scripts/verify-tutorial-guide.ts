@@ -1329,6 +1329,7 @@ section('a gate unlocked far from the player is still heard, from its direction'
 section('meeting Dave and his farewell are story cutscenes the step waits on');
 {
   const { CutsceneDirector } = await import('../src/systems/cutscene/CutsceneDirector.js');
+  const { noWorldActions } = await import('../src/systems/cutscene/cutsceneSteps.js');
   const { Conversation } = await import('../src/dialog/Conversation.js');
   const { StoryDirector } = await import('../src/story/StoryDirector.js');
   const { StoryDelivery } = await import('../src/systems/StoryDelivery.js');
@@ -1346,6 +1347,8 @@ section('meeting Dave and his farewell are story cutscenes the step waits on');
     teleportDaveOut: () => {
       daveTeleports++;
     },
+    playSound: () => {},
+    runWorldAction: noWorldActions,
   });
   tutorial.setCutscenes(director);
   const story = new StoryDirector();

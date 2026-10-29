@@ -600,34 +600,6 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'ball-of-swine',
-    views: async () => {
-      const { drawBallOfSwineSprite, ballOfSwinePortrait } =
-        await import('../src/sprites/ballOfSwineSprite.js');
-      const still = ballOfSwinePortrait();
-      return [
-        {
-          name: 'rolling',
-          paint: ({ dom, unit }) => drawBallOfSwineSprite(dom, 0, 0, unit, still),
-        },
-        {
-          name: 'wallowing',
-          paint: ({ dom, unit }) =>
-            drawBallOfSwineSprite(dom, 0, 0, unit, { ...still, pose: 'wallow' }),
-        },
-        {
-          name: 'bursting',
-          paint: ({ dom, unit }) =>
-            drawBallOfSwineSprite(dom, 0, 0, unit, {
-              ...still,
-              pose: 'burst',
-              progress: ATTACK_MIDPOINT,
-            }),
-        },
-      ];
-    },
-  },
-  {
     name: 'fat-clown',
     views: async () => {
       const { drawFatClownSprite } = await import('../src/sprites/fatClownSprite.js');

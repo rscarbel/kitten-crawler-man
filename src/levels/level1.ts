@@ -1,5 +1,9 @@
 import type { FairyRoomRate, LevelDef } from './types';
 import { LEARNING_FLOOR_LEVELLED_CURVE } from '../creatures/mobLevelScaling';
+import {
+  FLOODED_APPROACH_DEFAULT_MIN_LENGTH_TILES,
+  WIDE_CORRIDOR_WIDTH_TILES,
+} from '../map/floodedApproach';
 
 const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
@@ -30,13 +34,13 @@ const GOBLIN_MAX_LEVEL = 2;
  */
 const ARCHER_MIN_PER_ROOM = 0;
 const ARCHER_MAX_PER_ROOM = 1;
-/** Region index 1 is the stretch between the Trash Gremlin and Big Rooster. */
+/** Region index 1 is the stretch between the Trash Gremlin and the Kraken. */
 const ARCHER_FIRST_REGION = 1;
 const ARCHER_MIN_LEVEL = 1;
 const ARCHER_MAX_LEVEL = 3;
 
 /**
- * The bomber goblins, attached to a goblin room past Big Rooster and never
+ * The bomber goblins, attached to a goblin room past the Kraken and never
  * spawned on their own. Their blast takes a large share of a crawler's health,
  * so they wait until the party has had two gauntlets to learn to keep moving,
  * and a room has at most one of each: a bomber should be the thing a room is
@@ -44,8 +48,8 @@ const ARCHER_MAX_LEVEL = 3;
  */
 const BOMBER_MIN_PER_ROOM = 0;
 const BOMBER_MAX_PER_ROOM = 1;
-/** Region index 2 is the free-roam stretch past Big Rooster. */
-const POST_ROOSTER_REGION = 2;
+/** Region index 2 is the free-roam stretch past the Kraken. */
+const POST_KRAKEN_REGION = 2;
 const BOMBER_MIN_LEVEL = 1;
 const BOMBER_MAX_LEVEL = 3;
 
@@ -74,21 +78,21 @@ const TRASH_GREMLIN_BRANCH_MAX = 4;
 const TRASH_GREMLIN_BRANCH_ROOMS_MIN = 3;
 const TRASH_GREMLIN_BRANCH_ROOMS_MAX = 9;
 
-/** Branch count leaving the Trash Gremlin's room toward Big Rooster's gateway. */
-const BIG_ROOSTER_BRANCH_MIN = 2;
-const BIG_ROOSTER_BRANCH_MAX = 3;
+/** Branch count leaving the Trash Gremlin's room toward the Kraken's gateway. */
+const KRAKEN_BRANCH_MIN = 2;
+const KRAKEN_BRANCH_MAX = 3;
 
-/** Rooms along each branch toward Big Rooster — noticeably longer than the first stretch. */
-const BIG_ROOSTER_BRANCH_ROOMS_MIN = 6;
-const BIG_ROOSTER_BRANCH_ROOMS_MAX = 15;
+/** Rooms along each branch toward the Kraken — noticeably longer than the first stretch. */
+const KRAKEN_BRANCH_ROOMS_MIN = 6;
+const KRAKEN_BRANCH_ROOMS_MAX = 15;
 
 /**
- * Twice the room-count-derived default. The free region past Big Rooster is large
+ * Twice the room-count-derived default. The free region past the Kraken is large
  * enough that one stairwell per 50 rooms leaves a first-time crawler wandering.
  */
 const LEVEL1_STAIRWELL_MULTIPLIER = 2;
 
-/** Safe rooms scattered through the free-roam region past Big Rooster. */
+/** Safe rooms scattered through the free-roam region past the Kraken. */
 const LEVEL1_SCATTER_SAFE_ROOMS = 2;
 
 /**
@@ -98,12 +102,12 @@ const LEVEL1_SCATTER_SAFE_ROOMS = 2;
  */
 const PRE_GREMLIN_SPAWN_BONUS = 0;
 const POST_GREMLIN_SPAWN_BONUS = 1;
-const POST_ROOSTER_SPAWN_BONUS = 2;
+const POST_KRAKEN_SPAWN_BONUS = 2;
 
 /**
  * Levels added to each room band as the floor is cleared.
  *
- * A crawler reaches the Trash Gremlin around level 3 and leaves Big Rooster around 7,
+ * A crawler reaches the Trash Gremlin around level 3 and leaves the Kraken around 7,
  * but a goblin band of 1–2 tops out against a level-3 party — so the whole back
  * half of the floor, the longest stretch of it, was fought against the same
  * level-2 goblin the first room offered. Two steps of one level put the last
@@ -113,7 +117,7 @@ const POST_ROOSTER_SPAWN_BONUS = 2;
  */
 const PRE_GREMLIN_LEVEL_BONUS = 0;
 const POST_GREMLIN_LEVEL_BONUS = 1;
-const POST_ROOSTER_LEVEL_BONUS = 2;
+const POST_KRAKEN_LEVEL_BONUS = 2;
 
 /**
  * Where floor 1's XP starts drying up. A crawler who clears both gauntlets
@@ -135,32 +139,16 @@ const LEVEL1_XP_TRICKLE_MULTIPLIER = 0.1;
  */
 const TRASH_GREMLIN_MIN_LEVEL = 1;
 const TRASH_GREMLIN_MAX_LEVEL = 4;
-const BIG_ROOSTER_MIN_LEVEL = 3;
-const BIG_ROOSTER_MAX_LEVEL = 7;
-
-/**
- * Little Rooster and Slightly Bent Rooster, guarding Big Rooster's gateway,
- * levelled above the rooms leading up to it so the gauntlet boss isn't guarded
- * by weaker creatures than the ones a party already fought to reach it.
- */
-const ROOSTER_FLOCK_MIN_LEVEL = 2;
-const ROOSTER_FLOCK_MAX_LEVEL = 3;
+const KRAKEN_MIN_LEVEL = 3;
+const KRAKEN_MAX_LEVEL = 7;
 
 /**
  * The goblin mother's bugaboo wave. The nursery sits between the Trash Gremlin and
- * Big Rooster, so it is fought by a party around level 3–5 rather than by the
+ * the Kraken, so it is fought by a party around level 3–5 rather than by the
  * level-7 one the encounter was first tuned against.
  */
 const BUGABOO_MIN_LEVEL = 1;
 const BUGABOO_MAX_LEVEL = 3;
-
-/** Little Rooster's post, west-northwest of the gym's centre. */
-const LITTLE_ROOSTER_OFFSET_X = -3;
-const LITTLE_ROOSTER_OFFSET_Y = -2;
-
-/** Slightly Bent Rooster's post, east-northwest of the gym's centre. */
-const BENT_ROOSTER_OFFSET_X = 3;
-const BENT_ROOSTER_OFFSET_Y = -2;
 
 /**
  * Fairies on the first floor. None before the Trash Gremlin, for the same reason the
@@ -173,7 +161,7 @@ const POST_GREMLIN_FAIRY_RATE: FairyRoomRate = {
   minCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
   maxCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
 };
-const POST_ROOSTER_FAIRY_RATE: FairyRoomRate = {
+const POST_KRAKEN_FAIRY_RATE: FairyRoomRate = {
   chance: { easy: 0.3, normal: 0.4, hard: 0.65 },
   minCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
   maxCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
@@ -193,7 +181,8 @@ export const level1: LevelDef = {
   arrivalLoadingScreen: {
     tips: [
       'The floor is on a countdown. Find a stairwell before it collapses with you on it.',
-      'The Trash Gremlin and then Big Rooster stand between you and the stairwells.',
+      'The Trash Gremlin and then the Kraken stand between you and the stairwells.',
+      'Something big has flooded the pump room. Wade carefully, and watch the water.',
       'A safe room saves your run, and a death returns you to your last save.',
       'The Bopca in each safe room runs a shop. Spend your coins before you descend.',
       'Other crawlers have painted signs on the walls. They point toward the stairwell.',
@@ -207,7 +196,7 @@ export const level1: LevelDef = {
     'dungeon_common',
     'floor1_tileset',
     'boss_trash_gremlin',
-    'boss_big_rooster',
+    'boss_flooded_pump_room',
   ],
   interiorSpriteGroups: [],
   roomMobs: [
@@ -231,7 +220,7 @@ export const level1: LevelDef = {
           type: 'goblin_dynamiter',
           minCount: BOMBER_MIN_PER_ROOM,
           maxCount: BOMBER_MAX_PER_ROOM,
-          minRegion: POST_ROOSTER_REGION,
+          minRegion: POST_KRAKEN_REGION,
           minLevel: BOMBER_MIN_LEVEL,
           maxLevel: BOMBER_MAX_LEVEL,
         },
@@ -239,7 +228,7 @@ export const level1: LevelDef = {
           type: 'goblin_bombardier',
           minCount: BOMBER_MIN_PER_ROOM,
           maxCount: BOMBER_MAX_PER_ROOM,
-          minRegion: POST_ROOSTER_REGION,
+          minRegion: POST_KRAKEN_REGION,
           minLevel: BOMBER_MIN_LEVEL,
           maxLevel: BOMBER_MAX_LEVEL,
         },
@@ -261,33 +250,45 @@ export const level1: LevelDef = {
       minLevel: TRASH_GREMLIN_MIN_LEVEL,
       maxLevel: TRASH_GREMLIN_MAX_LEVEL,
     },
-    { type: 'big_rooster', minLevel: BIG_ROOSTER_MIN_LEVEL, maxLevel: BIG_ROOSTER_MAX_LEVEL },
+    { type: 'kraken', minLevel: KRAKEN_MIN_LEVEL, maxLevel: KRAKEN_MAX_LEVEL },
   ],
   progression: {
     gauntlets: [
       {
         bossType: 'trash_gremlin',
-        branchCount: { min: TRASH_GREMLIN_BRANCH_MIN, max: TRASH_GREMLIN_BRANCH_MAX },
-        branchRooms: { min: TRASH_GREMLIN_BRANCH_ROOMS_MIN, max: TRASH_GREMLIN_BRANCH_ROOMS_MAX },
+        route: {
+          kind: 'branches',
+          branchCount: { min: TRASH_GREMLIN_BRANCH_MIN, max: TRASH_GREMLIN_BRANCH_MAX },
+          branchRooms: { min: TRASH_GREMLIN_BRANCH_ROOMS_MIN, max: TRASH_GREMLIN_BRANCH_ROOMS_MAX },
+        },
       },
       {
-        bossType: 'big_rooster',
-        branchCount: { min: BIG_ROOSTER_BRANCH_MIN, max: BIG_ROOSTER_BRANCH_MAX },
-        branchRooms: { min: BIG_ROOSTER_BRANCH_ROOMS_MIN, max: BIG_ROOSTER_BRANCH_ROOMS_MAX },
+        bossType: 'kraken',
+        route: {
+          kind: 'branches',
+          branchCount: { min: KRAKEN_BRANCH_MIN, max: KRAKEN_BRANCH_MAX },
+          branchRooms: { min: KRAKEN_BRANCH_ROOMS_MIN, max: KRAKEN_BRANCH_ROOMS_MAX },
+        },
         // The goblin mother's nursery is the one room every crawler crosses
-        // between the Trash Gremlin and Big Rooster, on whichever of the two sealed
-        // stems this map drew.
+        // between the Trash Gremlin and the Kraken, on the sealed stem out of
+        // the Trash Gremlin's room: the flooded approach leaves no room for it
+        // in front of the Kraken's door.
         questChoke: true,
+        approach: {
+          kind: 'flooded',
+          minLengthTiles: FLOODED_APPROACH_DEFAULT_MIN_LENGTH_TILES,
+          widthTiles: WIDE_CORRIDOR_WIDTH_TILES,
+        },
       },
     ],
     scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
     outskirtsSafeRoomHops: true,
-    regionSpawnBonus: [PRE_GREMLIN_SPAWN_BONUS, POST_GREMLIN_SPAWN_BONUS, POST_ROOSTER_SPAWN_BONUS],
-    regionLevelBonus: [PRE_GREMLIN_LEVEL_BONUS, POST_GREMLIN_LEVEL_BONUS, POST_ROOSTER_LEVEL_BONUS],
+    regionSpawnBonus: [PRE_GREMLIN_SPAWN_BONUS, POST_GREMLIN_SPAWN_BONUS, POST_KRAKEN_SPAWN_BONUS],
+    regionLevelBonus: [PRE_GREMLIN_LEVEL_BONUS, POST_GREMLIN_LEVEL_BONUS, POST_KRAKEN_LEVEL_BONUS],
   },
   defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
   fairies: {
-    roomRatesByRegion: [null, POST_GREMLIN_FAIRY_RATE, POST_ROOSTER_FAIRY_RATE],
+    roomRatesByRegion: [null, POST_GREMLIN_FAIRY_RATE, POST_KRAKEN_FAIRY_RATE],
     roomHealerChance: LEVEL1_ROOM_HEALER_CHANCE,
   },
   // Floor 1 keeps the curve it was tuned on when the shared one was flattened
@@ -302,21 +303,5 @@ export const level1: LevelDef = {
     { minPlayerLevel: LEVEL1_XP_HALF_LEVEL, multiplier: LEVEL1_XP_HALF_MULTIPLIER },
     { minPlayerLevel: LEVEL1_XP_QUARTER_LEVEL, multiplier: LEVEL1_XP_QUARTER_MULTIPLIER },
     { minPlayerLevel: LEVEL1_XP_TRICKLE_LEVEL, multiplier: LEVEL1_XP_TRICKLE_MULTIPLIER },
-  ],
-  extraSpawns: [
-    {
-      type: 'little_rooster',
-      origin: 'bossRoom:1',
-      minLevel: ROOSTER_FLOCK_MIN_LEVEL,
-      maxLevel: ROOSTER_FLOCK_MAX_LEVEL,
-      offsets: [[LITTLE_ROOSTER_OFFSET_X, LITTLE_ROOSTER_OFFSET_Y]],
-    },
-    {
-      type: 'slightly_bent_rooster',
-      origin: 'bossRoom:1',
-      minLevel: ROOSTER_FLOCK_MIN_LEVEL,
-      maxLevel: ROOSTER_FLOCK_MAX_LEVEL,
-      offsets: [[BENT_ROOSTER_OFFSET_X, BENT_ROOSTER_OFFSET_Y]],
-    },
   ],
 };

@@ -240,7 +240,7 @@ interface FloorState {
   readonly openedChest: unknown;
   readonly bathroomSolved: boolean;
   readonly plumbing: string;
-  readonly krakarenKilled: boolean;
+  readonly krakenKilled: boolean;
 }
 
 function revealedFog(scene: Scene): Uint8Array {
@@ -262,7 +262,7 @@ function floorState(scene: Scene, openedChest: unknown): FloorState {
     openedChest: chest?.state ?? null,
     bathroomSolved: scene.cloggedBathroom.isSolved,
     plumbing: scene['gameMap'].bathroomPlumbingState,
-    krakarenKilled: scene['krakarenKilled'],
+    krakenKilled: scene['krakenKilled'],
   };
 }
 
@@ -347,7 +347,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   if (chest !== undefined) chest.state = 'opened';
   outside['miniMap'].revealAround(door.x, door.y);
   outside.cloggedBathroom.markSolved();
-  outside['krakarenKilled'] = true;
+  outside['krakenKilled'] = true;
 
   const before = floorState(outside, chest);
   const fogBefore = revealedFog(outside);

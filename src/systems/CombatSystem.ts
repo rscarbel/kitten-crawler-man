@@ -159,6 +159,26 @@ const MISSILE_SHOCKWAVE_RADIUS_TILES = 5;
 const ENERGY_SHIELD_CHAIN_LIGHTNING_LEVEL = 15;
 /** Missile collision hit radius as a fraction of TILE_SIZE. */
 const MISSILE_HIT_RADIUS_FRACTION = 0.7;
+
+/**
+ * How much further than an ordinary mob's a missile meets `mob`: it detonates
+ * on the drawn body, so a body wider than its own tile is struck at its edge
+ * rather than only near its centre.
+ */
+function bodyBeyondOwnTile(mob: Mob): number {
+  return mob.bodyRadiusPx - TILE_SIZE / 2;
+}
+
+/**
+ * The widest {@link bodyBeyondOwnTile} among `mobs`, so the grid query around
+ * a missile reaches a wide body whose position — its tile's corner — sits
+ * further off than an ordinary mob's would.
+ */
+function widestBodyBeyondOwnTileOf(mobs: readonly Mob[]): number {
+  let widest = 0;
+  for (const mob of mobs) widest = Math.max(widest, bodyBeyondOwnTile(mob));
+  return widest;
+}
 /** Boss stun duration in frames when seismic stomp lands in the inner blast zone. */
 const SEISMIC_STOMP_BOSS_STUN_FRAMES = 150;
 /** Seismic Stomp heal-on-hit chance (10th-level+). */
@@ -354,10 +374,13 @@ export type WeaponProcs = Readonly<Record<WeaponProcId, WeaponProc>>;
 export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: number): boolean {
   const { human } = ctx;
   const edge = damageMultiplier * crawlerMeleeStrikeDamage(human);
-  const blow = mob.blowsEarnNothing ? edge : gearScaledDamage(human, mob, 'melee', edge);
+  // Read once: the cut itself can flip a phased boss into an immune phase, and
+  // the blow that earned its way in still pays out.
+  const earnsNothing = mob.blowsEarnNothing;
+  const blow = earnsNothing ? edge : gearScaledDamage(human, mob, 'melee', edge);
   const damage = outgoingHitDamageOn(human, mob, blow, human.meleeHitTags());
   mob.takeDamageFrom(damage, human, 'melee');
-  if (mob.blowsEarnNothing) return false;
+  if (earnsNothing) return false;
   ctx.hitLanded = true;
   landGearProcs(ctx, human, mob, 'melee', damage);
   landTattooStrikeProcs(human, mob);
@@ -673,8 +696,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const splashRadius = TILE_SIZE * MISSILE_SPLASH_RADIUS_TILES;
 
     const missileSplitCopies = gearModifiers(cat).missileSplitCopies;
+    const missiles = cat.getMissiles();
+    const widestBodyBeyondOwnTile = missiles.length > 0 ? widestBodyBeyondOwnTileOf(ctx.mobs) : 0;
+    const missileQueryRadius = hitRadius + TILE_SIZE + widestBodyBeyondOwnTile;
 
-    for (const missile of cat.getMissiles()) {
+    for (const missile of missiles) {
       if (missile.state !== 'flying' || missile.hit || !missileCanStrike(missile)) continue;
       const damage = cat.getMissileDamage();
       const strikesScenery = missileStrikesScenery(missile);
@@ -737,7 +763,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         continue;
       }
 
-      const nearMissile = mobGrid.queryCircle(missile.x, missile.y, hitRadius + TILE_SIZE);
+      const nearMissile = mobGrid.queryCircle(missile.x, missile.y, missileQueryRadius);
       for (const mob of nearMissile) {
         // A missile passes clean through anything it cannot hurt rather than
         // detonating on it: an ally who wanders into the line of fire should
@@ -746,7 +772,13 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (!missileMayHitMob(missile, mob)) continue;
         const mc = centerOf(mob);
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
-        if (dist < hitRadius) {
+        if (dist < hitRadius + bodyBeyondOwnTile(mob)) {
+          if (mob.tryBlockProjectile('missile')) {
+            missile.hit = true;
+            missile.state = 'exploding';
+            ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
+            break;
+          }
           if (!cat.zeroDamage && mob.blowsEarnNothing) {
             mob.takeDamageFrom(outgoingHitDamageOn(cat, mob, damage, MAGIC_HIT), cat, 'missile');
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
@@ -898,7 +930,7 @@ function bounceRock(
   let next: Mob | null = null;
   let nearest = Infinity;
   for (const mob of mobGrid.queryCircle(rock.x, rock.y, seekPx + TILE_SIZE)) {
-    if (mob === struck || !mob.isAlive || !mob.takesPlayerDamage('slingshot')) continue;
+    if (mob === struck || !mob.isHostileTarget || !mob.takesPlayerDamage('slingshot')) continue;
     const dx = mob.x + HALF_TILE - rock.x;
     const dy = mob.y + HALF_TILE - rock.y;
     const dist = Math.hypot(dx, dy);

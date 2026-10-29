@@ -1,6 +1,7 @@
 /**
- * Where everything in Big Rooster's gym goes: floor zones, equipment, the mirror
- * and the whiteboard. A pure function of the room's bounds and doorways, so the
+ * Where everything in Big Rooster's gym goes: floor zones, equipment, the
+ * kettlebell racks, the exercise balls' resting spots, the mirror and the
+ * whiteboard. A pure function of the room's bounds and doorways, so the
  * chunk painter, the room system and the gates all read one answer.
  *
  * Collidable props come from one template authored in the doorway frame (see
@@ -63,6 +64,13 @@ export interface GymLayout {
   readonly cableStacks: readonly TilePoint[];
   readonly treadmills: readonly GymTreadmill[];
   readonly benches: readonly TilePoint[];
+  /**
+   * The racks he heaves his kettlebell rain from, at least
+   * {@link GYM_KETTLEBELL_RACK_MIN}, each with open floor in front of it.
+   */
+  readonly kettlebellRacks: readonly TilePoint[];
+  /** Where the exercise balls rest against the side walls until he kicks them. */
+  readonly exerciseBalls: readonly TilePoint[];
   readonly boombox: TilePoint | null;
   /** The silvered stretch of the north wall, the one wall that faces the room. */
   readonly mirror: GymWallRun;
@@ -100,6 +108,20 @@ const WHITEBOARD_TILES = 4;
 const WHITEBOARD_CORNER_GAP = 2;
 /** Bare wall left between the whiteboard and the mirror on either side. */
 const MIRROR_BOARD_GAP_TILES = 1;
+/** The fewest kettlebell racks a gym is planned with: one either side of the door. */
+export const GYM_KETTLEBELL_RACK_MIN = 2;
+/** The kettlebell racks stand on the doorway wall, this far in from each corner. */
+const KETTLEBELL_RACK_CORNER_GAP_TILES = 3;
+const BALLS_PER_WALL = 4;
+const SIDE_WALL_COUNT = 2;
+/** How many exercise balls rest in the gym. */
+export const EXERCISE_BALL_COUNT = BALLS_PER_WALL * SIDE_WALL_COUNT;
+/** The nearest ball on each side wall rests this deep into the room. */
+const BALL_NEAR_DEPTH_TILES = 4;
+/** The farthest ball on each side wall rests this many tiles short of the turf. */
+const BALL_TURF_GAP_TILES = 1;
+/** The furthest a piece is slid from where it wants to stand to find clear floor, in tiles. */
+const MAX_SPOT_SEARCH_TILES = 8;
 
 function inwardOf(side: DoorSide): TileStep {
   switch (side) {
@@ -353,6 +375,20 @@ export function planGymLayout(
   }
 
   const boombox = ofKind('boombox')[0] ?? null;
+  const taken = new Set<string>(keepClear);
+  const wallKit = [
+    ...placed.filter((entry) => entry.kind !== 'turf'),
+    ...treadmills.flatMap((t) => t.belt),
+  ];
+  for (const tile of wallKit) {
+    for (const near of [tile, ...neighbours(tile)]) taken.add(key(near));
+  }
+  for (const tile of ofKind('turf')) taken.add(key(tile));
+  const kettlebellRacks = planKettlebellRacks(side, bounds, alongMin, alongMax, farDepth, taken);
+  for (const rack of kettlebellRacks) {
+    for (const near of [rack, ...neighbours(rack)]) taken.add(key(near));
+  }
+  const exerciseBalls = planExerciseBalls(side, bounds, alongMin, alongMax, farDepth, taken);
   const whiteboard = whiteboardRun(bounds, doorways);
   return {
     bounds,
@@ -372,11 +408,138 @@ export function planGymLayout(
     cableStacks: ofKind('cable'),
     treadmills,
     benches: ofKind('bench'),
+    kettlebellRacks,
+    exerciseBalls,
     boombox,
     mirror: mirrorRun(bounds, doorways, whiteboard),
     whiteboard,
     doorways,
   };
+}
+
+const neighbours = (tile: TilePoint): TilePoint[] => [
+  { x: tile.x + 1, y: tile.y },
+  { x: tile.x - 1, y: tile.y },
+  { x: tile.x, y: tile.y + 1 },
+  { x: tile.x, y: tile.y - 1 },
+];
+
+/** A door-frame spot and the tile one step further into the room, placed; null if either leaves the room. */
+function spotWithFront(
+  along: number,
+  depth: number,
+  front: TemplateOffset,
+  side: DoorSide,
+  bounds: TileRect,
+): { tile: TilePoint; front: TilePoint } | null {
+  const placed = rotateTemplate([{ along, depth }, front], side, bounds);
+  if (placed.length < 2) return null;
+  return { tile: placed[0], front: placed[1] };
+}
+
+/**
+ * The first spot along `candidates` whose tile and front are both free of
+ * `taken`, or null. Each candidate names where it stands and which neighbour
+ * is its front: the floor a lifter stands on, which must stay open.
+ */
+function firstFreeSpot(
+  candidates: ReadonlyArray<{ along: number; depth: number; front: TemplateOffset }>,
+  side: DoorSide,
+  bounds: TileRect,
+  taken: ReadonlySet<string>,
+): TilePoint | null {
+  for (const candidate of candidates) {
+    const spot = spotWithFront(candidate.along, candidate.depth, candidate.front, side, bounds);
+    if (spot === null) continue;
+    if (taken.has(key(spot.tile)) || taken.has(key(spot.front))) continue;
+    return spot.tile;
+  }
+  return null;
+}
+
+/**
+ * The kettlebell racks: against the doorway wall, one in from each corner, so
+ * a heave sends him back toward the door the party came in by and the far end
+ * of the room is never a safe corner from it. Each slides toward the door to
+ * clear a secondary doorway, then onto the side wall nearest it, so a gym
+ * always gets two.
+ */
+function planKettlebellRacks(
+  side: DoorSide,
+  bounds: TileRect,
+  alongMin: number,
+  alongMax: number,
+  farDepth: number,
+  taken: Set<string>,
+): TilePoint[] {
+  const racks: TilePoint[] = [];
+  const ends = [
+    { corner: alongMin + KETTLEBELL_RACK_CORNER_GAP_TILES, toward: 1, wall: alongMin },
+    { corner: alongMax - KETTLEBELL_RACK_CORNER_GAP_TILES, toward: -1, wall: alongMax },
+  ];
+  for (const end of ends) {
+    const candidates: Array<{ along: number; depth: number; front: TemplateOffset }> = [];
+    for (let step = 0; step <= MAX_SPOT_SEARCH_TILES; step++) {
+      const along = end.corner + step * end.toward;
+      candidates.push({ along, depth: 0, front: { along, depth: 1 } });
+    }
+    for (let depth = 1; depth < farDepth - TURF_DEPTH_TILES; depth++) {
+      candidates.push({ along: end.wall, depth, front: { along: end.wall + end.toward, depth } });
+    }
+    const rack = firstFreeSpot(candidates, side, bounds, taken);
+    if (rack === null) continue;
+    racks.push(rack);
+    for (const near of [rack, ...neighbours(rack)]) taken.add(key(near));
+  }
+  return racks;
+}
+
+/**
+ * The exercise balls' resting spots: an even run of them down each side wall
+ * from the doorway end to the turf, each slid along its wall to the nearest
+ * tile clear of the kit there.
+ */
+function planExerciseBalls(
+  side: DoorSide,
+  bounds: TileRect,
+  alongMin: number,
+  alongMax: number,
+  farDepth: number,
+  taken: Set<string>,
+): TilePoint[] {
+  const balls: TilePoint[] = [];
+  const farDepthWanted = farDepth - TURF_DEPTH_TILES - BALL_TURF_GAP_TILES;
+  const walls = [
+    { wall: alongMin, inward: 1 },
+    { wall: alongMax, inward: -1 },
+  ];
+  const depthStep = (farDepthWanted - BALL_NEAR_DEPTH_TILES) / (BALLS_PER_WALL - 1);
+  const wants = Array.from({ length: BALLS_PER_WALL }, (_, index) =>
+    walls.map((wall) => ({
+      ...wall,
+      depth: BALL_NEAR_DEPTH_TILES + Math.round(index * depthStep),
+    })),
+  ).flat();
+  for (const want of wants) {
+    const candidates: Array<{ along: number; depth: number; front: TemplateOffset }> = [];
+    for (let distance = 0; distance <= MAX_SPOT_SEARCH_TILES; distance++) {
+      for (const depth of distance === 0
+        ? [want.depth]
+        : [want.depth - distance, want.depth + distance]) {
+        if (depth < 1 || depth > farDepthWanted) continue;
+        candidates.push({
+          along: want.wall,
+          depth,
+          front: { along: want.wall + want.inward, depth },
+        });
+      }
+    }
+    const ball = firstFreeSpot(candidates, side, bounds, taken);
+    if (ball === null) continue;
+    balls.push(ball);
+    for (const near of [ball, ...neighbours(ball)]) taken.add(key(near));
+  }
+  return balls;
 }
 
 function isDoorwayWallTile(

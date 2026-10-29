@@ -10,7 +10,7 @@ A mob is a `Player` with AI: `Mob` (`src/creatures/Mob.ts`) extends `Player` (`s
 ## Required in the subclass
 
 - `readonly xpValue: number` (abstract).
-- `updateAI(targets: Player[]): void` (abstract) — called each frame by `MobUpdateLoop`. Pattern: guard `if (!this.isAlive) return` → tick cooldowns → find nearest living target in aggro range → `updateLastKnown(target)` + `followTargetAStar(...)` → attack in range via `this.dealDamage(target, base)` → else `doWander()`.
+- `updateAI(targets: Player[]): void` (abstract) — called each frame by `MobUpdateLoop`. Pattern: guard `if (!this.isAlive) return` → tick cooldowns → find nearest living target in aggro range (`acquireTarget`) and write it to `this.currentTarget` (null when there is none) → `updateLastKnown(target)` + `followTargetAStar(...)` → attack in range via `this.dealDamage(target, base)` → else `doWander()`. Writing `currentTarget` is not optional: companions join a fight by who a mob is targeting (`CompanionSystem.findMobTargetingNear`), and `acquireTarget` keeps an engaged target at its longer persist range only through it. A creature that never writes it is never fought by the AI companion.
 - `protected override drawSelf(ctx, camX, camY, tileSize)` (abstract on `Player`) — compute `sx = this.x - camX`, `sy = this.y - camY`, call your sprite draw fn, then `renderMobHealthBar` (and `renderAggroIndicator` if aggro'd). Never override `render`: `Player.render` is sealed and wraps `drawSelf` so the hit flash and status paint land on the figure's own silhouette.
 - Constructor: `constructor(tileX, tileY, tileSize) { super(tileX, tileY, tileSize, MAX_HP, SPEED); }` — extract HP/speed/ranges into named module-level constants (CLAUDE.md: no magic numbers).
 - `protected override get eyePlacement(): EyePlacement | null` (abstract) — where its eyes are, for the two glints the dungeon's dark shows of a hostile it hides (`DungeonLightingSystem.renderEyeShine`). `EyePlacement` (`src/sprites/eyePlacement.ts`) has two shapes, after how the art turns to its facing:
@@ -21,7 +21,7 @@ A mob is a `Player` with AI: `Mob` (`src/creatures/Mob.ts`) extends `Player` (`s
 
 ## Optional overrides (all have base defaults)
 
-`coinDropMin/Max`, `displayName`, `description`, `audioTag`, `bodyPartKey`, `mass` (heavier = displaced less in separation), `separationAnchored` (nothing can push it; whatever bumps it, crawlers included, takes the whole push), `collisionRadiusPx` (for a body drawn wider than a tile: measure it from the rendered art, keep it inside both crawlers' melee reach, and see `KrakarenClone`), `isFlying`, `isBoss`, `isHostile`, `requiresEvasion`, `rollLootItems(killer)` for creature-specific drops, `tacticsEligibility` (see below).
+`coinDropMin/Max`, `displayName`, `description`, `audioTag`, `bodyPartKey`, `mass` (heavier = displaced less in separation), `separationAnchored` (nothing can push it; whatever bumps it, crawlers included, takes the whole push), `collisionRadiusPx` (for a body drawn wider than a tile: measure it from the rendered art, keep it inside both crawlers' melee reach, and see `Kraken`), `isFlying`, `isBoss`, `isHostile`, `requiresEvasion`, `rollLootItems(killer)` for creature-specific drops, `tacticsEligibility` (see below).
 
 ## Do not reimplement — inherited helpers
 
@@ -81,7 +81,21 @@ A creature that must be hit by the world's damage pipeline but is not an enemy i
 - A soldier is knocked down, not killed: it zeroes out inside its own damage doors, keeps `rendersWhenDead`, and overrides `undoResurrectionForCheckpoint`.
 - Any "for every mob" sweep you write must filter on `isHostile` explicitly.
 
+**Targeting predicate.** Anything on the party's side that picks an enemy to fight — aim snap, homing, auto-aim, a companion, a pet, a hire, a soldier, a converted ally, a trebuchet, a gear proc — reads `Mob.isHostileTarget` (alive, hostile and not `awaitingItsFight`), never `isHostile` on its own. A boss that is in the world before its fight begins overrides `awaitingItsFight` (the Kraken returns true until her flooded room is drained) and is passed over by every one of them at once; never add a per-system special case for it.
+
 **Hostile-only walkability.** `GameMap.isWalkableForHostile` also honours `BLOCK_HOSTILE_ONLY` (Briar Hollow's gate). Mob movement (`stepThroughWalls`, `findPath(..., forHostile)`, tactical steps) uses it when the mob is hostile; line of sight and spawn checks do not. A custom mover must use the same test, or hostiles walk through the gate.
+
+**Projectile blocks.** A projectile's hit path asks `Mob.tryBlockProjectile(kind)` before any damage (today the cat's Magic Missile, in `CombatSystem`). A creature that blocks overrides `blocksProjectile(kind)` (its roll) and `playProjectileBlock(kind)` (its guard visual); the base shows the "BLOCKED" label and the caller consumes the projectile.
+
+**Who counts as a target.** Targeting reads `Mob.isHostileTarget` (alive, `isHostile`, and not `awaitingItsFight`), never `isHostile` alone. A boss waiting out a room's scripted opening overrides `awaitingItsFight` to true and is passed over by auto-aim, missiles, companions and the minimap-style sweeps until its fight begins; a hit the player lands by hand still reaches its damage doors.
+
+**Stun and seizure.** `MobUpdateLoop` keeps a stunned, seized or frozen mob's target but skips its AI. The Electrified status (`src/core/combat/StatusEffect.ts`) bites every `ELECTRIFIED_BITE_INTERVAL_TICKS` and each bite seizes its carrier for `ELECTRIFIED_SEIZE_FRAMES`, unable to walk or attack, crawlers and mobs alike. A boss that keeps a timer running through a seizure advances it in `tickTimers`, which runs even when `updateAI` does not (`ElectricGoblin`).
+
+**Scripted deaths.** A death that plays out as a cutscene (a shark taking a crawler) is a `ScriptedDeathKind`, not a damage number; see `ScriptedDeathSystem` in `game-architecture`.
+
+**Bosses.** Floor 1: `TrashGremlin`, then `Kraken` (with `KrakenTentacle`). Floor 2: `ElectricGoblin` (the Current Goblin), then `BigRooster` (with `RoosterMinion`, `LittleRooster`, `SlightlyBentRooster`). `GrotesqueSpider` is the spider lab's quest boss. Each boss type is a `GauntletBossType` (`src/map/bossRoomSizes.ts`) with an entry in `BOSS_META`, a dressing in `src/systems/bossRooms/` and a `bossRooms` rule in its level.
+
+**Explosives.** A mob that reacts to the party's lit dynamite and bombs reads `liveExplosives()` and kicks a stick with `kickExplosive(id, velocity)` (`src/creatures/explosiveAwareness.ts`), which `MobUpdateLoop` publishes from every registered `ExplosiveSource` (`src/systems/ExplosiveSource.ts`; `DynamiteSystem` is registered in `DungeonScene`). Nothing reacts unless its own AI asks. Big Rooster and his flock kick landed sticks through the shared helpers in `src/creatures/roosterKicks.ts`, which aim a kick with `launchSpeedFor` (`src/systems/dynamiteSlide.ts`) so it slides as far as they mean it to.
 
 **Root.** `Mob.root(frames, source)` / `releaseRoot` / `isRooted`: `moveWithCollision` refuses the mob's own steps (knockback still moves it) but it keeps attacking. Unlike `aiHeld`, it does not clear the target. A charger must end its charge when rooted.
 
@@ -101,6 +115,7 @@ A creature that must be hit by the world's damage pipeline but is not an enemy i
 - **Statuses that scale incoming damage**: a status's effect on damage taken is the `incomingDamageScale` of its entry in `STATUS_DEFS` (`src/core/combat/StatusEffect.ts`), a `Record` over every status that holds all of a status's rules (cure, ward, caster-held, stat boon, damage over time, persistence), so a new status fails to compile until it has one. Its look is its entry in `STATUS_VISUALS` (`src/sprites/status/statusEffectVisuals.ts`), also a `Record` over every status. Mobs and crawlers both multiply by `statusDamageScale`, once, for every source; never add a one-off `if` in a `takeDamage`.
 - **HP-threshold reactions**: a crawler reacting on the way down (low-health warning, the retch at 5%) is an entry in `CRAWLER_HP_THRESHOLDS` (`src/core/combat/hpThresholds.ts`). `Player` detects entry on every HP write and re-arms above the band; scenes drain it through `drainHpThresholdCrossings`.
 - **Telegraphed attacks**: a new telegraphed attack must satisfy the P2 fairness invariants in `docs/difficulty-fairness-rules.md`, and is gated by `npm run verify:difficulty`.
+- **Ground warnings are always red**: draw every telegraph on the floor with `drawDangerCircle` / `drawDangerCone` / `drawDangerTile` / `drawDangerLane` / `drawDangerRegion` / `drawDangerPath` (`src/sprites/dangerTelegraph.ts`). They take no colour; their ink is `GROUND_WARNING_INK`. Pass `fillProgress` so the fill meets the outline on the frame the hit lands, and `locked` once the aim is fixed. `drawDangerPath` (a winding route, such as a hazard's whole run) takes `locked` only: it has no fill to grow. The creature's own colour goes on the effect (arcs, flames, bile) drawn over the warning, never on the warning.
 
 ## Companions and pets
 
@@ -110,7 +125,7 @@ A player-owned creature is a `Mob` with three contracts the base class does not 
 
 **Attribution.** A pet must deal damage in its own name — pass itself as the attacker and set `target.retaliateMob = this` — or the mobs it mauls come after the owner standing behind it. Kill credit is then redirected by `Player.xpCreditTarget` (defaults to `this`; a pet returns its owner), which `CombatSystem.resolveKills` maps damage entries through, so the owner keeps the XP exactly as before. `Mob.killedByDealer` holds the literal dealer alongside the credited one, because killer-keyed loot rolls and achievements must still see the pet. Any `takeDamageFrom` override in a boss subclass has to preserve this mapping or it silently drops pet credit.
 
-**Targeting.** `Mob.isPetAttackable` (default `isHostile`) is the pet's target predicate, not `isHostile` directly — it lets a calm creature opt into being prey without becoming hostile to the player. A pet's acquisition must still pass `canNotice`; it is easy to write the one targeting path in the codebase with no perception gate, and a pet that beelines at enemies through walls is what that looks like.
+**Targeting.** `Mob.isPetAttackable` (default `isHostileTarget`) is the pet's target predicate, not `isHostile` directly — it lets a calm creature opt into being prey without becoming hostile to the player. A pet's acquisition must still pass `canNotice`; it is easy to write the one targeting path in the codebase with no perception gate, and a pet that beelines at enemies through walls is what that looks like.
 
 **State outlives the creature object.** A pet that is summoned and dismissed is a new instance every time, so HP, regeneration, level-scaling and any recovery lock live in a plain state object threaded through scene options — never on the `Mob`. Two consequences worth knowing in advance: the accessor a save path or a UI bar reads must distinguish stored HP from live HP (a spent pet is pinned at 1 HP so it can walk home, and an autosave mid-retreat would otherwise record that 1 as health it does not have); and a pet that despawns leaves every mob it provoked holding a `retaliateMob` reference to a creature that never dies, so those references must be cleared both when the retreat starts and when it finishes.
 

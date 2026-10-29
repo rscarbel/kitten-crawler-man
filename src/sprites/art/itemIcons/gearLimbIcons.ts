@@ -38,7 +38,7 @@ export type GearLimbIconId =
   | 'riot_kneeguards'
   | 'iron_knuckle_gauntlet'
   | 'silkspinner_gloves'
-  | 'hamhock_boots'
+  | 'lineman_boots'
   | 'mousehide_booties'
   | 'prowler_booties'
   | 'hearthguard_bracers'
@@ -251,7 +251,7 @@ const paintHearthguardBoots: IconArtPainter = (ctx, px) => {
 
 const PIG_LEATHER = '#d9958a';
 const HOOF = '#4a3a36';
-const HAMHOCK_UPPER: Shape = [
+const LINEMAN_UPPER: Shape = [
   [0.26, 0.18, 0.04],
   [0.54, 0.18, 0.04],
   [0.56, 0.48],
@@ -262,7 +262,7 @@ const HAMHOCK_UPPER: Shape = [
   [0.23, 0.48],
 ];
 /** A cloven trotter cap on the toe: two rounded toes split by a notch, the one shape that says "pig" at slot size. */
-const HAMHOCK_TROTTER: Shape = [
+const LINEMAN_TROTTER: Shape = [
   [0.7, 0.6, 0.06],
   [0.86, 0.62, 0.06],
   [0.93, 0.7, 0.04],
@@ -272,17 +272,17 @@ const HAMHOCK_TROTTER: Shape = [
   [0.68, 0.88, 0.04],
   [0.66, 0.72, 0.06],
 ];
-const HAMHOCK_CLEFT: Shape = [
+const LINEMAN_CLEFT: Shape = [
   [0.8, 0.74],
   [0.74, 0.74],
 ];
-const HAMHOCK_SOLE: Shape = [
+const LINEMAN_SOLE: Shape = [
   [0.18, 0.8, 0.02],
   [0.7, 0.8],
   [0.7, 0.88],
   [0.18, 0.88, 0.02],
 ];
-const HAMHOCK_WRINKLES: readonly Shape[] = [
+const LINEMAN_WRINKLES: readonly Shape[] = [
   [
     [0.3, 0.5],
     [0.38, 0.47],
@@ -300,9 +300,9 @@ const TAIL_CY = 0.26;
 const TAIL_R = 0.06;
 const TAIL_START = -Math.PI * 0.4;
 const TAIL_SWEEP = Math.PI * 1.6;
-const HAMHOCK_GLINT: Point = [0.32, 0.3];
+const LINEMAN_GLINT: Point = [0.32, 0.3];
 
-const paintHamhockBoots: IconArtPainter = (ctx, px) => {
+const paintLinemanBoots: IconArtPainter = (ctx, px) => {
   ctx.beginPath();
   ctx.arc(TAIL_CX, TAIL_CY, TAIL_R, TAIL_START, TAIL_START + TAIL_SWEEP);
   ctx.strokeStyle = ICON_OUTLINE;
@@ -311,14 +311,14 @@ const paintHamhockBoots: IconArtPainter = (ctx, px) => {
   ctx.strokeStyle = PIG_LEATHER;
   ctx.lineWidth = hairlineWidth(px) * BOLD_DETAIL;
   ctx.stroke();
-  litForm(ctx, px, HAMHOCK_SOLE, tone(PIG_LEATHER, SOLE_TONE));
-  litForm(ctx, px, HAMHOCK_UPPER, PIG_LEATHER);
-  for (const wrinkle of HAMHOCK_WRINKLES) {
+  litForm(ctx, px, LINEMAN_SOLE, tone(PIG_LEATHER, SOLE_TONE));
+  litForm(ctx, px, LINEMAN_UPPER, PIG_LEATHER);
+  for (const wrinkle of LINEMAN_WRINKLES) {
     strokeDetail(ctx, px, wrinkle, tone(PIG_LEATHER, CREASE_TONE), MEDIUM_DETAIL);
   }
-  litForm(ctx, px, HAMHOCK_TROTTER, HOOF);
-  strokeDetail(ctx, px, HAMHOCK_CLEFT, ICON_OUTLINE, BOLD_DETAIL);
-  glint(ctx, HAMHOCK_GLINT[0], HAMHOCK_GLINT[1], BOOT_GLINT_R);
+  litForm(ctx, px, LINEMAN_TROTTER, HOOF);
+  strokeDetail(ctx, px, LINEMAN_CLEFT, ICON_OUTLINE, BOLD_DETAIL);
+  glint(ctx, LINEMAN_GLINT[0], LINEMAN_GLINT[1], BOOT_GLINT_R);
 };
 
 /* ---------------------------------------------------------- cat booties */
@@ -955,7 +955,7 @@ const LIMB_ICON_PAINTERS: Record<GearLimbIconId, IconArtPainter> = {
   riot_kneeguards: paintRiotKneeguards,
   iron_knuckle_gauntlet: paintIronKnuckleGauntlet,
   silkspinner_gloves: paintSilkspinnerGloves,
-  hamhock_boots: paintHamhockBoots,
+  lineman_boots: paintLinemanBoots,
   mousehide_booties: paintMousehideBooties,
   prowler_booties: paintProwlerBooties,
   hearthguard_bracers: paintHearthguardBracers,

@@ -306,7 +306,7 @@ export class CombatKit {
       const nearby = grid.queryCircle(target.x, target.y, TILE_SIZE * CHAIN_LIGHTNING_RANGE_TILES);
       let hits = 0;
       for (const mob of nearby) {
-        if (!mob.isAlive || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
+        if (!mob.isHostileTarget || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
         if (!mob.takesPlayerDamage('energy_shield')) continue;
         if (!human.zeroDamage) {
           const bolt = outgoingHitDamageOn(human, mob, CHAIN_LIGHTNING_DAMAGE, MAGIC_HIT);

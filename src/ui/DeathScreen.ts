@@ -1,4 +1,5 @@
 import type { AudioManager } from '../audio/AudioManager';
+import { plainDeathMessage, type DeathMessage } from './DeathExplanations';
 
 const ALPHA_VISIBILITY_THRESHOLD = 0.5;
 const ALPHA_MAX = 0.82;
@@ -19,15 +20,15 @@ export type RespawnMode = 'floorRestart' | 'checkpoint';
 export class DeathScreen {
   private alpha = 0;
   private _active = false;
-  private _explanation = '';
+  private _message: DeathMessage = plainDeathMessage('');
   private _mode: RespawnMode = 'floorRestart';
   audio: AudioManager | null = null;
 
   /** Activate the death screen — begins the fade-in from alpha 0. */
-  activate(explanation: string, mode: RespawnMode = 'floorRestart'): void {
+  activate(message: DeathMessage, mode: RespawnMode = 'floorRestart'): void {
     this._active = true;
     this.alpha = 0;
-    this._explanation = explanation;
+    this._message = message;
     this._mode = mode;
     this.audio?.play('death_sequence');
   }
@@ -36,7 +37,7 @@ export class DeathScreen {
   reset(): void {
     this._active = false;
     this.alpha = 0;
-    this._explanation = '';
+    this._message = plainDeathMessage('');
     this._mode = 'floorRestart';
     this.audio?.stopSound('death_sequence');
   }
@@ -47,7 +48,12 @@ export class DeathScreen {
 
   /** The flavour line naming what killed the party; empty when there is none. */
   get explanation(): string {
-    return this._explanation;
+    return this._message.explanation;
+  }
+
+  /** Advice on surviving what killed the party, shown above the explanation; null when there is none. */
+  get hint(): string | null {
+    return this._message.hint;
   }
 
   get respawnMode(): RespawnMode {

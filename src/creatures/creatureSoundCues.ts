@@ -4,10 +4,32 @@
  * build plays for each.
  */
 export type RoosterSoundCue =
-  'crow' | 'effort' | 'hurt' | 'notice' | 'peck' | 'swing' | 'clubImpact' | 'ruffle' | 'step';
+  | 'crow'
+  | 'effort'
+  | 'hurt'
+  | 'notice'
+  | 'peck'
+  | 'swing'
+  | 'clubImpact'
+  | 'ruffle'
+  | 'step'
+  | 'kick';
 
 /** The moments the Trash Gremlin makes a sound of its own, beside its vomit's retch. */
 export type TrashGremlinSoundCue = 'hurt' | 'gurgle' | 'shriek' | 'cackle';
+
+/** The moments the Current Goblin makes a sound of his own, by what happened. */
+export type ElectricGoblinSoundCue =
+  | 'grenadeBurst'
+  | 'chargeWindup'
+  | 'chargeSparks'
+  | 'puddleCharged'
+  | 'puddleArc'
+  | 'swipe'
+  | 'block'
+  | 'slam'
+  | 'laugh'
+  | 'hurt';
 
 /**
  * Sounds a creature asked for since the scene last looked, each at most once

@@ -575,7 +575,7 @@ export class MedicKit implements MercenaryKit {
     let ax = 0;
     let ay = 0;
     for (const mob of ctx.allMobs) {
-      if (mob === merc || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === merc || !mob.isHostileTarget) continue;
       const dx = merc.x - mob.x;
       const dy = merc.y - mob.y;
       const d = Math.hypot(dx, dy);
@@ -667,7 +667,7 @@ export class MedicKit implements MercenaryKit {
     let best: Mob | null = null;
     let bestPx = Infinity;
     for (const mob of ctx.allMobs) {
-      if (mob === merc || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === merc || !mob.isHostileTarget) continue;
       if (huntingOnly && !this.isHunting(mob)) continue;
       const d = Math.hypot(mob.x - merc.x, mob.y - merc.y);
       if (d < bestPx) {

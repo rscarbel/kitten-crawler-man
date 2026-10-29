@@ -31,13 +31,33 @@ Entry shape:
 
 ### Mob construction rolls bypass the spawn context's random stream
 
-- **Where:** `Mob`'s `noticeStagger` and `astarStagger` field initialisers (`src/creatures/Mob.ts`, through `randomInt`, which reads `worldRandom`), and creature field initialisers that call `Math.random` while being built (`EvilClown`'s `idlePhaseOffsetSeconds`, `BallOfSwine`'s `heading`, `Cockroach`'s `skitterPhase`, `NecroFairy`'s `effectSeed`, and others in `src/creatures/`).
+- **Where:** `Mob`'s `noticeStagger` and `astarStagger` field initialisers (`src/creatures/Mob.ts`, through `randomInt`, which reads `worldRandom`), and creature field initialisers that call `Math.random` while being built (`EvilClown`'s `idlePhaseOffsetSeconds`, `Cockroach`'s `skitterPhase`, `NecroFairy`'s `effectSeed`, and others in `src/creatures/`).
 - **Problem:** each kind's `create` on `MOB_KINDS` (`src/levels/mobKinds.ts`) receives the `SpawnContext`'s `random`, but only `Necromancer` keeps it; the base class and the other creatures roll from other streams while being built.
 - **Cost:** a harness passing a seeded stream through the funnel still gets unseeded per-mob staggers and phases unless it also replaces `Math.random`, so a gate depending on them is not reproducible from the context alone.
 - **Better shape:** hand the `create` stream to the `Mob` constructor and let the base class and every creature draw their construction rolls from it.
 - **Until then:** don't add new `Math.random` rolls to a creature for anything a gate needs to reproduce; take the `random` its `create` is given.
 - **Size:** M
 - **Found:** 2026-10-21, spawn funnel work.
+
+### The companion's dodge flag also lifts a mob out of the AI activation radius
+
+- **Where:** `isExemptFromAiRadius` in `src/systems/MobUpdateLoop.ts`, which ORs in `Mob.requiresEvasion`; every override of `requiresEvasion` in `src/creatures/` (`GoblinArcher`, `GoblinBomber`, `EvilClown`, `Mantid`, `Troglodyte`, `DarkKnight`, …).
+- **Problem:** `requiresEvasion` says "the companion should sidestep this mob's attacks", but the mob loop reads it as "this mob roams the whole map", so every archer, bomber and clown on a floor ticks every frame wherever it stands. A generated floor 1 holds about 110 goblin archers, all of them active with the party at the far end of the map.
+- **Cost:** about half of the active mobs the perf overlay counts on floor 1 are archers nowhere near the party, paid in update time every frame; and a mob cannot ask for the companion to dodge without also opting out of the radius.
+- **Better shape:** a separate opt-in for a mob that really roams the map (the Grotesque Spider), and `isExemptFromAiRadius` reading that instead of the dodge flag.
+- **Until then:** don't add `requiresEvasion` to a common mob kind.
+- **Size:** S
+- **Found:** 2026-10-28, flooded pump room frame-rate investigation.
+
+### Big Rooster and his gym talk through public mailbox fields
+
+- **Where:** `BigRooster` (`src/creatures/BigRooster.ts`) fields the gym writes every frame (`nearestDumbbellPos`, `loadedSquatRacks`, `confinedTo`, `musicPlaying`, `kettlebellRackStands`, `restingExerciseBalls`, `flockLosses`, `flockView`) and the requests he leaves for it to clear (`requestDumbbellAt`, `plateTakenFrom`, `heaveRequest`, `ballKickRequest`); `RoosterMinion.flockView`; `GymRoomSystem.update` and `publishFlock` (`src/systems/GymRoomSystem.ts`).
+- **Problem:** the boss and the room share state through a dozen mutable public fields, each with its own unwritten rule about who sets it, who clears it and on which frame. Every new gym mechanic adds one in each direction.
+- **Cost:** a field the room forgets to set leaves him acting on a stale value, and a request nobody clears fires twice; a harness that drives him without the room has to fake each field by hand.
+- **Better shape:** one typed `GymView` the room hands his AI each frame, and one typed list of `GymRequest`s (a discriminated union) the room drains from him, so the contract is two types instead of a field per mechanic.
+- **Until then:** don't add another one-off field for a new mechanic; if one is unavoidable, document who writes and who clears it beside the field.
+- **Size:** M
+- **Found:** 2026-10-28, Big Rooster's kettlebell rain and fury.
 
 ### A status effect does not remember whether a spell laid it
 
@@ -48,6 +68,16 @@ Entry shape:
 - **Until then:** a new chill source on a crawler that is not a spell must not ship without that stamp; a new magic status applier goes through `magicResistedFrames`.
 - **Size:** M
 - **Found:** 2026-10-27, stat sheet and magic resistance work.
+
+### The Electric Goblin's slam fan assumes an open straight walk to its gap
+
+- **Where:** `ElectricGoblin.fanLanes` (`src/creatures/ElectricGoblin.ts`), the `stepToGapPx <= PLAYER_SPEED * tellFrames` test.
+- **Problem:** whether the target can reach the gap between lanes is judged as a straight-line walk at base `PLAYER_SPEED`, ignoring walls, puddles and props in the way and any slow (chill, stuck, sprint) on the target.
+- **Cost:** a slowed or boxed-in crawler can be dealt a gapped fan whose gap it cannot reach before the tell ends, which reads as an unfair hit.
+- **Better shape:** ask the target's own current move speed and a short path search over the room's walkable tiles, the way other reachability checks in the game measure a trip.
+- **Until then:** don't reuse this straight-line test for another boss's dodge window.
+- **Size:** S
+- **Found:** 2026-10-28, floor-two boss review.
 
 ## Creature art
 
@@ -60,6 +90,16 @@ Entry shape:
 - **Until then:** don't add another body segment with its own `fillAndOutline`; join new masses into a union.
 - **Size:** M
 - **Found:** 2026-10-28, owner review of the Deinonychus sprite.
+
+### Each slam's travelling wave has its own painter
+
+- **Where:** `drawSlamShockwave` (`src/sprites/slamShockwave.ts`, Big Rooster's fist slam) and `drawSlamWave` (`src/sprites/electricGoblinTelegraphs.ts`, the Current Goblin's slam).
+- **Problem:** both draw a front of force running over the floor, but `slamShockwave.ts` is radial through and through: its scuff, compression lens, chalk ring, plumes, debris and haze are all arcs and angles about one centre, with its tints as inline `'r, g, b'` strings. The Current Goblin's wave is a straight band running down a lane, which none of that geometry can express, so it has a separate small painter coloured from `worldPalette.electricGoblin`.
+- **Cost:** a third slam (another boss, a crawler ability) gets a third painter, and a fix to how a front reads (the two-band refraction lens, fade, thinning) lands in one of them only.
+- **Better shape:** one travelling-front painter that takes the front's shape (a ring about a point or a band across a lane) and a palette from `worldInk`, with the per-floor dressing (chalk, matting, sparks) as optional layers the caller picks.
+- **Until then:** don't add another slam or shockwave painter; build the next one as that shared painter and move these two onto it.
+- **Size:** M
+- **Found:** 2026-10-28, review of the Current Goblin's slam telegraphs.
 
 ## Townsfolk
 
@@ -134,6 +174,18 @@ Entry shape:
 - **Size:** S
 - **Found:** 2026-10-27, Starlight Tent finale.
 
+## Level generation
+
+### The free-roam dungeon builder has no floor that uses it
+
+- **Where:** `buildDungeon` in `src/map/DungeonGenerator.ts`: the `else` branch of `if (progression !== undefined)` (fixed safe/boss/quest room slots, Prim's MST hallways, dead-end rescue and loop corridors, `FREE_ROAM_SAFE_ROOM_COUNT`), and the free-roam stairwell pass under "7. Stairwells".
+- **Problem:** every dungeon floor (`level1`, `level2`) declares `progression`, the tutorial builds its own map and floor 3 is the overworld, so the free-roam path runs only for a hand-built options object no caller makes. It still has to be kept compiling and consistent with every change to rooms, boss sizes and floors.
+- **Cost:** a second room-placement and corridor algorithm inside the 3,000-line generator that no gate exercises, so it can rot silently while looking supported.
+- **Better shape:** delete the free-roam path and make `progression` required in `DungeonLevelOptions`, or move it to its own module with a gate if a free-roam floor is ever wanted.
+- **Until then:** don't add features only to the free-roam path; a new floor should be a progression floor.
+- **Size:** S
+- **Found:** 2026-10-28, per-boss room sizes and floor-2 layout work.
+
 ## Rendering and memory
 
 ### The game's memory tally misses about 40% of what Chrome counts
@@ -144,6 +196,16 @@ Entry shape:
 - **Better shape:** keep the tally, but tune budgets against measured browser totals: Chrome's Task Manager, and `performance.measureUserAgentSpecificMemory` where it is available.
 - **Size:** S
 - **Found:** 2026-10-21, siege blackout.
+
+### World code reads the world view's size from a global, and some of it from the canvas
+
+- **Where:** `worldViewWidth` / `worldViewHeight` and `getWorldZoom` (`src/core/rendering/Viewport.ts`), read by every world culler (`RenderPipeline`, `GoreSystem`, `WaterAnimationSystem` and the rest), by `readMovement` (`src/systems/GameLoopPhases.ts`) and `renderEntityTooltip` (`src/systems/worldEffects.ts`); `TrashGremlinRoomSystem` culls against `ctx.canvas.width` / `ctx.canvas.height`; `BuildingInteriorScene`, the club's casino and poker systems, the prison and the Starlight Tent's lighting still measure the world with `viewportWidth()`.
+- **Problem:** the camera's zoom reaches world code as published module state rather than through the render or system context, and the code that never ran under a zoom still measures the world with the screen's size (or, for the trash room, the backing store's).
+- **Cost:** a camera zoom anywhere but the flooded pump room would leave those cullers drawing a screen-sized patch of a larger view, with the edges of the world missing; a reader cannot tell from a signature whether a function works in screen or world-view units.
+- **Better shape:** carry the camera (top-left, view size, zoom) in `RenderContext` and `SystemContext`, and have every culler and screen-to-world conversion take it from there.
+- **Until then:** world-space code measures against `worldViewWidth()` / `worldViewHeight()`, never `viewportWidth()` or the canvas; screen chrome keeps `viewportWidth()`. Asking for a camera zoom outside floor 1's flooded room needs the listed readers converted first.
+- **Size:** M
+- **Found:** 2026-10-28, the flooded pump room's camera zoom.
 
 ## Testing and gates
 
@@ -197,7 +259,7 @@ Entry shape:
 
 ### Figures freeze ink measurements the runtime already measures
 
-- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakarenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `DEINONYCHUS_HEAD_CLEARANCE_TILES` (`deinonychusSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
+- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `DEINONYCHUS_HEAD_CLEARANCE_TILES` (`deinonychusSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
 - **Problem:** each figure nudges every gore piece by an offset measured offline so its ink sits on the cell's centre, or freezes how far its art stands above its tile, and a gate re-measures the number on every render. But `figureFrameCache.ts` measures both at runtime: `drawFigureCachedRotatedCenter` spins a piece about `figureInkBounds(...)`, so where the ink sits in its cell does not change how it tumbles, and `figureRowInkTop` gives a drawn row's top.
 - **Cost:** every redraw means re-pasting measured numbers to keep gates green, for values the runtime could read itself. Their doc comments say only an offline pass can measure ink, which the runtime contradicts.
 - **Better shape:** paint each gore piece about the cell's centre with clearance from the edges and hang overhead chrome off `figureRowInkTop`; then delete the tables, the constants, their lookups and the gates that re-measure them. The structural gate's edge check is what still matters.
@@ -300,6 +362,50 @@ Entry shape:
 - **Until then:** route every new crawler hit through `outgoingHitDamageOn` with its tags; don't add a skill bonus anywhere else.
 - **Size:** M
 - **Found:** 2026-10-27, proficiency skills.
+
+## Audio
+
+### Loops cannot be placed in the world
+
+- **Where:** `AudioScope.startAmbientLoop` / `setAmbientLoopVolume` (`src/audio/AudioScope.ts`); `FloodedPumpRoomSystem.updateLoops` and `DungeonScene.setFloodedRoomLoopVolume`.
+- **Problem:** one-shots have `playAt` (distance falloff and pan from the listener), but a loop is one voice per id at a flat level. The flooded pump room's pour and shark-chase loops fake placement by setting the level from the distance to the nearest running pump every frame, with no pan, and three pumps share one voice.
+- **Cost:** every positional loop (a pump, a generator rig, a charged puddle) re-derives its own falloff, none pans, and two sources of one id cannot both be heard.
+- **Better shape:** a scope loop keyed by owner and placed at a world point, mixed through the same listener falloff and pan `playAt` uses.
+- **Until then:** keep any hand-rolled falloff inside the system that owns the source, as the pump room does, rather than adding another scene-level volume helper.
+- **Size:** M
+- **Found:** 2026-10-28, the Kraken's flooded pump room.
+
+### The audio layer imports cue tables from the systems layer
+
+- **Where:** `src/audio/AudioManager.ts` and `src/audio/sfxGroups.ts` import `ELECTRIC_GOBLIN_CUES` from `src/systems/bossSoundCues.ts`; `AudioManager.wireEvents` plays the Current Goblin's death and lab power-down takes on `bossDefeated`.
+- **Problem:** the audio layer, which every system depends on, reaches back up into a gameplay module for a boss's take lists, and holds a boss-specific branch in its event wiring.
+- **Cost:** the dependency runs both ways between `src/audio/` and `src/systems/`, so a change to a system's cue table touches the audio core's import graph, and each new boss tempts another branch in `wireEvents`.
+- **Better shape:** cue tables that are pure sound data live under `src/audio/` (beside `weaponSoundCues.ts`), and a boss's death cues are played by the system or scene that owns the boss, not by `AudioManager`.
+- **Until then:** don't add another import from `src/systems/` to anything in `src/audio/`, and don't add more boss-specific branches to `wireEvents`.
+- **Size:** S
+- **Found:** 2026-10-28, review of the floor-two bosses work.
+
+### Music stems are filed as jingles
+
+- **Where:** `src/audio/jingles/the_kraken_flooded_2pumps.ogg`, `the_kraken_flooded_1pump.ogg`; their ids in `JINGLE_IDS` (`src/audio/sounds.ts`); `MUSIC_STEM_SETS` (`src/audio/music/stemSets.ts`).
+- **Problem:** a stem set's reduced stems are registered as jingles because they need no credit or music-page row, but they are not stings: they are layers of one catalogued song, only ever played through a `stems` claim.
+- **Cost:** `jingles/` mixes one-shot stings with fight-music layers, `JingleId` admits a stem anywhere a sting is expected, and the next stem set adds more files to the wrong folder.
+- **Better shape:** a `MUSIC_STEM_IDS` tuple and its own folder, `src/audio/music/stems/`, with `check:audio` holding the folder, the tuple and `MUSIC_STEM_SETS` to each other.
+- **Until then:** a new stem set's reduced stems may go in `jingles/` like the Kraken's, but nothing should play a stem except through a `stems` claim.
+- **Size:** S
+- **Found:** 2026-10-28, review of the floor-two bosses work.
+
+## Cutscenes
+
+### The spider lab's opening runs its own camera pan and shake outside the cutscene director
+
+- **Where:** `SpiderQuestSystem`'s `_cutsceneCamFromX`/`_cutsceneCamFromY`/`_cutsceneCamLerpProgress`, `cameraTargetOverride`, `_screenShakeIntensity` and `_applyShakeJitter`, driven off its own frame clock (`CS_CAMERA_PAN_FRAME`, `CS_PAN_END_FRAME`, `CS_RUMBLE_FRAME`); read in `DungeonScene.camera()` ahead of the director's `cameraFocus`.
+- **Problem:** the cutscene director has `panCamera`, `holdCamera`, `returnCamera` and `shake` steps, but the spider lab's opening pans with a linear lerp from the player to the egg, follows its spit projectile and impact point, and ramps a random-jitter shake down mid-pan, all keyed to frame numbers inside one timeline. None of that maps onto the director's steps without changing how it looks and times, so the camera has two cutscene owners.
+- **Cost:** two places decide where a scripted camera points and how a scripted shake feels, and the scene's camera chain has to rank them by hand.
+- **Better shape:** play the lab's opening as a director script: a `panCamera` to the egg, a world action that fires the spit, a camera step that follows a moving point, and a shake profile that decays across the pan; then delete the system's own camera fields.
+- **Until then:** don't add camera or shake moves to another system's private timeline; script them through the director's steps.
+- **Size:** M
+- **Found:** 2026-10-28, cutscene camera and world steps.
 
 ## Shared types
 

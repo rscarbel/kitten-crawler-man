@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import type { Player } from '../Player';
 import {
   HIRELING_REVIVE_WINDOW_FRAMES,
@@ -147,8 +147,8 @@ export function hirelingDownedArrowCandidate(
     bodyCenterY,
     camX,
     camY,
-    viewportWidth(),
-    viewportHeight(),
+    worldViewWidth(),
+    worldViewHeight(),
     0,
   );
   const distanceFromActive = Math.hypot(body.x - active.x, body.y - active.y);

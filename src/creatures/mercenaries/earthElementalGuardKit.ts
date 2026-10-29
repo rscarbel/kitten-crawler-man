@@ -312,7 +312,7 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
   onFriendHurt(ctx: MercenaryKitContext, friend: Player, attacker: Mob | null): void {
     if (!this.guard.guardsCat) return;
     if (!(friend instanceof CatPlayer) || attacker === null) return;
-    if (!attacker.isAlive || !attacker.isHostile) return;
+    if (!attacker.isHostileTarget) return;
     if (!this.withinEngageOfOwner(ctx, attacker)) return;
     this.catFoe = attacker;
     this.catFocusFrames = CAT_GUARD_FOCUS_FRAMES;
@@ -423,7 +423,7 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
     if (foe === null) return;
     this.catFocusFrames--;
     const stillWorthIt =
-      this.catFocusFrames > 0 && foe.isAlive && foe.isHostile && this.withinEngageOfOwner(ctx, foe);
+      this.catFocusFrames > 0 && foe.isHostileTarget && this.withinEngageOfOwner(ctx, foe);
     if (!stillWorthIt) this.catFoe = null;
   }
 
@@ -438,7 +438,7 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
     let closest: Mob | null = null;
     let closestDistance = Infinity;
     for (const mob of ctx.allMobs) {
-      if (mob === ctx.merc || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === ctx.merc || !mob.isHostileTarget) continue;
       // A held mob threatens nobody yet, and blocking it would be picking a fight.
       if (mob.offLimitsToAllies) continue;
       const d = centerDistance(mob, owner);
@@ -484,7 +484,7 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
 
   private anyHostileNearOwner(ctx: MercenaryKitContext): boolean {
     for (const mob of ctx.allMobs) {
-      if (mob === ctx.merc || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === ctx.merc || !mob.isHostileTarget) continue;
       if (this.withinEngageOfOwner(ctx, mob)) return true;
     }
     return false;

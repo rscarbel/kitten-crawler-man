@@ -26,16 +26,19 @@ import {
   type RegularFairyKind,
   type RoomFairyRoll,
 } from '../../src/levels/fairySpawner';
+import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import type { GameMap } from '../../src/map/GameMap';
 import { level1 } from '../../src/levels/level1';
 import { level2 } from '../../src/levels/level2';
-import type { FairyRoomRate, FairySpawnTable } from '../../src/levels/types';
+import type { FairyRoomRate, FairySpawnTable, LevelDef } from '../../src/levels/types';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import type { FairyGateReport } from './report';
 import { ARENA_TILES, makeArena } from './stage';
 
 export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+/** The floor 2 boss whose death raises the fairy rates of the rooms past its safe room. */
+export const FLOOR_TWO_UPGRADE_BOSS = 'big_rooster' as const satisfies StandaloneMobKind;
 
 /** Rolls per (floor, region, difficulty, upgrade) cell. */
 const ROLLS_PER_CELL = 20_000;
@@ -52,9 +55,8 @@ const CHANCE_TOLERANCE = 0.015;
  * tolerance.
  */
 const MIN_CONDITIONED_ROOMS = 2_000;
-/** The fewest fairies a hard room may hold once the Ball of Swine is dead. */
-const HARD_POST_SWINE_MIN_FAIRIES = 2;
-const SWINE_BOSS_TYPE = 'ball_of_swine';
+/** The fewest fairies a hard room may hold once floor 2's upgrade boss is dead. */
+const HARD_UPGRADED_MIN_FAIRIES = 2;
 const DECIMALS = 3;
 
 type Roller = (
@@ -484,7 +486,7 @@ function tallyBossHealerSpawns(spawn: BossHealerSpawn): BossHealerTally {
   const map = makeArena();
   const centreTile = Math.floor(ARENA_TILES / 2);
   const boss = spawnMob(
-    SWINE_BOSS_TYPE,
+    FLOOR_TWO_UPGRADE_BOSS,
     { x: centreTile, y: centreTile },
     map,
     liveSpawnContext('dev:spawn'),
@@ -612,13 +614,15 @@ export function verifySpawnTables(report: FairyGateReport): void {
     table: tableOf('level2', level2.fairies),
     regions: level2.fairies?.roomRatesByRegion.length ?? 0,
   };
-  const REGIONS_BEFORE_AND_AFTER_KRAKAREN = 2;
-  const REGIONS_AROUND_GREMLIN_AND_BIG_ROOSTER = 3;
+  // The region before the first gauntlet, then one past each gauntlet's boss.
+  const progressionRegions = (def: LevelDef): number =>
+    (def.progression?.gauntlets.length ?? 0) + 1;
+  const floor1Regions = progressionRegions(level1);
+  const floor2Regions = progressionRegions(level2);
   report.check(
-    floor1.regions === REGIONS_AROUND_GREMLIN_AND_BIG_ROOSTER &&
-      floor2.regions === REGIONS_BEFORE_AND_AFTER_KRAKAREN,
+    floor1.regions === floor1Regions && floor2.regions === floor2Regions,
     'every progression region has a table row to measure',
-    `floor 1 ${floor1.regions}, floor 2 ${floor2.regions}`,
+    `floor 1 ${floor1.regions} of ${floor1Regions}, floor 2 ${floor2.regions} of ${floor2Regions}`,
   );
 
   const floor1Region0 = anyFairyRooms(rollRoomFairies, floor1.table, 0, rng);
@@ -652,13 +656,13 @@ export function verifySpawnTables(report: FairyGateReport): void {
     }
   }
 
-  const upgrade = floor2.table.upgrades?.find((entry) => entry.bossType === SWINE_BOSS_TYPE);
-  report.check(upgrade !== undefined, 'floor 2 carries a Ball of Swine upgrade to measure');
+  const upgrade = floor2.table.upgrades?.find((entry) => entry.bossType === FLOOR_TWO_UPGRADE_BOSS);
+  report.check(upgrade !== undefined, 'floor 2 carries a Big Rooster upgrade to measure');
   if (upgrade !== undefined) {
     const { min, rolls } = hardUpgradedMinimum(rollRoomFairies, floor2.table, upgrade.region, rng);
     report.check(
-      min >= HARD_POST_SWINE_MIN_FAIRIES,
-      `hard after the Swine never rolls fewer than ${HARD_POST_SWINE_MIN_FAIRIES} fairies`,
+      min >= HARD_UPGRADED_MIN_FAIRIES,
+      `hard after Big Rooster never rolls fewer than ${HARD_UPGRADED_MIN_FAIRIES} fairies`,
       `min ${min} over ${rolls}`,
     );
 
@@ -673,7 +677,7 @@ export function verifySpawnTables(report: FairyGateReport): void {
     };
     const mutant = hardUpgradedMinimum(rollRoomFairies, loneFairyUpgrade, upgrade.region, rng);
     report.checkCatches(
-      mutant.min >= HARD_POST_SWINE_MIN_FAIRIES,
+      mutant.min >= HARD_UPGRADED_MIN_FAIRIES,
       'an upgraded hard table that can yield a lone fairy is caught',
       `min ${mutant.min}`,
     );

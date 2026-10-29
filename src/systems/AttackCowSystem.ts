@@ -3,7 +3,7 @@ import type { AttackCowState } from '../core/state/AttackCowState';
 import { petWords, type PetNames, type PetWords } from '../core/party/petNames';
 import { REVIVE_RANGE_PX } from '../core/party/reviveRules';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import type { SoundId } from '../audio/sounds';
 import { AttackCow, attackCowMaxHpForFloor } from '../creatures/AttackCow';
 import type { Mob } from '../creatures/Mob';
@@ -267,7 +267,7 @@ export class AttackCowSystem implements GameSystem {
 
   /** A boss keeps its own mind, and a script's held mob is not hers to pull. */
   private canTaunt(mob: Mob): boolean {
-    if (!mob.isAlive || !mob.isHostile || mob.isBoss) return false;
+    if (!mob.isHostileTarget || mob.isBoss) return false;
     if (mob.offLimitsToAllies || mob.isConverted) return false;
     return hasAiAttention(mob, this.crawlers);
   }
@@ -299,7 +299,7 @@ export class AttackCowSystem implements GameSystem {
     const offsetX = cow.x - cow.owner.x;
     const offsetY = cow.y - cow.owner.y;
     const onScreen =
-      Math.abs(offsetX) <= viewportWidth() / 2 && Math.abs(offsetY) <= viewportHeight() / 2;
+      Math.abs(offsetX) <= worldViewWidth() / 2 && Math.abs(offsetY) <= worldViewHeight() / 2;
     const leftBehind = hirelingShouldCatchUp({
       distancePx: Math.hypot(offsetX, offsetY),
       onScreen,
@@ -327,9 +327,9 @@ export class AttackCowSystem implements GameSystem {
   asCarriedCompanion(): CarriedCompanion {
     return {
       body: this.standingCow,
-      landingTile: (map) => {
+      landingTile: (map, isAcceptable) => {
         const cow = this.cow;
-        return cow === null ? null : findSpawnTile(cow.owner, map);
+        return cow === null ? null : findSpawnTile(cow.owner, map, isAcceptable);
       },
       putAway: (mobs, grid) => this.dismiss(mobs, grid),
       onPlaced: (mobs) => {

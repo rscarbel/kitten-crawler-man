@@ -5,15 +5,7 @@ import { SHARED_LOOKS_TIER, type VarietyTier } from '../core/perf/varietyTier';
 
 /** The parts of a floor that each spawn their own population. */
 type FloorEncounterSlot =
-  | 'room'
-  | 'hallway'
-  | 'camp'
-  | 'treasure'
-  | 'landmark'
-  | 'boss-room'
-  | 'on-kill'
-  | 'fairies'
-  | 'arena';
+  'room' | 'hallway' | 'camp' | 'treasure' | 'landmark' | 'boss-room' | 'on-kill' | 'fairies';
 
 /** Quests and set pieces that field hostiles of their own. */
 type QuestEncounterName =

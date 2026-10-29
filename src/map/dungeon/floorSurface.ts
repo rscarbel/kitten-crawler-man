@@ -9,7 +9,7 @@
  *   the generator's generic floor type for the zone maps to. The generic type
  *   stays on the grid untouched — walkability, spawning, the minimap and every
  *   gate read it — and the painters ask this record first. Anything with no
- *   character (start, safe, boss and quest rooms, the arena, the spider lab,
+ *   character (start, safe, boss and quest rooms, the spider lab,
  *   undressed regions) answers null and falls back to the tile type, which is
  *   what keeps those rooms' own art — except a special region that declares a
  *   floor of its own (`SPECIAL_REGION_FLOOR_MATERIALS`), such as the clogged

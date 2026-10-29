@@ -84,13 +84,8 @@ export function adviceIntel(
   return CAROLINE_OBJECTIVE_INTEL[objective.id]({ direction });
 }
 
-/** The four gateway bosses whose speech is pinned to the safe room guarding them. */
-const GATEWAY_ADVICE_IDS = [
-  'trash_gremlin',
-  'big_rooster',
-  'krakaren_clone',
-  'ball_of_swine',
-] as const;
+/** The gateway bosses whose speech is pinned to the safe room guarding them. */
+const GATEWAY_ADVICE_IDS = ['trash_gremlin', 'big_rooster', 'kraken', 'electric_goblin'] as const;
 
 /** A boss whose speech belongs to the safe room guarding it. */
 export type GatewayAdviceId = (typeof GATEWAY_ADVICE_IDS)[number];
@@ -99,7 +94,7 @@ export type GatewayAdviceId = (typeof GATEWAY_ADVICE_IDS)[number];
  * Narrows a safe room's `guardsBossType` to the objective whose prose it pins.
  *
  * The tag is a mob type string carried on the map, so the two vocabularies have
- * to be reconciled somewhere; they happen to agree on all four gateway bosses.
+ * to be reconciled somewhere; they happen to agree on every gateway boss.
  */
 export function gatewayAdviceId(bossType: string | undefined): GatewayAdviceId | null {
   if (bossType === undefined) return null;

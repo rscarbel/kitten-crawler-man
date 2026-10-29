@@ -13,7 +13,13 @@
  * the outline freezes solid once the aim can no longer change, and the whole
  * shape flashes on the tick the damage is computed. Omitting the options draws
  * the plain crawling warning.
+ *
+ * Every ground warning is red: the painters here take no colour, only a
+ * shape, and their ink is `GROUND_WARNING_INK` from the world theme. A
+ * creature's own colour goes on the attack's effect drawn over the warning.
  */
+
+import { GROUND_WARNING_INK } from '../ui/theme/worldInk';
 
 /** Opacity of the flat red ground fill at full fade. */
 const DANGER_FILL_ALPHA = 0.28;
@@ -31,17 +37,12 @@ const OUTLINE_WIDTH = 3;
 /** Opacity of a locked outline at full fade: brighter than the crawling one so the change of state reads. */
 const LOCKED_OUTLINE_ALPHA = 1;
 const LOCKED_OUTLINE_WIDTH = 4;
-/** A thin pale core inside a locked outline, so it reads as lit rather than just thicker. */
-const LOCKED_OUTLINE_CORE_COLOR = '#ffe0d0';
 const LOCKED_OUTLINE_CORE_WIDTH = 1.5;
 const LOCKED_OUTLINE_CORE_ALPHA = 0.85;
 /** Opacity of the solid edge at the front of a growing fill, marking how far it has come. */
 const FILL_FRONT_ALPHA = 0.55;
 const FILL_FRONT_WIDTH = 2;
-/** The strike flash: a red wash under a white one, together reading as white-hot red. */
-const STRIKE_FLASH_RED = '#ff3020';
 const STRIKE_FLASH_RED_ALPHA = 0.55;
-const STRIKE_FLASH_WHITE = '#fff4ee';
 const STRIKE_FLASH_WHITE_ALPHA = 0.5;
 
 /**
@@ -70,34 +71,34 @@ export interface DangerTelegraphOptions {
   readonly outlineOnly?: boolean;
 }
 
-/** Colours and dash rhythm for one telegraph. */
-export interface DangerPalette {
-  fill: string;
-  stripe: string;
-  outline: string;
+/** The ink and dash rhythm of one telegraph shape: never a colour a caller picks. */
+interface DangerPalette {
+  readonly fill: string;
+  readonly stripe: string;
+  readonly outline: string;
   /** Length of a dash and of the gap after it, in pixels. */
-  dashSegment: number;
+  readonly dashSegment: number;
   /** Milliseconds per pixel of dash travel. */
-  dashSpeed: number;
+  readonly dashSpeed: number;
   /** Dash offset wraps at this many pixels, keeping the animation seamless. */
-  dashMod: number;
+  readonly dashMod: number;
 }
 
-/** The spider's screech ring — the reference look for a circular telegraph. */
-export const DANGER_CIRCLE_PALETTE: DangerPalette = {
-  fill: '#ff1020',
-  stripe: '#ff0000',
-  outline: '#ff1020',
+/** The spider's screech ring, the reference look for a circular telegraph. */
+const DANGER_CIRCLE_PALETTE: DangerPalette = {
+  fill: GROUND_WARNING_INK.fill,
+  stripe: GROUND_WARNING_INK.stripe,
+  outline: GROUND_WARNING_INK.outline,
   dashSegment: 10,
   dashSpeed: 25,
   dashMod: 20,
 };
 
-/** The spider's slam cone — warmer, with a faster dash. */
-export const DANGER_CONE_PALETTE: DangerPalette = {
-  fill: '#ff4010',
-  stripe: '#ff5010',
-  outline: '#ff6020',
+/** The spider's slam cone: the same red, with a faster dash. Tiles, lanes and regions share it. */
+const DANGER_CONE_PALETTE: DangerPalette = {
+  fill: GROUND_WARNING_INK.fill,
+  stripe: GROUND_WARNING_INK.stripe,
+  outline: GROUND_WARNING_INK.outline,
   dashSegment: 8,
   dashSpeed: 20,
   dashMod: 16,
@@ -174,7 +175,7 @@ function strokeDangerOutline(
   tracePath();
   ctx.stroke();
   ctx.globalAlpha = fade * LOCKED_OUTLINE_CORE_ALPHA;
-  ctx.strokeStyle = LOCKED_OUTLINE_CORE_COLOR;
+  ctx.strokeStyle = GROUND_WARNING_INK.lockedCore;
   ctx.lineWidth = LOCKED_OUTLINE_CORE_WIDTH;
   ctx.stroke();
   ctx.restore();
@@ -192,10 +193,10 @@ function paintStrikeFlash(
   const top = cy - radiusPx;
   const size = radiusPx * 2;
   ctx.globalAlpha = strength * STRIKE_FLASH_RED_ALPHA;
-  ctx.fillStyle = STRIKE_FLASH_RED;
+  ctx.fillStyle = GROUND_WARNING_INK.strikeRed;
   ctx.fillRect(left, top, size, size);
   ctx.globalAlpha = strength * STRIKE_FLASH_WHITE_ALPHA;
-  ctx.fillStyle = STRIKE_FLASH_WHITE;
+  ctx.fillStyle = GROUND_WARNING_INK.strikeWhite;
   ctx.fillRect(left, top, size, size);
 }
 
@@ -229,9 +230,9 @@ export function drawDangerCircle(
   cy: number,
   radiusPx: number,
   fade: number,
-  palette: DangerPalette = DANGER_CIRCLE_PALETTE,
   options: DangerTelegraphOptions = {},
 ): void {
+  const palette = DANGER_CIRCLE_PALETTE;
   const now = performance.now();
   const fillRadius = fillRadiusFor(radiusPx, options.fillProgress);
   const outlineOnly = options.outlineOnly ?? false;
@@ -283,8 +284,8 @@ export function drawDangerTile(
   y: number,
   size: number,
   fade: number,
-  palette: DangerPalette = DANGER_CONE_PALETTE,
 ): void {
+  const palette = DANGER_CONE_PALETTE;
   const now = performance.now();
   const cx = x + size / 2;
   const cy = y + size / 2;
@@ -318,9 +319,9 @@ export function drawDangerCone(
   facingAngle: number,
   halfAngleRad: number,
   fade: number,
-  palette: DangerPalette = DANGER_CONE_PALETTE,
   options: DangerTelegraphOptions = {},
 ): void {
+  const palette = DANGER_CONE_PALETTE;
   const now = performance.now();
   const arcStart = facingAngle - halfAngleRad;
   const arcEnd = facingAngle + halfAngleRad;
@@ -359,4 +360,273 @@ export function drawDangerCone(
   }
 
   strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, () => tracePie(radiusPx));
+}
+
+/**
+ * A straight lane of ground warning: `lengthPx` long from (fromX, fromY) along
+ * the unit direction (dirX, dirY), `halfWidthPx` either side of its line. A
+ * growing fill runs down the lane from its start. Screen pixels.
+ */
+export function drawDangerLane(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  dirX: number,
+  dirY: number,
+  lengthPx: number,
+  halfWidthPx: number,
+  fade: number,
+  options: DangerTelegraphOptions = {},
+): void {
+  const palette = DANGER_CONE_PALETTE;
+  const now = performance.now();
+  const fillLength = fillRadiusFor(lengthPx, options.fillProgress);
+  const outlineOnly = options.outlineOnly ?? false;
+  const flash = outlineOnly ? 0 : (options.strikeFlash ?? 0);
+  const midX = lengthPx / 2;
+  const coverRadius = Math.max(midX, halfWidthPx);
+  const traceLane = (length: number): void => {
+    ctx.beginPath();
+    ctx.rect(0, -halfWidthPx, length, halfWidthPx * 2);
+  };
+
+  ctx.save();
+  ctx.translate(fromX, fromY);
+  ctx.rotate(Math.atan2(dirY, dirX));
+  if (fillLength > 0) {
+    if (!outlineOnly) {
+      ctx.save();
+      traceLane(fillLength);
+      ctx.clip();
+      paintHazardFill(ctx, midX, 0, coverRadius, fade, palette, now);
+      ctx.restore();
+    }
+    if (fillLength < lengthPx) {
+      strokeFillFront(ctx, fade, palette, () => {
+        ctx.beginPath();
+        ctx.moveTo(fillLength, -halfWidthPx);
+        ctx.lineTo(fillLength, halfWidthPx);
+      });
+    }
+  }
+  if (flash > 0) {
+    ctx.save();
+    traceLane(lengthPx);
+    ctx.clip();
+    paintStrikeFlash(ctx, midX, 0, coverRadius, flash);
+    ctx.restore();
+  }
+  strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, () => traceLane(lengthPx));
+  ctx.restore();
+}
+
+/** A map tile, by its column and row. */
+export interface DangerTile {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A ground warning over an arbitrary set of map tiles (a puddle, a spill): one
+ * wash across all of them, outlined only along the region's outer edge so it
+ * reads as one shape rather than a grid. A growing fill spreads from the
+ * region's middle and covers it all at 1. The tiles are placed in screen
+ * pixels from the camera.
+ */
+export function drawDangerRegion(
+  ctx: CanvasRenderingContext2D,
+  tiles: readonly DangerTile[],
+  tileSize: number,
+  camX: number,
+  camY: number,
+  fade: number,
+  options: DangerTelegraphOptions = {},
+): void {
+  if (tiles.length === 0) return;
+  const palette = DANGER_CONE_PALETTE;
+  const now = performance.now();
+  const keys = new Set(tiles.map((t) => `${t.x},${t.y}`));
+  const has = (x: number, y: number): boolean => keys.has(`${x},${y}`);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const t of tiles) {
+    minX = Math.min(minX, t.x);
+    minY = Math.min(minY, t.y);
+    maxX = Math.max(maxX, t.x + 1);
+    maxY = Math.max(maxY, t.y + 1);
+  }
+  const cx = ((minX + maxX) / 2) * tileSize - camX;
+  const cy = ((minY + maxY) / 2) * tileSize - camY;
+  const coverRadius = (Math.hypot(maxX - minX, maxY - minY) / 2) * tileSize;
+  const fillRadius = fillRadiusFor(coverRadius, options.fillProgress);
+  const outlineOnly = options.outlineOnly ?? false;
+  const flash = outlineOnly ? 0 : (options.strikeFlash ?? 0);
+  const traceTiles = (): void => {
+    ctx.beginPath();
+    for (const t of tiles)
+      ctx.rect(t.x * tileSize - camX, t.y * tileSize - camY, tileSize, tileSize);
+  };
+  const traceEdge = (): void => {
+    ctx.beginPath();
+    for (const t of tiles) {
+      const left = t.x * tileSize - camX;
+      const top = t.y * tileSize - camY;
+      const right = left + tileSize;
+      const bottom = top + tileSize;
+      if (!has(t.x, t.y - 1)) {
+        ctx.moveTo(left, top);
+        ctx.lineTo(right, top);
+      }
+      if (!has(t.x + 1, t.y)) {
+        ctx.moveTo(right, top);
+        ctx.lineTo(right, bottom);
+      }
+      if (!has(t.x, t.y + 1)) {
+        ctx.moveTo(right, bottom);
+        ctx.lineTo(left, bottom);
+      }
+      if (!has(t.x - 1, t.y)) {
+        ctx.moveTo(left, bottom);
+        ctx.lineTo(left, top);
+      }
+    }
+  };
+
+  if (fillRadius > 0 && !outlineOnly) {
+    ctx.save();
+    traceTiles();
+    ctx.clip();
+    if (fillRadius < coverRadius) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, fillRadius, 0, Math.PI * 2);
+      ctx.clip();
+    }
+    paintHazardFill(ctx, cx, cy, coverRadius, fade, palette, now);
+    ctx.restore();
+  }
+  if (flash > 0) {
+    ctx.save();
+    traceTiles();
+    ctx.clip();
+    paintStrikeFlash(ctx, cx, cy, coverRadius, flash);
+    ctx.restore();
+  }
+  strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, traceEdge);
+}
+
+/** A point in screen pixels. */
+export interface DangerPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A ground warning swept along a path: everything within `radiusPx` of the
+ * polyline through `points`, so its ends and every bend are round. This is
+ * exactly the ground a disc of that radius covers moving down the path, which
+ * a lane per leg would under-cover at each bend and at both ends. One wash
+ * covers the whole shape, and the outline follows only its outer edge.
+ * Screen pixels.
+ */
+export function drawDangerPath(
+  ctx: CanvasRenderingContext2D,
+  points: readonly DangerPoint[],
+  radiusPx: number,
+  fade: number,
+  options: Pick<DangerTelegraphOptions, 'locked'> = {},
+): void {
+  if (points.length === 0) return;
+  const palette = DANGER_CONE_PALETTE;
+  const now = performance.now();
+  const tracers = pathPieceTracers(ctx, points, radiusPx);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const outerMarginPx = radiusPx + OUTLINE_WIDTH + LOCKED_OUTLINE_WIDTH;
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const coverRadius = Math.hypot(maxX - minX, maxY - minY) / 2 + outerMarginPx;
+
+  ctx.save();
+  ctx.beginPath();
+  // Every piece is traced the same way round, so the nonzero rule clips to their union.
+  for (const trace of tracers) trace();
+  ctx.clip();
+  paintHazardFill(ctx, cx, cy, coverRadius, fade, palette, now);
+  ctx.restore();
+
+  tracers.forEach((trace, own) => {
+    ctx.save();
+    tracers.forEach((other, index) => {
+      if (index === own) return;
+      ctx.beginPath();
+      ctx.rect(cx - coverRadius, cy - coverRadius, coverRadius * 2, coverRadius * 2);
+      other();
+      ctx.clip('evenodd');
+    });
+    strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, () => {
+      ctx.beginPath();
+      trace();
+    });
+    ctx.restore();
+  });
+}
+
+/**
+ * The pieces whose union is a swept path: a disc at every point and a band
+ * along every leg. Each adds a closed subpath to the current path, all wound
+ * the same way as `arc`, which runs clockwise on screen.
+ */
+function pathPieceTracers(
+  ctx: CanvasRenderingContext2D,
+  points: readonly DangerPoint[],
+  radiusPx: number,
+): Array<() => void> {
+  const tracers: Array<() => void> = points.map((p) => () => {
+    ctx.moveTo(p.x + radiusPx, p.y);
+    ctx.arc(p.x, p.y, radiusPx, 0, Math.PI * 2);
+    ctx.closePath();
+  });
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1];
+    const to = points[i];
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length === 0) continue;
+    const normalX = (-(to.y - from.y) / length) * radiusPx;
+    const normalY = ((to.x - from.x) / length) * radiusPx;
+    const corners: DangerPoint[] = [
+      { x: from.x + normalX, y: from.y + normalY },
+      { x: to.x + normalX, y: to.y + normalY },
+      { x: to.x - normalX, y: to.y - normalY },
+      { x: from.x - normalX, y: from.y - normalY },
+    ];
+    const wound = isClockwiseOnScreen(corners) ? corners : [...corners].reverse();
+    tracers.push(() => {
+      wound.forEach((corner, index) => {
+        if (index === 0) ctx.moveTo(corner.x, corner.y);
+        else ctx.lineTo(corner.x, corner.y);
+      });
+      ctx.closePath();
+    });
+  }
+  return tracers;
+}
+
+/** Whether a polygon runs clockwise as drawn on screen, where y grows downward. */
+function isClockwiseOnScreen(corners: readonly DangerPoint[]): boolean {
+  let twiceArea = 0;
+  corners.forEach((corner, index) => {
+    const next = corners[(index + 1) % corners.length];
+    twiceArea += corner.x * next.y - next.x * corner.y;
+  });
+  return twiceArea > 0;
 }

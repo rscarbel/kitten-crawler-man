@@ -224,7 +224,7 @@ function spotlightPoint(scene: AISceneContext, subject: Landmark | 'nearest_enem
   let best: { x: number; y: number } | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const mob of scene.getMobs()) {
-    if (!mob.isAlive || !mob.isHostile) continue;
+    if (!mob.isHostileTarget) continue;
     const distance = Math.hypot(mob.x - focus.x, mob.y - focus.y);
     if (distance < bestDistance) {
       best = { x: mob.x, y: mob.y };

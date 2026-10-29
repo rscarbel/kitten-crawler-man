@@ -86,12 +86,14 @@ bosses are ahead or where; that is Caroline's.
 - **Floor 1, The Dungeon** (cellars; 40-minute collapse timer): rooms and corridors full of
   goblins, rats, cockroaches, llamas and worse. Two boss gauntlets: **The Trash Gremlin** (a hunched,
   big-eared scavenger that rules a dump room, spits acid and shrieks cockroaches out of its trash
-  piles; its towers of junk topple onto crawlers) and **Big Rooster**. A goblin nursery on the route
+  piles; its towers of junk topple onto crawlers) and **The Kraken** in a flooded pump room. A goblin nursery on the route
   holds an optional defence quest: protect the Goblin Mother from a Bugaboo wave by
   barricading the grates. Safe rooms each have a Bopca and Dave.
-- **Floor 2, The Dungeon, Level 2** (service level; 60-minute timer): the boss gauntlet of the
-  **Krakaren Clone**, the **Ball of Swine**, the **Grotesque Spider** in Dr. Moult's spider
-  lab, and a colosseum. Side quests: the clogged bathroom (a pipe-board puzzle and a
+- **Floor 2, The Dungeon, Level 2** (service level; 60-minute timer): two boss gauntlets, the
+  **Current Goblin** (a huge goblin in rubber insulating armour with a humming generator on
+  his back and a ball-tipped shock rod in each hand; he lobs shock grenades, charges the lab's
+  floor puddles, swats magic missiles aside and runs from lit dynamite) in the power lab and **Big Rooster** in his gym, the **Grotesque Spider** in
+  Dr. Moult's spider lab, and more. Side quests: the clogged bathroom (a pipe-board puzzle and a
   bathroom goblin queue), the **Stealth Key Snatch** (steal the key from the Goblin High
   Security Prison past patrolling guards), the spider lab, and the defence quest.
 - **Floor 3, The Overworld** (no collapse timer): open country with a town. The Sleeping Cat

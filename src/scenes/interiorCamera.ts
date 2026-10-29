@@ -21,14 +21,7 @@ import type { TileContent } from '../map/tileTypes';
 import { clamp } from '../utils';
 import { townInteriorPropArtRiseTiles } from '../sprites/art/townInterior/townInteriorProps';
 import { intersect, type Rect } from '../ui/core/geom';
-
-/** An axis-aligned rectangle in world pixels. */
-export interface WorldRect {
-  readonly left: number;
-  readonly top: number;
-  readonly right: number;
-  readonly bottom: number;
-}
+import type { WorldRect } from '../core/rendering/worldRect';
 
 /**
  * Empty dark space shown past every edge of a room once the camera has panned

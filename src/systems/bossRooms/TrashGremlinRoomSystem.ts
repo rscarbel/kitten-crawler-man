@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../../core/constants';
+import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { Cockroach } from '../../creatures/Cockroach';
@@ -35,6 +36,8 @@ import {
 import { InertBossRoomDressing } from './InertBossRoomDressing';
 import { trashGremlinBulb, type HangingBulb } from './bossRoomMoodLights';
 import { drawHangingBulb } from '../../sprites/art/moodLightArt';
+import { LAIR_SHADOW, withAlpha } from '../../sprites/art/trashJunkKit';
+import { drawDangerRegion } from '../../sprites/dangerTelegraph';
 import type { TrashGremlinRoomCheckpoint, ToppledTower } from './trashGremlinRoomCheckpoint';
 
 // ── Tunables ─────────────────────────────────────────────────────────────────
@@ -101,10 +104,11 @@ const FLY_WING_COLOUR = 'rgba(220,225,230,0.7)';
 /** Off-screen margin past which a fly is not drawn. */
 const CULL_MARGIN_PX = TILE_SIZE * 2;
 
-const FALL_LINE_SHADOW = 'rgba(12,8,4,';
 /** How dark the fall line's shadow gets by impact. */
 const FALL_LINE_SHADOW_PEAK_ALPHA = 0.5;
 const FALL_LINE_SHADOW_START_ALPHA = 0.12;
+/** The red warning over the fall line is full strength from the first rock; its fill is the countdown. */
+const FALL_LINE_WARNING_FADE = 1;
 
 const HALF = 0.5;
 /** Bursts left undrained past this are dropped, so a scene with no audio cannot grow the list. */
@@ -742,17 +746,24 @@ export class TrashGremlinRoomSystem
       nest.y * TILE_SIZE - camY,
       TILE_SIZE,
     );
+  }
+
+  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const topple = this.topple;
     if (topple === null) return;
-    // The line darkens as the tower rocks: the ground it will come down on.
+    // The line darkens as the tower rocks, and its warning fills as the fall
+    // nears: the ground it will come down on.
     const progress = Math.min(1, topple.frames / (TOWER_WOBBLE_FRAMES + TOWER_FALL_TICKS));
     const alpha =
       FALL_LINE_SHADOW_START_ALPHA +
       (FALL_LINE_SHADOW_PEAK_ALPHA - FALL_LINE_SHADOW_START_ALPHA) * progress;
-    ctx.fillStyle = `${FALL_LINE_SHADOW}${alpha.toFixed(2)})`;
+    ctx.fillStyle = withAlpha(LAIR_SHADOW, alpha);
     for (const tile of topple.line) {
       ctx.fillRect(tile.x * TILE_SIZE - camX, tile.y * TILE_SIZE - camY, TILE_SIZE, TILE_SIZE);
     }
+    drawDangerRegion(ctx, topple.line, TILE_SIZE, camX, camY, FALL_LINE_WARNING_FADE, {
+      fillProgress: progress,
+    });
   }
 
   override renderEntities(): ReadonlyArray<DressingRenderable> {
@@ -862,8 +873,8 @@ export class TrashGremlinRoomSystem
     const view = {
       left: -CULL_MARGIN_PX,
       top: -CULL_MARGIN_PX,
-      right: ctx.canvas.width + CULL_MARGIN_PX,
-      bottom: ctx.canvas.height + CULL_MARGIN_PX,
+      right: worldViewWidth() + CULL_MARGIN_PX,
+      bottom: worldViewHeight() + CULL_MARGIN_PX,
     };
     const tick = Math.floor(frameTime * OVERLAY_FPS) / OVERLAY_FPS;
     let drawn = 0;

@@ -7,7 +7,8 @@
  * - three treadmills, each two belt tiles running out of the wall into the room;
  * - Little Rooster and Slightly Bent Rooster are the guards, one each, and
  *   their spawn offsets land on open floor, off every prop;
- * - a belt never carries a crawler onto a tile it cannot stand on, or out of the room.
+ * - a belt never carries a crawler onto a tile it cannot stand on, or out of the room;
+ * - the rules of his kettlebell rain, fury and dynamite kicks (`gymFightRuleGates.ts`).
  */
 
 import { TILE_SIZE } from '../../src/core/constants.js';
@@ -15,6 +16,7 @@ import { GYM_CABLE_STACK, GYM_RACK, GYM_SQUAT_RACK } from '../../src/map/tileTyp
 import type { GymRoomSystem } from '../../src/systems/GymRoomSystem.js';
 import type { TilePoint } from '../../src/systems/bossRooms/bossRoomLayout.js';
 import { gameGauntletDressings, type RoomGateContext } from './harness.js';
+import { gymFightRuleGates } from './gymFightRuleGates.js';
 
 /** The racks must be at least this far apart, in tiles, so a reload means crossing the room. */
 const MIN_RACK_SEPARATION_TILES = 12;
@@ -23,9 +25,6 @@ const MIDDLE_SHARE = 0.6;
 const TREADMILL_COUNT = 3;
 /** Two squat racks and two cable stacks. */
 const TALL_PIECES = 4;
-/** The boss-room index the rooster guards' spawn rules name. */
-const GUARD_ROOM_INDEX = 1;
-const GUARD_ORIGIN = `bossRoom:${GUARD_ROOM_INDEX}`;
 /** The guards at the gym door, sorted: one of each rooster. */
 const GUARD_KINDS = ['little_rooster', 'slightly_bent_rooster'];
 /** Frames a crawler is left on each belt tile, well past the time it takes to ride off. */
@@ -142,12 +141,18 @@ export function gymRoomGates(context: RoomGateContext): void {
     if (!onPerimeter(wallEnd, bounds)) report.fail(`the belt at ${key(wallEnd)} is off the wall`);
   }
 
-  const guardRules = env.levelDef.extraSpawns?.filter((rule) => rule.origin === GUARD_ORIGIN) ?? [];
+  const guardRules =
+    env.levelDef.extraSpawns?.filter(
+      (rule) => rule.origin.kind === 'bossRoom' && rule.origin.bossType === 'big_rooster',
+    ) ?? [];
   const guardKinds = guardRules.flatMap((rule) => rule.offsets.map(() => rule.type)).sort();
   if (JSON.stringify(guardKinds) !== JSON.stringify(GUARD_KINDS)) {
-    report.fail(`${GUARD_ORIGIN} guards are [${guardKinds.join(', ')}], not one of each rooster`);
+    report.fail(`the gym's guards are [${guardKinds.join(', ')}], not one of each rooster`);
   }
-  const centre = gameMap.bossRooms[GUARD_ROOM_INDEX]?.centre ?? room.spawn;
+  const gymRoomIndex = (env.levelDef.bossRooms ?? []).findIndex(
+    (rule) => rule.type === 'big_rooster',
+  );
+  const centre = gameMap.bossRooms[gymRoomIndex]?.centre ?? room.spawn;
   for (const rule of guardRules) {
     for (const [dx, dy] of rule.offsets) {
       const tile = { x: centre.x + dx, y: centre.y + dy };
@@ -163,6 +168,7 @@ export function gymRoomGates(context: RoomGateContext): void {
   }
 
   gateBeltRides(context, gym);
+  gymFightRuleGates(context, gym);
 }
 
 /**

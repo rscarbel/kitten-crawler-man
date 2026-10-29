@@ -1,7 +1,12 @@
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { SystemContext } from '../GameSystem';
-import type { BossRoomDressing, DressingRenderable } from './BossRoomDressing';
+import {
+  SEAL_ON_ENTRY,
+  type BossRoomDressing,
+  type BossRoomSealRule,
+  type DressingRenderable,
+} from './BossRoomDressing';
 
 const NO_RENDERABLES: ReadonlyArray<DressingRenderable> = [];
 
@@ -24,6 +29,10 @@ export abstract class InertBossRoomDressing implements BossRoomDressing {
     _promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     // Its floor is entirely in the chunk bake.
+  }
+
+  renderGroundWarnings(_ctx: CanvasRenderingContext2D, _camX: number, _camY: number): void {
+    // Nothing in it warns of a blow to come.
   }
 
   renderEntities(): ReadonlyArray<DressingRenderable> {
@@ -60,5 +69,9 @@ export abstract class InertBossRoomDressing implements BossRoomDressing {
 
   wouldInteract(_player: HumanPlayer | CatPlayer): boolean {
     return false;
+  }
+
+  get sealRule(): BossRoomSealRule {
+    return SEAL_ON_ENTRY;
   }
 }

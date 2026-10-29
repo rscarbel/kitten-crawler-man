@@ -18,7 +18,6 @@ import {
 } from '../sprites/tusklingAttackTiming';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
-import { clampEndedStep, clampIntoDrum, type DrumClamp } from '../systems/bossRooms/colosseumSlide';
 
 const TUSK_HP = 30;
 const TUSK_SPEED = 1.0;
@@ -85,26 +84,6 @@ export class Tuskling extends Mob {
   /** 0–1: charge windup progress (for sprite snort animation). */
   chargeWindup = 0;
 
-  /**
-   * When > 0, the tuskling is dazed (stunned) and cannot act.
-   * Set to 600 (10 s) when spawned from Ball of Swine burst.
-   */
-  dazeTimer = 0;
-
-  /**
-   * Whether this tuskling tore loose from a live Ball of Swine mid-fight, as
-   * against being released by its death burst.
-   *
-   * A flag on the creature rather than a list held by `ArenaSystem`, because a
-   * checkpoint restore deletes every mob spawned since the safe room: a list would
-   * keep holding those references, and each one would occupy a slot in the shed cap
-   * forever — a mob removed from the scene never stops reporting itself alive.
-   */
-  shedFromBall = false;
-
-  /** What the arena's curved wall did to this body's last step; see `clampIntoDrum`. */
-  private lastDrumClamp: DrumClamp = { pulledPx: 0 };
-
   private state: TuskState = 'idle';
   private windupTimer = 0;
   private chargeTimer = 0;
@@ -136,26 +115,8 @@ export class Tuskling extends Mob {
     this.hookTimer = 0;
     this.chargeAnimTimer = 0;
     this.chargeHitDealt = false;
-    // The daze is owned by the Ball of Swine burst that produced this tuskling,
-    // and the checkpoint restores that arena phase itself; a daze carried across
-    // the rewind leaves the creature frozen out of step with it.
-    this.dazeTimer = 0;
     this.chargeDx = 0;
     this.chargeDy = 0;
-  }
-
-  /**
-   * Every step is held inside the arena's curve, so a Tuskling slides round the
-   * drum the art shows rather than catching on the tiles' stair-steps.
-   */
-  protected override moveWithCollision(dx: number, dy: number): void {
-    super.moveWithCollision(dx, dy);
-    const map = this.map;
-    const arena = map?.arenaExteriors[0];
-    this.lastDrumClamp =
-      map === null || arena === undefined
-        ? { pulledPx: 0 }
-        : clampIntoDrum(this, arena.centre, map);
   }
 
   /** 0–1 through the tusk hook, or null when it is not swinging. */
@@ -179,19 +140,6 @@ export class Tuskling extends Mob {
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
-
-    // Dazed — can't act, just spin in place. The action state is dropped too,
-    // or a hook interrupted by the daze would resume mid-swing ten seconds
-    // later with nothing in front of it.
-    if (this.dazeTimer > 0) {
-      this.dazeTimer--;
-      this.isMoving = false;
-      this.chargeWindup = 0;
-      this.state = 'idle';
-      this.hookTimer = 0;
-      this.chargeAnimTimer = 0;
-      return;
-    }
 
     const ts = this.tileSize;
     const aggroRangePx = ts * AGGRO_RANGE_TILES;
@@ -312,20 +260,11 @@ export class Tuskling extends Mob {
 
         const prevX = this.x;
         const prevY = this.y;
-        const stepX = this.chargeDx * CHARGE_SPEED;
-        const stepY = this.chargeDy * CHARGE_SPEED;
-        this.moveWithCollision(stepX, stepY);
+        this.moveWithCollision(this.chargeDx * CHARGE_SPEED, this.chargeDy * CHARGE_SPEED);
 
         const movedX = Math.abs(this.x - prevX) > MIN_MOVEMENT_PX;
         const movedY = Math.abs(this.y - prevY) > MIN_MOVEMENT_PX;
-        const stoppedByCurve = clampEndedStep(
-          this.lastDrumClamp,
-          this.x - prevX,
-          this.y - prevY,
-          stepX,
-          stepY,
-        );
-        const wallHit = (!movedX && !movedY) || stoppedByCurve;
+        const wallHit = !movedX && !movedY;
 
         if (wallHit) {
           this.state = 'cooldown';

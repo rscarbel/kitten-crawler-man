@@ -12,13 +12,12 @@
  * - no room and no hallway segment is cut into more walkable pieces than it
  *   had bare
  * - no prop covers, and no blocking prop stands beside, a spawn point, a
- *   chest, a stairwell footprint, a building door, the arena's stairwell or a
- *   crawler sign
+ *   chest, a stairwell footprint, a building door or a crawler sign
  * - blocking props cover at most `MAX_BLOCKING_PROP_COVERAGE` of each room,
  *   and none stands in a room's open middle
  * - outside rooms, a blocking prop stands only in a nook segment, on the
  *   tile that is not open on two opposite sides, so never in a walking lane
- * - every populated room and every non-arena hallway segment has a character,
+ * - every populated room and every hallway segment has a character,
  *   and every special room its lighting tag
  * - a room holds at most one gas bottle, and none stands within
  *   `GAS_CYLINDER_CLEARANCE` tiles of any doorway or spawn point
@@ -268,10 +267,6 @@ function checkMap(data: DungeonData, levelDef: LevelDef, totals: SweepTotals | n
       }),
     ),
   ];
-  protectedTiles.push(
-    ...data.arenaExteriors.map((arena) => arena.doorTile),
-    ...data.arenaExteriors.map((arena) => arena.stairwellTile),
-  );
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
       if (grid[y][x].type === CRAWLER_SIGN) protectedTiles.push({ x, y });
@@ -425,7 +420,7 @@ function checkMap(data: DungeonData, levelDef: LevelDef, totals: SweepTotals | n
   const hallwayAssignments = regionCharacters.hallwayAssignments();
   for (const hallway of regionMap.hallways) {
     const assignment = hallwayAssignments[hallway.id - HALLWAY_REGION_BASE] ?? null;
-    const expected = hallway.arena || hallway.labApproach ? 'special' : 'hallway';
+    const expected = hallway.labApproach ? 'special' : 'hallway';
     if (assignment?.type !== expected) {
       fail('character', `hallway ${hallway.id} has no ${expected} assignment`);
     }
@@ -598,7 +593,7 @@ function runNegativeTests(): number {
   });
   expectRed('lane', (data) => {
     const hallway = data.regionMap.hallways.find(
-      (candidate) => !candidate.arena && !candidate.hallwayKinds.includes('nook'),
+      (candidate) => !candidate.hallwayKinds.includes('nook'),
     );
     const tile = hallway?.tiles[0];
     if (tile === undefined) return null;
@@ -609,7 +604,6 @@ function runNegativeTests(): number {
     // A tile open only to its two opposite sides is the middle of a one-tile
     // lane; standing a prop on it cuts the lane in two.
     for (const hallway of data.regionMap.hallways) {
-      if (hallway.arena) continue;
       const segment = new Set(hallway.tiles.map((tile) => `${tile.x},${tile.y}`));
       for (const tile of hallway.tiles) {
         const open = ORTHOGONAL.map((step) => {

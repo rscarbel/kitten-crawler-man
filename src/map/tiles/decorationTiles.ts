@@ -57,8 +57,9 @@ import {
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
-  KRAKAREN_TANK,
-  KRAKAREN_CONSOLE,
+  GYM_KETTLEBELL_RACK,
+  POWER_LAB_TANK,
+  POWER_LAB_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
   HOLLOW_WALL,
@@ -2393,8 +2394,9 @@ export function drawDecorationTile(
       case GYM_RACK:
       case GYM_SQUAT_RACK:
       case GYM_CABLE_STACK:
-      case KRAKAREN_TANK:
-      case KRAKAREN_CONSOLE:
+      case GYM_KETTLEBELL_RACK:
+      case POWER_LAB_TANK:
+      case POWER_LAB_CONSOLE:
       case LAB_BENCH:
       case LAB_SHELF:
       case ROCK_DEPOSIT:

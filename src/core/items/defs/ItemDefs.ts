@@ -75,7 +75,7 @@ export type ItemId =
   | 'demolition_apron'
   | 'foremans_hardhat'
   | 'silkspinner_gloves'
-  | 'hamhock_boots'
+  | 'lineman_boots'
   | 'rebar_shiv'
   | 'pipe_wrench'
   | 'rattlestick_sling'
@@ -294,7 +294,7 @@ export interface InventoryItem {
   resistances?: ResistanceType[];
   /** Fairy magics that cannot hurt or afflict the wearer while this is equipped. */
   fairyImmunities?: FairyElement[];
-  /** While equipped, momentum-based attacks (e.g. the Ball of Swine's trample) are cancelled on contact. */
+  /** While equipped, momentum-based attacks (a charge or a trample) are cancelled on contact. */
   cancelsMomentum?: boolean;
   /** Effective skill-level bonus granted while equipped; stacks with the trained level, capped at the skill's max. */
   skillLevelBonus?: Partial<Record<SkillId, number>>;

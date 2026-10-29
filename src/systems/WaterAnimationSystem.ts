@@ -27,16 +27,25 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import { snapUserX, snapUserY } from '../map/tiles/deviceSnap';
 import type { GameMap } from '../map/GameMap';
 import {
   FloorTypeValue,
   FLOW_DIR_VECTORS,
+  isDungeonWater,
   MAX_WATER_DEPTH,
   RIVER_ROCK,
   type TileContent,
 } from '../map/tileTypes';
 import { drawRiverRockTile } from '../map/tiles/decorationTiles';
+import { drawDungeonWaterSurface, DungeonWaterRuns } from '../map/tiles/dungeonWaterSurface';
+import {
+  drawDungeonShoreSurface,
+  DungeonShoreTiles,
+  isDungeonShoreTile,
+} from '../map/tiles/dungeonWaterShore';
+import { drawDungeonWaterline } from '../sprites/dungeonWaterlineSprite';
 import { frameTime } from '../utils';
 import type { GameSystem } from './GameSystem';
 
@@ -388,6 +397,13 @@ export class WaterAnimationSystem implements GameSystem {
    */
   private readonly clipRuns: { sx: number; sy: number; width: number }[] = [];
   private clipRunCount = 0;
+  /**
+   * Visible dungeon water, which gets the churned chop instead of the river's
+   * streaks, flecks and sun glints: it is opaque runoff under a ceiling.
+   */
+  private readonly dungeonRuns = new DungeonWaterRuns();
+  /** Visible tiles along a dungeon waterline, whose chop is clipped to the line and laps onto the floor. */
+  private readonly dungeonShore = new DungeonShoreTiles();
   /** Tiles per opacity level in the streak pass; see `STREAK_ALPHA_LEVELS`. */
   private readonly streakLevelCounts = new Array<number>(STREAK_ALPHA_LEVELS).fill(0);
   private readonly glints: { x: number; y: number; alpha: number }[] = [];
@@ -541,8 +557,11 @@ export class WaterAnimationSystem implements GameSystem {
 
     const time = frameTime;
     const previousAlpha = ctx.globalAlpha;
+    // Before the clip: laps run up onto the dry floor beside the water.
+    drawDungeonShoreSurface(ctx, this.gameMap.structure, this.dungeonShore, camX, camY, time);
     ctx.save();
     this.clipToWater(ctx);
+    drawDungeonWaterSurface(ctx, this.dungeonRuns, camX, camY, time);
     if (this.fullDetail()) {
       this.drawStreakPass(ctx, time);
       this.drawFleckPass(ctx, time);
@@ -565,21 +584,25 @@ export class WaterAnimationSystem implements GameSystem {
     const firstTileY = Math.max(0, Math.floor(camY / TILE_SIZE) - CULL_MARGIN_TILES);
     const lastTileX = Math.min(
       structure[0].length - 1,
-      Math.ceil((camX + viewportWidth()) / TILE_SIZE) + CULL_MARGIN_TILES,
+      Math.ceil((camX + worldViewWidth()) / TILE_SIZE) + CULL_MARGIN_TILES,
     );
     const lastTileY = Math.min(
       structure.length - 1,
-      Math.ceil((camY + viewportHeight()) / TILE_SIZE) + CULL_MARGIN_TILES,
+      Math.ceil((camY + worldViewHeight()) / TILE_SIZE) + CULL_MARGIN_TILES,
     );
 
     this.visibleCount = 0;
     this.rockCount = 0;
     this.clipRunCount = 0;
+    this.dungeonRuns.reset();
+    this.dungeonShore.reset();
     for (let ty = firstTileY; ty <= lastTileY; ty++) {
       const row = structure[ty];
       let runStartTx = -1;
       for (let tx = firstTileX; tx <= lastTileX; tx++) {
         const type = row[tx].type;
+        const isShore = isDungeonShoreTile(structure, tx, ty);
+        if (isShore) this.dungeonShore.add(tx, ty);
         const isRock = type === RIVER_ROCK;
         if (!isRock && type !== FloorTypeValue.water) {
           if (runStartTx >= 0) this.pushClipRun(runStartTx, tx, ty, camX, camY);
@@ -588,6 +611,10 @@ export class WaterAnimationSystem implements GameSystem {
         }
         if (runStartTx < 0) runStartTx = tx;
         const cell = row[tx];
+        if (isDungeonWater(cell)) {
+          if (!isShore) this.dungeonRuns.add(tx, ty, depthIndex(cell));
+          continue;
+        }
         const list = isRock ? this.rocks : this.visible;
         const index = isRock ? this.rockCount++ : this.visibleCount++;
         if (index === list.length) list.push(emptyVisibleWaterTile());
@@ -650,13 +677,19 @@ export class WaterAnimationSystem implements GameSystem {
    * Marks are positioned by tile hash but are not *bounded* by their tile — a
    * streak has length, a rock's wake has a 13 px radius and a wader's ripple
    * grows past 30 px. On a bank tile all three spill onto the grass, which reads
-   * as the river's surface painted over the land.
+   * as the river's surface painted over the land. Its rects are snapped to
+   * whole device pixels so its edge meets the snapped shore and chop exactly.
    */
   private clipToWater(ctx: CanvasRenderingContext2D): void {
+    const transform = ctx.getTransform();
     ctx.beginPath();
     for (let i = 0; i < this.clipRunCount; i++) {
       const run = this.clipRuns[i];
-      ctx.rect(run.sx, run.sy, run.width, TILE_SIZE);
+      const left = snapUserX(transform, run.sx);
+      const top = snapUserY(transform, run.sy);
+      const right = snapUserX(transform, run.sx + run.width);
+      const bottom = snapUserY(transform, run.sy + TILE_SIZE);
+      ctx.rect(left, top, right - left, bottom - top);
     }
     ctx.clip();
   }
@@ -918,9 +951,20 @@ export class WaterAnimationSystem implements GameSystem {
    *
    * Called by `RenderPipeline` straight after it draws the clipped body, so the
    * rim lands on top of the cut edge and hides the fact that it is a hard
-   * horizontal line through a sprite.
+   * horizontal line through a sprite. In dungeon water, which hides the body
+   * below it completely, the cut is ringed with churning foam instead.
    */
-  renderWaterline(ctx: CanvasRenderingContext2D, screenX: number, screenY: number): void {
+  renderWaterline(
+    ctx: CanvasRenderingContext2D,
+    screenX: number,
+    screenY: number,
+    camX: number,
+    camY: number,
+  ): void {
+    if (this.isDungeonWaterBelow(screenX + camX, screenY + camY)) {
+      drawDungeonWaterline(ctx, screenX, screenY, frameTime);
+      return;
+    }
     const previousAlpha = ctx.globalAlpha;
     ctx.globalAlpha = WATERLINE_FILL_ALPHA;
     ctx.fillStyle = WATERLINE_FILL_COLOR;
@@ -940,6 +984,17 @@ export class WaterAnimationSystem implements GameSystem {
     ctx.lineWidth = WATERLINE_RIM_WIDTH_PX;
     ctx.stroke();
     ctx.globalAlpha = previousAlpha;
+  }
+
+  /**
+   * Whether the water at a waterline is dungeon water. The waterline sits up
+   * to a tile above the foot it belongs to, so the tile beneath is asked too.
+   */
+  private isDungeonWaterBelow(worldX: number, worldY: number): boolean {
+    const tx = Math.floor(worldX / TILE_SIZE);
+    const ty = Math.floor(worldY / TILE_SIZE);
+    const structure = this.gameMap.structure;
+    return isDungeonWater(structure[ty]?.[tx]) || isDungeonWater(structure[ty + 1]?.[tx]);
   }
 
   private spawnRipple(wader: WaderState, strength: number): void {

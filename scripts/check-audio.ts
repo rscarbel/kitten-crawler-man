@@ -26,6 +26,7 @@ import {
 } from '../src/audio/sounds';
 import { SFX_GROUPS } from '../src/audio/sfxGroups';
 import { MUSIC_CATALOG } from '../src/audio/music/catalog';
+import { MUSIC_STEM_SETS } from '../src/audio/music/stemSets';
 import { LOUDNESS } from '../src/audio/loudness.generated';
 import type { LoudnessEntry } from '../src/audio/loudnessTargets';
 import { hashAudioFile } from './audioHash';
@@ -35,6 +36,9 @@ const AUDIO_ROOT = join(REPO_ROOT, 'src/audio');
 const MUSIC_FOLDER = 'music';
 const JINGLES_FOLDER = 'jingles';
 const AUDIO_FILE = /\.(mp3|ogg|wav|m4a|aac|flac)$/i;
+/** The formats a recording may ship in; every browser the game targets decodes both. */
+const SHIPPED_AUDIO_EXTENSIONS = ['mp3', 'ogg'] as const;
+const SHIPPED_AUDIO_FILE = new RegExp(`\\.(${SHIPPED_AUDIO_EXTENSIONS.join('|')})$`);
 
 interface AudioRule {
   readonly name: string;
@@ -50,8 +54,8 @@ function isSoundId(id: string): id is SoundId {
   return soundIds.has(id);
 }
 
-function manifestPathFor(folder: string, id: string): string {
-  return `./src/audio/${folder}/${id}.mp3`;
+function manifestPathFor(folder: string, fileName: string): string {
+  return `./src/audio/${folder}/${fileName}`;
 }
 
 function audioFilesIn(folder: string): string[] {
@@ -87,7 +91,13 @@ function folderFilesAreRegistered(
       continue;
     }
     if (!isSoundId(id)) continue;
-    const expected = manifestPathFor(folder, id);
+    if (!SHIPPED_AUDIO_FILE.test(name)) {
+      problems.push(
+        `src/audio/${folder}/${name} must be one of ${SHIPPED_AUDIO_EXTENSIONS.join(', ')}`,
+      );
+      continue;
+    }
+    const expected = manifestPathFor(folder, name);
     if (SOUND_MANIFEST[id] !== expected) {
       problems.push(`SOUND_MANIFEST.${id} is "${SOUND_MANIFEST[id]}", expected "${expected}"`);
     }
@@ -99,8 +109,10 @@ function folderFilesAreRegistered(
 function idsHaveFiles(folder: string, ids: readonly SoundId[]): readonly string[] {
   const problems: string[] = [];
   for (const id of ids) {
-    const file = join(AUDIO_ROOT, folder, `${id}.mp3`);
-    if (!existsSync(file)) problems.push(`${id} has no file at src/audio/${folder}/${id}.mp3`);
+    const candidates = SHIPPED_AUDIO_EXTENSIONS.map((extension) => `${id}.${extension}`);
+    const found = candidates.some((name) => existsSync(join(AUDIO_ROOT, folder, name)));
+    if (!found)
+      problems.push(`${id} has no file at src/audio/${folder}/${candidates.join(' or ')}`);
   }
   return problems;
 }
@@ -214,6 +226,15 @@ const RULES: readonly AudioRule[] = [
       [...groupsById()]
         .filter(([id]) => STREAMING_SOUND_IDS.has(id))
         .map(([id, groups]) => `streamed ${id} is in SFX group(s) ${groups.join(', ')}`),
+  },
+  {
+    name: 'no stem of a stem set is streamed',
+    check: () =>
+      Object.entries(MUSIC_STEM_SETS).flatMap(([set, stems]) =>
+        stems
+          .filter((id) => STREAMING_SOUND_IDS.has(id))
+          .map((id) => `${id}, a stem of ${set}, is streamed; stems loop decoded`),
+      ),
   },
   {
     name: 'every sound has a loudness measurement matching its file',

@@ -1,5 +1,4 @@
 import type { TileContent } from '../tileTypes';
-import { isColosseumRingTile } from './bossRooms/colosseumTiles';
 import {
   BONE_PILE,
   SLUMPED_SKELETON,
@@ -9,7 +8,6 @@ import {
   VOID_TYPE,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   TREE,
   ROOF_THATCH,
   ROOF_SLATE,
@@ -105,7 +103,6 @@ const SHADOW_TYPES = new Set([
   INTERIOR_COUNTER,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   TREE,
   ROOF_THATCH,
   ROOF_SLATE,
@@ -134,7 +131,6 @@ const NON_FLOOR_TYPES = new Set<number>([
   INTERIOR_COUNTER,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   TREE,
   ROOF_THATCH,
   ROOF_SLATE,
@@ -320,21 +316,11 @@ export function drawWallShadow(
   tx: number,
   ty: number,
 ) {
-  // The colosseum's round wall paints its own curved shadow, which a square
-  // strip would cut straight across.
-  if (
-    ty > 0 &&
-    SHADOW_TYPES.has(structure[ty - 1][tx].type) &&
-    !isColosseumRingTile(structure, tx, ty - 1)
-  ) {
+  if (ty > 0 && SHADOW_TYPES.has(structure[ty - 1][tx].type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.40)';
     ctx.fillRect(sx, sy, ts, SHADOW_TOP_DEPTH);
   }
-  if (
-    tx > 0 &&
-    SHADOW_TYPES.has(structure[ty][tx - 1].type) &&
-    !isColosseumRingTile(structure, tx - 1, ty)
-  ) {
+  if (tx > 0 && SHADOW_TYPES.has(structure[ty][tx - 1].type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.fillRect(sx, sy, SHADOW_SIDE_DEPTH, ts);
   }

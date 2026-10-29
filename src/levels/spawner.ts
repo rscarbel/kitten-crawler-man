@@ -5,7 +5,6 @@ import {
   type TreasureRoomData,
 } from '../map/DungeonGenerator';
 import { campSiteKey } from '../map/overworld/camps';
-import { BallOfSwine } from '../creatures/BallOfSwine';
 import { clamp, randomIntFrom } from '../utils';
 import { spawnMob, type SpawnContext } from './spawnFunnel';
 import { floorEncounter } from './encounters';
@@ -16,7 +15,13 @@ import {
   applySpawnDifficulty,
   type DifficultyProfile,
 } from '../core/difficulty/difficultyProfiles';
-import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
+import type {
+  EscortSpawnRule,
+  ExtraSpawnOrigin,
+  MobLevelRange,
+  MobSpawnRule,
+  LevelDef,
+} from './types';
 import { NO_SPAWN_TERRAIN, type SpawnTerrain } from '../map/overworld/spawnTerrain';
 
 /** Maximum attempts to find a walkable spawn position. */
@@ -411,45 +416,28 @@ function rollEscorts(
   return rolled;
 }
 
-/** Resolve an ExtraSpawnRule origin string to a tile coordinate, or null if the landmark doesn't exist. */
+/** The tile an {@link ExtraSpawnOrigin} names, or null when this map has no such landmark. */
 function resolveOrigin(
-  origin: string,
+  origin: ExtraSpawnOrigin,
   map: GameMap,
   def: LevelDef,
 ): { x: number; y: number } | null {
-  if (origin === 'mapCenter') {
-    const half = Math.floor(def.mapSize / 2);
-    return { x: half, y: half };
-  }
-  const bossMatch = /^bossRoom:(\d+)$/.exec(origin);
-  if (bossMatch) {
-    const idx = parseInt(bossMatch[1], 10);
-    if (idx < 0 || idx >= map.bossRooms.length) return null;
-    return map.bossRooms[idx].centre;
-  }
-  const arenaMatch = /^arena:(\d+)$/.exec(origin);
-  if (arenaMatch) {
-    const idx = parseInt(arenaMatch[1], 10);
-    if (idx < 0 || idx >= map.arenaExteriors.length) return null;
-    return map.arenaExteriors[idx].centre;
-  }
-  return null;
-}
-
-/**
- * Post-spawn setup callbacks for mobs that need special initialization
- * beyond what `spawnMob` provides (e.g. BallOfSwine needs arena binding).
- */
-const SPAWN_SETUP: Partial<
-  Record<string, (mob: Mob, map: GameMap, origin: { x: number; y: number }) => void>
-> = {
-  setupBallOfSwine(mob, map, origin) {
-    if (mob instanceof BallOfSwine) {
-      mob.setArena(origin.x, origin.y);
-      mob.setMap(map);
+  switch (origin.kind) {
+    case 'mapCenter': {
+      const half = Math.floor(def.mapSize / 2);
+      return { x: half, y: half };
     }
-  },
-};
+    case 'bossRoom': {
+      // A floor's boss rooms are generated in the order its `bossRooms` rules list them.
+      const roomIndex = (def.bossRooms ?? []).findIndex((rule) => rule.type === origin.bossType);
+      return roomIndex < 0 ? null : (map.bossRooms[roomIndex]?.centre ?? null);
+    }
+    default: {
+      const unhandled: never = origin;
+      return unhandled;
+    }
+  }
+}
 
 /**
  * Spawn mobs described by `def.extraSpawns` — position-relative spawns
@@ -480,9 +468,6 @@ export function spawnExtraMobs(
       );
       applySpawnDifficulty(mob, profile);
       mob.allowWorldGearDrop = def.worldGearDrops === true;
-      if (rule.setup) {
-        SPAWN_SETUP[rule.setup]?.(mob, map, origin);
-      }
       mobs.push(mob);
     }
   }

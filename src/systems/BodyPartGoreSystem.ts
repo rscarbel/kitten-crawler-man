@@ -69,11 +69,16 @@ import {
   ROCK_GOLEM_FIGURE,
 } from '../sprites/art/rockGolemFigure';
 import {
-  KRAKAREN_TENTACLE_BODY_PART_KEY,
-  KRAKAREN_TENTACLE_GORE_PARTS,
-} from '../sprites/krakarenTentacleSprite';
-import { KRAKAREN_BODY_PART_KEY, KRAKAREN_GORE_PARTS } from '../sprites/krakarenSprite';
-import { KRAKAREN_FIGURE, KRAKAREN_TENTACLE_FIGURE } from '../sprites/art/krakarenFigure';
+  KRAKEN_TENTACLE_BODY_PART_KEY,
+  KRAKEN_TENTACLE_GORE_PARTS,
+} from '../sprites/krakenTentacleSprite';
+import { KRAKEN_BODY_PART_KEY, KRAKEN_GORE_PARTS } from '../sprites/krakenSprite';
+import {
+  ELECTRIC_GOBLIN_BODY_PART_KEY,
+  ELECTRIC_GOBLIN_FIGURE,
+  ELECTRIC_GOBLIN_GORE_PARTS,
+} from '../sprites/electricGoblinSprite';
+import { KRAKEN_FIGURE, KRAKEN_TENTACLE_FIGURE } from '../sprites/art/krakenFigure';
 import { COW_FIGURE_ENTRIES } from '../sprites/art/cowFigure';
 import { COW_GORE_PARTS, cowBodyPartKey } from '../sprites/cowSprite';
 import { GRAVE_BULL_FIGURE } from '../sprites/art/graveBullFigure';
@@ -244,15 +249,15 @@ const ROOSTER_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = (
  * under — the burst is how the player learns that cutting it down is the thing
  * that lifts the boss's guard.
  */
-const KRAKAREN_TENTACLE_CONFIG: MobBodyPartConfig = {
-  art: KRAKAREN_TENTACLE_FIGURE,
-  parts: KRAKAREN_TENTACLE_GORE_PARTS,
+const KRAKEN_TENTACLE_CONFIG: MobBodyPartConfig = {
+  art: KRAKEN_TENTACLE_FIGURE,
+  parts: KRAKEN_TENTACLE_GORE_PARTS,
 };
 
 /** The boss's own seven, painted by her own figure. */
-const KRAKAREN_CONFIG: MobBodyPartConfig = {
-  art: KRAKAREN_FIGURE,
-  parts: KRAKAREN_GORE_PARTS,
+const KRAKEN_CONFIG: MobBodyPartConfig = {
+  art: KRAKEN_FIGURE,
+  parts: KRAKEN_GORE_PARTS,
 };
 
 /** The Grave Bull's bones and chain: a raised carcass has no quarters of meat to drop. */
@@ -265,6 +270,10 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
   [TRASH_GREMLIN_BODY_PART_KEY, TRASH_GREMLIN_CONFIG],
+  [
+    ELECTRIC_GOBLIN_BODY_PART_KEY,
+    { art: ELECTRIC_GOBLIN_FIGURE, parts: ELECTRIC_GOBLIN_GORE_PARTS },
+  ],
   [COCKROACH_BODY_PART_KEY, COCKROACH_CONFIG],
   [RAT_BODY_PART_KEY, RAT_CONFIG],
   [LLAMA_BODY_PART_KEY, LLAMA_CONFIG],
@@ -276,8 +285,8 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   [TUSKLING_BODY_PART_KEY, TUSKLING_CONFIG],
   ...ROOSTER_CONFIGS,
   [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_CONFIG],
-  [KRAKAREN_TENTACLE_BODY_PART_KEY, KRAKAREN_TENTACLE_CONFIG],
-  [KRAKAREN_BODY_PART_KEY, KRAKAREN_CONFIG],
+  [KRAKEN_TENTACLE_BODY_PART_KEY, KRAKEN_TENTACLE_CONFIG],
+  [KRAKEN_BODY_PART_KEY, KRAKEN_CONFIG],
   ...SKELETON_CONFIGS,
   ...COW_CONFIGS,
   [GRAVE_BULL_BODY_PART_KEY, GRAVE_BULL_CONFIG],

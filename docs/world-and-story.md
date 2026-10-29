@@ -200,7 +200,7 @@ leave its beats waiting on each other forever.
 
 ### Previewing a beat
 
-Open the game with `?story=<beatId>` (for example `?story=floor2_dave_chosen`).
+Open the game with `?story=<beatId>` (for example `?story=floor1_dave_chosen`).
 It boots the floor the beat belongs to with every earlier beat heard and plays
 the beat at once, Dave standing beside the party for one of his, so any beat
 can be read without playing to it. The tutorial's beats open in the tutorial;

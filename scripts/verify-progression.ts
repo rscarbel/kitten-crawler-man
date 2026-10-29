@@ -141,17 +141,10 @@ function runFloor(levelDef: LevelDef): RunResult[] {
   return results;
 }
 
-/**
- * Whether the placement band governs a floor's stairwells at all.
- *
- * An arena floor seats every stairwell in the pocket behind the drum, whose
- * distance from the last boss's exit is the arena's own geometry rather than a
- * choice, so the generator never applies the ceiling there — and a check that
- * demanded it would be measuring a rule that floor does not live under.
- */
+/** Whether the placement band governs a floor's stairwells: every progression floor's does. */
 function bandGovernsFloor(levelDef: LevelDef): boolean {
   const gauntletCount = levelDef.progression?.gauntlets.length ?? 0;
-  return gauntletCount > 0 && !(levelDef.hasArena ?? false);
+  return gauntletCount > 0;
 }
 
 function isInsideBandInterior(stairwell: StairwellRecord): boolean {
@@ -175,7 +168,7 @@ function isInsideBandInterior(stairwell: StairwellRecord): boolean {
  */
 function reportStairwellBand(levelDef: LevelDef, results: RunResult[]): boolean {
   if (!bandGovernsFloor(levelDef)) {
-    console.log('  stairwell band : n/a — this floor seats its stairs behind the arena');
+    console.log('  stairwell band : n/a — this floor has no gauntlets');
     return true;
   }
 

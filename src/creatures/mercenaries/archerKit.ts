@@ -332,7 +332,7 @@ export class ArcherKit implements MercenaryKit {
     const previous = this.lastSeenAt;
     let best: { mob: Mob; distancePx: number } | null = null;
     for (const mob of ctx.allMobs) {
-      if (mob === merc || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === merc || !mob.isHostileTarget) continue;
       const distancePx = Math.hypot(mob.x - merc.x, mob.y - merc.y);
       if (distancePx > TILE_SIZE * KITE_CLEAR_TILES) continue;
       if (distancePx > TILE_SIZE * KITE_ENTER_TILES) continue;
@@ -356,7 +356,7 @@ export class ArcherKit implements MercenaryKit {
     this.lastSeenAt = this.seenNow;
     const seen: SeenAt[] = [];
     for (const mob of ctx.allMobs) {
-      if (mob === merc || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === merc || !mob.isHostileTarget) continue;
       const distancePx = Math.hypot(mob.x - merc.x, mob.y - merc.y);
       if (distancePx > TILE_SIZE * KITE_CLEAR_TILES) continue;
       seen.push({ mob, x: mob.x, y: mob.y });

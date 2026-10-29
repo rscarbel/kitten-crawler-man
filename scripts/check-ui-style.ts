@@ -32,7 +32,6 @@ const SCANNED_DIRECTORIES: readonly string[] = [
 /** HUD, menu and panel owners that live outside `src/ui/`. */
 const SCANNED_FILES: readonly string[] = [
   'src/systems/AchievementUISystem.ts',
-  'src/systems/ArenaSystem.ts',
   'src/systems/BossIntroSystem.ts',
   'src/systems/BuildingSystem.ts',
   'src/systems/ClubCasinoSystem.ts',
@@ -119,6 +118,22 @@ const STYLE_SOURCES: readonly string[] = [
   'src/ui/theme/',
   // Item and skill painters: small pictures, coloured like art, not chrome.
   'src/ui/icons/',
+];
+
+/**
+ * The ground-warning painters. Every ground warning in the game is red, drawn
+ * in `GROUND_WARNING_INK` from `theme/worldInk.ts`; a colour literal here is a
+ * warning that could drift off red, so these are held to the same rule as UI
+ * code. A creature's own colours belong on its effects, also from the theme.
+ */
+const GROUND_WARNING_PAINTERS: readonly string[] = [
+  'src/creatures/grotesqueSpiderTelegraphs.ts',
+  'src/sprites/dangerTelegraph.ts',
+  'src/sprites/electricGoblinTelegraphs.ts',
+  'src/sprites/fairyTelegraphs.ts',
+  'src/sprites/krakenTelegraphs.ts',
+  'src/sprites/necromancerTelegraphs.ts',
+  'src/sprites/starlightTentTelegraphs.ts',
 ];
 
 /**
@@ -269,14 +284,18 @@ function collectTypeScriptFiles(directory: string): string[] {
 }
 
 function listedFilesThatAreGone(): string[] {
-  return SCANNED_FILES.filter((file) => !existsSync(join(REPO_ROOT, file)));
+  return [...SCANNED_FILES, ...GROUND_WARNING_PAINTERS].filter(
+    (file) => !existsSync(join(REPO_ROOT, file)),
+  );
 }
 
 function scannedFiles(): string[] {
   const fromDirectories = SCANNED_DIRECTORIES.flatMap((dir) =>
     collectTypeScriptFiles(join(REPO_ROOT, dir)),
   );
-  const listed = SCANNED_FILES.map((file) => join(REPO_ROOT, file));
+  const listed = [...SCANNED_FILES, ...GROUND_WARNING_PAINTERS].map((file) =>
+    join(REPO_ROOT, file),
+  );
   const unique = [...new Set([...fromDirectories, ...listed])];
   return unique
     .filter((file) => !isUnder(toRepoPath(file), [...STYLE_SOURCES, ...WORLD_ART_EXEMPT]))

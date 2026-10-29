@@ -1,13 +1,14 @@
 import { TILE_SIZE } from '../core/constants';
 import { Mercenary } from '../creatures/Mercenary';
 import { MERCENARY_ART } from '../sprites/mercenaryArt';
-import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import { ANY_TILE, findNearbyWalkableTile, type TileFilter } from '../map/findWalkableTile';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
+import { PartyTrail, routeTrailBetween } from './partyTrail';
 import {
   contractIsCurrent,
   hirelingStartingHp,
@@ -25,7 +26,7 @@ import type { MobRoster } from './kits/SceneWorld';
 import { hasAiAttention } from './MobUpdateLoop';
 import type { CarriedCompanion } from './companionCarry';
 import { hirelingShouldCatchUp } from '../creatures/mercenaries/hirelingCatchUp';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 
 /**
  * A point-in-time copy of the spawn state, for the in-run safe-room checkpoint.
@@ -118,6 +119,9 @@ export class MercenarySystem implements GameSystem {
   private sceneMobs: readonly Mob[] = [];
   /** Whether the player has been warned, for this fall, that leaving loses the hire. */
   private warnedAboutLeaving = false;
+  /** The trail the hire walks behind the following crawler, while a room wants it there. */
+  private trail: PartyTrail | null = null;
+  private trailMap: GameMap | null = null;
 
   /**
    * @param levelId the floor this scene stands on, stamped on the roster. Null
@@ -134,6 +138,21 @@ export class MercenarySystem implements GameSystem {
     private readonly feedback: HirelingFeedback = SILENT_FEEDBACK,
   ) {
     if (levelId !== null) roster.floorLevelId = levelId;
+  }
+
+  /**
+   * Puts the hire on the following crawler's own trail at `spacingPx` of walked
+   * distance, behind them in a line, or (null) hands it back to its own feet.
+   * On the trail it does not fight, the same as the companion it follows.
+   */
+  setTrailFollow(spacingPx: number | null): void {
+    this.trail =
+      spacingPx === null
+        ? null
+        : new PartyTrail(spacingPx, (from, to) =>
+            this.trailMap === null ? null : routeTrailBetween(this.trailMap, from, to),
+          );
+    if (spacingPx === null && this.merc !== null) this.merc.walksTrail = false;
   }
 
   /**
@@ -187,6 +206,9 @@ export class MercenarySystem implements GameSystem {
     }
     merc.allies = this.allies;
     this.catchUpIfLeftBehind(merc, gameMap, ctx.roster.grid);
+    this.trailMap = gameMap;
+    merc.walksTrail = this.trail !== null;
+    this.trail?.tick(ctx.inactive, merc);
 
     const heal = merc.tickSurvival();
     if (heal?.kind === 'potion') this.feedback.sound(POTION_SOUND);
@@ -248,6 +270,14 @@ export class MercenarySystem implements GameSystem {
       if (mob.retaliateMob === merc) mob.retaliateMob = null;
       if (mob.currentTarget === merc) mob.currentTarget = null;
     }
+  }
+
+  /** Stands a downed hire back up on the spot, silently, as a script gathering the party does. */
+  reviveDownedQuietly(): void {
+    const merc = this.downedMerc;
+    if (merc === null) return;
+    merc.getUpQuietly();
+    this.recordHp(merc);
   }
 
   /** One frame on the floor: the revive, or the window running down. */
@@ -318,7 +348,7 @@ export class MercenarySystem implements GameSystem {
     // The camera follows the active crawler, whom the hire follows, so the
     // screen is judged as the viewport centred on its owner.
     const onScreen =
-      Math.abs(offsetX) <= viewportWidth() / 2 && Math.abs(offsetY) <= viewportHeight() / 2;
+      Math.abs(offsetX) <= worldViewWidth() / 2 && Math.abs(offsetY) <= worldViewHeight() / 2;
     const leftBehind = hirelingShouldCatchUp({
       distancePx: Math.hypot(offsetX, offsetY),
       onScreen,
@@ -348,9 +378,9 @@ export class MercenarySystem implements GameSystem {
   asCarriedCompanion(): CarriedCompanion {
     return {
       body: this.activeMerc,
-      landingTile: (map) => {
+      landingTile: (map, isAcceptable) => {
         const merc = this.merc;
-        return merc === null ? null : findSpawnTile(merc.owner, map);
+        return merc === null ? null : findSpawnTile(merc.owner, map, isAcceptable);
       },
       putAway: (mobs, grid) => this.dismissForTransition(mobs, grid),
       onPlaced: (mobs) => {
@@ -441,10 +471,7 @@ export class MercenarySystem implements GameSystem {
     if (distance > TILE_SIZE * TALK_RANGE_TILES) return null;
     const clearancePx = Math.max(active.attackReachPx(), TILE_SIZE * merc.kit.engageRadiusTiles);
     const fightOn = mobs.some(
-      (mob) =>
-        mob.isAlive &&
-        mob.isHostile &&
-        Math.hypot(mob.x - active.x, mob.y - active.y) <= clearancePx,
+      (mob) => mob.isHostileTarget && Math.hypot(mob.x - active.x, mob.y - active.y) <= clearancePx,
     );
     return fightOn ? null : merc;
   }
@@ -612,9 +639,14 @@ export class MercenarySystem implements GameSystem {
  * sprite overhangs. Candidates must be in her sight, or the ring search would
  * solve a blocked corridor by putting the hire in the room through the wall,
  * and must not be stairwells, which `isWalkable` admits but
- * `Mob.moveWithCollision` refuses to enter.
+ * `Mob.moveWithCollision` refuses to enter. `isAcceptable` narrows the search
+ * to a region the caller owns.
  */
-export function findSpawnTile(active: Player, gameMap: GameMap): { x: number; y: number } | null {
+export function findSpawnTile(
+  active: Player,
+  gameMap: GameMap,
+  isAcceptable: TileFilter = ANY_TILE,
+): { x: number; y: number } | null {
   const ownerCentreX = active.x + TILE_SIZE * TILE_CENTER;
   const ownerCentreY = active.y + TILE_SIZE * TILE_CENTER;
   const behindX = Math.floor(ownerCentreX / TILE_SIZE) - Math.round(active.facingX);
@@ -631,7 +663,7 @@ export function findSpawnTile(active: Player, gameMap: GameMap): { x: number; y:
     behindX,
     behindY,
     SPAWN_SEARCH_RADIUS_TILES,
-    (x, y) => inOwnersSight(x, y) && !gameMap.isStairwellTile(x, y),
+    (x, y) => inOwnersSight(x, y) && !gameMap.isStairwellTile(x, y) && isAcceptable(x, y),
   );
 }
 

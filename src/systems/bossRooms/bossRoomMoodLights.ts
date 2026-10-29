@@ -4,18 +4,19 @@
  * A boss room is never darkened: its fight was tuned in full light and plays
  * in it. These lights only add colour — a bare bulb over the Trash Gremlin's junk,
  * strip lights over the gym's mirror, the lab's monitors and its broken vat,
- * floodlights on the colosseum's rim. One placement serves both the lighting
- * pass, which adds the glow, and the room's dressing, which paints the fixture
- * where the glow comes from.
+ * the shimmer off the pump room's flood.
+ * One placement serves both the lighting pass, which adds the glow, and the
+ * room's dressing, which paints the fixture the glow comes from. The shimmer
+ * has no fixture: the flood itself throws it.
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { FloorTypeValue, type TileContent } from '../../map/tileTypes';
 import type { GymLayout } from '../../map/tiles/bossRooms/gymLayout';
-import { colosseumCapInnerRadius } from '../../map/tiles/bossRooms/colosseumGeometry';
 import type { LightKind } from '../lighting/lightKinds';
-import type { KrakarenLabLayout } from './krakarenLabLayout';
+import type { PowerLabLayout } from './powerLabLayout';
 import type { TilePoint, TileRect } from './bossRoomLayout';
+import type { TileContent } from '../../map/tileTypes';
+import { dungeonWaterRevision } from '../../map/tiles/dungeonWaterColumn';
 
 const HALF = 0.5;
 
@@ -26,6 +27,12 @@ export interface BossRoomMoodLight {
   readonly kind: LightKind;
   /** Where the pool falls, in world pixels. */
   readonly centre: { readonly x: number; readonly y: number };
+  /**
+   * Whether what throws the light is still there, read every frame: the
+   * light fades out when it turns false and comes back when it turns true.
+   * Absent for a light that never goes out.
+   */
+  readonly powered?: () => boolean;
 }
 
 /** What a mood light can be handed to: the lighting pass's mood-light registration. */
@@ -138,14 +145,14 @@ function nearestIndex(
   return null;
 }
 
-// ── The clone lab ───────────────────────────────────────────────────────────
+// ── The power lab ───────────────────────────────────────────────────────────
 
 /**
  * The lab's glows: each console's screen, and the broken vat bed in the
  * middle, which still gives off the specimen fluid's pink. The lab already
  * draws every one of these things.
  */
-export function krakarenMoodLights(layout: KrakarenLabLayout): BossRoomMoodLight[] {
+export function powerLabMoodLights(layout: PowerLabLayout): BossRoomMoodLight[] {
   const lights: BossRoomMoodLight[] = layout.consoles.map((tile) => ({
     tileX: tile.x,
     tileY: tile.y,
@@ -161,55 +168,83 @@ export function krakarenMoodLights(layout: KrakarenLabLayout): BossRoomMoodLight
   return lights;
 }
 
-// ── The colosseum's floodlights ─────────────────────────────────────────────
+// ── The flooded pump room ───────────────────────────────────────────────────
 
-const DUE_NORTH = -Math.PI * HALF;
 /**
- * Each lamp's bearing off due north: in the gap between the top pair of
- * cages and the nearer banners, where nothing else stands on the rim.
+ * Where the shimmer pools fall, as shares of the room's width and height: the
+ * middle and a quarter in from each corner, so the cold sway is spread over
+ * the whole flood without one pool standing out.
  */
-const FLOOD_LAMP_SPREAD_RADIANS = 0.35;
-/** How far onto the wall's top the lamp stands, past the inner face. */
-const FLOOD_LAMP_ON_CAP_TILES = 0.3;
-/** How far in from the lamp its light is thrown from, and where its pool falls. */
-const FLOOD_EMITTER_IN_TILES = 2;
-const FLOOD_POOL_IN_TILES = 5;
+const FLOOD_SHIMMER_NEAR_SHARE = 0.25;
+const FLOOD_SHIMMER_FAR_SHARE = 0.75;
+const FLOOD_SHIMMER_SHARES: ReadonlyArray<readonly [number, number]> = [
+  [HALF, HALF],
+  [FLOOD_SHIMMER_NEAR_SHARE, FLOOD_SHIMMER_NEAR_SHARE],
+  [FLOOD_SHIMMER_FAR_SHARE, FLOOD_SHIMMER_NEAR_SHARE],
+  [FLOOD_SHIMMER_NEAR_SHARE, FLOOD_SHIMMER_FAR_SHARE],
+  [FLOOD_SHIMMER_FAR_SHARE, FLOOD_SHIMMER_FAR_SHARE],
+];
 
-/** A floodlight on the colosseum's north rim. */
-export interface FloodLamp {
-  readonly light: BossRoomMoodLight;
-  /** The housing, in world pixels. */
-  readonly x: number;
-  readonly y: number;
-  /** Which way the lens faces, radians with y growing south. */
-  readonly aim: number;
+/** What the shimmer reads the flood off: the map's standing water. */
+export interface StandingWater {
+  readonly structure: TileContent[][];
+  dungeonWaterDepthAt(tileX: number, tileY: number): number;
 }
 
-/** The floodlights over the colosseum whose sand is centred on `centre`. */
-export function colosseumFloodLamps(
-  centre: TilePoint,
-  structure: ReadonlyArray<ReadonlyArray<TileContent>>,
-): FloodLamp[] {
-  const centrePx = tileCentrePx(centre);
-  const lamps: FloodLamp[] = [];
-  for (const side of [-1, 1]) {
-    const bearing = DUE_NORTH + side * FLOOD_LAMP_SPREAD_RADIANS;
-    const along = (tiles: number): { x: number; y: number } => ({
-      x: centrePx.x + Math.cos(bearing) * tiles * TILE_SIZE,
-      y: centrePx.y + Math.sin(bearing) * tiles * TILE_SIZE,
-    });
-    const lampRadius = colosseumCapInnerRadius(bearing) + FLOOD_LAMP_ON_CAP_TILES;
-    const lamp = along(lampRadius);
-    const emitter = along(lampRadius - FLOOD_EMITTER_IN_TILES);
-    const tileX = Math.floor(emitter.x / TILE_SIZE);
-    const tileY = Math.floor(emitter.y / TILE_SIZE);
-    if (structure[tileY]?.[tileX]?.type === FloorTypeValue.wall) continue;
-    lamps.push({
-      light: { tileX, tileY, kind: 'flood_lamp', centre: along(lampRadius - FLOOD_POOL_IN_TILES) },
-      x: lamp.x,
-      y: lamp.y,
-      aim: bearing + Math.PI,
-    });
+/**
+ * Whether any tile of `bounds` still holds water. The answer is kept until
+ * the map's water next moves, since every light in the room asks every frame
+ * and a drained room would otherwise be read through each time.
+ */
+function roomHoldsWater(water: StandingWater, bounds: TileRect): () => boolean {
+  let answered: {
+    readonly structure: TileContent[][];
+    readonly revision: number;
+    readonly wet: boolean;
+  } | null = null;
+  return () => {
+    const structure = water.structure;
+    const revision = dungeonWaterRevision(structure);
+    const stillCurrent =
+      answered !== null && answered.structure === structure && answered.revision === revision;
+    if (answered !== null && stillCurrent) return answered.wet;
+    const wet = anyTileWet(water, bounds);
+    answered = { structure, revision, wet };
+    return wet;
+  };
+}
+
+function anyTileWet(water: StandingWater, bounds: TileRect): boolean {
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      if (water.dungeonWaterDepthAt(x, y) > 0) return true;
+    }
   }
-  return lamps;
+  return false;
+}
+
+/**
+ * The pump room's glows: light thrown back off the flood, fading once the
+ * room drains and back whenever a restore floods it again. Placed from the
+ * room's bounds alone, since the water fills the whole floor and nothing in
+ * the room's layout decides where it shines.
+ */
+export function floodedPumpRoomMoodLights(
+  bounds: TileRect,
+  water: StandingWater,
+): BossRoomMoodLight[] {
+  const powered = roomHoldsWater(water, bounds);
+  return FLOOD_SHIMMER_SHARES.map(([alongX, alongY]) => {
+    const tile = {
+      x: bounds.x + Math.floor(bounds.w * alongX),
+      y: bounds.y + Math.floor(bounds.h * alongY),
+    };
+    return {
+      tileX: tile.x,
+      tileY: tile.y,
+      kind: 'flood_shimmer',
+      centre: tileCentrePx(tile),
+      powered,
+    };
+  });
 }

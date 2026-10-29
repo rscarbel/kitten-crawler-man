@@ -6,8 +6,7 @@
  *   which cannot save. Leaving it lands inside the town wall, whose entry is a
  *   save, and that save carries the new hire through capture, the save format,
  *   and the restore a death respawn runs.
- * - Nothing on the third floor seals a room: no boss room, no swine arena, no
- *   spider lab. Hirelings exist only on the third floor, so none of the systems
+ * - Nothing on the third floor seals a room: no boss room, no spider lab. Hirelings exist only on the third floor, so none of the systems
  *   that lock a door behind the party can shut one outside.
  * - A hire taken from the town to the circus and on to a defeat in the Starlight
  *   Tent's maze is still with the party after every step
@@ -174,7 +173,6 @@ function checkNoSealingRooms(worldSeed: number): void {
   const label = `seed ${worldSeed}`;
   const map = buildMap(level3, worldSeed);
   check(map.bossRooms.length === 0, `${label}: the overworld has a boss room that can lock`);
-  check(map.arenaExteriors.length === 0, `${label}: the overworld has an arena that can lock`);
   check(map.spiderLabRoom === null, `${label}: the overworld has a spider lab that can lock`);
 }
 
@@ -187,7 +185,7 @@ function checkSealingRoomsAreVisible(): void {
   // above prove nothing.
   const map = buildMap(level2, SEEDS[0]);
   checkCatches(
-    map.bossRooms.length === 0 && map.arenaExteriors.length === 0 && map.spiderLabRoom === null,
+    map.bossRooms.length === 0 && map.spiderLabRoom === null,
     'the second floor, which has sealing rooms, reads as having none',
   );
 }

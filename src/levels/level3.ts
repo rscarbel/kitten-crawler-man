@@ -279,7 +279,7 @@ export const level3: LevelDef = {
   extraSpawns: [
     {
       type: 'hawkfolk',
-      origin: 'mapCenter',
+      origin: { kind: 'mapCenter' },
       minLevel: HAWKFOLK_MIN_LEVEL,
       maxLevel: HAWKFOLK_MAX_LEVEL,
       offsets: [

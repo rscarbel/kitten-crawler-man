@@ -79,7 +79,6 @@ interface SweepTotals {
   rooms: number;
   hallways: number;
   nookHallways: number;
-  arenaHallways: number;
   unkindedHallways: number;
   doorways: number;
   /** Non-walkable tiles outside every room that carry no region, by tile type. */
@@ -213,7 +212,6 @@ function checkFloorMap(map: GameMap, totals: SweepTotals): void {
     );
     if (hallway.hallwayKind === 'nook') totals.nookHallways++;
     if (hallway.hallwayKind === null) totals.unkindedHallways++;
-    if (hallway.arena) totals.arenaHallways++;
   });
 
   // Roles survive generation, cross-checked against the encounter lists the
@@ -311,7 +309,6 @@ function sweepFloor(name: string, levelDef: LevelDef, floorIndex: number, seeds:
     rooms: 0,
     hallways: 0,
     nookHallways: 0,
-    arenaHallways: 0,
     unkindedHallways: 0,
     doorways: 0,
     unregionedBlockers: new Map(),
@@ -334,7 +331,7 @@ function sweepFloor(name: string, levelDef: LevelDef, floorIndex: number, seeds:
   console.log(
     `${name}: ${totals.maps} maps, ${totals.rooms} rooms, ${totals.doorways} doorways, ` +
       `${totals.hallways} hallway segments (${totals.nookHallways} nook, ` +
-      `${totals.arenaHallways} arena, ${totals.unkindedHallways} with no carved kind)`,
+      `${totals.unkindedHallways} with no carved kind)`,
   );
   console.log(`  blocking non-wall tiles outside rooms with no region: ${blockers || 'none'}`);
   // A floor where no segment ever reads as a nook means the carvers' kinds are

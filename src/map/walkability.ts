@@ -5,7 +5,6 @@ import {
   TREE,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   ROOF_THATCH,
   ROOF_SLATE,
   ROOF_RED,
@@ -70,8 +69,9 @@ import {
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
-  KRAKAREN_TANK,
-  KRAKAREN_CONSOLE,
+  GYM_KETTLEBELL_RACK,
+  POWER_LAB_TANK,
+  POWER_LAB_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
   HOLLOW_WALL,
@@ -107,7 +107,6 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   TREE,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   ROOF_THATCH,
   ROOF_SLATE,
   ROOF_RED,
@@ -180,7 +179,7 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   BROKEN_BOOKSHELF,
   CRAWLER_SIGN,
   // Boss-room props. The walkable boss-room decals (`TRASH_RUBBLE`,
-  // `GYM_TREADMILL_BELT`, `KRAKAREN_WADE`, `LAB_WEB`, `ARENA_MUD`) are
+  // `GYM_TREADMILL_BELT`, `LAB_WEB`) are
   // deliberately absent: each is ground a fight is meant to cross.
   TRASH_PILE,
   TRASH_TOWER,
@@ -188,8 +187,9 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
-  KRAKAREN_TANK,
-  KRAKAREN_CONSOLE,
+  GYM_KETTLEBELL_RACK,
+  POWER_LAB_TANK,
+  POWER_LAB_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
   // Briar Hollow. `HOLLOW_GATE` is deliberately absent — it is walkable by
@@ -228,7 +228,8 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
 const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
   TRASH_BAG,
   GYM_RACK,
-  KRAKAREN_CONSOLE,
+  GYM_KETTLEBELL_RACK,
+  POWER_LAB_CONSOLE,
   LAB_BENCH,
   // A palisade segment and the gate are shoulder height; a crawler behind one
   // is still exposed. `HOLLOW_PROP_LOW` is the same idea for the village's own
@@ -263,7 +264,6 @@ const LOB_BLOCKING_TILE_TYPES: readonly number[] = [
   VOID_TYPE,
   BUILDING_WALL,
   METAL_WALL,
-  ARENA_CAGE,
   ROOF_THATCH,
   ROOF_SLATE,
   ROOF_RED,

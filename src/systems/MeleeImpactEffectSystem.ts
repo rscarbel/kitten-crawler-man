@@ -1,5 +1,5 @@
 import type { GameSystem } from './GameSystem';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 
 /**
  * The small dust puff and streak burst a crawler's fist or foot throws at the
@@ -175,8 +175,8 @@ export class MeleeImpactEffectSystem implements GameSystem {
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.puffs.length === 0 && this.streaks.length === 0) return;
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
 
     ctx.save();
     for (const p of this.puffs) {

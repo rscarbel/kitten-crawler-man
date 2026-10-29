@@ -61,8 +61,8 @@ import {
   interiorCameraBounds,
   interiorFocusRange,
   interiorMustSeeBounds,
-  type WorldRect,
 } from '../src/scenes/interiorCamera';
+import type { WorldRect } from '../src/core/rendering/worldRect';
 import {
   hotbarBandHeightCss,
   interiorHudOccluders,

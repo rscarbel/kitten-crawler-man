@@ -12,6 +12,11 @@ import { travelUnlocksSection } from '../../../systems/travel/travelDestinations
 import { ChestRewardDialog, type ChestLootSplit } from '../../../ui/ChestRewardDialog';
 import type { Surface } from '../../../ui/core/UiRoot';
 import { DeathScreen, type RespawnMode } from '../../../ui/DeathScreen';
+import {
+  pickDeathMessage,
+  plainDeathMessage,
+  type DeathMessage,
+} from '../../../ui/DeathExplanations';
 import { drawRewardChestIcon } from '../../../ui/icons/rewardIcons';
 import { QuestRewardScreen } from '../../../ui/questReward/QuestRewardScreen';
 import {
@@ -65,12 +70,16 @@ function gated(shown: () => boolean, surface: Surface): Surface {
   return { ...surface, isOpen: () => shown() && surface.isOpen() };
 }
 
-function deathFixture(name: string, explanation: string, mode: RespawnMode): DialogFixture {
+/** Pinned rather than picked, so the gallery renders the same card every run. */
+const SHARK_DEATH_SAMPLE_EXPLANATION =
+  'Open water belongs to the shark. You were in it for one swim too many.';
+
+function deathFixture(name: string, message: DeathMessage, mode: RespawnMode): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       const model = new DeathScreen();
-      model.activate(explanation, mode);
+      model.activate(message, mode);
       return [
         deathScreenSurface(model, { id: name, isOpen: shown, onRespawn: () => model.reset() }),
       ];
@@ -251,10 +260,21 @@ function fadeFixture(name: string, alpha: number): DialogFixture {
 export const FIXTURES: readonly DialogFixture[] = [
   fadeFixture('screen-fade-half', FADE_HALF_ALPHA),
   fadeFixture('screen-fade-black', FADE_BLACK_ALPHA),
-  deathFixture('death', 'A goblin got you. Repeatedly. With enthusiasm.', 'checkpoint'),
+  deathFixture(
+    'death',
+    plainDeathMessage('A goblin got you. Repeatedly. With enthusiasm.'),
+    'checkpoint',
+  ),
+  deathFixture(
+    'death-with-hint',
+    { ...pickDeathMessage('sharkAttack'), explanation: SHARK_DEATH_SAMPLE_EXPLANATION },
+    'checkpoint',
+  ),
   deathFixture(
     'death-long-explanation',
-    'The Grotesque Spider slammed down on you from the ceiling, which is a sentence nobody should ever have to read about themselves. Your body has been filed under "abstract art". Somewhere a sad trombone is playing, and it is playing for you.',
+    plainDeathMessage(
+      'The Grotesque Spider slammed down on you from the ceiling, which is a sentence nobody should ever have to read about themselves. Your body has been filed under "abstract art". Somewhere a sad trombone is playing, and it is playing for you.',
+    ),
     'floorRestart',
   ),
   {

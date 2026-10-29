@@ -14,6 +14,8 @@ export type DeathCause =
   | 'bigRoosterSlam'
   | 'bigRoosterClub'
   | 'bigRoosterPlateRoll'
+  | 'bigRoosterKettlebell'
+  | 'bigRoosterExerciseBall'
   | 'roosterPeck'
   | 'roosterPunch'
   | 'bugaboo'
@@ -24,11 +26,14 @@ export type DeathCause =
   | 'grotesqueSpiderSlam'
   | 'grotesqueSpiderScreech'
   | 'grotesqueSpiderSpit'
-  | 'krakarenCloneSlam'
-  | 'krakarenCloneRegularMelee'
-  | 'krakarenTentacleStrike'
-  | 'ballOfSwine'
-  | 'ballOfSwineStench'
+  | 'krakenSlam'
+  | 'krakenRegularMelee'
+  | 'krakenTentacleStrike'
+  | 'electricGoblinGrenade'
+  | 'electricGoblinPuddle'
+  | 'electricGoblinSwipe'
+  | 'electricGoblinWave'
+  | 'electricGoblinElectrified'
   | 'tuskling'
   | 'troglodyte'
   | 'smallSpider'
@@ -85,8 +90,6 @@ export type DeathCause =
   | 'lichFirewall'
   | 'lichOrb'
   | 'trashAvalanche'
-  | 'krakarenLiveWire'
-  | 'krakarenTankBurst'
   | 'explosiveFriendlyFire'
   | 'siegeFriendlyFire'
   | 'raisedRatkin'
@@ -94,6 +97,7 @@ export type DeathCause =
   | 'necromancerBolt'
   | 'necromancerPulse'
   | 'doomsdayExplosion'
+  | 'sharkAttack'
   | 'unknown';
 
 export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
@@ -138,6 +142,16 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'He bowled a plate down a chalk lane and you stood in the lane.',
     'Flattened by a rolling bumper plate. The line on the floor was the part where you move.',
     'Big Rooster rolled iron at your ankles and called it cardio.',
+  ],
+  bigRoosterKettlebell: [
+    'A shadow grew under your feet and you let it finish growing.',
+    'It rained kettlebells. You did not find the dry spot.',
+    'Somewhere above the gym a kettlebell picked you. You should have picked a different tile.',
+  ],
+  bigRoosterExerciseBall: [
+    'Run over by an exercise ball. It was rolling the whole time; so was your luck.',
+    'A ball the size of a crawler came off the wall and through you.',
+    'He kicked the balls loose and you stood in the way of one. Core workout.',
   ],
   roosterPeck: [
     'Pecked to death. By a rooster. In a gym.',
@@ -274,14 +288,28 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Buried under a landslide of tin cans and wet cardboard. The tower wobbled first. You watched it wobble.',
     'Flattened by trash. The roaches will be moving into you by morning.',
   ],
-  krakarenLiveWire: [
-    'You stood in the wired puddle while the cable sparked its way down to you. The junction box was right there. It had a lightning bolt on it.',
-    'Two amps of lab current through ankle-deep clone soup. The sparks crawled toward you for a full second first.',
-    'Death by live wire in a flooded lab. The water hummed, the cable fizzed, and you kept standing in it.',
+  electricGoblinGrenade: [
+    'A shock grenade landed in the ring it had been drawing under you the whole way down.',
+    'The Current Goblin lobbed one at you specifically. The circle on the floor was your name tag.',
+    'Grenade, ring, zap. You had the whole flight to take one step.',
   ],
-  krakarenTankBurst: [
-    'A clone vat cracked for a whole second, sprayed you, and then burst in your face. Stand to the side of the glass.',
-    'Flattened by a wave of growth medium and a failed copy of the boss. It had been in that tank a long time. So had the pressure.',
+  electricGoblinPuddle: [
+    'He raised both rods, the puddle lit up, and you were still standing in it when he plunged them in.',
+    'Cooked in a puddle. His boots are rubber. Yours, it turns out, are not.',
+    'The water crackled for a good long while first. Puddles are for stepping out of.',
+  ],
+  electricGoblinSwipe: [
+    'You got close enough to hug the Current Goblin, and he swatted you across the lab with a live rod.',
+    'Shocked off your feet by a rod to the chest. Close range was his idea, not yours.',
+  ],
+  electricGoblinWave: [
+    'A wave of current ran straight down the floor at you. One step sideways and it would have missed.',
+    'He slammed his rods and the floor came for you in a straight line. You stayed on the line.',
+    "You tried to outrun the slam wave. It runs faster than you do. That's why you step aside.",
+  ],
+  electricGoblinElectrified: [
+    'The grenade only stung. Then the current in you kept seizing you until there was nothing left to seize.',
+    'Still buzzing from his grenade, you locked up one last time and did not unlock.',
   ],
   clownGas: [
     "You stood in the clown's gas until your lungs gave out.",
@@ -323,35 +351,24 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Once her aim line locks it cannot follow you. Sidestep it; running straight back only keeps you on it.',
     "You were dissolved by acid that flew exactly where the frozen line pointed. Don't stand on the line.",
   ],
-  krakarenCloneSlam: [
-    "You were crushed under the Krakaren's falling appendage. Don't stand in the shadow.",
-    "The Krakaren's slam reduced you to paste. The shadow on the ground was right there.",
-    'The Krakaren Clone smashed you flat. The dark zone on the floor was not decoration.',
+  krakenSlam: [
+    "The Kraken's slam took a big piece out of you, and you didn't have a big piece left. Step off the red before it lands.",
+    'One slam is a hard hit, not a death. You took it hurt. Heal up before the red comes for you, or be somewhere else.',
+    'The tentacle came down on the red patch, and you were standing in it with too little health to spare. Red floor means move.',
   ],
-  krakarenCloneRegularMelee: [
-    'A Krakaren Clone beat you to death with its tentacles.',
-    "You were shredded by the Krakaren's tentacles. It happens.",
-    'The Krakaren Clone tore you apart.',
+  krakenRegularMelee: [
+    'The Kraken beat you to death with its tentacles.',
+    "You were shredded by the Kraken's tentacles. It happens.",
+    'The Kraken tore you apart.',
   ],
-  krakarenTentacleStrike: [
+  krakenTentacleStrike: [
     'A guard tentacle swatted you flat while you were watching the big one. The little ones hit too.',
     'You died to the small tentacle beside you, not the boss in front of you. Cut them down first.',
     'The guard tentacle whipped down where you were standing. It reared for half a second before it did.',
   ],
-  ballOfSwine: [
-    'The Ball of Swine ran you down. It never slows down on its own — make it hit something flat.',
-    'You were flattened by a giant rolling pig monster. Of all the ways to go...',
-    'The Ball of Swine caught you with its momentum up. Bait it square into the wall and it has to stop.',
-    'It caroms off a glancing wall without losing a thing. Lead it in head-on instead.',
-    'A gym barrier drags its momentum down every time it rolls through one. Worth remembering.',
-  ],
-  ballOfSwineStench: [
-    'The Ball of Swine burst against the wall and the stench did the rest. Do not stand where it lands.',
-    'Sewage and rotten meat, at pressure. You were far too close to that impact.',
-  ],
   tuskling: [
-    "A Tuskling gored you. They're dazed, not dead.",
-    "One of the Ball of Swine's piglets killed you. Embarrassing.",
+    'A Tuskling gored you. Step aside from the charge and it runs out of room.',
+    'Killed by a piglet with tusks. Embarrassing.',
     'A pig monster killed you. Let that sink in.',
   ],
   troglodyte: [
@@ -530,6 +547,12 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The soul crystal went off before you cleared the blast radius.',
     'Taloncrest came down around you. You should have run faster.',
   ],
+  sharkAttack: [
+    'The fin was circling for a reason. You stepped off the raft while it was looking.',
+    'Open water belongs to the shark. You were in it for one swim too many.',
+    'Something with a lot of teeth came up from under you. It did not come up twice.',
+    'The raft was dry and safe. The water between rafts was neither.',
+  ],
   unknown: [
     'Something in the dungeon killed you. Better luck next time.',
     'Death came from an unexpected direction.',
@@ -537,9 +560,28 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   ],
 };
 
-/** Pick a random explanation string for the given death cause. */
-export function pickDeathExplanation(cause: DeathCause): string {
+/**
+ * Advice shown above the explanation, for the deaths whose way out is not
+ * obvious from the line about what happened.
+ */
+const DEATH_HINTS: Readonly<Partial<Record<DeathCause, string>>> = {
+  sharkAttack: 'Wait for the shark to be as far as possible before swimming to a new raft.',
+};
+
+/** What the death screen says about a death: an optional hint, then the flavour line. */
+export interface DeathMessage {
+  readonly hint: string | null;
+  readonly explanation: string;
+}
+
+/** A death message with no hint, for a line that does not come from a {@link DeathCause}. */
+export function plainDeathMessage(explanation: string): DeathMessage {
+  return { hint: null, explanation };
+}
+
+/** The cause's hint, if it has one, and a random explanation for it. */
+export function pickDeathMessage(cause: DeathCause): DeathMessage {
   const options = DEATH_EXPLANATIONS[cause];
-  if (options.length === 0) return '';
-  return randomFromArray([...options]);
+  const explanation = options.length === 0 ? '' : randomFromArray([...options]);
+  return { hint: DEATH_HINTS[cause] ?? null, explanation };
 }

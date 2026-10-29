@@ -30,13 +30,13 @@ export const CORE_FILES = ['index.html', 'main.css', 'manifest.json', 'sw.js', '
 const ENTRY_POINT_FILES = ['index.html', 'main.css', 'manifest.json', 'download/index.html'];
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|ico)$/i;
-const AUDIO_EXTENSIONS = /\.mp3$/i;
+const AUDIO_EXTENSIONS = /\.(mp3|ogg)$/i;
 const FONT_EXTENSIONS = /\.woff2$/i;
 
 const FONT_LICENSE = 'src/fonts/OFL.txt';
 
 const IMAGE_PATH_LITERAL = /src\/images\/[\w\-./]+?\.(?:png|jpe?g|ico)/gi;
-const AUDIO_PATH_LITERAL = /src\/audio\/[\w\-./]+?\.mp3/gi;
+const AUDIO_PATH_LITERAL = /src\/audio\/[\w\-./]+?\.(?:mp3|ogg)/gi;
 const FONT_PATH_LITERAL = /src\/fonts\/[\w\-./]+?\.woff2/gi;
 
 /** Recursively walk a directory, returning ROOT-relative POSIX paths. */

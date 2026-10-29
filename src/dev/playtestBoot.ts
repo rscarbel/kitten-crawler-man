@@ -11,9 +11,14 @@ import { snapPlayer } from '../core/save/PlayerSnapshot';
 import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
-import type { MobKind } from '../levels/mobKinds';
+import type { GauntletBossType } from '../map/bossRoomSizes';
 import type { TownBuildingId, BriarHollowBuildingId } from '../map/buildingIds';
-import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
+import type {
+  PlaytestDeinonychus,
+  PlaytestLoadout,
+  PlaytestPreset,
+  PlaytestSpawn,
+} from './playtestPresets';
 
 /**
  * Turns a {@link PlaytestPreset} into the scene inputs that describe it: two
@@ -29,9 +34,10 @@ export interface PlaytestBoot {
   catSnap: PlayerSnapshot;
   abilityManager: AbilityManager;
   spawn: PlaytestSpawn;
-  preDefeatedBossTypes: readonly MobKind[];
+  preDefeatedBossTypes: readonly GauntletBossType[];
   doomsdayStage: PlaytestPreset['doomsdayStage'];
   spiderQuestAwaitingHacking: boolean;
+  deinonychus: PlaytestDeinonychus;
 }
 
 /** Tile a preset's crawlers start on before the real spawn point is resolved. */
@@ -140,6 +146,7 @@ export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
     preDefeatedBossTypes: preset.preDefeatedBossTypes ?? [],
     doomsdayStage: preset.doomsdayStage,
     spiderQuestAwaitingHacking: preset.spiderQuestAwaitingHacking ?? false,
+    deinonychus: preset.deinonychus,
   };
 }
 

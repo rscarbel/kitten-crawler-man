@@ -31,6 +31,8 @@ import {
   makeBloodVomit,
   statusIncomingDamageScale,
   STATUS_DEFS,
+  statusIncapacitates,
+  reappliedStatus,
 } from './core/combat/StatusEffect';
 import {
   BRASS_BELCH_TEXT,
@@ -128,6 +130,7 @@ import {
 } from './ui/world/overheadStack';
 import { HUMANOID_NPC_SCALE } from './sprites/humanoidScale';
 import type { PromptFigure } from './ui/InteractionPrompt';
+import type { ScriptedDeathKind } from './systems/scriptedDeath/scriptedDeathKinds';
 
 const NO_SILHOUETTE_LAYERS: readonly SilhouetteLayer[] = [];
 
@@ -166,9 +169,7 @@ type EnvironmentalHazard =
   | 'clownGas'
   | 'lichFirewall'
   | 'lichOrb'
-  | 'trashAvalanche'
-  | 'krakarenLiveWire'
-  | 'krakarenTankBurst';
+  | 'trashAvalanche';
 
 /** Which standing hazards are spells, and so turned aside by magic resistance. */
 const HAZARD_IS_MAGIC = {
@@ -179,8 +180,6 @@ const HAZARD_IS_MAGIC = {
   lichFirewall: true,
   lichOrb: true,
   trashAvalanche: false,
-  krakarenLiveWire: false,
-  krakarenTankBurst: false,
 } as const satisfies Record<EnvironmentalHazard, boolean>;
 
 /** Whether a blow from `source` is magic, which magic resistance turns aside. */
@@ -270,7 +269,13 @@ export type DamageSource =
        */
       readonly kind: 'siege';
       readonly dodgeable: boolean;
-    };
+    }
+  /**
+   * A death a script played out, such as a shark taking the crawler. It goes
+   * past every dodge, ward and 9 Lives ({@link Player.dieScripted}), so a
+   * script's death is always a death.
+   */
+  | { readonly kind: 'scripted'; readonly death: ScriptedDeathKind };
 
 /**
  * Whether a blow from `source` can be sidestepped: a swung, thrown or bitten
@@ -650,6 +655,11 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
   /**
+   * Set on a status bite that seizes its carrier (electrified's zap); the
+   * scene drains it for a crawler and the mob audio pass for a mob.
+   */
+  seizureJoltSoundPending = false;
+  /**
    * Set on the frame a retch of blood comes up; a scene drains it into
    * the splatter on the floor and the retch sound, neither of which a body can
    * reach on its own.
@@ -827,12 +837,16 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /**
-   * Whether this character may attack, cast, or use an item. Every entry point
-   * for those asks, for the active crawler and the AI companion alike, so an
-   * encased crawler cannot be steered into a swing by any route.
+   * Whether this character may walk, attack, cast, or use an item. Every entry
+   * point for those asks, for the active crawler and the AI companion alike, so
+   * a frozen, stunned or seized crawler cannot be steered into a swing by any
+   * route; `MobUpdateLoop` asks it before running a mob's AI.
    */
   get canAct(): boolean {
-    return !this.hasStatus(FROZEN_STATUS);
+    for (const effect of this.statusEffects) {
+      if (statusIncapacitates(effect)) return false;
+    }
+    return true;
   }
 
   /**
@@ -1237,6 +1251,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    *   `MISS!` does not come with a helping of poison.
    */
   takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
+    if (source?.kind === 'scripted') return this.dieScripted(source.death);
     if (amount <= 0 || !this.canBeHarmed) return false;
     const scaledAmount = this.incomingDamage(amount, source);
     if (isDodgeableSource(source)) {
@@ -1418,6 +1433,21 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    */
   get framesSinceLastDamage(): number {
     return this.framesSinceDamaged;
+  }
+
+  /**
+   * Ends this body outright for a script: no dodge, ward, hurt hook, blanket
+   * protection or 9 Lives stands in the way, because the script has already
+   * shown the death. God mode alone spares it, so a cheat can still watch one
+   * play without losing the run.
+   *
+   * @returns whether it died.
+   */
+  dieScripted(death: ScriptedDeathKind): boolean {
+    if (this.godMode) return false;
+    this.lastDamageSource = { kind: 'scripted', death };
+    this.hp = 0;
+    return true;
   }
 
   /**
@@ -1688,7 +1718,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * Whether a crawler's blow on this body may only make it react: no ability
    * XP, no on-hit proc, no splash or sub-missile, no stomp heal, and no
    * "combat started". For a body that can be struck forever and never dies
-   * (the bathroom queue), where any of those would be a farm. Every attack
+   * (the bathroom queue), or a mob refusing damage for now, where any of those
+   * would be a farm. Every attack
    * site that pays for a landed blow, and every bite of a status a crawler
    * laid on, asks this before paying.
    */
@@ -1901,12 +1932,14 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /**
-   * Apply a status effect. If the same type is already active it is refreshed
-   * (replaced) rather than stacked.
+   * Apply a status effect. One of a type already active is never stacked; see
+   * {@link reappliedStatus} for how the two combine.
    */
   applyStatus(applied: StatusEffect) {
-    const effect = this.durationWarded(applied);
-    const idx = this.statusEffects.findIndex((e) => e.type === effect.type);
+    const warded = this.durationWarded(applied);
+    const idx = this.statusEffects.findIndex((e) => e.type === warded.type);
+    const existing = idx >= 0 ? this.statusEffects[idx] : undefined;
+    const effect = existing === undefined ? warded : reappliedStatus(existing, warded);
     if (idx >= 0) {
       this.statusEffects[idx] = effect;
     } else {
@@ -1915,7 +1948,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     // A health boon just moved max HP; without this the bar reads against
     // the old maximum until something unrelated happens to reconcile them.
     if (STAT_BOON_BONUSES.has(effect.type)) this.syncHpToMaxHp();
-    if (effect.type === FROZEN_STATUS) this.abandonSwing();
+    if (STATUS_DEFS[effect.type].incapacitates) this.abandonSwing();
   }
 
   /** `effect` as this body's proficiency skills shorten it: Pyro's Touch on a burn. */
@@ -1929,8 +1962,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * Drops any swing already under way. A swing's blow lands off its own timer,
-   * which the freeze merely holds, so a swing started before the ice would
-   * otherwise still land at its peak — mid-freeze, or the moment it thaws.
+   * which a freeze, stun or seizure merely holds, so a swing started before it
+   * would otherwise still land at its peak — mid-hold, or the moment it lifts.
    */
   protected abandonSwing(): void {
     // Nothing swings by default.
@@ -1950,11 +1983,13 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     // tick, and the last one to land owns the death cause.
     let kept = 0;
     let statBoonExpired = false;
+    let seizedByBite = false;
     for (const effect of this.statusEffects) {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       const damageOverTime = STATUS_DEFS[effect.type].damageOverTime;
       if (damageOverTime !== null && elapsed > 0 && elapsed % damageOverTime.intervalTicks === 0) {
         this.applyStatusTickDamage(effect, damageOverTime);
+        if (damageOverTime.seizeTicks !== null) seizedByBite = true;
       }
       effect.ticksRemaining--;
       const justExpired = effect.ticksRemaining < 0;
@@ -1974,6 +2009,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
       }
     }
     this.statusEffects.length = kept;
+    if (seizedByBite) {
+      this.abandonSwing();
+      this.seizureJoltSoundPending = true;
+    }
     // Deliberately after the compaction, not inside the loop: a stat boon's
     // bonus is read off this very list, so syncing while the expired effect is
     // still in it would measure the maximum the boon was still paying for.
@@ -2548,8 +2587,6 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
       case 'mobHealthBar':
       case 'aggro':
       case 'acidSpits':
-      case 'swineGroundTells':
-      case 'swineStoppedWarning':
         return;
     }
   }

@@ -504,6 +504,8 @@ const FIRST_CUES = {
   briarHollowSiege: 'bell_alarm',
   bounty: 'mantid_hiss_1',
   starlightTent: 'high_striker_bell',
+  floodedPumpRoomMusic: 'the_kraken_battle',
+  trashGremlinMusic: 'king_of_the_heap',
 } as const satisfies Record<(typeof GATED_SFX_GROUPS)[number], SoundId>;
 
 /** A tile `tiles` west of the scripted village's west edge. */

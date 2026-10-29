@@ -19,7 +19,7 @@ import {
   type HazardEscape,
 } from './GroundHazardSource';
 import type { BossRoomSystem } from './BossRoomSystem';
-import { PartyTrail, type TrailBody, type TrailPoint } from './partyTrail';
+import { PartyTrail, routeTrailBetween } from './partyTrail';
 import { normalize, clamp, randomInt } from '../utils';
 
 type Entity = {
@@ -99,8 +99,6 @@ const HUMAN_EVADE_ANGLE_SPEED = 0.04;
 
 // Magic number constants
 const TILE_CENTER_OFFSET = 0.5;
-/** How far a restarted trail may route between the two crawlers before the follower is stood on the leader instead. */
-const TRAIL_ROUTE_MAX_TILES = 24;
 
 const COLLISION_BOX_RIGHT_FRACTION = 0.72;
 const COLLISION_BOX_LEFT_FRACTION = 0.28;
@@ -146,6 +144,27 @@ const COMPANION_MAX_PATH_DISTANCE_TILES = 96;
  * moment it is back within range of what it just walked away from.
  */
 const COMPANION_TARGET_BAN_FRAMES = 90;
+
+/**
+ * The share of her missile's flight the cat counts on reaching with. Short of
+ * the full flight, so a target that steps back as the shot leaves is still hit.
+ */
+const CAT_MISSILE_REACH_SHARE = 0.85;
+
+/**
+ * The furthest the kiting cat holds from the edge of what she is fighting,
+ * however far her missile flies. A fully levelled missile crosses the room,
+ * and a cat holding at the end of that flight would leave the party behind.
+ */
+const CAT_MISSILE_HOLD_MAX_EDGE_TILES = 5;
+const CAT_MISSILE_HOLD_MAX_EDGE_PX = TILE_SIZE * CAT_MISSILE_HOLD_MAX_EDGE_TILES;
+
+/**
+ * How far around the cat she looks for a boss she is not shooting at. Wider
+ * than any boss's clearance (the kite's stand-off from its body's edge).
+ */
+const CAT_BOSS_CLEARANCE_SEARCH_TILES = 8;
+const CAT_BOSS_CLEARANCE_SEARCH_PX = TILE_SIZE * CAT_BOSS_CLEARANCE_SEARCH_TILES;
 
 /**
  * How much of her claw reach the cat holds at when she has stopped retreating.
@@ -210,7 +229,7 @@ const NEARBY_TARGET_FOLLOW_DISTANCE = 0.9;
  * reads as alive, and a companion holding it fires at an empty spot forever.
  */
 function isNoLongerAFight(target: Mob, mobGrid: SpatialGrid<Mob>): boolean {
-  return !target.isAlive || target.avoidInstead || !target.isHostile || !mobGrid.has(target);
+  return !target.isHostileTarget || target.avoidInstead || !mobGrid.has(target);
 }
 
 export class CompanionSystem implements GameSystem {
@@ -257,6 +276,8 @@ export class CompanionSystem implements GameSystem {
    * several of its callers are still iterating that one.
    */
   private readonly _avoidQuery = new Set<Mob>();
+  /** Reused result set for the bosses the cat keeps clear of while fighting something else. */
+  private readonly _bossClearanceQuery = new Set<Mob>();
   /** This frame's mob grid, so the follow drive can see the flee radius it must not re-enter. */
   private avoidGrid: SpatialGrid<Mob> | null = null;
   /** Whether the companion fled an avoid mob last time she was asked; widens the radius she flees. */
@@ -400,21 +421,7 @@ export class CompanionSystem implements GameSystem {
     this.trail =
       spacingPx === null
         ? null
-        : new PartyTrail(spacingPx, (from, to) => this.trailRoute(from, to));
-  }
-
-  /** The tile corners of a walkable path between two bodies, for a trail starting again. */
-  private trailRoute(from: TrailBody, to: TrailBody): readonly TrailPoint[] | null {
-    const tileOf = (body: TrailBody): { x: number; y: number } => ({
-      x: Math.floor((body.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE),
-      y: Math.floor((body.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE),
-    });
-    const start = tileOf(from);
-    const goal = tileOf(to);
-    if (start.x === goal.x && start.y === goal.y) return [];
-    const path = this.gameMap.findPath(start.x, start.y, goal.x, goal.y, TRAIL_ROUTE_MAX_TILES);
-    if (path.length === 0) return null;
-    return path.map((tile) => ({ x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE }));
+        : new PartyTrail(spacingPx, (from, to) => routeTrailBetween(this.gameMap, from, to));
   }
 
   /** The trail the follower is walking, when it is on one. */
@@ -853,7 +860,7 @@ export class CompanionSystem implements GameSystem {
           let closest: Mob | null = null;
           const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
           for (const mob of nearHuman) {
-            if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+            if (!mob.isHostileTarget || mob.avoidInstead) continue;
             // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
             if (mob.offLimitsToAllies) continue;
             if (this.targetBans.has(mob)) continue;
@@ -1047,7 +1054,7 @@ export class CompanionSystem implements GameSystem {
       // Hostility gates this the same way it gates the human's own scan: an
       // ally that has somehow come to hold a crawler as its `currentTarget` —
       // a pack shout, a defend assignment — is not a fight to answer.
-      if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+      if (!mob.isHostileTarget || mob.avoidInstead) continue;
       if (mob.offLimitsToAllies) continue;
       if (mob.currentTarget !== quarry) continue;
       if (this.targetBans.has(mob)) continue;
@@ -1077,7 +1084,7 @@ export class CompanionSystem implements GameSystem {
     let closest: Mob | null = null;
     let closestDistSq = range * range;
     for (const mob of nearby) {
-      if (!mob.isAlive || !mob.drawsCompanionAggro || !mob.isHostile) continue;
+      if (!mob.isHostileTarget || !mob.drawsCompanionAggro) continue;
       if (mob.offLimitsToAllies || this.targetBans.has(mob)) continue;
       const dx = mob.x - centre.x;
       const dy = mob.y - centre.y;
@@ -1121,8 +1128,7 @@ export class CompanionSystem implements GameSystem {
       companion.y + TILE_SIZE * TILE_CENTER_OFFSET - (closest.y + TILE_SIZE * TILE_CENTER_OFFSET);
     const n = normalize(dx, dy);
     const fleeSpeed = FOLLOWER_SPEED * RECALL_CHASE_SPEED;
-    // Straight away from a rolling threat is often straight into a wall — the
-    // Ball of Swine's arena is a ring she is always backed against — and a
+    // Straight away from a rolling threat is often straight into a wall, and a
     // vector into a wall stays refused every frame while the threat closes.
     // Cornered with nowhere away left to go, she stands rather than running on the spot.
     companion.isMoving = stepAlongEscape(
@@ -1211,7 +1217,7 @@ export class CompanionSystem implements GameSystem {
    * The flee radius of a mob to be dodged is the same kind of ground. Without
    * it the flee steps her out past the radius, the follow walks her back in
    * towards a player fighting inside it, and the two alternate every frame —
-   * a companion visibly shaking on the rim of the Ball of Swine's range.
+   * a companion visibly shaking on the rim of a rolling boss's range.
    */
   private stepUnlessIntoMarkedGround(
     entity: { x: number; y: number },
@@ -1242,7 +1248,7 @@ export class CompanionSystem implements GameSystem {
    * true if he's retreating.
    *
    * The cat has an HP-gated brawl check of her own ({@link catMayTradeBlows});
-   * the human had none, which is how he stood in Krakaren's face at low HP
+   * the human had none, which is how he stood in Kraken's face at low HP
    * with nothing left to heal with instead of buying time to recover.
    */
   private fleeIfHumanImperiled(human: HumanPlayer, mobGrid: SpatialGrid<Mob>): boolean {
@@ -1312,7 +1318,7 @@ export class CompanionSystem implements GameSystem {
     let closest: Mob | null = null;
     let closestDistSq = HUMAN_ENGAGE_RANGE * HUMAN_ENGAGE_RANGE;
     for (const m of nearby) {
-      if (!m.isAlive || !m.isHostile || m.avoidInstead) continue;
+      if (!m.isHostileTarget || m.avoidInstead) continue;
       const dx = m.x - companion.x;
       const dy = m.y - companion.y;
       const distSq = dx * dx + dy * dy;
@@ -1450,13 +1456,16 @@ export class CompanionSystem implements GameSystem {
     if (human.isActive) {
       if (cat.autoTarget?.isAlive) {
         const enemy = cat.autoTarget;
-        if (enemy.currentTarget === cat) {
+        const crowdingBoss = this.bossCrowdingCat(cat, enemy, mobGrid);
+        if (crowdingBoss !== null) {
+          this.stepCatAwayFrom(cat, crowdingBoss);
+        } else if (enemy.currentTarget === cat) {
           this.doCatKite(cat, enemy, mobGrid);
         } else if (enemy.currentTarget === human) {
-          if (enemy.requiresEvasion) {
+          if (enemy.requiresEvasion || !this.behindHumanInMissileReach(cat, human, enemy)) {
             this.doCatKite(cat, enemy, mobGrid);
           } else {
-            this.doCatBehindHuman(cat, human, enemy);
+            this.doCatBehindHuman(cat, human, enemy, mobGrid);
           }
         } else {
           this.companionFollow(
@@ -1548,9 +1557,33 @@ export class CompanionSystem implements GameSystem {
     distToEnemy: number,
     mobGrid: SpatialGrid<Mob>,
   ): number {
-    if (this.catMissileWasReady) return CAT_KITE_DIST;
-    if (!this.catMayTradeBlows(cat, enemy, mobGrid)) return CAT_KITE_DIST;
-    return clamp(distToEnemy, cat.getMeleeRange() * CLAW_HOLD_FRACTION, CAT_KITE_DIST);
+    const castingDistance = this.catMissileHoldPx(cat, enemy);
+    if (this.catMissileWasReady) return castingDistance;
+    if (!this.catMayTradeBlows(cat, enemy, mobGrid)) return castingDistance;
+    return clamp(distToEnemy, cat.getMeleeRange() * CLAW_HOLD_FRACTION, castingDistance);
+  }
+
+  /**
+   * Her casting distance from `enemy`, centre to centre: near the end of her
+   * missile's flight, measured to the edge of its body, because that is where
+   * the missile meets it. A wide body standing at its centre would otherwise
+   * draw her in by its whole radius — inside the reach of everything it swings.
+   *
+   * Never closer than the kite's own stand-off from that edge, and never
+   * further than {@link CAT_MISSILE_HOLD_MAX_EDGE_PX}, since a missile that
+   * flies across the whole room does not need her standing across it too.
+   */
+  private catMissileHoldPx(cat: CatPlayer, enemy: Mob): number {
+    const bodyBeyondOwnTile = enemy.bodyRadiusPx - TILE_SIZE * TILE_CENTER_OFFSET;
+    const nearestHoldPx = CAT_KITE_DIST + bodyBeyondOwnTile;
+    const furthestHoldPx = CAT_MISSILE_HOLD_MAX_EDGE_PX + enemy.bodyRadiusPx;
+    const missileHoldPx = this.catMissileReachToCentrePx(cat, enemy);
+    return clamp(missileHoldPx, nearestHoldPx, Math.max(nearestHoldPx, furthestHoldPx));
+  }
+
+  /** How far from `enemy`'s centre her missile can be counted on to strike its body. */
+  private catMissileReachToCentrePx(cat: CatPlayer, enemy: Mob): number {
+    return cat.attackReachPx() * CAT_MISSILE_REACH_SHARE + enemy.bodyRadiusPx;
   }
 
   /**
@@ -1584,7 +1617,7 @@ export class CompanionSystem implements GameSystem {
     this._proximityQuery.clear();
     let closeHostiles = 0;
     for (const mob of mobGrid.queryCircle(cat.x, cat.y, crowdRadius, this._proximityQuery)) {
-      if (!mob.isAlive || !mob.isHostile) continue;
+      if (!mob.isHostileTarget) continue;
       if (this.centreDistance(cat, mob) > crowdRadius) continue;
       closeHostiles++;
       if (closeHostiles > CAT_BRAWL_MAX_CROWD) return false;
@@ -1608,43 +1641,139 @@ export class CompanionSystem implements GameSystem {
     this.catKiteAngle += angleStep;
 
     if (distToEnemy < standOff * KITE_DISTANCE_THRESHOLD) {
-      if (distToEnemy > 0) {
-        const nx = (cx - ex) / distToEnemy;
-        const ny = (cy - ey) / distToEnemy;
-        cat.isMoving = this.stepAwayClearOfMarkedGround(
-          cat,
-          nx,
-          ny,
-          FOLLOWER_SPEED * KITE_SPEED_MULTIPLIER,
-          KITE_BACKOFF_ANGLES,
-        );
-      }
+      this.stepCatAwayFrom(cat, enemy);
     } else {
-      const targetX = ex + Math.cos(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET;
-      const targetY = ey + Math.sin(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET;
+      const orbit = this.clearOfOtherBosses(
+        {
+          x: ex + Math.cos(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET,
+          y: ey + Math.sin(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET,
+        },
+        enemy,
+        mobGrid,
+      );
       this.companionFollow(
         cat,
-        targetX,
-        targetY,
+        orbit.x,
+        orbit.y,
         FOLLOWER_SPEED,
         TILE_SIZE * ANCHOR_CLOSE_DISTANCE,
       );
     }
   }
 
-  private doCatBehindHuman(cat: CatPlayer, human: HumanPlayer, enemy: Mob): void {
+  /** The kite's retreat: straight away from `threat`, swerving round marked ground. */
+  private stepCatAwayFrom(cat: CatPlayer, threat: Mob): void {
+    const awayX = cat.x - threat.x;
+    const awayY = cat.y - threat.y;
+    if (awayX === 0 && awayY === 0) return;
+    const away = normalize(awayX, awayY);
+    cat.isMoving = this.stepAwayClearOfMarkedGround(
+      cat,
+      away.x,
+      away.y,
+      FOLLOWER_SPEED * KITE_SPEED_MULTIPLIER,
+      KITE_BACKOFF_ANGLES,
+    );
+  }
+
+  /**
+   * How close the cat lets a boss come while she is shooting at something
+   * else: the kite's stand-off, measured from its body's edge. A boss's adds
+   * rise beside the party, inside the boss's own reach, and a cat kiting one of
+   * them at the ordinary distance kites straight into the boss's swing.
+   */
+  private bossClearancePx(boss: Mob): number {
+    return CAT_KITE_DIST + boss.bodyRadiusPx - TILE_SIZE * TILE_CENTER_OFFSET;
+  }
+
+  /** The nearest living boss other than `enemy` that the cat stands inside the clearance of, if any. */
+  private bossCrowdingCat(cat: CatPlayer, enemy: Mob, mobGrid: SpatialGrid<Mob>): Mob | null {
+    let crowding: Mob | null = null;
+    let crowdingDist = Infinity;
+    for (const boss of this.otherBossesNear(cat, enemy, mobGrid)) {
+      const dist = this.centreDistance(cat, boss);
+      if (dist >= this.bossClearancePx(boss) || dist >= crowdingDist) continue;
+      crowding = boss;
+      crowdingDist = dist;
+    }
+    return crowding;
+  }
+
+  /**
+   * `point` pushed out of the clearance of every boss other than `enemy`, so a
+   * spot she is walking to never leads her back in. A little past the edge,
+   * since the follow stops short of its goal by its own arrival distance.
+   */
+  private clearOfOtherBosses(
+    point: { x: number; y: number },
+    enemy: Mob,
+    mobGrid: SpatialGrid<Mob>,
+  ): { x: number; y: number } {
+    let { x, y } = point;
+    for (const boss of this.otherBossesNear(point, enemy, mobGrid)) {
+      const fromBossX = x - boss.x;
+      const fromBossY = y - boss.y;
+      const dist = Math.hypot(fromBossX, fromBossY);
+      const clearance = this.bossClearancePx(boss) + TILE_SIZE * ANCHOR_CLOSE_DISTANCE;
+      if (dist >= clearance || dist === 0) continue;
+      x = boss.x + (fromBossX / dist) * clearance;
+      y = boss.y + (fromBossY / dist) * clearance;
+    }
+    return { x, y };
+  }
+
+  private otherBossesNear(
+    point: { readonly x: number; readonly y: number },
+    enemy: Mob,
+    mobGrid: SpatialGrid<Mob>,
+  ): Mob[] {
+    this._bossClearanceQuery.clear();
+    const nearby = mobGrid.queryCircle(
+      point.x,
+      point.y,
+      CAT_BOSS_CLEARANCE_SEARCH_PX,
+      this._bossClearanceQuery,
+    );
+    const bosses: Mob[] = [];
+    for (const mob of nearby) {
+      if (mob !== enemy && mob.isBoss && mob.isAlive && mob.isHostileTarget) bosses.push(mob);
+    }
+    return bosses;
+  }
+
+  private doCatBehindHuman(
+    cat: CatPlayer,
+    human: HumanPlayer,
+    enemy: Mob,
+    mobGrid: SpatialGrid<Mob>,
+  ): void {
+    const spot = this.clearOfOtherBosses(this.behindHumanSpot(human, enemy), enemy, mobGrid);
+    this.companionFollow(cat, spot.x, spot.y, FOLLOWER_SPEED, TILE_SIZE * ANCHOR_CLOSE_DISTANCE);
+  }
+
+  /** Where the cat stands to shoot past the human: behind him, on the side away from `enemy`. */
+  private behindHumanSpot(human: HumanPlayer, enemy: Mob): { x: number; y: number } {
     const ex = enemy.x + TILE_SIZE * TILE_CENTER_OFFSET;
     const ey = enemy.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const hx = human.x + TILE_SIZE * TILE_CENTER_OFFSET;
     const hy = human.y + TILE_SIZE * TILE_CENTER_OFFSET;
+    const n = normalize(hx - ex, hy - ey);
+    return {
+      x: hx + n.x * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * TILE_CENTER_OFFSET,
+      y: hy + n.y * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * TILE_CENTER_OFFSET,
+    };
+  }
 
-    const dx = hx - ex;
-    const dy = hy - ey;
-    const n = normalize(dx, dy);
-
-    const targetX = hx + n.x * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * TILE_CENTER_OFFSET;
-    const targetY = hy + n.y * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * TILE_CENTER_OFFSET;
-    this.companionFollow(cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * ANCHOR_CLOSE_DISTANCE);
+  /**
+   * Whether her missile reaches `enemy` from behind the human. An enemy that
+   * fights the human from range (a caster holding its distance) leaves that
+   * spot further away than her missile flies, and a cat standing there fires
+   * every shot into the floor short of it; she kites it instead.
+   */
+  private behindHumanInMissileReach(cat: CatPlayer, human: HumanPlayer, enemy: Mob): boolean {
+    const spot = this.behindHumanSpot(human, enemy);
+    const distance = Math.hypot(spot.x - enemy.x, spot.y - enemy.y);
+    return distance <= this.catMissileReachToCentrePx(cat, enemy);
   }
 
   /**

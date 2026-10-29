@@ -567,7 +567,7 @@ export class AttackCow extends Cow {
   }
 
   private isFightable(mob: Mob): boolean {
-    if (mob === this || !mob.isAlive || !mob.isHostile) return false;
+    if (mob === this || !mob.isHostileTarget) return false;
     if (mob.offLimitsToAllies || mob.avoidInstead || mob.isDefendTarget === true) return false;
     return !mob.isBoss || mob.forceAggro;
   }

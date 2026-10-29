@@ -60,11 +60,11 @@ import {
   drawBoulderShadow,
   drawBurst,
   drawEmber,
-  drawLandingRing,
   drawMiasma,
   drawWrench,
   emberDrift,
 } from '../../sprites/art/siegeEffectsArt';
+import { drawDangerCircle } from '../../sprites/dangerTelegraph';
 import { WORLD_TEXT, worldPalette } from '../../ui/theme/worldInk';
 import { worldBar, worldPlate } from '../../ui/world/worldShapes';
 import { worldText } from '../../ui/world/worldText';
@@ -134,6 +134,8 @@ const FLIGHT_FRAMES_PER_TILE = 4.2;
  * floor.
  */
 const MIN_FLIGHT_FRAMES = LOCKED_TELEGRAPH_MIN_FRAMES;
+/** The landing warning is fixed from the throw, so it is drawn at full strength for the whole flight. */
+const WARNING_FADE = 1;
 const MAX_FLIGHT_FRAMES = 42;
 /** Peak of the lob above the straight line from sling to ground, in tiles. */
 const ARC_HEIGHT_TILES = 2.4;
@@ -611,8 +613,7 @@ export class TrebuchetSystem {
    */
   private isFairGame(mob: Mob): boolean {
     return (
-      mob.isAlive &&
-      mob.isHostile &&
+      mob.isHostileTarget &&
       mob.isDefendTarget !== true &&
       !mob.refusesDamage &&
       !mob.offLimitsToAllies &&
@@ -998,14 +999,10 @@ export class TrebuchetSystem {
     const shatterRadius = SHATTER_RADIUS_TILES * TILE_SIZE;
     for (const boulder of this.boulders) {
       const view = TrebuchetSystem.viewOf(boulder);
-      drawLandingRing(
-        ctx,
-        view.toX - camX,
-        view.toY - camY,
-        shatterRadius,
-        view.progress,
-        boulder.infernal,
-      );
+      drawDangerCircle(ctx, view.toX - camX, view.toY - camY, shatterRadius, WARNING_FADE, {
+        fillProgress: view.progress,
+        locked: true,
+      });
       drawBoulderShadow(ctx, view.groundX - camX, view.groundY - camY, view.heightPx, TILE_SIZE);
     }
   }

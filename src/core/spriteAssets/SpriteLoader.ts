@@ -9,13 +9,13 @@ import environmentRocksManifest from '../../images/environment/rocks/manifest.js
 import environmentCampManifest from '../../images/environment/camp/manifest.json';
 import environmentVillageManifest from '../../images/environment/village/manifest.json';
 import environmentCircusManifest from '../../images/environment/circus/manifest.json';
-import environmentBossKrakarenManifest from '../../images/environment/boss_krakaren/manifest.json';
+import environmentBossPowerLabManifest from '../../images/environment/boss_power_lab/manifest.json';
+import environmentFloodedPumpRoomManifest from '../../images/environment/flooded_pump_room/manifest.json';
 import environmentTrashGremlinManifest from '../../images/environment/trash_gremlin/manifest.json';
 import environmentGymManifest from '../../images/environment/gym/manifest.json';
 import environmentSpiderLabManifest from '../../images/environment/spider_lab/manifest.json';
 import environmentTaloncrestManifest from '../../images/environment/towns/taloncrest/manifest.json';
 import interfacesManifest from '../../images/interfaces/manifest.json';
-import environmentColosseumManifest from '../../images/environment/colosseum/manifest.json';
 import environmentServiceLevelManifest from '../../images/environment/service_level/manifest.json';
 import environmentCellarPropsManifest from '../../images/environment/cellar_props/manifest.json';
 import { TILE_SIZE } from '../constants';
@@ -61,14 +61,14 @@ const environmentManifest = {
   // Big Rooster's gym equipment, painted at floor load, in its own directory for
   // the same reason.
   ...environmentGymManifest,
-  // Krakaren Clone's clone lab: its vats and consoles are Y-sorted tile props,
+  // The power lab: its vats and consoles are Y-sorted tile props,
   // so their reach above the tile must widen the map's cull margin too.
-  ...environmentBossKrakarenManifest,
+  ...environmentBossPowerLabManifest,
+  // The Kraken's flooded pump room: the pump and its outflow chute reach two
+  // tiles above their tiles, and a barrel stack nearly as far.
+  ...environmentFloodedPumpRoomManifest,
   // The Grotesque Spider's lab: benches and shelving are Y-sorted tile props too.
   ...environmentSpiderLabManifest,
-  // Ball of Swine's Iron Colosseum: its portcullis, cages, crowd and banners,
-  // painted at floor load, in its own directory for the same reason.
-  ...environmentColosseumManifest,
   // Floor 2's service-level furniture: lockers, cabinets, the boiler. Y-sorted
   // tile props that reach above their tiles, painted at floor load.
   ...environmentServiceLevelManifest,

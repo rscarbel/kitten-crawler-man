@@ -101,13 +101,6 @@ export const PRISON_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTuning>>
   },
 };
 
-/**
- * How far behind the leader, along the leader's own trail, the following
- * crawler walks inside the prison. One tile keeps both bodies on the route the
- * player chose: the follower stands exactly where the leader stood one step ago.
- */
-export const PRISON_TRAIL_SPACING_TILES = 1;
-
 /** What made a noise. Every landed party attack is one of the damage types; a blast is `'explosion'`. */
 export type PrisonNoiseKind = PlayerDamageType;
 

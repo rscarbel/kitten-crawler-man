@@ -83,8 +83,7 @@ export interface HallwayRegion {
   /**
    * Every corridor shape carved into this segment, in `narrow`, `standard`,
    * `nook` order. Several when corridors of different kinds merge at a junction;
-   * empty when no corridor carver made any of it (the arena drum and its
-   * concourse, sign pockets, the arena's north gate).
+   * empty when no corridor carver made any of it (sign pockets).
    */
   readonly hallwayKinds: ReadonlyArray<HallwayKind>;
   /**
@@ -95,12 +94,6 @@ export interface HallwayRegion {
   readonly hallwayKind: HallwayKind | null;
   /** Zone of the segment's tile centroid. */
   readonly zone: Zone;
-  /**
-   * Set when the segment reaches inside an arena's radius: the arena drum is
-   * walkable floor that no room rectangle covers, so it lands here as a
-   * "hallway" and needs telling apart from one.
-   */
-  readonly arena: boolean;
   /**
    * Set on the two hallways of the spider lab's approach — host room to its
    * station, station to the lab — which are dressed as the lab's own wreckage
@@ -128,7 +121,6 @@ export interface RegionMapInput {
   /** The kind of corridor that first carved a tile, or `undefined` for a tile no corridor carved. */
   readonly corridorKindAt: (x: number, y: number) => HallwayKind | undefined;
   readonly zoneOf: (point: Point) => Zone;
-  readonly arenas: ReadonlyArray<{ readonly centre: Point; readonly radius: number }>;
   /** Tile keys (`tileCoordKey`) of the spider lab's approach hallways; absent on a floor without a lab. */
   readonly labApproachTiles?: ReadonlySet<number>;
 }
@@ -251,12 +243,6 @@ function centroidOf(tiles: ReadonlyArray<Point>): Point {
   return { x: Math.round(sumX / count), y: Math.round(sumY / count) };
 }
 
-function insideAnyArena(tiles: ReadonlyArray<Point>, arenas: RegionMapInput['arenas']): boolean {
-  return arenas.some(({ centre, radius }) =>
-    tiles.some((tile) => Math.hypot(tile.x - centre.x, tile.y - centre.y) < radius),
-  );
-}
-
 /**
  * Builds a floor's {@link RegionMap} from its finished grid.
  *
@@ -264,7 +250,7 @@ function insideAnyArena(tiles: ReadonlyArray<Point>, arenas: RegionMapInput['are
  * changes the floor it describes.
  */
 export function buildRegionMap(input: RegionMapInput): RegionMap {
-  const { grid, rooms, corridorKindAt, zoneOf, arenas } = input;
+  const { grid, rooms, corridorKindAt, zoneOf } = input;
   const height = grid.length;
   const width = grid[0]?.length ?? 0;
   const cells = new Int16Array(width * height).fill(NO_REGION);
@@ -323,7 +309,6 @@ export function buildRegionMap(input: RegionMapInput): RegionMap {
       hallwayKinds,
       hallwayKind: dominantHallwayKind(hallwayKinds),
       zone: zoneOf(centroidOf(component.tiles)),
-      arena: insideAnyArena(component.tiles, arenas),
       labApproach: component.tiles.some(
         (tile) => input.labApproachTiles?.has(tileCoordKey(tile.x, tile.y)) === true,
       ),

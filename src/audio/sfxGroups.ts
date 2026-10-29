@@ -1,4 +1,9 @@
-import { STREAMING_SOUND_IDS, WOOD_SMASHING_SOUNDS, type SoundId } from './sounds';
+import {
+  ELECTRIFIED_JOLT_SOUNDS,
+  STREAMING_SOUND_IDS,
+  WOOD_SMASHING_SOUNDS,
+  type SoundId,
+} from './sounds';
 import type { BuildingEntry } from '../map/buildingEntry';
 import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
@@ -12,7 +17,13 @@ import { INTERIOR_AMBIENCE_CUES } from '../systems/interiorAmbienceCues';
 import { occupantRoutineSoundIds } from '../systems/occupantRoutineCues';
 import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
 import { BOMBER_GOBLIN_CUES } from '../systems/bomberGoblinSoundCues';
+import { ELECTRIC_GOBLIN_CUES } from '../systems/bossSoundCues';
+import { GENERATOR_RIG_HUM_LOOP } from './loopLevels';
+import { FLOODED_PUMP_ROOM_CUES } from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
+import { SCRIPTED_DEATH_CUES } from '../systems/scriptedDeath/scriptedDeathCues';
 import { starlightTentCueSoundIds } from '../systems/starlightTent/starlightTentSoundCues';
+import { MUSIC_STEM_SETS } from './music/stemSets';
+import { KRAKEN_BATTLE_TRACK } from './music/bossTracks';
 
 /**
  * Every take in a cue table that is decoded into a buffer. A cue table also
@@ -49,6 +60,8 @@ export type SfxGroup =
   | 'spiderQuest'
   | 'bounty'
   | 'starlightTent'
+  | 'floodedPumpRoomMusic'
+  | 'trashGremlinMusic'
   | 'murderMysteryQuest'
   | 'deinonychusMercenary'
   | 'interiorBopca'
@@ -65,6 +78,15 @@ export type SfxGroup =
  * they spawn on all three floors and march in Briar Hollow's siege waves.
  */
 const BOMBER_GOBLIN_SFX_IDS: readonly SoundId[] = decodedCueIds(BOMBER_GOBLIN_CUES);
+
+/** Every take the Kraken's flooded pump room plays (`FLOODED_PUMP_ROOM_CUES`). */
+const FLOODED_PUMP_ROOM_SFX_IDS: readonly SoundId[] = decodedCueIds(FLOODED_PUMP_ROOM_CUES);
+
+/** Every take the Current Goblin's cues play (`ELECTRIC_GOBLIN_CUES`), and his generator's hum. */
+const ELECTRIC_GOBLIN_SFX_IDS: readonly SoundId[] = [
+  ...decodedCueIds(ELECTRIC_GOBLIN_CUES),
+  GENERATOR_RIG_HUM_LOOP.id,
+];
 
 /**
  * Every cue a fairy, its spells or its death can raise. Fairies spawn in rooms
@@ -254,6 +276,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * these, so they preload at boot rather than at floor entry.
    */
   universal: [
+    // Electrified can come from gear on any floor, not only the Current Goblin.
+    ...ELECTRIFIED_JOLT_SOUNDS,
     'ability_level_up',
     'achievement_awarded',
     // Deinonychus's own three cues. `DungeonScene` constructs `DeinonychusSystem` for every
@@ -538,10 +562,66 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'deinonychus_chitter',
   ],
 
-  /** The Trash Gremlin + Big Rooster boss rooms, level1's llama/rat, and its dungeon-generated arena. */
+  /** The Trash Gremlin and the Kraken, and level1's llama and rat. */
   level1: [
     'trash_gremlin_vomit',
+    ...FLOODED_PUMP_ROOM_SFX_IDS,
+    ...SCRIPTED_DEATH_CUES.sharkBreachBite.takes,
+    'kraken_ground_slam',
+    'kraken_slam_rise',
+    'kraken_tentacle_death',
+    'kraken_tentacle_emerge',
+    'kraken_tentacle_strike',
+    'kraken_yell',
+    'trash_gremlin_acid_gurgle_1',
+    'trash_gremlin_acid_gurgle_2',
+    'trash_gremlin_acid_gurgle_3',
+    'trash_gremlin_cackle_1',
+    'trash_gremlin_cackle_2',
+    'trash_gremlin_cackle_3',
+    'trash_gremlin_death',
+    'trash_gremlin_hurt_1',
+    'trash_gremlin_hurt_2',
+    'trash_gremlin_hurt_3',
+    'trash_gremlin_hurt_4',
+    'trash_gremlin_summon_shriek_1',
+    'trash_gremlin_summon_shriek_2',
+    'trash_pile_roach_burst_1',
+    'trash_pile_roach_burst_2',
+    'trash_pile_roach_burst_3',
+    'llama_fireball',
+    'llama_fireball_explosion',
+    'rat_squeak_1',
+    'rat_squeak_2',
+    'rat_squeak_3',
+    'tuskling_grunt_1',
+    'tuskling_grunt_2',
+    'tuskling_grunt_3',
+    'tuskling_grunt_4',
+    ...DUNGEON_CUE_SFX_IDS,
+    ...FAIRY_SFX_IDS,
+    ...RAISED_SKELETON_SFX_IDS,
+    ...BOMBER_GOBLIN_SFX_IDS,
+  ],
+
+  /** Floor 2's power lab, Big Rooster's gym, the spider lab quest, and level2's llama and rat. */
+  level2: [
     'dumbbell_throw',
+    'kettlebell_heave',
+    'kettlebell_rain_wind_loop',
+    'dynamite_kick_1',
+    'dynamite_kick_2',
+    'dynamite_kick_3',
+    'kettlebell_impact_1',
+    'kettlebell_impact_2',
+    'kettlebell_impact_3',
+    'kettlebell_impact_4',
+    'exercise_ball_kick',
+    'exercise_ball_bounce_1',
+    'exercise_ball_bounce_2',
+    'exercise_ball_bounce_3',
+    'exercise_ball_bounce_4',
+    'exercise_ball_bounce_5',
     'bent_rooster_cluck_1',
     'bent_rooster_cluck_2',
     'bent_rooster_cluck_3',
@@ -575,41 +655,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'rooster_talon_step_2',
     'rooster_talon_step_3',
     'rooster_talon_step_4',
-    'trash_gremlin_acid_gurgle_1',
-    'trash_gremlin_acid_gurgle_2',
-    'trash_gremlin_acid_gurgle_3',
-    'trash_gremlin_cackle_1',
-    'trash_gremlin_cackle_2',
-    'trash_gremlin_cackle_3',
-    'trash_gremlin_death',
-    'trash_gremlin_hurt_1',
-    'trash_gremlin_hurt_2',
-    'trash_gremlin_hurt_3',
-    'trash_gremlin_hurt_4',
-    'trash_gremlin_summon_shriek_1',
-    'trash_gremlin_summon_shriek_2',
-    'trash_pile_roach_burst_1',
-    'trash_pile_roach_burst_2',
-    'trash_pile_roach_burst_3',
-    'llama_fireball',
-    'llama_fireball_explosion',
     'massive_strike_with_dirt_impact',
-    'rat_squeak_1',
-    'rat_squeak_2',
-    'rat_squeak_3',
-    'tuskling_grunt_1',
-    'tuskling_grunt_2',
-    'tuskling_grunt_3',
-    'tuskling_grunt_4',
-    ...DUNGEON_CUE_SFX_IDS,
-    ...FAIRY_SFX_IDS,
-    ...RAISED_SKELETON_SFX_IDS,
-    ...BOMBER_GOBLIN_SFX_IDS,
-  ],
-
-  /** Krakaren clone boss room, Ball of Swine, the spider lab quest, level2's llama/rat/arena. */
-  level2: [
-    'ball_of_swine_rolling',
     'deep_rumbling',
     'flesh_being_sliced',
     'grotesque_spider_screech_attack',
@@ -617,15 +663,6 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'grotesque_spider_spit_attack',
     'grotesque_spider_spit_landing',
     'keyboard_hero_music_track_1',
-    'krakaren_ground_slam',
-    'krakaren_junction_burst',
-    'krakaren_junction_dead',
-    'krakaren_slam_rise',
-    'krakaren_spark_buzz',
-    'krakaren_tentacle_death',
-    'krakaren_tentacle_emerge',
-    'krakaren_tentacle_strike',
-    'krakaren_yell',
     'life_machine_powering_on',
     // The keyboard-hero board's own feedback: the per-hit terminal tick, a
     // firewall pip shattering, and the success stinger. Only the pip's glass is
@@ -649,12 +686,11 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_2',
     'tuskling_grunt_3',
     'tuskling_grunt_4',
-    // The colosseum's portcullis landing.
-    'massive_metal_hit',
     ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
     ...BOMBER_GOBLIN_SFX_IDS,
+    ...ELECTRIC_GOBLIN_SFX_IDS,
   ],
 
   /**
@@ -961,6 +997,17 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
+   * The Kraken's fight music. Its stems change over at one point in a loop
+   * and every loop repeats with no gap, which only a decoded buffer does, and
+   * decoded they are about 100 MB, so they are held only near her room.
+   */
+  floodedPumpRoomMusic: [...MUSIC_STEM_SETS.kraken_flooded, KRAKEN_BATTLE_TRACK],
+  /**
+   * The Trash Gremlin's fight music. A short loop that repeats for the whole
+   * fight, so it is decoded to loop with no gap, and held only near his room.
+   */
+  trashGremlinMusic: ['king_of_the_heap'],
+  /**
    * The Starlight Tent maze's cues (`STARLIGHT_TENT_CUES`), the grounds' high striker, the
    * voices of the clowns guarding the finale ring's chest, and the rope ladder out of that
    * ring (`INTERIOR_EXIT_FIXTURES`). Floor 3 holds this group near the circus grounds; the
@@ -1148,14 +1195,26 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'deinonychusMercenary',
 ];
 
-/** Floor 3's groups decoded only while something can play them (`FloorSfxGates`). */
+/**
+ * Groups decoded only while something can play them (`FloorSfxGates`): floor
+ * 3's siege, bounties and circus, and floor 1's Kraken and Trash Gremlin fight music.
+ */
 export const GATED_SFX_GROUPS = [
   'briarHollowSiege',
   'bounty',
   'starlightTent',
+  'floodedPumpRoomMusic',
+  'trashGremlinMusic',
 ] as const satisfies readonly SfxGroup[];
 
 export type GatedSfxGroup = (typeof GATED_SFX_GROUPS)[number];
+
+/** Floor 3's gated groups, whose one-shots a scene keeps compressed (`compressedSfxForLevelId`). */
+const LEVEL3_GATED_SFX_GROUPS = [
+  'briarHollowSiege',
+  'bounty',
+  'starlightTent',
+] as const satisfies readonly GatedSfxGroup[];
 
 /** Every id in a gated group. */
 export const GATED_SFX_IDS: ReadonlySet<SoundId> = new Set(
@@ -1165,9 +1224,11 @@ export const GATED_SFX_IDS: ReadonlySet<SoundId> = new Set(
 /**
  * Ids a floor's scenes keep compressed: the gated groups on floor 3, so a cue
  * played while its group is let go decodes on demand rather than going unheard.
+ * Floor 1's fight music needs none: a music track missing its buffer is
+ * fetched and decoded when it is claimed.
  */
 export function compressedSfxForLevelId(levelId: LevelId): readonly SoundId[] {
-  return levelId === 'level3' ? [...GATED_SFX_IDS] : [];
+  return levelId === 'level3' ? LEVEL3_GATED_SFX_GROUPS.flatMap((group) => SFX_GROUPS[group]) : [];
 }
 
 /** Floor 2's own cues plus the quests that only appear there. */

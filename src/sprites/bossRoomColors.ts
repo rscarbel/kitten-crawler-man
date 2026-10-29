@@ -6,8 +6,8 @@
 export const BOSS_IDENTITY_COLOR = {
   trash_gremlin: '#c084fc',
   big_rooster: '#fb923c',
-  ball_of_swine: '#f87171',
-  krakaren_clone: '#e05090',
+  kraken: '#e05090',
+  electric_goblin: '#38bdf8',
 } as const;
 
 export const SEALED_ROOM_BORDER_COLOR = {

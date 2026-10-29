@@ -22,6 +22,7 @@ import {
   GOBLIN_TENT,
   HIGHLAND_GRASS,
   TRASH_GREMLIN_FLOOR,
+  FLOODED_PUMP_ROOM_FLOOR,
   HOLLOW_DECAL,
   HOLLOW_GATE,
   HOLLOW_PALISADE,
@@ -148,6 +149,8 @@ export function minimapTileColor(type: number): string {
       return '#4a5256';
     case TRASH_GREMLIN_FLOOR:
       return '#2a1808';
+    case FLOODED_PUMP_ROOM_FLOOR:
+      return '#2c3a3c';
     case TOWN_WALL:
       return '#8a8175';
     case VERGE_GRASS:

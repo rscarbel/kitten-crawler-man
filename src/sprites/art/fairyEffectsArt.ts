@@ -15,7 +15,6 @@
  */
 
 import { drawEmbermote, drawGlow, hash01, hashRange, rgba, type Rgb } from '../status/statusPaint';
-import { drawDangerCircle } from '../dangerTelegraph';
 
 const TAU = Math.PI * 2;
 const HALF = 0.5;
@@ -1135,7 +1134,7 @@ export function drawIceBolt(
   ctx.restore();
 }
 
-// ── Fire: lob, reticle, charge, flame patch, explosion ──────────────────────
+// ── Fire: lob, charge, flame patch, explosion ───────────────────────────────
 
 /** One point of a fireball's recent path, in screen pixels (already lifted by its height). */
 export interface FireballTrailPoint {
@@ -1304,107 +1303,6 @@ export function drawFireballFlight(
     FIREBALL_CORONA_ALPHA_SHARE,
   );
   drawGlow(ctx, FIRE_CORE, head.x, head.y, ballRadius * FIREBALL_HEART_RADIUS_SCALE, 1);
-  ctx.restore();
-}
-
-/**
- * The small red reticle on the ground where a fire fairy has locked its throw.
- * Four brackets close in and spin slowly as `progress` (0 → 1 through the lock
- * and the flight) nears the landing, so the time left is readable at a glance.
- */
-/** The brackets start this much wider than the landing radius and close in as the lock completes. */
-const RETICLE_BRACKET_START_SCALE = 1.35;
-const RETICLE_BRACKET_CLOSE_SCALE = 0.35;
-const RETICLE_SPIN_SPEED = 0.03;
-const RETICLE_PULSE_SPEED_BASE = 0.2;
-const RETICLE_PULSE_SPEED_LOCK = 0.4;
-const RETICLE_FILL_ALPHA_BASE = 0.08;
-const RETICLE_FILL_ALPHA_LOCK = 0.12;
-const RETICLE_BRACKET_COUNT = 4;
-/** Each bracket's own arc length, radians, and the gap that opens it from the last one's end. */
-const RETICLE_BRACKET_SWEEP = 0.7;
-const RETICLE_BRACKET_GAP = 0.35;
-const RETICLE_BRACKET_WIDTH_PX = 2;
-const RETICLE_BRACKET_ALPHA_BASE = 0.55;
-const RETICLE_BRACKET_ALPHA_LOCK = 0.35;
-const RETICLE_CROSS_ALPHA_BASE = 0.4;
-const RETICLE_CROSS_ALPHA_LOCK = 0.5;
-const RETICLE_CROSS_WIDTH_PX = 1;
-const RETICLE_CROSS_REACH_SHARE = 0.35;
-
-export function drawLandingReticle(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  radiusPx: number,
-  progress: number,
-  frame: number,
-): void {
-  const p = clamp01(progress);
-  const radius = radiusPx * (RETICLE_BRACKET_START_SCALE - RETICLE_BRACKET_CLOSE_SCALE * p);
-  const spin = frame * RETICLE_SPIN_SPEED;
-  const pulse =
-    HALF + HALF * Math.sin(frame * (RETICLE_PULSE_SPEED_BASE + RETICLE_PULSE_SPEED_LOCK * p));
-  ctx.save();
-  groundEllipse(ctx, cx, cy, radiusPx);
-  ctx.fillStyle = rgba(FIRE_RED, RETICLE_FILL_ALPHA_BASE + RETICLE_FILL_ALPHA_LOCK * p);
-  ctx.fill();
-  ctx.lineCap = 'round';
-  ctx.lineWidth = RETICLE_BRACKET_WIDTH_PX;
-  ctx.strokeStyle = rgba(FIRE_RED, RETICLE_BRACKET_ALPHA_BASE + RETICLE_BRACKET_ALPHA_LOCK * pulse);
-  for (let i = 0; i < RETICLE_BRACKET_COUNT; i++) {
-    const start = spin + (i / RETICLE_BRACKET_COUNT) * TAU - RETICLE_BRACKET_GAP;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, radius, radius * GROUND_SQUASH, 0, start, start + RETICLE_BRACKET_SWEEP);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = rgba(FIRE_GOLD, RETICLE_CROSS_ALPHA_BASE + RETICLE_CROSS_ALPHA_LOCK * p);
-  ctx.lineWidth = RETICLE_CROSS_WIDTH_PX;
-  const cross = radiusPx * RETICLE_CROSS_REACH_SHARE;
-  ctx.beginPath();
-  ctx.moveTo(cx - cross, cy);
-  ctx.lineTo(cx + cross, cy);
-  ctx.moveTo(cx, cy - cross * GROUND_SQUASH);
-  ctx.lineTo(cx, cy + cross * GROUND_SQUASH);
-  ctx.stroke();
-  ctx.restore();
-}
-
-const DANGER_FILL_RING_ALPHA_BASE = 0.55;
-const DANGER_FILL_RING_ALPHA_SHARE = 0.45;
-const DANGER_FILL_DISC_ALPHA_BASE = 0.18;
-const DANGER_FILL_DISC_ALPHA_SHARE = 0.12;
-const DANGER_FILL_RIM_WIDTH_PX = 1.5;
-const DANGER_FILL_RIM_ALPHA_SHARE = 0.6;
-
-/**
- * A danger circle that fills from the centre as `progress` runs 0 → 1: the
- * shared red warning at full size, plus a solid disc growing inside it, so how
- * long is left reads as how much of the circle is still empty.
- */
-export function drawFillingDangerCircle(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  radiusPx: number,
-  progress: number,
-): void {
-  const p = clamp01(progress);
-  drawDangerCircle(
-    ctx,
-    cx,
-    cy,
-    radiusPx,
-    DANGER_FILL_RING_ALPHA_BASE + DANGER_FILL_RING_ALPHA_SHARE * p,
-  );
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, radiusPx * p, 0, TAU);
-  ctx.fillStyle = rgba(FIRE_RED, DANGER_FILL_DISC_ALPHA_BASE + DANGER_FILL_DISC_ALPHA_SHARE * p);
-  ctx.fill();
-  ctx.lineWidth = DANGER_FILL_RIM_WIDTH_PX;
-  ctx.strokeStyle = rgba(FIRE_ORANGE, DANGER_FILL_RIM_ALPHA_SHARE);
-  ctx.stroke();
   ctx.restore();
 }
 

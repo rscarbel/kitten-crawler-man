@@ -2,6 +2,8 @@ import type { LevelId } from './levelIds';
 import type { CampKind } from '../map/overworld/camps';
 import type { BathroomRequest } from '../map/gauntletLayout';
 import type { StealthGateRequest } from '../map/spineLayout';
+import type { GauntletBossType } from '../map/bossRoomSizes';
+import type { FloodedApproachSpec } from '../map/floodedApproach';
 import type { MusicTrackId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
@@ -31,7 +33,7 @@ export type CampSpawnRule = Omit<MobSpawnRule, 'chance' | 'escorts' | 'terrain'>
  *
  * Factored out because for a long time only room and hallway rules had one, so
  * boss rooms and `extraSpawns` spawned at base stats forever — a level-1
- * troglodyte guarding a floor-1 gauntlet boss, and a Ball of Swine no tougher on
+ * troglodyte guarding a floor-1 gauntlet boss, and a gauntlet boss no tougher on
  * the day the party finds it than on the day the floor was authored.
  */
 export interface MobLevelRange {
@@ -103,27 +105,26 @@ export interface EscortSpawnRule extends MobLevelRange {
  * encounter's authored tuning intact for a party that comes back over-levelled.
  */
 export interface BossRoomRule extends MobLevelRange {
-  type: StandaloneMobKind;
+  type: GauntletBossType;
 }
+
+/** The landmark an {@link ExtraSpawnRule}'s offsets are measured from. */
+export type ExtraSpawnOrigin =
+  /** The centre of the room this floor seats for `bossType`. */
+  | { readonly kind: 'bossRoom'; readonly bossType: GauntletBossType }
+  /** (mapSize/2, mapSize/2). */
+  | { readonly kind: 'mapCenter' };
 
 /**
  * Describes mobs that should be spawned at positions relative to a map
- * landmark (boss room, arena centre, map centre, etc.) rather than at
- * generic room/hallway spawn points.
+ * landmark (a boss room or the map centre) rather than at generic room/hallway
+ * spawn points.
  */
 export interface ExtraSpawnRule extends MobLevelRange {
   type: StandaloneMobKind;
-  /**
-   * Where the origin point comes from:
-   * - `bossRoom:<index>` — centre of the Nth boss room (e.g. `bossRoom:1`)
-   * - `arena:0`          — centre of the first arena exterior
-   * - `mapCenter`        — (mapSize/2, mapSize/2)
-   */
-  origin: string;
+  origin: ExtraSpawnOrigin;
   /** Tile offsets from the origin. One mob is spawned per offset. */
   offsets: [number, number][];
-  /** Optional post-spawn callback key for special setup (e.g. 'setupBallOfSwine'). */
-  setup?: string;
 }
 
 /**
@@ -158,28 +159,15 @@ export interface OverLevelReinforcement {
 }
 
 /**
- * One forced-progression unit on a floor: several branching room chains leaving
- * a common entry, all converging on a single gateway safe room whose only onward
- * exit is the named boss's room. Nothing beyond that boss room is reachable
- * without clearing it.
+ * Branching room chains leaving a common entry, all converging on a gauntlet's
+ * gateway safe room. Branches are parallel, so no branch room is a forced
+ * crossing.
  */
-export interface GauntletDef {
-  /** Boss guarding this gauntlet's gateway; pairs with the same-index `bossRooms` entry. */
-  bossType: StandaloneMobKind;
+export interface BranchesRoute {
+  kind: 'branches';
   branchCount: { min: number; max: number };
   /** Rooms per branch, exclusive of the entry room and the gateway safe room. */
   branchRooms: { min: number; max: number };
-  /**
-   * Seats the defense quest's room as a mandatory choke on this gauntlet: either
-   * on the sealed stem out of the previous boss room, or on the approach between
-   * the gateway safe room and this gauntlet's own boss. Which of the two is
-   * drawn per map.
-   *
-   * Branches are parallel, so a branch room can never be a forced crossing —
-   * those two stems are the only points on a gauntlet every player provably
-   * walks through.
-   */
-  questChoke?: boolean;
   /**
    * Seats a clogged bathroom of this size halfway along every branch. Its
    * onward doorways stay blocked by the queue until the plumbing is fixed, and
@@ -190,14 +178,16 @@ export interface GauntletDef {
 }
 
 /**
- * A single forced chain of rooms between two fixed landmarks, replacing the
- * free-region sprawl on a floor that declares one.
+ * A single forced chain of rooms from the previous gauntlet's exit safe room to
+ * this gauntlet's gateway safe room. Only a gauntlet after the first can be
+ * reached this way, since the first has no previous exit to leave from.
  *
  * The journey's length comes from winding rather than from separation: the two
  * endpoints may be only a few dozen tiles apart, so `rooms` is a contract about
  * the *walk*, not about the distance.
  */
-export interface SpineDef {
+export interface SpineRoute {
+  kind: 'spine';
   /** Rooms seated along the chain, endpoints exclusive. The quest room is one of them. */
   rooms: { min: number; max: number };
   /** Chain positions that fork into a second, reconverging lane. */
@@ -209,6 +199,44 @@ export interface SpineDef {
    */
   stealthGate?: StealthGateRequest;
 }
+
+/** How a gauntlet's gateway safe room is reached. */
+export type GauntletRoute = BranchesRoute | SpineRoute;
+
+/**
+ * What every gauntlet carries, whichever boss guards it.
+ */
+interface GauntletDefCommon {
+  route: GauntletRoute;
+  /**
+   * Seats the defense quest's room as a mandatory choke on this gauntlet: on
+   * the sealed stem out of the previous boss room, on the approach between the
+   * gateway safe room and this gauntlet's own boss, or, on a spine route, as a
+   * room of the chain. Which of the first two is drawn per map; a gauntlet with
+   * a flooded `approach` only ever takes the stem.
+   */
+  questChoke?: boolean;
+}
+
+/**
+ * One forced-progression unit on a floor: a route converging on a single
+ * gateway safe room whose only onward exit is the named boss's room. Nothing
+ * beyond that boss room is reachable without clearing it.
+ *
+ * `bossType` pairs with the same-index `bossRooms` entry. Only the Kraken's
+ * gauntlet has a flooded corridor from its gateway safe room to the boss room
+ * door, since its fight is staged from that water; every other boss is
+ * reached by an ordinary corridor.
+ */
+export type GauntletDef =
+  | (GauntletDefCommon & {
+      bossType: 'kraken';
+      approach: FloodedApproachSpec;
+    })
+  | (GauntletDefCommon & {
+      bossType: Exclude<GauntletBossType, 'kraken'>;
+      approach?: never;
+    });
 
 /**
  * The band the defense quest's bugaboo wave rolls its level in on this floor.
@@ -223,29 +251,26 @@ export interface ProgressionDef {
   /** In order. `gauntlets[i].bossType` must equal `bossRooms[i].type`. */
   gauntlets: GauntletDef[];
   /**
-   * Replaces the free region past the last gateway boss with one forced,
-   * winding chain of rooms ending at the arena's antechamber. Only meaningful
-   * on a floor that has an arena, which is what supplies the far endpoint.
-   */
-  spine?: SpineDef;
-  /**
    * The minimum count of extra safe rooms the free region must carry, beyond its
    * gateway safe rooms. Meaningful only on a floor with {@link outskirtsSafeRoomHops}
    * set, where it is the floor the hop rule's own promotion pass is held to —
-   * that pass may seat more than this to satisfy the rule, never fewer. A spine
-   * floor's safe-access pockets come entirely from its own mandatory pocket
-   * count (`safeAccessPocketIndices`) instead, so it has nothing for this to
-   * configure and may omit it.
+   * that pass may seat more than this to satisfy the rule, never fewer.
    */
   scatterSafeRooms?: number;
   /**
    * Spaces the free region's own safe rooms by room hops rather than by plain
    * distance: every one of them, the last gateway's exit safe room included,
    * keeps its nearest other safe room between 4 and 9 hops away. Stated by the
-   * floor rather than inferred, because it only holds past a floor's *last*
-   * boss when nothing past it replaces the free region with a forced spine.
+   * floor rather than inferred: a free region small enough to be mostly
+   * stairwell rooms has no room to space safe rooms that far apart.
    */
   outskirtsSafeRoomHops?: boolean;
+  /**
+   * Ordinary rooms the free region past the last gauntlet grows to. Absent
+   * fills the map, as a floor whose free region is a long hunt for the stairs
+   * wants; a floor that wants only a short stretch past its last boss caps it.
+   */
+  freeRegionRooms?: number;
   /**
    * Extra mobs added to each room's rolled count, indexed by progression region
    * — one entry per gauntlet, then one more for the free-roam region beyond the
@@ -464,9 +489,10 @@ export interface LevelDef {
    * own palette and never reaches the dungeon renderer.
    */
   groundTheme?: DungeonFloorThemeId;
-  /** Whether this level has a circular arena with the Ball of Swine boss. */
-  hasArena?: boolean;
-  /** Whether this level has a spider lab room with the Grotesque Spider quest. */
+  /**
+   * Whether this level has a spider lab room with the Grotesque Spider quest.
+   * The lab hangs off a spine route, so a floor with one needs one.
+   */
   hasSpiderLab?: boolean;
   /**
    * Level band the defense quest's bugaboo wave rolls in on this floor. Absent
@@ -507,7 +533,7 @@ export interface LevelDef {
    */
   fairies?: FairySpawnTable;
   /**
-   * Forces an early-floor boss order. When present the generator replaces free
+   * Forces the order a floor's bosses are met in. When present the generator replaces free
    * room placement with the declared gauntlets — spawn at map centre, branch
    * chains, gateway safe room, gateway boss room, repeated per gauntlet — and
    * only then generates a free-roam region. Absent means the classic free-roam

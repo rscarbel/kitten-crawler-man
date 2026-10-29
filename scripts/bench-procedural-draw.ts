@@ -31,10 +31,10 @@ import { drawRatkin, restingPose as ratKinRestingPose } from '../src/sprites/art
 import { RATKIN_CAST_OUTFITS } from '../src/sprites/art/ratkin/cast.js';
 import { drawShady, restingPose as shadyRestingPose } from '../src/sprites/art/shadyArt.js';
 import {
-  KRAKAREN_FIGURE,
-  KRAKAREN_SLAM_FIGURE,
-  KRAKAREN_TENTACLE_FIGURE,
-} from '../src/sprites/art/krakarenFigure.js';
+  KRAKEN_FIGURE,
+  KRAKEN_SLAM_FIGURE,
+  KRAKEN_TENTACLE_FIGURE,
+} from '../src/sprites/art/krakenFigure.js';
 import { COCKROACH_FIGURE } from '../src/sprites/art/cockroachFigure.js';
 import { RAT_FIGURE } from '../src/sprites/art/ratFigure.js';
 import { TUSKLING_FIGURE } from '../src/sprites/art/tusklingFigure.js';
@@ -58,7 +58,6 @@ import {
   drawDeinonychusSide,
   restPose as deinonychusRestPose,
 } from '../src/sprites/art/deinonychusArt.js';
-import { drawBallRoll } from '../src/sprites/art/ballOfSwineArt.js';
 import { drawBipedFront } from '../src/sprites/art/biped/figure.js';
 import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { restingPose as humanRestingPose } from '../src/sprites/art/biped/rig.js';
@@ -202,8 +201,6 @@ const mantidPose = mantidRestPose();
 const golemPose = golemRestPose();
 /** One arbitrary but fixed instant; every frame of these loops costs the same. */
 const ROCK_EFFECT_BENCH_PROGRESS = 0.5;
-/** One arbitrary but fixed longitude; every roll frame costs the same to paint. */
-const BALL_ROLL_BENCH_PHASE = 0;
 
 const SUBJECTS: readonly Subject[] = [
   {
@@ -276,11 +273,6 @@ const SUBJECTS: readonly Subject[] = [
       ),
   },
   {
-    name: 'ball_of_swine',
-    frameSize: 288,
-    paint: (ctx) => drawBallRoll(asGameContext(ctx), BALL_ROLL_BENCH_PHASE),
-  },
-  {
     name: 'mantid',
     frameSize: 272,
     paint: (ctx) => drawMantidFront(asGameContext(ctx), mantidPose, MANTID_BOSS_BUILD),
@@ -310,9 +302,9 @@ const SUBJECTS: readonly Subject[] = [
     frameSize: 96,
     paint: (ctx) => drawRockBurst(asGameContext(ctx), 1, ROCK_EFFECT_BENCH_PROGRESS),
   },
-  figureSubject(KRAKAREN_FIGURE, 'idle'),
-  figureSubject(KRAKAREN_TENTACLE_FIGURE, 'idle'),
-  figureSubject(KRAKAREN_SLAM_FIGURE, 'loom'),
+  figureSubject(KRAKEN_FIGURE, 'idle'),
+  figureSubject(KRAKEN_TENTACLE_FIGURE, 'idle'),
+  figureSubject(KRAKEN_SLAM_FIGURE, 'loom'),
   figureSubject(TUSKLING_FIGURE, 'idle'),
   figureSubject(BIG_ROOSTER_FIGURE, 'idle'),
   figureSubject(LITTLE_ROOSTER_FIGURE, 'idle'),

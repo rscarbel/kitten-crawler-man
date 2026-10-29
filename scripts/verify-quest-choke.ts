@@ -21,7 +21,6 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants.js';
-import { ARENA_BOSS_TYPE } from '../src/map/progressionValidation.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
@@ -121,18 +120,22 @@ function rectContains(rect: Rect, point: Point): boolean {
 function blockedLandmark(gameMap: GameMap, levelDef: LevelDef): Rect | null {
   const choke = gameMap.progressionLayout?.questChoke ?? null;
   if (choke === null) return null;
-  if (choke.blocks === 'gatewayBossRoom') {
-    return gameMap.bossRooms[choke.gauntletIndex]?.bounds ?? null;
+  switch (choke.blocks) {
+    case 'gatewayBossRoom':
+      return gameMap.bossRooms[choke.gauntletIndex]?.bounds ?? null;
+    case 'gatewaySafeRoom': {
+      const bossType = levelDef.progression?.gauntlets[choke.gauntletIndex]?.bossType;
+      return (
+        gameMap.safeRooms.find(
+          (room) => room.guardsBossType === bossType && room.followsBossType === undefined,
+        )?.bounds ?? null
+      );
+    }
+    default: {
+      const unhandled: never = choke.blocks;
+      throw new Error(`unknown choke landmark ${String(unhandled)}`);
+    }
   }
-  if (choke.blocks === 'gatewaySafeRoom') {
-    const bossType = levelDef.progression?.gauntlets[choke.gauntletIndex]?.bossType;
-    return (
-      gameMap.safeRooms.find(
-        (room) => room.guardsBossType === bossType && room.followsBossType === undefined,
-      )?.bounds ?? null
-    );
-  }
-  return gameMap.safeRooms.find((room) => room.guardsBossType === ARENA_BOSS_TYPE)?.bounds ?? null;
 }
 
 function verifyFloor(levelDef: LevelDef): void {
@@ -151,11 +154,11 @@ function verifyFloor(levelDef: LevelDef): void {
     gameMap.setBathroomPlumbing('fixed');
     gameMap.setStealthGate('open');
     const size = gameMap.gridSize;
-    const room = gameMap.questRooms[0];
-    if (room === undefined) {
+    if (gameMap.questRooms.length === 0) {
       check(false, 'the floor generated no quest room');
       continue;
     }
+    const room = gameMap.questRooms[0];
 
     check(room.exitDoorTiles.length > 0, 'the quest room has no onward doorway');
 
@@ -222,7 +225,7 @@ function verifyFloor(levelDef: LevelDef): void {
     );
 
     const landmark = blockedLandmark(gameMap, levelDef);
-    if (landmark === null || landmark === undefined) {
+    if (landmark === null) {
       check(false, 'the floor recorded no quest choke for the nursery to sit on');
       continue;
     }

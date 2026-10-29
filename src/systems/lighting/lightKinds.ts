@@ -31,7 +31,7 @@ export type GlowColour = LightColour | 'arcane' | 'fire' | 'acid' | 'specimen';
  * A light a boss room hangs for mood alone. A boss room is never darkened, so
  * these only colour it, and only at the sharp preset.
  */
-export type MoodLightKind = 'hanging_bulb' | 'strip_light' | 'vat_glow' | 'flood_lamp';
+export type MoodLightKind = 'hanging_bulb' | 'strip_light' | 'vat_glow' | 'flood_shimmer';
 
 /**
  * The spider lab's field station: a steady cool emergency lamp where a Bopca
@@ -126,9 +126,13 @@ const STRIP_LIGHT_GLOW_STRENGTH = 0.45;
 const VAT_GLOW_REACH_TILES = 2;
 const VAT_GLOW_RADIUS_TILES = 2.2;
 const VAT_GLOW_STRENGTH = 0.5;
-const FLOOD_LAMP_REACH_TILES = 7;
-const FLOOD_LAMP_GLOW_RADIUS_TILES = 6;
-const FLOOD_LAMP_GLOW_STRENGTH = 0.4;
+/**
+ * Small pools: the pump room's whole floor is in view at once, so every one
+ * of its glows is drawn every frame and their size is the room's lighting cost.
+ */
+const FLOOD_SHIMMER_REACH_TILES = 5;
+const FLOOD_SHIMMER_GLOW_RADIUS_TILES = 4;
+const FLOOD_SHIMMER_GLOW_STRENGTH = 0.5;
 
 /** A crawler's light: soft, neutral, and always there, so a pitch-black room is never unfair. */
 export const CRAWLER_LIGHT_REACH_TILES = 3.5;
@@ -275,12 +279,13 @@ export const LIGHT_KINDS = {
     colour: 'specimen',
     flicker: 'steady',
   },
-  flood_lamp: {
-    reachTiles: FLOOD_LAMP_REACH_TILES,
-    glowRadiusTiles: FLOOD_LAMP_GLOW_RADIUS_TILES,
-    glowStrength: FLOOD_LAMP_GLOW_STRENGTH,
-    colour: 'sodium',
-    flicker: 'steady',
+  // Light thrown back off standing water: it sways the way a surface does, and has no fixture to paint.
+  flood_shimmer: {
+    reachTiles: FLOOD_SHIMMER_REACH_TILES,
+    glowRadiusTiles: FLOOD_SHIMMER_GLOW_RADIUS_TILES,
+    glowStrength: FLOOD_SHIMMER_GLOW_STRENGTH,
+    colour: 'cold',
+    flicker: 'candle',
   },
   crawler: {
     reachTiles: CRAWLER_LIGHT_REACH_TILES,

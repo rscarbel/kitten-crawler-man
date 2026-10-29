@@ -9,6 +9,7 @@
  */
 
 import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
+import { seizureRemainingFraction, type StatusEffect } from '../../core/combat/StatusEffect';
 import {
   bodyTop,
   bodyX,
@@ -207,6 +208,8 @@ const SHOCK_POOL_ALPHA = 0.32;
 
 /** How white the body goes on the frames an arc is striking. */
 const SHOCK_FLASH_ALPHA = 0.55;
+/** How white the body goes the instant a bite seizes it, fading back as the seizure runs out. */
+const SEIZURE_FLASH_ALPHA = 0.9;
 const SHOCK_RIM_ALPHA = 0.6;
 
 /** 1 while at least one arc is striking, 0 in the gaps between strikes. */
@@ -220,15 +223,17 @@ function strikeStrength(f: StatusVisualFrame): number {
   return strongest;
 }
 
-export function electrifiedBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
-  const strike = strikeStrength(f);
+export function electrifiedBodyLayer(f: StatusVisualFrame, effect: StatusEffect): SilhouetteLayer {
+  const seizure = seizureRemainingFraction(effect);
+  const strike = Math.max(strikeStrength(f), seizure);
+  const flashAlpha = SHOCK_FLASH_ALPHA + (SEIZURE_FLASH_ALPHA - SHOCK_FLASH_ALPHA) * seizure;
   return {
     paint: (target, box) => {
       target.fillStyle = rgba(ARC_CORE, 1);
       target.fillRect(box.x, box.y, box.width, box.height);
     },
     blend: 'lighter',
-    alpha: SHOCK_FLASH_ALPHA * strike * f.fade,
+    alpha: flashAlpha * strike * f.fade,
     rimColor: rgba(ARC_HALO, 1),
     rimAlpha: SHOCK_RIM_ALPHA * (HALF + HALF * strike) * f.fade,
   };

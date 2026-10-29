@@ -42,7 +42,6 @@ function undeadCasterSpecial(mob: Mob): MobCueSlot {
  */
 const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   silent: SILENT_VOICE,
-  ball_of_swine: { ...SILENT_VOICE, special: { takes: ['ball_of_swine_rolling'] } },
   bear: {
     attack: { takes: ['bear_big_attack'] },
     projectile: NONE,
@@ -87,13 +86,25 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   grave_bull: SILENT_VOICE,
   grotesque_spider: SILENT_VOICE,
   hawkfolk: { ...SILENT_VOICE, attack: { takes: ['hawkfolk_1', 'hawkfolk_2'] } },
-  krakaren: {
-    attack: { takes: ['krakaren_ground_slam'] },
+  kraken: {
+    attack: { takes: ['kraken_ground_slam'] },
     projectile: NONE,
     damage: NONE,
-    special: { takes: ['krakaren_yell'] },
+    special: { takes: ['kraken_yell'] },
   },
-  krakaren_tentacle: SILENT_VOICE,
+  kraken_tentacle: SILENT_VOICE,
+  // His own moments play from his cue queue; the flag here is the grenade volley leaving his rod.
+  electric_goblin: {
+    ...SILENT_VOICE,
+    projectile: {
+      takes: [
+        'bomb_toss_whoosh_1',
+        'bomb_toss_whoosh_2',
+        'bomb_toss_whoosh_3',
+        'bomb_toss_whoosh_4',
+      ],
+    },
+  },
   krasue: { ...SILENT_VOICE, attack: { takes: ['krasue_attack'] } },
   lemur: {
     attack: { takes: ['lemur_attack'] },

@@ -56,7 +56,6 @@ import { buildWallCaseStructure } from '../src/map/dungeon/wallCaseFixture.js';
 import { WALL_FACE_RISE_TILES, WALL_FADE_TILES } from '../src/map/dungeon/wallLight.js';
 import { drawTerrainTile } from '../src/map/tiles/terrainTiles.js';
 import {
-  ARENA_CAGE,
   CRAWLER_SIGN,
   FloorTypeValue,
   METAL_WALL,
@@ -151,12 +150,7 @@ const paintWall: TilePainter = (ctx, structure, type, sx, sy, ts, tx, ty) => {
   drawTerrainTile(ctx, structure, type, sx, sy, ts, tx, ty);
 };
 
-const SOLID_TYPES: ReadonlySet<number> = new Set([
-  FloorTypeValue.wall,
-  VOID_TYPE,
-  METAL_WALL,
-  ARENA_CAGE,
-]);
+const SOLID_TYPES: ReadonlySet<number> = new Set([FloorTypeValue.wall, VOID_TYPE, METAL_WALL]);
 
 function typeAt(structure: TileContent[][], x: number, y: number): number | undefined {
   return structure[y]?.[x]?.type;

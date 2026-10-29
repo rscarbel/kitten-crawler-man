@@ -6,10 +6,8 @@ import {
   SAFE_ROOM_THRESHOLD,
   TRASH_GREMLIN_FLOOR,
   GYM_FLOOR,
-  KRAKAREN_BOSS_ROOM_FLOOR,
-  METAL_WALL,
-  ARENA_CAGE,
-  ARENA_FLOOR,
+  POWER_LAB_FLOOR,
+  FLOODED_PUMP_ROOM_FLOOR,
   FLOOR_GRATE,
   SPIDER_LAB_FLOOR,
   LAB_STATION_FLOOR,
@@ -21,37 +19,24 @@ import {
   CRAWLER_SIGN,
   STEALTH_GATE_CLOSED,
 } from './tileTypes';
-import { randomFromArray, randomInt, clamp } from '../utils';
+import { randomFromArray, randomInt } from '../utils';
 import { tileCoordKey } from './tileIndex';
 import { planCrawlerSigns, crawlerSignFootprint, type PlannedCrawlerSign } from './crawlerSigns';
 import { isWalkableTileType } from './walkability';
 import { guideAndBedTiles, SAFE_ROOM_THRESHOLD_DEPTH_TILES } from './safeRoomFixtures';
 import { planLabStation } from './labStationLayout';
 import { labHallwayDecayAt, layOutLabApproach, type LabHallwayTile } from './labApproach';
-import type { ProgressionDef } from '../levels/types';
-import {
-  ARENA_ANTECHAMBER_MIN_DEPTH,
-  ARENA_ANTECHAMBER_MIN_WIDTH,
-  ARENA_CONCOURSE_REACH,
-  ARENA_DOOR_COLUMN_OFFSETS,
-  ARENA_GATE_COLUMN_OFFSETS,
-  ARENA_CONCOURSE_LINK_INNER_DX,
-  ARENA_CONCOURSE_LINK_OUTER_DX,
-  ARENA_RADIUS,
-  ARENA_REACH,
-  ARENA_WALL_THICKNESS,
-  arenaDoorTileAt,
-  arenaGateBreachTiles,
-  arenaGateTileAt,
-  arenaReserveRect,
-} from './arenaGeometry';
+import type { BranchesRoute, GauntletDef, ProgressionDef, SpineRoute } from '../levels/types';
+import { BOSS_ROOM_SIZE, type GauntletBossType } from './bossRoomSizes';
+import { floodedTileDepths, type FloodedApproachData } from './floodedApproach';
+import { floodDungeonTile } from './dungeonWater';
 import {
   SegmentMap,
   SEGMENT_FREE,
-  SEGMENT_ARENA,
-  SEGMENT_BEYOND,
+  SEGMENT_FREE_RESERVE,
   gauntletSegment,
   planGauntlet,
+  planGauntletHead,
   planCorridorBetween,
   rectCentre,
   rectCentredOn,
@@ -63,7 +48,9 @@ import {
   START_ROOM_H_MAX,
   gauntletSegmentCeiling,
   type ChokeSlot,
+  type GauntletHead,
   type GauntletPlan,
+  type GauntletRoomSizes,
   type PlannedBathroom,
   type PlannedCorridor,
 } from './gauntletLayout';
@@ -80,11 +67,9 @@ import {
   validateProgression,
   distanceToRect,
   SCATTER_SAFE_ROOM_SEPARATION,
-  ARENA_BOSS_TYPE,
   STAIRWELL_MIN_SEPARATION,
   STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
   STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
-  BEYOND_STAIRWELL_MIN_SEPARATION,
   buildRoomGraph,
   nearestHopDistance,
   OUTSKIRTS_SAFE_ROOM_MIN_HOPS,
@@ -166,14 +151,6 @@ type RoomTags = Pick<
 >;
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
-
-export interface ArenaExterior {
-  centre: Point;
-  radius: number;
-  doorTile: Point;
-  /** Tile position for the stairwell placed at the arena centre (initially locked). */
-  stairwellTile: Point;
-}
 
 export interface QuestRoomData {
   bounds: Rect;
@@ -325,10 +302,10 @@ export interface QuestChokeData {
    * to.
    */
   rank: number;
-  /** Which gauntlet's rooms bracket the choke. Unused for a spine choke. */
+  /** Which gauntlet's rooms bracket the choke. */
   gauntletIndex: number;
   /** The landmark that must become unreachable once the quest room is removed. */
-  blocks: 'gatewaySafeRoom' | 'gatewayBossRoom' | 'antechamber';
+  blocks: 'gatewaySafeRoom' | 'gatewayBossRoom';
 }
 
 /**
@@ -371,8 +348,8 @@ export interface ProgressionLayoutData {
    * flag meaning "every stair came from the band" is false on exactly the floor
    * the band was built for, which leaves the ceiling enforcing nothing there.
    *
-   * Keyed by tile rather than by index into `stairwellTiles`, which is filtered
-   * after placement on an arena floor.
+   * Keyed by tile rather than by index into `stairwellTiles`, so a reader
+   * matching one never depends on placement order.
    */
   bandedStairwellTiles: Point[];
   /**
@@ -394,13 +371,19 @@ export interface ProgressionLayoutData {
    */
   stealthGate: { chainIndex: number; bounds: Rect } | null;
   /**
-   * The forced chain past the last gateway boss, or null on a free-region floor.
+   * The forced chain a spine route leads up to its gauntlet's gateway safe room,
+   * or null on a floor with none.
    *
    * `chain` is in walking order and every one of its rooms is meant to be a cut
    * vertex; `lanes` are the alternate routes, each bridging `chain[forkIndex]`
-   * and the room after it.
+   * and the room after it. `gauntletIndex` is the gauntlet whose gateway safe
+   * room the chain arrives at.
    */
-  spine: { chain: Rect[]; lanes: Array<{ forkIndex: number; rooms: Rect[] }> } | null;
+  spine: {
+    chain: Rect[];
+    lanes: Array<{ forkIndex: number; rooms: Rect[] }>;
+    gauntletIndex: number;
+  } | null;
 }
 
 /**
@@ -431,9 +414,16 @@ export interface MobSpawnPoint extends Point {
  */
 function chokeSlotsFor(
   gauntletIndex: number,
-  carriesChoke: boolean,
+  gauntlet: GauntletDef,
 ): ReadonlyArray<ChokeSlot | undefined> {
-  if (!carriesChoke) return [undefined];
+  if (gauntlet.questChoke !== true) return [undefined];
+  // A flooded approach is the corridor the approach slot would interrupt.
+  if (gauntlet.approach !== undefined) {
+    if (gauntletIndex === 0) {
+      throw new Error('a flooded approach takes its choke on the stem; gauntlet 0 has none');
+    }
+    return ['stem'];
+  }
   // The stem is the corridor out of the *previous* gauntlet's boss room, which
   // gauntlet 0 leaves from the start room instead — a choke there would gate the
   // floor before the player has walked anywhere.
@@ -443,9 +433,6 @@ function chokeSlotsFor(
 
 /** Side length, in tiles, of the square a stairwell blocks. */
 export const STAIRWELL_FOOTPRINT_SPAN = 2;
-
-/** Tiles beyond an arena's radius that no sign pocket is cut into, so its wall ring is never nicked. */
-const SIGN_POCKET_ARENA_MARGIN_TILES = 6;
 
 /**
  * Rooms a sign may stand in. Safe rooms are excluded because the scene stamps
@@ -461,7 +448,9 @@ const SIGN_ROOM_ROLES: ReadonlySet<RoomRole> = new Set<RoomRole>(['chain', 'regu
 function plumberBlocksOnFloor(progression: ProgressionDef | undefined): boolean {
   return !(
     progression?.gauntlets.some(
-      (gauntlet) => gauntlet.bathroomChoke?.plumberWalkableForGate === true,
+      (gauntlet) =>
+        gauntlet.route.kind === 'branches' &&
+        gauntlet.route.bathroomChoke?.plumberWalkableForGate === true,
     ) ?? false
   );
 }
@@ -533,9 +522,8 @@ export interface DungeonData {
   mobSpawnPoints: MobSpawnPoint[];
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
-  arenaExteriors: ArenaExterior[];
-  /** South-door tile of the arena, when this floor has one. */
-  arenaDoorTile?: Point;
+  /** Every gauntlet's flooded corridor into its boss room; empty on a floor with none. */
+  floodedApproaches: FloodedApproachData[];
   /** Set only in forced-progression mode. */
   progressionLayout?: ProgressionLayoutData;
   /** Every wayfinding sign stamped into the grid; empty when the floor has no forced progression. */
@@ -580,8 +568,6 @@ const ATTEMPT_MULTIPLIER = 8;
 const MIN_PLACEMENT_ATTEMPTS = 80;
 
 // Special room fixed dimensions
-const BOSS_ROOM_W = 22;
-const BOSS_ROOM_H = 18;
 const QUEST_ROOM_W = 14;
 const QUEST_ROOM_H = 12;
 const SPIDER_LAB_W = 40;
@@ -654,22 +640,43 @@ const ROOMS_PER_STAIRWELL = 50;
 const EVEN_SLOT_CHANCE = 0.5;
 
 /**
- * Arena sitings tried on a spine floor before the map is thrown away.
+ * Sitings of a spine-fed gauntlet tried before the map is thrown away.
  *
- * A spine that will not fit between this boss room and this arena is usually a
- * complaint about where the arena landed, not about the whole floor, so the
- * arena is re-sited first and only a run of failures costs a map attempt.
+ * A spine that will not fit between the previous exit and this gateway is
+ * usually a complaint about where the gateway landed, not about the whole
+ * floor, so the gauntlet is re-sited first and only a run of failures costs a
+ * map attempt.
  */
-const MAX_ARENA_ATTEMPTS = 6;
-/** Serpentines tried per arena siting. Mirrors the per-branch attempt budget. */
+const MAX_SPINE_GATEWAY_SITINGS = 6;
+/** Candidate positions sampled per siting before it gives up on finding one that fits. */
+const SPINE_GATEWAY_PLACEMENT_SAMPLES = 400;
+/**
+ * Distance from the previous gauntlet's exit to a spine-fed gateway safe room.
+ * Short on purpose: the spine's length comes from winding, not distance.
+ */
+const SPINE_GATEWAY_DIST_MIN = 30;
+const SPINE_GATEWAY_DIST_MAX = 100;
+/** How far from an already-seated free room a room sampled near the region is tried. */
+const FREE_ROOM_NEAR_DIST_MIN = 18;
+const FREE_ROOM_NEAR_DIST_MAX = 40;
+/**
+ * Side of the square of open ground held beyond a spine-fed last gauntlet's
+ * exit safe room while its spine is planned, so the spine cannot wind through
+ * the only ground the free region past it, where the stairwells are, could
+ * grow in. Room for a few rooms each way at the free region's pitch.
+ */
+const FREE_REGION_RESERVE_SPAN_TILES = 64;
+/** Rock left between the exit safe room and the near edge of that reserve. */
+const FREE_REGION_RESERVE_GAP_TILES = 4;
+/** Serpentines tried per gateway siting. Mirrors the per-branch attempt budget. */
 const MAX_SPINE_ATTEMPTS = 10;
 /**
  * Ordinary dead-end rooms hung off the spine, on top of the floor's safe rooms.
  * The treasure-room pass draws from these, so a floor with none would have its
- * chests only behind the arena.
+ * chests only past its last boss.
  */
 const SPINE_TREASURE_POCKETS = 5;
-/** Chests a spine floor aims for, drawn from its pockets and its beyond rooms. */
+/** Chests a spine floor aims for, drawn from its pockets and its free region. */
 const SPINE_TREASURE_ROOM_TARGET = 3;
 
 /**
@@ -712,55 +719,6 @@ const HALLWAY_SPAWN_MIN_GAP = 3;
  */
 export const START_ROOM_HALLWAY_SPAWN_MARGIN_TILES = 4;
 
-// Arena placement
-const ARENA_PLACEMENT_ATTEMPTS = 800;
-const ARENA_ANGLE_JITTER = 0.3;
-const ARENA_MIN_DIST = 20;
-const ARENA_DIST_VARIANCE = 70;
-const ARENA_CLEARANCE = 3;
-/** Arena distance from the last gateway boss room, in progression mode. */
-const ARENA_MIN_DIST_FROM_GAUNTLET_EXIT = 30;
-/** Nearest free rooms the antechamber will try to reach before the map is rejected. */
-const ANTECHAMBER_CONNECT_CANDIDATES = 12;
-/**
- * Ways out of the antechamber the generator aims for.
- *
- * A target rather than a requirement: the layout may only offer one, and a floor
- * rejected for not fitting three corridors around a reserved disc would be rejected
- * often. Only the first is mandatory.
- */
-const ANTECHAMBER_EXIT_TARGET = 3;
-/** Antechamber size range — a safe room, so it reuses the safe-room dimensions. */
-/**
- * The antechamber has to reach out under both concourse links, so its width has a
- * hard floor rather than a taste-based one — see `ARENA_ANTECHAMBER_MIN_WIDTH`.
- */
-const ANTECHAMBER_W_MIN = ARENA_ANTECHAMBER_MIN_WIDTH;
-/** Slack above the floor, so every antechamber is not the same shape. */
-const ANTECHAMBER_WIDTH_SLACK = 3;
-const ANTECHAMBER_W_MAX = ARENA_ANTECHAMBER_MIN_WIDTH + ANTECHAMBER_WIDTH_SLACK;
-const ANTECHAMBER_H_MIN = ARENA_ANTECHAMBER_MIN_DEPTH;
-const ANTECHAMBER_H_MAX = 12;
-
-/**
- * Rock the arena's reserve must keep clear to its north, beyond its own reserved
- * rect, so the beyond pocket always has somewhere to live. An arena sited too
- * close to the map's border scores zero instead of stranding the pocket.
- */
-const BEYOND_HEADROOM_TILES = 22;
-/** Rooms the beyond pocket aims to seat before it stops trying for more. */
-const BEYOND_ROOM_TARGET = 6;
-/** Below this many seated rooms, the pocket is rejected rather than shipped thin. */
-const BEYOND_MIN_ROOMS = 3;
-/** How far a beyond-pocket room may sit from the gate tile, keeping the pocket clustered behind the drum. */
-const BEYOND_MAX_DIST_FROM_GATE = 60;
-/**
- * Distance outside the arena a mob or stairwell must keep, so neither sits on the
- * concourse ring. One tile inside `ARENA_REACH`, so beyond-region stairwells —
- * which sit past the reserve edge — still clear it, if only by that one tile.
- */
-const ARENA_STAIRWELL_EXCLUSION_TILES = ARENA_RADIUS + 2;
-
 function getZone(point: Point, start: Point): Zone {
   const d = Math.hypot(point.x - start.x, point.y - start.y);
   if (d < ZONE_ENTRANCE_MAX) return 'entrance';
@@ -787,23 +745,13 @@ function corridorFloorForZone(zone: Zone): number {
 }
 
 /**
- * How the first stairwell is chosen when nothing is seated yet.
- *
- * `random` suits a pool the distance ceiling governs: callers sort by distance
- * from the boss exit, so seeding from that end and then maximising isolation
- * reproduces the perimeter bias the ceiling exists to remove.
- *
- * `farthest` takes the head of that same sort — the candidate farthest from the
- * exit — for a pool no ceiling governs, where distance from the exit is the
- * geometry the floor was built around rather than a bias to be corrected.
- */
-type StairwellSeedStrategy = 'random' | 'farthest';
-
-/**
  * Seats up to `count` stairwells over a candidate pool by farthest-point
  * sampling: each addition goes to whichever candidate is currently most isolated
  * from the ones already seated, so the set spreads across the pool instead of
- * packing into whichever end the caller's sort happens to visit first.
+ * packing into whichever end the caller's sort happens to visit first. The first
+ * is seeded at random: callers sort by distance from the boss exit, so seeding
+ * from either end would bring back the perimeter bias the distance ceiling
+ * exists to remove.
  *
  * `alreadySeated` lets a caller widen the pool and carry on from a partial set
  * rather than start over, so a narrower first pool keeps the placements it won.
@@ -815,15 +763,10 @@ function seatStairwellsByIsolation(
   candidates: readonly Point[],
   count: number,
   minSeparation: number,
-  seedStrategy: StairwellSeedStrategy,
   alreadySeated: readonly Point[] = [],
 ): Point[] {
   if (candidates.length === 0) return [...alreadySeated];
-  const FARTHEST_CANDIDATE_INDEX = 0;
-  const seedIndex =
-    seedStrategy === 'random'
-      ? Math.floor(worldRandom() * candidates.length)
-      : FARTHEST_CANDIDATE_INDEX;
+  const seedIndex = Math.floor(worldRandom() * candidates.length);
   const seated: Point[] = alreadySeated.length > 0 ? [...alreadySeated] : [candidates[seedIndex]];
   while (seated.length < count) {
     let bestCandidate: Point | null = null;
@@ -846,18 +789,21 @@ function seatStairwellsByIsolation(
 
 // ── Boss floor selection ──────────────────────────────────────────────────────
 
-function bossFloorForType(type: string): number {
-  switch (type) {
-    case 'trash_gremlin':
-      return TRASH_GREMLIN_FLOOR;
-    case 'big_rooster':
-      return GYM_FLOOR;
-    case 'krakaren_clone':
-      return KRAKAREN_BOSS_ROOM_FLOOR;
-    default:
-      return TRASH_GREMLIN_FLOOR;
-  }
-}
+const BOSS_ROOM_FLOOR = {
+  trash_gremlin: TRASH_GREMLIN_FLOOR,
+  kraken: FLOODED_PUMP_ROOM_FLOOR,
+  electric_goblin: POWER_LAB_FLOOR,
+  big_rooster: GYM_FLOOR,
+} as const satisfies Record<GauntletBossType, number>;
+
+/**
+ * Boss room floors that name no ground material of their own, and the
+ * material they are laid in. The flooded pump room is bare concrete under its
+ * water; its dressing paints everything else.
+ */
+const BOSS_ROOM_FLOOR_GROUND: ReadonlyMap<number, number> = new Map([
+  [FLOODED_PUMP_ROOM_FLOOR, FloorTypeValue.concrete],
+]);
 
 // ── Safe-room thresholds ──────────────────────────────────────────────────────
 
@@ -1032,11 +978,10 @@ function evenlySpacedOffsets(count: number, spread: number): number[] {
 
 /** Everything the generator needs except the map's side length. */
 export interface DungeonLevelOptions {
-  numBossRooms: number;
+  /** One boss room per entry, in order; a boss room is always sized for its boss. */
+  bossTypes: readonly GauntletBossType[];
   numStairwellsOverride?: number;
   stairwellCountMultiplier?: number;
-  hasArena?: boolean;
-  bossTypes?: string[];
   hasSpiderLab?: boolean;
   /** When present, forced-progression mode replaces free room placement. */
   progression?: ProgressionDef;
@@ -1062,254 +1007,43 @@ export interface GenerateDungeonOptions extends DungeonLevelOptions {
  */
 const FREE_ROAM_SAFE_ROOM_COUNT = 2;
 
-/** Where the arena will be carved, and the safe room that will guard its door. */
-interface ArenaReservation {
-  centre: Point;
-  doorTile: Point;
-  /** Rock claimed for the arena wall, its outer ring, and a margin of its own. */
-  reserve: Rect;
-  antechamber: Rect;
-}
-
-/** Spectator cages set into the arena's inner wall, evenly spaced around it. */
-const ARENA_CAGE_COUNT = 14;
-/** Radians of clearance kept between a cage and the door, so none blocks the way in. */
-const ARENA_CAGE_DOOR_CLEARANCE = 0.35;
-/** Half-turns added before a modulo, so a signed angle difference wraps positive. */
-const ANGLE_WRAP_TURNS = 3;
-/** Half of a band's thickness, for finding its middle row. */
-const WALL_BAND_HALF = 0.5;
-
-/**
- * Sets cages into the inner face of the arena wall.
- *
- * Placed by angle rather than by walking the wall tiles, so they stay evenly spread
- * however the rasterised circle happens to fall, and only ever written onto a tile
- * that is already `METAL_WALL` — the door and the concourse's own seal are both
- * live structure, and a cage dropped on either would either wall the fight in or
- * open a second way to it.
- */
-function setArenaCages(
-  grid: TileContent[][],
-  size: number,
-  centreX: number,
-  centreY: number,
-): void {
-  // Mid-wall, so a cage reads as an alcove with wall on both sides of it rather than
-  // as a hole in the inner or outer face.
-  const wallBandMidpoint = (ARENA_WALL_THICKNESS - 1) * WALL_BAND_HALF;
-  const wallRadius = ARENA_RADIUS - wallBandMidpoint;
-  const doorAngle = Math.PI / 2;
-
-  for (let i = 0; i < ARENA_CAGE_COUNT; i++) {
-    const angle = (i / ARENA_CAGE_COUNT) * Math.PI * 2;
-    // Angular distance to the door, wrapped, so the two cages nearest it are dropped.
-    const toDoor = Math.abs(
-      ((angle - doorAngle + Math.PI * ANGLE_WRAP_TURNS) % (Math.PI * 2)) - Math.PI,
-    );
-    if (toDoor < ARENA_CAGE_DOOR_CLEARANCE) continue;
-    const gx = centreX + Math.round(Math.cos(angle) * wallRadius);
-    const gy = centreY + Math.round(Math.sin(angle) * wallRadius);
-    if (gy < 0 || gy >= size || gx < 0 || gx >= size) continue;
-    if (grid[gy][gx].type !== METAL_WALL) continue;
-    grid[gy][gx].type = ARENA_CAGE;
-  }
-}
-
-/**
- * Walls off the concourse along the arena's door row, on both sides of the door.
- *
- * The door sits at the outer edge of the wall, so the concourse's own tiles run
- * along beside it — and a crawler standing on one could step sideways into the
- * arena without ever entering the antechamber. Walling the row instead keeps the
- * ring and closes the bypass: the only tiles left touching the door from outside
- * belong to the safe room.
- *
- * The links carved next deliberately cut back through this seal further out; what
- * has to be sealed is the stretch *between* the door and those links.
- */
-function sealConcourseAcrossDoorRow(
-  grid: TileContent[][],
-  size: number,
-  centreX: number,
-  doorY: number,
-): void {
-  if (doorY < 0 || doorY >= size) return;
-  for (let dx = -ARENA_CONCOURSE_REACH; dx <= ARENA_CONCOURSE_REACH; dx++) {
-    // The door's own columns are the way in and stay carved.
-    if (ARENA_DOOR_COLUMN_OFFSETS.includes(dx)) continue;
-    const radius = Math.hypot(dx, ARENA_RADIUS);
-    if (radius <= ARENA_RADIUS || radius > ARENA_CONCOURSE_REACH) continue;
-    const gx = centreX + dx;
-    if (gx < 0 || gx >= size) continue;
-    grid[doorY][gx].type = METAL_WALL;
-  }
-}
-
-/**
- * Drops the concourse into the antechamber on both flanks.
- *
- * Two two-tile passages through the door row, far enough out that the seal above
- * still separates them from the door. They are what make the circuit a circuit: the
- * ring's western end comes down into the safe room, and its eastern end leaves
- * again on the other side.
- */
-function linkConcourseToAntechamber(
-  grid: TileContent[][],
-  size: number,
-  centreX: number,
-  doorY: number,
-  antechamber: Rect,
-): void {
-  for (const side of [-1, 1] as const) {
-    for (const offset of [ARENA_CONCOURSE_LINK_INNER_DX, ARENA_CONCOURSE_LINK_OUTER_DX]) {
-      const gx = centreX + side * offset;
-      if (gx < antechamber.x || gx >= antechamber.x + antechamber.w) continue;
-      if (gx < 0 || gx >= size || doorY < 0 || doorY >= size) continue;
-      // Exactly the door row, which the seal has just walled: the concourse's last
-      // row sits immediately above it and the antechamber's first immediately below,
-      // so opening this one tile joins two stretches of floor that already exist.
-      // Only ever a wall the seal put there — anywhere else and this would be
-      // punching a hole in the arena.
-      if (grid[doorY][gx].type !== METAL_WALL) continue;
-      grid[doorY][gx].type = FloorTypeValue.concrete;
-    }
-  }
-}
-
-/**
- * Breaches the reserve margin at the arena's north point, joining the concourse
- * ring straight to the beyond pocket's landing room.
- *
- * Unlike the door, this never touches the metal wall band around the disc — the
- * gate only opens the rock reserved outside the ring, never the ring's own inner
- * boundary — so the drum stays enterable only through the south door.
- */
-function carveArenaGate(
-  grid: TileContent[][],
-  size: number,
-  centreX: number,
-  centreY: number,
-  landingRoom: Rect,
-): void {
-  for (const tile of arenaGateBreachTiles({ x: centreX, y: centreY }, landingRoom)) {
-    if (tile.x < 0 || tile.x >= size || tile.y < 0 || tile.y >= size) continue;
-    grid[tile.y][tile.x].type = FloorTypeValue.concrete;
-  }
-}
-
-/**
- * Finds a home for the arena in progression mode and claims the tiles for it.
- *
- * Spirals outward from the last gateway boss room, so the arena sits somewhere in
- * the free region rather than back inside a gauntlet, and takes the first
- * position where both the arena's own footprint and the antechamber below its
- * door land on untouched rock.
- */
 function rectOfRoom(room: { x: number; y: number; w: number; h: number }): Rect {
   return { x: room.x, y: room.y, w: room.w, h: room.h };
 }
 
-/**
- * The arena's footprint at a candidate centre, or null if it will not fit there.
- *
- * Split out from the search so the search can score candidates instead of taking
- * the first that fits.
- */
-function planArenaAt(
-  segments: SegmentMap,
-  centre: Point,
-  size: number,
-  border: number,
-): ArenaReservation | null {
-  if (
-    centre.x - ARENA_REACH < border ||
-    centre.x + ARENA_REACH >= size - border ||
-    centre.y - ARENA_REACH < border ||
-    centre.y + ARENA_REACH >= size - border
-  ) {
-    return null;
-  }
-
-  const doorTile = arenaDoorTileAt(centre);
-  const reserve = arenaReserveRect(centre);
-
-  // The beyond pocket lives north of the reserve, so a candidate that would back
-  // onto the map's border there is unusable even though the reserve itself fits —
-  // scoring it zero here is what keeps `reserveArena` from ever picking it.
-  if (reserve.y - BEYOND_HEADROOM_TILES < border) return null;
-
-  const antechamberW = randomInt(ANTECHAMBER_W_MIN, ANTECHAMBER_W_MAX);
-  const antechamberH = randomInt(ANTECHAMBER_H_MIN, ANTECHAMBER_H_MAX);
-  const antechamber: Rect = {
-    x: doorTile.x - Math.floor(antechamberW / 2),
-    y: doorTile.y + 1,
-    w: antechamberW,
-    h: antechamberH,
+/** The room sizes drawn for one gauntlet's head, its boss room from the size table. */
+function gauntletRoomSizes(
+  bossType: GauntletBossType,
+  drawSize: () => { w: number; h: number },
+): GauntletRoomSizes {
+  const safe = drawSize();
+  const exit = drawSize();
+  const boss = BOSS_ROOM_SIZE[bossType];
+  return {
+    safeRoomW: safe.w,
+    safeRoomH: safe.h,
+    bossRoomW: boss.w,
+    bossRoomH: boss.h,
+    exitSafeRoomW: exit.w,
+    exitSafeRoomH: exit.h,
   };
-
-  if (!segments.canPlaceRoom(reserve, SEGMENT_ARENA)) return null;
-  if (!segments.canPlaceRoom(antechamber, SEGMENT_ARENA)) return null;
-  return { centre, doorTile, reserve, antechamber };
 }
 
-/**
- * How the arena's home is chosen among the legal candidates.
- *
- * `farthest` is the free-region floor's rule: the arena is meant to sit at the
- * far end of the floor's paths, and on a loopy region distance from the last
- * boss's exit is the only thing that puts it there.
- *
- * `varied` is the spine floor's. There the walk is what makes the arena distant
- * — a dozen forced rooms of winding — so distance buys nothing, and taking the
- * farthest fit every time makes the siting effectively deterministic: a spine
- * that will not thread between this boss room and that arena would be retried
- * against the same arena until the map is thrown away.
- */
-type ArenaSiting = 'farthest' | 'varied';
+/** The stealth gate room a spine seated, with the corridors it is entered and left by. */
+interface PlannedStealthGate {
+  rect: Rect;
+  chainIndex: number;
+  entryTiles: Set<number>;
+  exitTiles: Set<number>;
+}
 
-function reserveArena(
-  segments: SegmentMap,
-  origin: Point,
-  size: number,
-  border: number,
-  siting: ArenaSiting,
-): ArenaReservation | null {
-  // Scored rather than first-fit: the arena is meant to sit at the far end of the
-  // floor's paths, the way Big Rooster does on floor 1, and taking the first legal
-  // spiral step put it wherever the search happened to look first — sometimes a
-  // couple of rooms past the gauntlet exit, where a crawler trips over it on the way
-  // out. Distance from that exit is the score, and the whole attempt budget is spent
-  // looking for the furthest one that fits.
-  let best: ArenaReservation | null = null;
-  let bestDistance = -1;
-  const legal: ArenaReservation[] = [];
-
-  for (let attempt = 0; attempt < ARENA_PLACEMENT_ATTEMPTS; attempt++) {
-    const angle =
-      (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + worldRandom() * ARENA_ANGLE_JITTER;
-    const distance = ARENA_MIN_DIST_FROM_GAUNTLET_EXIT + worldRandom() * ARENA_DIST_VARIANCE;
-    if (siting === 'farthest' && distance <= bestDistance) continue;
-    const centre: Point = {
-      x: Math.round(origin.x + Math.cos(angle) * distance),
-      y: Math.round(origin.y + Math.sin(angle) * distance),
-    };
-
-    const plan = planArenaAt(segments, centre, size, border);
-    if (plan === null) continue;
-    if (siting === 'varied') {
-      legal.push(plan);
-      continue;
-    }
-    best = plan;
-    bestDistance = distance;
-  }
-
-  if (siting === 'varied' && legal.length > 0) best = randomFromArray(legal);
-  if (best === null) return null;
-  segments.addRoom(best.reserve, SEGMENT_ARENA);
-  segments.addRoom(best.antechamber, SEGMENT_ARENA);
-  return best;
+/** What building one gauntlet seated beyond its rooms, for the floor-wide records. */
+interface GauntletBuild {
+  /** The quest room's choke record and the corridor it is entered by, when this gauntlet seated it. */
+  questChoke: { entryTiles: Set<number>; data: QuestChokeData } | null;
+  stealthGate: PlannedStealthGate | null;
+  seatedBathrooms: boolean;
+  seatedSpine: boolean;
 }
 
 /**
@@ -1330,22 +1064,14 @@ function buildDungeon(
   };
   const {
     size,
-    numBossRooms,
     numStairwellsOverride,
     stairwellCountMultiplier = 1,
-    hasArena = false,
-    bossTypes = [],
+    bossTypes,
     hasSpiderLab = false,
     progression,
     questGrateCount = BASE_NURSERY_GRATE_COUNT,
   } = options;
   const BORDER = 5;
-
-  // The lab's approach — the station and both hallways — is seated by the spine,
-  // so a floor asking for a lab without one is a level-definition bug.
-  if (hasSpiderLab && progression?.spine === undefined) {
-    throw new Error('a spider lab is seated off a spine; this floor has none');
-  }
 
   // 1. Fill everything with wall tiles
   const grid: TileContent[][] = Array.from({ length: size }, (_, y) =>
@@ -1509,21 +1235,18 @@ function buildDungeon(
    * The stealth gate room the spine seated, with the tiles of the corridors it
    * is entered and left by, for the reason `questChokeEntryTiles` is kept.
    */
-  let plannedStealthGate: {
-    rect: Rect;
-    chainIndex: number;
-    entryTiles: Set<number>;
-    exitTiles: Set<number>;
-  } | null = null;
-  let arenaReservation: ArenaReservation | null = null;
-  let antechamberSafeRoom: SafeRoomData | null = null;
-  /** Indices into `rooms` of the beyond pocket, index 0 always the landing room. */
-  const beyondRoomIndices: number[] = [];
+  let plannedStealthGate: PlannedStealthGate | null = null;
+  /** Every gauntlet's flooded corridor, laid out and waiting to be flooded once the floor is built. */
+  const plannedFloodedApproaches: FloodedApproachData[] = [];
+  /** Indices into `rooms` of the free region past the last gauntlet: the only rooms a stairwell may stand in. */
+  const freeRegionRoomIndices: number[] = [];
 
   const carveRoomFloor = (rect: Rect, floor: number): void => {
+    const ground = BOSS_ROOM_FLOOR_GROUND.get(floor);
     for (let ry = rect.y; ry < rect.y + rect.h; ry++) {
       for (let rx = rect.x; rx < rect.x + rect.w; rx++) {
         grid[ry][rx].type = floor;
+        if (ground !== undefined) grid[ry][rx].groundType = ground;
       }
     }
   };
@@ -1547,9 +1270,13 @@ function buildDungeon(
     return rooms.length - 1;
   };
 
+  /** Spine bookkeeping the layout data and the validators read; filled by a spine route. */
+  const spineChainBounds: Rect[] = [];
+  const spineLanes: Array<{ forkIndex: number; rooms: Rect[] }> = [];
+  let spineGauntletIndex: number | null = null;
+
   if (progression !== undefined) {
     const segments = new SegmentMap(size, BORDER);
-    let antechamberRoomIndex: number | null = null;
 
     const mapCentre: Point = { x: Math.floor(size / 2), y: Math.floor(size / 2) };
     const startRoom = rectCentredOn(
@@ -1573,22 +1300,35 @@ function buildDungeon(
         corridor.kind,
       );
     };
+    const drawRoomSize = (): { w: number; h: number } => ({
+      w: randomInt(MIN_W, MAX_W),
+      h: randomInt(MIN_H, MAX_H),
+    });
 
     // ── Gauntlets ───────────────────────────────────────────────────────────
 
-    // One nursery per floor. Both the gauntlet flag and a spine seat a quest
-    // room, but the generator carries a single `questChoke` and finds the room
-    // with a single `role === 'quest'` lookup — so a second request would pair
-    // the first room with the second choke's entry corridor, leave it with no
-    // identifiable way in, and fail every map until the attempt budget threw.
+    // One nursery per floor. A gauntlet's flag and a spine route both seat a
+    // quest room, but the generator carries a single `questChoke` and finds the
+    // room with a single `role === 'quest'` lookup — so a second request would
+    // pair the first room with the second choke's entry corridor, leave it with
+    // no identifiable way in, and fail every map until the attempt budget threw.
     // Better to say so at the source than to fail forty layouts describing it.
-    const chokeRequests =
-      progression.gauntlets.filter((gauntlet) => gauntlet.questChoke === true).length +
-      (progression.spine === undefined ? 0 : 1);
+    const chokeRequests = progression.gauntlets.filter(
+      (gauntlet) => gauntlet.questChoke === true || gauntlet.route.kind === 'spine',
+    ).length;
     if (chokeRequests > 1) {
       throw new Error(
         `a floor may seat one defense-quest choke; this one asks for ${chokeRequests}`,
       );
+    }
+    // The lab's approach — the station and both hallways — is seated by a
+    // spine, so a floor asking for a lab without one is a level-definition bug.
+    const spineRoutes = progression.gauntlets.filter((gauntlet) => gauntlet.route.kind === 'spine');
+    if (hasSpiderLab && spineRoutes.length !== 1) {
+      throw new Error('a spider lab is seated off a spine; this floor needs exactly one');
+    }
+    if (spineRoutes.length > 1) {
+      throw new Error('a floor may route one gauntlet through a spine');
     }
 
     const gauntletRoomBounds: Rect[][] = [];
@@ -1597,22 +1337,40 @@ function buildDungeon(
     let entryRoom = startRoom;
     let previousHeading: number | null = null;
 
-    for (const [index, gauntlet] of progression.gauntlets.entries()) {
+    /** The rooms every gauntlet seats whatever its route: its head. */
+    const addGauntletHead = (gauntlet: GauntletDef, head: GauntletHead): void => {
+      addRoom(head.safeRoom, SAFE_ROOM_FLOOR, 'safe', { guardsBossType: gauntlet.bossType });
+      addRoom(head.bossRoom, BOSS_ROOM_FLOOR[gauntlet.bossType], 'boss');
+      addRoom(head.exitSafeRoom, SAFE_ROOM_FLOOR, 'safe', { followsBossType: gauntlet.bossType });
+      if (head.floodedApproach !== null) {
+        plannedFloodedApproaches.push({ ...head.floodedApproach, bossType: gauntlet.bossType });
+      }
+    };
+
+    /**
+     * Plans a gauntlet reached by branches, seats its rooms and carves its
+     * corridors. Returns false when no layout fit.
+     */
+    const buildBranchesGauntlet = (
+      index: number,
+      gauntlet: GauntletDef,
+      route: BranchesRoute,
+    ): GauntletBuild | null => {
       let plan: GauntletPlan | null = null;
       // The choke slot is drawn once and only yields to the other after the first
       // has genuinely proved unplaceable, for the same reason the branch count
       // is: the approach slot seats less often per attempt than the stem, so
       // redrawing per attempt would put the nursery on the stem nearly always.
       // The stem needs a boss room to hang off, which gauntlet 0 does not have.
-      const chokeSlotOrder = chokeSlotsFor(index, gauntlet.questChoke === true);
+      const chokeSlotOrder = chokeSlotsFor(index, gauntlet);
       for (const chokeSlot of chokeSlotOrder) {
         if (plan !== null) break;
         // The drawn branch count survives every geometry retry, and only steps down
         // once this many branches have proved genuinely unplaceable. Redrawing it
         // per attempt would collapse the distribution onto the minimum, because
         // fewer branches are always likelier to fit.
-        let branchCount = randomInt(gauntlet.branchCount.min, gauntlet.branchCount.max);
-        while (plan === null && branchCount >= gauntlet.branchCount.min) {
+        let branchCount = randomInt(route.branchCount.min, route.branchCount.max);
+        while (plan === null && branchCount >= route.branchCount.min) {
           for (let attempt = 0; attempt < MAX_GAUNTLET_ATTEMPTS && plan === null; attempt++) {
             const snapshot = segments.snapshot();
             plan = planGauntlet(segments, {
@@ -1621,21 +1379,15 @@ function buildDungeon(
               entryRoom,
               previousHeading,
               branchCount,
-              branchRooms: gauntlet.branchRooms,
-              sizes: {
-                safeRoomW: randomInt(MIN_W, MAX_W),
-                safeRoomH: randomInt(MIN_H, MAX_H),
-                bossRoomW: BOSS_ROOM_W,
-                bossRoomH: BOSS_ROOM_H,
-                exitSafeRoomW: randomInt(MIN_W, MAX_W),
-                exitSafeRoomH: randomInt(MIN_H, MAX_H),
-              },
+              branchRooms: route.branchRooms,
+              sizes: gauntletRoomSizes(gauntlet.bossType, drawRoomSize),
               choke:
                 chokeSlot === undefined
                   ? undefined
                   : { w: QUEST_ROOM_W, h: QUEST_ROOM_H, slot: chokeSlot },
-              bathroom: gauntlet.bathroomChoke,
-              pocketSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
+              bathroom: route.bathroomChoke,
+              approach: gauntlet.approach,
+              pocketSize: drawRoomSize,
               pickCorridorKind,
             });
             if (plan === null) segments.rollback(snapshot);
@@ -1643,31 +1395,37 @@ function buildDungeon(
           if (plan === null) branchCount--;
         }
       }
-      if (plan === null) return reject(`gauntlet ${index}`);
+      if (plan === null) return null;
 
       for (const count of plan.branchRoomCounts) {
-        if (count < gauntlet.branchRooms.min || count > gauntlet.branchRooms.max) {
+        if (count < route.branchRooms.min || count > route.branchRooms.max) {
           throw new Error(
             `gauntlet ${index} produced a branch of ${count} rooms, outside the configured ` +
-              `range ${gauntlet.branchRooms.min}–${gauntlet.branchRooms.max}`,
+              `range ${route.branchRooms.min}–${route.branchRooms.max}`,
           );
         }
       }
+      if (
+        route.bathroomChoke !== undefined &&
+        plan.bathroomRooms.length !== plan.branchChains.length
+      ) {
+        return null;
+      }
 
-      addRoom(plan.safeRoom, SAFE_ROOM_FLOOR, 'safe', { guardsBossType: gauntlet.bossType });
-      addRoom(plan.bossRoom, bossFloorForType(gauntlet.bossType), 'boss');
-      addRoom(plan.exitSafeRoom, SAFE_ROOM_FLOOR, 'safe', { followsBossType: gauntlet.bossType });
+      addGauntletHead(gauntlet, {
+        safeRoom: plan.safeRoom,
+        bossRoom: plan.bossRoom,
+        exitSafeRoom: plan.exitSafeRoom,
+        corridors: [],
+        approachChokeRoom: null,
+        approachChokeEntryCorridor: null,
+        floodedApproach: plan.floodedApproach,
+      });
       for (const rect of plan.chainRooms) {
         addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
       }
       for (const rect of plan.pockets) {
         addRoom(rect, SAFE_ROOM_FLOOR, 'safe', { isSafeAccessPocket: true });
-      }
-      if (gauntlet.bathroomChoke !== undefined) {
-        if (plan.bathroomRooms.length !== plan.branchChains.length) {
-          return reject(`gauntlet ${index} bathrooms`);
-        }
-        bathroomGauntletIndex = index;
       }
       for (const bathroom of plan.bathroomRooms) {
         addRoom(bathroom.rect, FloorTypeValue.tile_floor, 'bathroom');
@@ -1677,17 +1435,20 @@ function buildDungeon(
         });
       }
       const chokeRooms: Rect[] = [];
+      let questChoke: GauntletBuild['questChoke'] = null;
       if (plan.chokeRoom !== null && plan.chokeSlot !== null) {
         addRoom(plan.chokeRoom, FloorTypeValue.tile_floor, 'quest');
         chokeRooms.push(plan.chokeRoom);
         // The stem choke sits on the corridor out of the previous gauntlet's
         // boss room; the approach choke sits past this gauntlet's gateway safe
         // room. Both are crossed after every earlier gauntlet's boss.
-        questChokeEntryTiles = corridorTileKeys(plan.chokeEntryCorridor?.tiles ?? []);
-        questChokeData = {
-          rank: index,
-          gauntletIndex: index,
-          blocks: plan.chokeSlot === 'stem' ? 'gatewaySafeRoom' : 'gatewayBossRoom',
+        questChoke = {
+          entryTiles: corridorTileKeys(plan.chokeEntryCorridor?.tiles ?? []),
+          data: {
+            rank: index,
+            gauntletIndex: index,
+            blocks: plan.chokeSlot === 'stem' ? 'gatewaySafeRoom' : 'gatewayBossRoom',
+          },
         };
       }
       for (const corridor of plan.corridors) carvePlannedCorridor(corridor);
@@ -1705,8 +1466,232 @@ function buildDungeon(
       gauntletBranchChains.push(plan.branchChains);
       entryRoom = plan.exitSafeRoom;
       previousHeading = plan.heading;
+      return {
+        questChoke,
+        stealthGate: null,
+        seatedBathrooms: route.bathroomChoke !== undefined,
+        seatedSpine: false,
+      };
+    };
+
+    // A few ordinary dead ends hanging off the chain for the treasure-room pass
+    // to draw from. The chain's mandatory safe-access pockets are seated by
+    // `planSpine` itself, sized through `safeRoomSize` below.
+    const spinePockets: SpinePocketRequest[] = [];
+
+    /**
+     * Sites a spine-fed gauntlet's head near the previous exit and threads a
+     * spine to its gateway safe room, then seats and carves both. The two are
+     * planned together because the spine's far endpoint *is* that safe room: a
+     * spine that cannot be seated between this exit and this gateway is
+     * answered by moving the gateway rather than by throwing the whole map
+     * away. Both live purely in the `SegmentMap` until one pairing works, so a
+     * failure rolls back cleanly. Returns the stage that failed when it fails.
+     */
+    const buildSpineGauntlet = (
+      index: number,
+      gauntlet: GauntletDef,
+      route: SpineRoute,
+    ): GauntletBuild | 'spine gateway' | 'spine' => {
+      if (index === 0) {
+        throw new Error('a spine route leaves the previous gauntlet’s exit; the first has none');
+      }
+      for (let pocket = 0; pocket < SPINE_TREASURE_POCKETS; pocket++) {
+        spinePockets.push(drawRoomSize());
+      }
+      const spineEntry = entryRoom;
+      const entryCentre = rectCentre(spineEntry);
+      const isLastGauntlet = index === progression.gauntlets.length - 1;
+      const reserveFreeRegion = (exitRoom: Rect, heading: number): boolean => {
+        const exitCentre = rectCentre(exitRoom);
+        const exitReach = Math.hypot(exitRoom.w / 2, exitRoom.h / 2);
+        const reserveReach = FREE_REGION_RESERVE_SPAN_TILES / 2;
+        const offset = exitReach + FREE_REGION_RESERVE_GAP_TILES + reserveReach;
+        const reserve = rectCentredOn(
+          {
+            x: Math.round(exitCentre.x + Math.cos(heading) * offset),
+            y: Math.round(exitCentre.y + Math.sin(heading) * offset),
+          },
+          FREE_REGION_RESERVE_SPAN_TILES,
+          FREE_REGION_RESERVE_SPAN_TILES,
+        );
+        return segments.reserveArea(reserve, SEGMENT_FREE_RESERVE);
+      };
+      let head: GauntletHead | null = null;
+      let spinePlan: SpinePlan | null = null;
+      let headEverSeated = false;
+
+      for (let siting = 0; siting < MAX_SPINE_GATEWAY_SITINGS && spinePlan === null; siting++) {
+        const sitingSnapshot = segments.snapshot();
+        head = null;
+        for (let sample = 0; sample < SPINE_GATEWAY_PLACEMENT_SAMPLES && head === null; sample++) {
+          const sampleSnapshot = segments.snapshot();
+          const bearing = worldRandom() * Math.PI * 2;
+          const distance = randomInt(SPINE_GATEWAY_DIST_MIN, SPINE_GATEWAY_DIST_MAX);
+          head = planGauntletHead(segments, {
+            index,
+            heading: bearing,
+            safeRoomCentre: {
+              x: Math.round(entryCentre.x + Math.cos(bearing) * distance),
+              y: Math.round(entryCentre.y + Math.sin(bearing) * distance),
+            },
+            sizes: gauntletRoomSizes(gauntlet.bossType, drawRoomSize),
+            approach: gauntlet.approach,
+            pickCorridorKind,
+          });
+          if (head !== null && isLastGauntlet && !reserveFreeRegion(head.exitSafeRoom, bearing)) {
+            head = null;
+          }
+          if (head === null) segments.rollback(sampleSnapshot);
+        }
+        if (head === null) {
+          segments.rollback(sitingSnapshot);
+          continue;
+        }
+        headEverSeated = true;
+        const gatewayRoom = head.safeRoom;
+        const keepAway = [
+          ...rooms
+            .filter((room) => room.role === 'safe')
+            .map((room) => rectCentre(rectOfRoom(room))),
+          rectCentre(gatewayRoom),
+          rectCentre(head.exitSafeRoom),
+        ];
+        for (let spineAttempt = 0; spineAttempt < MAX_SPINE_ATTEMPTS; spineAttempt++) {
+          const spineSnapshot = segments.snapshot();
+          spinePlan = planSpine(segments, {
+            entryRoom: spineEntry,
+            exitRoom: gatewayRoom,
+            rooms: route.rooms,
+            splits: route.splits,
+            questRoom: { w: QUEST_ROOM_W, h: QUEST_ROOM_H },
+            stealthGate: route.stealthGate ?? null,
+            labRoom: hasSpiderLab
+              ? {
+                  w: SPIDER_LAB_W,
+                  h: SPIDER_LAB_H,
+                  station: { w: LAB_STATION_W, h: LAB_STATION_H },
+                }
+              : null,
+            pockets: spinePockets,
+            safeRoomSize: drawRoomSize,
+            safeRoomKeepAway: keepAway,
+            safeRoomSeparation: SCATTER_SAFE_ROOM_SEPARATION,
+            segmentBase: gauntletSegmentCeiling(progression.gauntlets.length) + 1,
+            pickCorridorKind,
+          });
+          if (spinePlan !== null) break;
+          segments.rollback(spineSnapshot);
+        }
+        if (spinePlan === null) segments.rollback(sitingSnapshot);
+      }
+      // Named by the stage that failed last: a histogram of rejections that
+      // blamed the gateway for a chain that would not thread would send its
+      // reader to the wrong planner.
+      if (head === null || spinePlan === null) return headEverSeated ? 'spine' : 'spine gateway';
+
+      addGauntletHead(gauntlet, head);
+      for (const corridor of head.corridors) carvePlannedCorridor(corridor);
+
+      // Everything the spine seats is carved here in one pass, because the plan
+      // claimed its tiles before any of it was drawn: rooms first, so the
+      // corridors could be threaded between them, then the corridors, in
+      // walking order.
+      const spineRooms: Rect[] = [];
+      let stealthGate: PlannedStealthGate | null = null;
+      let questChoke: GauntletBuild['questChoke'] = null;
+      for (const [chainIndex, room] of spinePlan.chain.entries()) {
+        spineChainBounds.push(room.rect);
+        spineRooms.push(room.rect);
+        if (room.kind === 'stealth_gate') {
+          addRoom(room.rect, FloorTypeValue.concrete, 'stealth_gate');
+          stealthGate = {
+            rect: room.rect,
+            chainIndex,
+            entryTiles: corridorTileKeys(spinePlan.stealthGateEntryCorridor?.tiles ?? []),
+            exitTiles: corridorTileKeys(spinePlan.stealthGateExitCorridor?.tiles ?? []),
+          };
+          continue;
+        }
+        if (room.kind === 'quest') {
+          addRoom(room.rect, FloorTypeValue.tile_floor, 'quest');
+          // The spine arrives at this gauntlet's gateway safe room, so the
+          // nursery stands where a stem choke would: in front of the gateway.
+          questChoke = {
+            entryTiles: corridorTileKeys(spinePlan.questEntryCorridor?.tiles ?? []),
+            data: { rank: index, gauntletIndex: index, blocks: 'gatewaySafeRoom' },
+          };
+          continue;
+        }
+        addRoom(room.rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(room.rect))]), 'chain');
+      }
+      for (const lane of spinePlan.lanes) {
+        spineLanes.push({ forkIndex: lane.forkIndex, rooms: lane.rooms });
+        spineRooms.push(...lane.rooms);
+        for (const rect of lane.rooms) {
+          addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
+        }
+      }
+      if (spinePlan.lab !== null) {
+        addRoom(spinePlan.lab.room, SPIDER_LAB_FLOOR, 'spider_lab');
+        addRoom(spinePlan.lab.station, LAB_STATION_FLOOR, 'safe', {
+          servesSpecialRoom: 'spider_lab',
+        });
+        spineRooms.push(spinePlan.lab.room, spinePlan.lab.station);
+      }
+      for (const pocket of spinePlan.pockets) {
+        const centre = rectCentre(pocket.rect);
+        if (pocket.role === 'safe') {
+          addRoom(pocket.rect, SAFE_ROOM_FLOOR, 'safe', { isSafeAccessPocket: true });
+        } else {
+          addRoom(pocket.rect, randomFromArray(ZONE_FLOORS[zoneOf(centre)]), 'regular');
+        }
+        spineRooms.push(pocket.rect);
+      }
+      for (const corridor of spinePlan.corridors) carvePlannedCorridor(corridor);
+
+      gauntletRoomBounds.push([head.safeRoom, head.bossRoom, head.exitSafeRoom, ...spineRooms]);
+      branchRoomCounts.push([]);
+      gauntletBranchChains.push([]);
+      previousHeading = Math.atan2(
+        rectCentre(head.safeRoom).y - entryCentre.y,
+        rectCentre(head.safeRoom).x - entryCentre.x,
+      );
+      entryRoom = head.exitSafeRoom;
+      return { questChoke, stealthGate, seatedBathrooms: false, seatedSpine: true };
+    };
+
+    for (const [index, gauntlet] of progression.gauntlets.entries()) {
+      const route = gauntlet.route;
+      let build: GauntletBuild;
+      switch (route.kind) {
+        case 'branches': {
+          const built = buildBranchesGauntlet(index, gauntlet, route);
+          if (built === null) return reject(`gauntlet ${index}`);
+          build = built;
+          break;
+        }
+        case 'spine': {
+          const built = buildSpineGauntlet(index, gauntlet, route);
+          if (typeof built === 'string') return reject(built);
+          build = built;
+          break;
+        }
+        default: {
+          const unhandled: never = route;
+          throw new Error(`unknown gauntlet route ${JSON.stringify(unhandled)}`);
+        }
+      }
+      if (build.questChoke !== null) {
+        questChokeEntryTiles = build.questChoke.entryTiles;
+        questChokeData = build.questChoke.data;
+      }
+      if (build.stealthGate !== null) plannedStealthGate = build.stealthGate;
+      if (build.seatedBathrooms) bathroomGauntletIndex = index;
+      if (build.seatedSpine) spineGauntletIndex = index;
     }
 
+    segments.releaseSegment(SEGMENT_FREE_RESERVE);
     const lastGauntletExitRoom = entryRoom;
     lastGauntletExitBounds = lastGauntletExitRoom;
     const lastGauntletExitIndex = rooms.findIndex(
@@ -1717,227 +1702,6 @@ function buildDungeon(
         r.y === lastGauntletExitRoom.y,
     );
     const lastGauntletExitCentre = rectCentre(lastGauntletExitRoom);
-
-    // ── Arena reservation ───────────────────────────────────────────────────
-    //
-    // The arena is sited before the free region rather than after it, because it
-    // needs a wide patch of untouched rock for its wall, its ring, and the
-    // antechamber that guards its only door. Once reserved, free rooms simply
-    // route around it.
-
-    // ── Beyond pocket ─────────────────────────────────────────────────────
-    //
-    // Every floor-2 stairwell lives back here. Seeded from the arena's north gate
-    // rather than the antechamber, so the walk to any of them crosses the ring the
-    // boss rages along, not merely the door that leads to it.
-    //
-    // Planned rather than carved, and planned *before* the spine, for two reasons
-    // that are really one: the pocket is the tightest thing on the floor — six
-    // rooms inside a 60-tile radius of a single gate tile — so it must claim its
-    // ground while the rock behind the drum is still untouched; and the gate's
-    // breach line is claimed by `claimCorridor`, which overwrites ownership
-    // rather than refusing it, so anything already sitting on that line would be
-    // silently joined to the pocket and hand the stairs a second way in.
-    const planBeyondPocket = (
-      reservation: ArenaReservation,
-    ): { rects: Rect[]; corridors: PlannedCorridor[] } | null => {
-      const arenaCentre = reservation.centre;
-      const reserveRect = reservation.reserve;
-      const gateTile = arenaGateTileAt(arenaCentre);
-      const rects: Rect[] = [];
-      const corridors: PlannedCorridor[] = [];
-
-      const connectBeyondRoom = (rect: Rect): PlannedCorridor | null => {
-        const centre = rectCentre(rect);
-        const sorted = [...rects].sort((a, b) => {
-          const ca = rectCentre(a);
-          const cb = rectCentre(b);
-          return (
-            Math.hypot(centre.x - ca.x, centre.y - ca.y) -
-            Math.hypot(centre.x - cb.x, centre.y - cb.y)
-          );
-        });
-        for (const candidate of sorted.slice(0, FREE_CONNECT_CANDIDATES)) {
-          const corridor = planCorridorBetween(
-            segments,
-            SEGMENT_BEYOND,
-            candidate,
-            rect,
-            pickCorridorKind(false, centre),
-          );
-          if (corridor === null) continue;
-          segments.claimCorridor(corridor.tiles, SEGMENT_BEYOND);
-          return corridor;
-        }
-        return null;
-      };
-
-      const placeBeyondRoom = (w: number, h: number): boolean => {
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          const rect: Rect = {
-            x: randomInt(BORDER + 1, size - BORDER - w - 2),
-            y: randomInt(BORDER + 1, size - BORDER - h - 2),
-            w,
-            h,
-          };
-          const centre = rectCentre(rect);
-          if (
-            Math.hypot(centre.x - gateTile.x, centre.y - gateTile.y) > BEYOND_MAX_DIST_FROM_GATE
-          ) {
-            continue;
-          }
-          // Stays north of the reserve — the pocket's whole reason to exist is
-          // ground the arena never claimed.
-          if (rect.y + rect.h > reserveRect.y) continue;
-          if (!segments.canPlaceRoom(rect, SEGMENT_BEYOND)) continue;
-
-          if (rects.length === 0) {
-            // The landing room is what the gate's straight breach reaches, so it
-            // has to span both gate columns — otherwise the breach carved through
-            // the reserve margin misses it entirely.
-            const spansGateColumns = ARENA_GATE_COLUMN_OFFSETS.every(
-              (offset) => gateTile.x + offset >= rect.x && gateTile.x + offset < rect.x + rect.w,
-            );
-            if (!spansGateColumns) continue;
-            segments.addRoom(rect, SEGMENT_BEYOND);
-            segments.claimCorridor(arenaGateBreachTiles(arenaCentre, rect), SEGMENT_BEYOND);
-            rects.push(rect);
-            return true;
-          }
-
-          const snapshot = segments.snapshot();
-          segments.addRoom(rect, SEGMENT_BEYOND);
-          const corridor = connectBeyondRoom(rect);
-          if (corridor === null) {
-            segments.rollback(snapshot);
-            continue;
-          }
-          rects.push(rect);
-          corridors.push(corridor);
-          return true;
-        }
-        return false;
-      };
-
-      while (rects.length < BEYOND_ROOM_TARGET) {
-        if (!placeBeyondRoom(randomInt(MIN_W, MAX_W), randomInt(MIN_H, MAX_H))) break;
-      }
-      if (rects.length < BEYOND_MIN_ROOMS) return null;
-      return { rects, corridors };
-    };
-
-    // A few ordinary dead ends hanging off the chain for the treasure-room pass
-    // to draw from. The chain's mandatory safe-access pockets are seated by
-    // `planSpine` itself, sized through `safeRoomSize` below.
-    const spinePockets: SpinePocketRequest[] = [];
-    for (let index = 0; index < SPINE_TREASURE_POCKETS; index++) {
-      spinePockets.push({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) });
-    }
-
-    // On a spine floor the arena and the spine are planned together, because the
-    // spine's far endpoint *is* the antechamber: a spine that cannot be seated
-    // between this boss room and this arena is answered by moving the arena
-    // rather than by throwing the whole map away. Both live purely in the
-    // `SegmentMap` until one pairing works, so a failure rolls back cleanly.
-    const spineDef = progression.spine;
-    let spinePlan: SpinePlan | null = null;
-    let beyondPlan: { rects: Rect[]; corridors: PlannedCorridor[] } | null = null;
-    let beyondPocketFailed = false;
-    if (hasArena) {
-      for (let arenaAttempt = 0; arenaAttempt < MAX_ARENA_ATTEMPTS; arenaAttempt++) {
-        const arenaSnapshot = segments.snapshot();
-        beyondPocketFailed = false;
-        const reservation = reserveArena(
-          segments,
-          lastGauntletExitCentre,
-          size,
-          BORDER,
-          spineDef === undefined ? 'farthest' : 'varied',
-        );
-        if (reservation === null) {
-          segments.rollback(arenaSnapshot);
-          continue;
-        }
-        const beyond = planBeyondPocket(reservation);
-        if (beyond === null) {
-          // Reported per attempt rather than latched, so a histogram of
-          // rejections names the stage that actually failed last.
-          beyondPocketFailed = true;
-          segments.rollback(arenaSnapshot);
-          continue;
-        }
-        if (spineDef === undefined) {
-          arenaReservation = reservation;
-          beyondPlan = beyond;
-          break;
-        }
-        for (let spineAttempt = 0; spineAttempt < MAX_SPINE_ATTEMPTS; spineAttempt++) {
-          const spineSnapshot = segments.snapshot();
-          const planned = planSpine(segments, {
-            entryRoom: lastGauntletExitRoom,
-            exitRoom: reservation.antechamber,
-            rooms: spineDef.rooms,
-            splits: spineDef.splits,
-            questRoom: { w: QUEST_ROOM_W, h: QUEST_ROOM_H },
-            stealthGate: spineDef.stealthGate ?? null,
-            labRoom: hasSpiderLab
-              ? {
-                  w: SPIDER_LAB_W,
-                  h: SPIDER_LAB_H,
-                  station: { w: LAB_STATION_W, h: LAB_STATION_H },
-                }
-              : null,
-            pockets: spinePockets,
-            safeRoomSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
-            safeRoomKeepAway: [
-              ...rooms
-                .filter((room) => room.role === 'safe')
-                .map((room) => rectCentre(rectOfRoom(room))),
-              rectCentre(reservation.antechamber),
-            ],
-            safeRoomSeparation: SCATTER_SAFE_ROOM_SEPARATION,
-            segmentBase: gauntletSegmentCeiling(progression.gauntlets.length) + 1,
-            pickCorridorKind,
-          });
-          if (planned !== null) {
-            spinePlan = planned;
-            break;
-          }
-          segments.rollback(spineSnapshot);
-        }
-        if (spinePlan !== null) {
-          arenaReservation = reservation;
-          beyondPlan = beyond;
-          break;
-        }
-        segments.rollback(arenaSnapshot);
-      }
-      // The spine is named first. On a spine floor the arena is only accepted
-      // once a spine threads to it, so an unseatable spine leaves *both* null —
-      // and reporting that as an arena failure sends whoever reads the rejection
-      // histogram to `reserveArena` when the geometry that would not fit is the
-      // chain.
-      if (spineDef !== undefined && spinePlan === null) return reject('spine');
-      if (arenaReservation === null) {
-        return reject(beyondPocketFailed ? 'beyond region' : 'arena reservation');
-      }
-      const antechamberIndex = addRoom(arenaReservation.antechamber, SAFE_ROOM_FLOOR, 'safe', {
-        guardsBossType: ARENA_BOSS_TYPE,
-      });
-      antechamberRoomIndex = antechamberIndex;
-      if (beyondPlan !== null) {
-        for (const rect of beyondPlan.rects) {
-          const floor = randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]);
-          beyondRoomIndices.push(addRoom(rect, floor, 'regular'));
-        }
-        for (const corridor of beyondPlan.corridors) carvePlannedCorridor(corridor);
-      }
-    } else if (spineDef !== undefined) {
-      // The spine's far endpoint is the antechamber, which only an arena floor
-      // has. A floor that asked for one without an arena is a level-definition
-      // bug, and shipping the free region instead would hide it.
-      throw new Error('a spine floor must have an arena to anchor the far end of its chain');
-    }
 
     // ── Free region ─────────────────────────────────────────────────────────
     //
@@ -1989,21 +1753,49 @@ function buildDungeon(
       return null;
     };
 
+    /**
+     * Where a free room is tried. `anywhere` samples the whole map, which on a
+     * large open floor spreads the region evenly. `nearRegion` samples around
+     * the rooms already seated (the last exit first), for a floor whose free
+     * ground is a pocket behind its last boss that uniform samples rarely land
+     * in with a corridor that can reach it.
+     */
+    type FreeRoomSampling = 'anywhere' | 'nearRegion';
+    const sampleFreeRoom = (w: number, h: number, sampling: FreeRoomSampling): Rect => {
+      if (sampling === 'anywhere') {
+        return {
+          x: randomInt(BORDER + 1, size - BORDER - w - 2),
+          y: randomInt(BORDER + 1, size - BORDER - h - 2),
+          w,
+          h,
+        };
+      }
+      const anchors = seedUsed
+        ? connectableIndices
+        : [lastGauntletExitIndex, ...connectableIndices];
+      const anchor = rectCentre(rectOfRoom(rooms[randomFromArray(anchors)]));
+      const angle = worldRandom() * Math.PI * 2;
+      const distance = randomInt(FREE_ROOM_NEAR_DIST_MIN, FREE_ROOM_NEAR_DIST_MAX);
+      return rectCentredOn(
+        {
+          x: Math.round(anchor.x + Math.cos(angle) * distance),
+          y: Math.round(anchor.y + Math.sin(angle) * distance),
+        },
+        w,
+        h,
+      );
+    };
+
     const placeFreeRoom = (
       w: number,
       h: number,
       role: RoomRole,
       floorFor: (centre: Point) => number,
       accept: (centre: Point) => boolean,
-      guardsBossType?: string,
+      sampling: FreeRoomSampling = 'anywhere',
     ): number | null => {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const rect: Rect = {
-          x: randomInt(BORDER + 1, size - BORDER - w - 2),
-          y: randomInt(BORDER + 1, size - BORDER - h - 2),
-          w,
-          h,
-        };
+        const rect = sampleFreeRoom(w, h, sampling);
         const centre = rectCentre(rect);
         if (!accept(centre)) continue;
         if (!segments.canPlaceRoom(rect, SEGMENT_FREE)) continue;
@@ -2015,9 +1807,10 @@ function buildDungeon(
           segments.rollback(snapshot);
           continue;
         }
-        const index = addRoom(rect, floorFor(centre), role, { guardsBossType });
+        const index = addRoom(rect, floorFor(centre), role);
         carvePlannedCorridor(corridor);
         connectableIndices.push(index);
+        freeRegionRoomIndices.push(index);
         return index;
       }
       return null;
@@ -2026,71 +1819,20 @@ function buildDungeon(
     const regularFloorFor = (centre: Point): number => randomFromArray(ZONE_FLOORS[zoneOf(centre)]);
     const anyPosition = (): boolean => true;
 
-    // ── Spine ───────────────────────────────────────────────────────────────
-    //
-    // Everything the spine seats is carved here in one pass, because the plan
-    // claimed its tiles before any of it was drawn: rooms first, so the corridors
-    // could be threaded between them, then the corridors, in walking order.
-    const spineChainBounds: Rect[] = [];
-    const spineLanes: Array<{ forkIndex: number; rooms: Rect[] }> = [];
-    if (spinePlan !== null) {
-      for (const [chainIndex, room] of spinePlan.chain.entries()) {
-        spineChainBounds.push(room.rect);
-        if (room.kind === 'stealth_gate') {
-          addRoom(room.rect, FloorTypeValue.concrete, 'stealth_gate');
-          plannedStealthGate = {
-            rect: room.rect,
-            chainIndex,
-            entryTiles: corridorTileKeys(spinePlan.stealthGateEntryCorridor?.tiles ?? []),
-            exitTiles: corridorTileKeys(spinePlan.stealthGateExitCorridor?.tiles ?? []),
-          };
-          continue;
-        }
-        if (room.kind === 'quest') {
-          addRoom(room.rect, FloorTypeValue.tile_floor, 'quest');
-          questChokeEntryTiles = corridorTileKeys(spinePlan.questEntryCorridor?.tiles ?? []);
-          questChokeData = {
-            rank: progression.gauntlets.length,
-            gauntletIndex: progression.gauntlets.length - 1,
-            blocks: 'antechamber',
-          };
-          continue;
-        }
-        addRoom(room.rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(room.rect))]), 'chain');
-      }
-      for (const lane of spinePlan.lanes) {
-        spineLanes.push({ forkIndex: lane.forkIndex, rooms: lane.rooms });
-        for (const rect of lane.rooms) {
-          addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
-        }
-      }
-      if (spinePlan.lab !== null) {
-        addRoom(spinePlan.lab.room, SPIDER_LAB_FLOOR, 'spider_lab');
-        addRoom(spinePlan.lab.station, LAB_STATION_FLOOR, 'safe', {
-          servesSpecialRoom: 'spider_lab',
-        });
-      }
-      for (const pocket of spinePlan.pockets) {
-        const centre = rectCentre(pocket.rect);
-        if (pocket.role === 'safe') {
-          addRoom(pocket.rect, SAFE_ROOM_FLOOR, 'safe', { isSafeAccessPocket: true });
-        } else {
-          addRoom(pocket.rect, randomFromArray(ZONE_FLOORS[zoneOf(centre)]), 'regular');
-        }
-      }
-      for (const corridor of spinePlan.corridors) carvePlannedCorridor(corridor);
-    }
-
+    // A capped free region is a short stretch past the last boss, so it grows
+    // out from the exit as one pocket; an uncapped one spreads over the map.
+    const preferredSampling: FreeRoomSampling =
+      progression.freeRegionRooms === undefined ? 'anywhere' : 'nearRegion';
+    const fallbackSampling: FreeRoomSampling =
+      preferredSampling === 'anywhere' ? 'nearRegion' : 'anywhere';
     let freeRegularRooms = 0;
     const fillWithRegularRooms = (limit: number): void => {
       while (rooms.length < limit) {
-        const placed = placeFreeRoom(
-          randomInt(MIN_W, MAX_W),
-          randomInt(MIN_H, MAX_H),
-          'regular',
-          regularFloorFor,
-          anyPosition,
-        );
+        const w = randomInt(MIN_W, MAX_W);
+        const h = randomInt(MIN_H, MAX_H);
+        const placed =
+          placeFreeRoom(w, h, 'regular', regularFloorFor, anyPosition, preferredSampling) ??
+          placeFreeRoom(w, h, 'regular', regularFloorFor, anyPosition, fallbackSampling);
         if (placed === null) break;
         freeRegularRooms++;
       }
@@ -2100,181 +1842,141 @@ function buildDungeon(
     // attach; then the quest room, while there is still open ground for it;
     // then everything else fills the gaps.
     //
-    // None of it happens on a spine floor. Free seed rooms, the minimum fill, the
-    // loop edges, the dead-end rescue shortcuts and the antechamber's extra exits
-    // are every one of them a bypass generator, and the spine's whole point is
-    // that there is one way through.
-    if (spinePlan === null) {
-      fillWithRegularRooms(rooms.length + FREE_SEED_ROOMS);
-      if (freeRegularRooms === 0) return reject('free region seed');
+    // Every free room, loop edge and dead-end shortcut is past the last
+    // gauntlet's exit and joins only other free rooms, so none of them can open
+    // a way around a boss or along a spine.
+    const freeRegionRoomLimit =
+      progression.freeRegionRooms === undefined
+        ? maxRooms
+        : Math.min(maxRooms, rooms.length + progression.freeRegionRooms);
+    fillWithRegularRooms(Math.min(freeRegionRoomLimit, rooms.length + FREE_SEED_ROOMS));
+    if (freeRegularRooms === 0) return reject('free region seed');
 
-      // Only on a floor whose gauntlets seated no choke: where they did, the quest
-      // room is already on the forced path and a second one would put a goblin
-      // mother in a side room too.
+    // Only on a floor whose gauntlets seated no choke: where they did, the quest
+    // room is already on the forced path and a second one would put a goblin
+    // mother in a side room too.
+    if (
+      questChokeData === null &&
+      placeFreeRoom(
+        QUEST_ROOM_W,
+        QUEST_ROOM_H,
+        'quest',
+        () => FloorTypeValue.tile_floor,
+        (centre) =>
+          Math.hypot(centre.x - lastGauntletExitCentre.x, centre.y - lastGauntletExitCentre.y) <=
+          QUEST_ROOM_MAX_DIST_FROM_EXIT,
+      ) === null
+    ) {
+      return reject('quest room');
+    }
+
+    // The outskirts' own safe rooms (floor 1 only) are promoted out of this
+    // fill once the free region — loop shortcuts included — is finished, so
+    // they can be chosen against the hop distances the player actually walks
+    // rather than against a guess made before the last shortcut was cut.
+    fillWithRegularRooms(freeRegionRoomLimit);
+    if (freeRegularRooms < MIN_FREE_REGULAR_ROOMS) return reject('free region too thin');
+
+    // ── Free-region loops and dead-end rescue ───────────────────────────────
+    //
+    // Filtered from `connectableIndices` — the rooms `placeFreeRoom` actually
+    // seated — rather than scanned by role. A spine's treasure pockets keep the
+    // 'regular' role too, so a role scan over every room would hand these passes
+    // a room before the last boss and let them carve a `SEGMENT_FREE` shortcut
+    // from it straight into the free region, around every boss in between.
+    const freeRegularIndices = connectableIndices.filter((i) => rooms[i].role === 'regular');
+
+    const tryFreeShortcut = (fromIndex: number, toIndex: number): boolean => {
+      const corridor = planCorridorBetween(
+        segments,
+        SEGMENT_FREE,
+        rectOfRoom(rooms[fromIndex]),
+        rectOfRoom(rooms[toIndex]),
+        'narrow',
+      );
+      if (corridor === null) return false;
+      segments.claimCorridor(corridor.tiles, SEGMENT_FREE);
+      carvePlannedCorridor(corridor);
+      return true;
+    };
+
+    const freeDegree = new Map<number, number>();
+    for (const edge of mstEdges) {
+      freeDegree.set(edge.from, (freeDegree.get(edge.from) ?? 0) + 1);
+      freeDegree.set(edge.to, (freeDegree.get(edge.to) ?? 0) + 1);
+    }
+    const parentOf = new Map<number, number>();
+    for (const edge of mstEdges) parentOf.set(edge.to, edge.from);
+
+    for (const i of freeRegularIndices) {
+      if ((freeDegree.get(i) ?? 0) !== 1) continue;
+      const centre = rectCentre(rectOfRoom(rooms[i]));
       if (
-        questChokeData === null &&
-        placeFreeRoom(
-          QUEST_ROOM_W,
-          QUEST_ROOM_H,
-          'quest',
-          () => FloorTypeValue.tile_floor,
-          (centre) =>
-            Math.hypot(centre.x - lastGauntletExitCentre.x, centre.y - lastGauntletExitCentre.y) <=
-            QUEST_ROOM_MAX_DIST_FROM_EXIT,
-        ) === null
+        Math.hypot(centre.x - startCentre.x, centre.y - startCentre.y) < DEADEND_MIN_DIST_FROM_START
       ) {
-        return reject('quest room');
+        continue;
       }
-
-      // The outskirts' own safe rooms (floor 1 only) are promoted out of this
-      // fill once the free region — loop shortcuts included — is finished, so
-      // they can be chosen against the hop distances the player actually walks
-      // rather than against a guess made before the last shortcut was cut.
-      fillWithRegularRooms(maxRooms);
-      if (freeRegularRooms < MIN_FREE_REGULAR_ROOMS) return reject('free region too thin');
-
-      // The antechamber is a junction, not a dead end.
-      //
-      // Every route to the arena door still runs through it — the door's only
-      // neighbours outside the wall are its own tiles, and the concourse is sealed
-      // across the door row — so extra ways *out* cost nothing and buy the thing the
-      // structure has to say: this fight is optional. A crawler who walks in, sees a
-      // sealed iron drum with one door in it and three ways onward does not need to be
-      // told they can leave. One is required; the rest are taken if the layout offers
-      // them.
-      if (antechamberRoomIndex !== null) {
-        const antechamber = rectOfRoom(rooms[antechamberRoomIndex]);
-        const antechamberCentre = rectCentre(antechamber);
-        const candidates = [...connectableIndices].sort((a, b) => {
-          const ra = rectCentre(rectOfRoom(rooms[a]));
-          const rb = rectCentre(rectOfRoom(rooms[b]));
-          return (
-            Math.hypot(antechamberCentre.x - ra.x, antechamberCentre.y - ra.y) -
-            Math.hypot(antechamberCentre.x - rb.x, antechamberCentre.y - rb.y)
-          );
-        });
-        let connected = 0;
-        for (const candidateIndex of candidates.slice(0, ANTECHAMBER_CONNECT_CANDIDATES)) {
-          if (connected >= ANTECHAMBER_EXIT_TARGET) break;
-          const corridor = planCorridorBetween(
-            segments,
-            SEGMENT_FREE,
-            antechamber,
-            rectOfRoom(rooms[candidateIndex]),
-            pickCorridorKind(true, antechamberCentre),
-          );
-          if (corridor === null) continue;
-          segments.claimCorridor(corridor.tiles, SEGMENT_FREE);
-          carvePlannedCorridor(corridor);
-          connected++;
+      const parent = parentOf.get(i);
+      let bestDist = Infinity;
+      let bestTargetIdx = -1;
+      for (const j of freeRegularIndices) {
+        if (j === i || j === parent) continue;
+        const other = rectCentre(rectOfRoom(rooms[j]));
+        const dist = Math.hypot(centre.x - other.x, centre.y - other.y);
+        if (dist >= DEADEND_SHORTCUT_MIN && dist <= DEADEND_SHORTCUT_MAX && dist < bestDist) {
+          bestDist = dist;
+          bestTargetIdx = j;
         }
-        if (connected === 0) return reject('antechamber connection');
       }
+      if (bestTargetIdx !== -1) tryFreeShortcut(i, bestTargetIdx);
+    }
 
-      // ── Free-region loops and dead-end rescue ───────────────────────────────
-      //
-      // Filtered from `connectableIndices` — the rooms `placeFreeRoom` actually
-      // seated — rather than scanned by role. Beyond-pocket rooms keep the
-      // 'regular' role too (decorations and mob spawns work unchanged on them), so
-      // a role scan over every room would hand these passes a beyond room and let
-      // them carve a `SEGMENT_FREE` shortcut straight back into the free region —
-      // reopening the very bypass the beyond pocket exists to close.
-      const freeRegularIndices = connectableIndices.filter((i) => rooms[i].role === 'regular');
+    const extraTarget = Math.max(1, Math.floor(freeRegularIndices.length * EXTRA_LOOP_RATIO));
+    let extraAdded = 0;
+    const maxLoopAttempts = extraTarget * LOOP_ATTEMPT_FACTOR;
+    for (let attempt = 0; attempt < maxLoopAttempts && extraAdded < extraTarget; attempt++) {
+      if (freeRegularIndices.length < 2) break;
+      const firstIdx = randomFromArray(freeRegularIndices);
+      const secondIdx = randomFromArray(freeRegularIndices);
+      if (firstIdx === secondIdx) continue;
+      const c1 = rectCentre(rectOfRoom(rooms[firstIdx]));
+      const c2 = rectCentre(rectOfRoom(rooms[secondIdx]));
+      const dist = Math.hypot(c1.x - c2.x, c1.y - c2.y);
+      if (dist < EXTRA_LOOP_MIN_DIST || dist > EXTRA_LOOP_MAX_DIST) continue;
+      if (tryFreeShortcut(firstIdx, secondIdx)) extraAdded++;
+    }
 
-      const tryFreeShortcut = (fromIndex: number, toIndex: number): boolean => {
-        const corridor = planCorridorBetween(
-          segments,
-          SEGMENT_FREE,
-          rectOfRoom(rooms[fromIndex]),
-          rectOfRoom(rooms[toIndex]),
-          'narrow',
-        );
-        if (corridor === null) return false;
-        segments.claimCorridor(corridor.tiles, SEGMENT_FREE);
-        carvePlannedCorridor(corridor);
-        return true;
-      };
-
-      const freeDegree = new Map<number, number>();
-      for (const edge of mstEdges) {
-        freeDegree.set(edge.from, (freeDegree.get(edge.from) ?? 0) + 1);
-        freeDegree.set(edge.to, (freeDegree.get(edge.to) ?? 0) + 1);
+    // ── Outskirts safe rooms (floor 1 only) ────────────────────────────────
+    //
+    // Rather than seating dedicated safe-shaped rooms up front — before the
+    // loop shortcuts above could shorten a hop count they'd have to guess at
+    // — ordinary free rooms already carved are promoted to safe once the
+    // region's graph is final, chosen so every outskirts safe room's nearest
+    // other one sits within the required hop band, spreading outward from
+    // the last gateway's own exit safe room rather than clustering near it.
+    if (progression.outskirtsSafeRoomHops === true) {
+      const outskirtsGraph = buildRoomGraph(grid, rooms.map(rectOfRoom));
+      const outskirtsSafeIndices = new Set<number>([lastGauntletExitIndex]);
+      const candidates = new Set<number>(freeRegularIndices);
+      for (;;) {
+        let best: { index: number; hops: number } | null = null;
+        for (const candidateIndex of candidates) {
+          const hops = nearestHopDistance(outskirtsGraph, candidateIndex, outskirtsSafeIndices);
+          if (hops < OUTSKIRTS_SAFE_ROOM_MIN_HOPS || hops > OUTSKIRTS_SAFE_ROOM_MAX_HOPS) continue;
+          if (best === null || hops > best.hops) best = { index: candidateIndex, hops };
+        }
+        if (best === null) break;
+        outskirtsSafeIndices.add(best.index);
+        candidates.delete(best.index);
       }
-      const parentOf = new Map<number, number>();
-      for (const edge of mstEdges) parentOf.set(edge.to, edge.from);
-
-      for (const i of freeRegularIndices) {
-        if ((freeDegree.get(i) ?? 0) !== 1) continue;
-        const centre = rectCentre(rectOfRoom(rooms[i]));
-        if (
-          Math.hypot(centre.x - startCentre.x, centre.y - startCentre.y) <
-          DEADEND_MIN_DIST_FROM_START
-        ) {
-          continue;
-        }
-        const parent = parentOf.get(i);
-        let bestDist = Infinity;
-        let bestTargetIdx = -1;
-        for (const j of freeRegularIndices) {
-          if (j === i || j === parent) continue;
-          const other = rectCentre(rectOfRoom(rooms[j]));
-          const dist = Math.hypot(centre.x - other.x, centre.y - other.y);
-          if (dist >= DEADEND_SHORTCUT_MIN && dist <= DEADEND_SHORTCUT_MAX && dist < bestDist) {
-            bestDist = dist;
-            bestTargetIdx = j;
-          }
-        }
-        if (bestTargetIdx !== -1) tryFreeShortcut(i, bestTargetIdx);
+      outskirtsSafeIndices.delete(lastGauntletExitIndex);
+      if (outskirtsSafeIndices.size < (progression.scatterSafeRooms ?? 0)) {
+        return reject('outskirts safe room hops');
       }
-
-      const extraTarget = Math.max(1, Math.floor(freeRegularIndices.length * EXTRA_LOOP_RATIO));
-      let extraAdded = 0;
-      const maxLoopAttempts = extraTarget * LOOP_ATTEMPT_FACTOR;
-      for (let attempt = 0; attempt < maxLoopAttempts && extraAdded < extraTarget; attempt++) {
-        if (freeRegularIndices.length < 2) break;
-        const firstIdx = randomFromArray(freeRegularIndices);
-        const secondIdx = randomFromArray(freeRegularIndices);
-        if (firstIdx === secondIdx) continue;
-        const c1 = rectCentre(rectOfRoom(rooms[firstIdx]));
-        const c2 = rectCentre(rectOfRoom(rooms[secondIdx]));
-        const dist = Math.hypot(c1.x - c2.x, c1.y - c2.y);
-        if (dist < EXTRA_LOOP_MIN_DIST || dist > EXTRA_LOOP_MAX_DIST) continue;
-        if (tryFreeShortcut(firstIdx, secondIdx)) extraAdded++;
-      }
-
-      // ── Outskirts safe rooms (floor 1 only) ────────────────────────────────
-      //
-      // Rather than seating dedicated safe-shaped rooms up front — before the
-      // loop shortcuts above could shorten a hop count they'd have to guess at
-      // — ordinary free rooms already carved are promoted to safe once the
-      // region's graph is final, chosen so every outskirts safe room's nearest
-      // other one sits within the required hop band, spreading outward from
-      // the last gateway's own exit safe room rather than clustering near it.
-      if (progression.outskirtsSafeRoomHops === true) {
-        const outskirtsGraph = buildRoomGraph(grid, rooms.map(rectOfRoom));
-        const outskirtsSafeIndices = new Set<number>([lastGauntletExitIndex]);
-        const candidates = new Set<number>(freeRegularIndices);
-        for (;;) {
-          let best: { index: number; hops: number } | null = null;
-          for (const candidateIndex of candidates) {
-            const hops = nearestHopDistance(outskirtsGraph, candidateIndex, outskirtsSafeIndices);
-            if (hops < OUTSKIRTS_SAFE_ROOM_MIN_HOPS || hops > OUTSKIRTS_SAFE_ROOM_MAX_HOPS)
-              continue;
-            if (best === null || hops > best.hops) best = { index: candidateIndex, hops };
-          }
-          if (best === null) break;
-          outskirtsSafeIndices.add(best.index);
-          candidates.delete(best.index);
-        }
-        outskirtsSafeIndices.delete(lastGauntletExitIndex);
-        if (outskirtsSafeIndices.size < (progression.scatterSafeRooms ?? 0)) {
-          return reject('outskirts safe room hops');
-        }
-        for (const index of outskirtsSafeIndices) {
-          rooms[index].role = 'safe';
-          rooms[index].floor = SAFE_ROOM_FLOOR;
-          carveRoomFloor(rectOfRoom(rooms[index]), SAFE_ROOM_FLOOR);
-        }
+      for (const index of outskirtsSafeIndices) {
+        rooms[index].role = 'safe';
+        rooms[index].floor = SAFE_ROOM_FLOOR;
+        carveRoomFloor(rectOfRoom(rooms[index]), SAFE_ROOM_FLOOR);
       }
     }
 
@@ -2294,13 +1996,16 @@ function buildDungeon(
         plannedStealthGate === null
           ? null
           : { chainIndex: plannedStealthGate.chainIndex, bounds: plannedStealthGate.rect },
-      spine: spinePlan === null ? null : { chain: spineChainBounds, lanes: spineLanes },
+      spine:
+        spineGauntletIndex === null
+          ? null
+          : { chain: spineChainBounds, lanes: spineLanes, gauntletIndex: spineGauntletIndex },
     };
   } else {
     const safeRoomStart = 1;
     const safeRoomEnd = 1 + FREE_ROAM_SAFE_ROOM_COUNT;
     const bossRoomStart = safeRoomEnd;
-    const bossRoomEnd = safeRoomEnd + numBossRooms;
+    const bossRoomEnd = safeRoomEnd + bossTypes.length;
     const questRoomIdx = bossRoomEnd;
 
     const SAFE_MAX_DIST = 50;
@@ -2309,10 +2014,15 @@ function buildDungeon(
 
     for (let attempt = 0; attempt < maxAttempts && rooms.length < maxRooms; attempt++) {
       const isSafeRoom = rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
-      const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
+      const bossIndex = rooms.length - bossRoomStart;
+      const bossType = bossIndex >= 0 ? bossTypes[bossIndex] : undefined;
+      const isBossRoom = bossType !== undefined;
       const isQuestRoom = rooms.length === questRoomIdx;
-      const w = isBossRoom ? BOSS_ROOM_W : isQuestRoom ? QUEST_ROOM_W : randomInt(MIN_W, MAX_W);
-      const h = isBossRoom ? BOSS_ROOM_H : isQuestRoom ? QUEST_ROOM_H : randomInt(MIN_H, MAX_H);
+      const { w, h } = isBossRoom
+        ? BOSS_ROOM_SIZE[bossType]
+        : isQuestRoom
+          ? { w: QUEST_ROOM_W, h: QUEST_ROOM_H }
+          : { w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) };
       const x = randomInt(BORDER + 1, size - BORDER - w - 2);
       const y = randomInt(BORDER + 1, size - BORDER - h - 2);
 
@@ -2357,11 +2067,10 @@ function buildDungeon(
         const roomCentre: Point = { x: cx, y: cy };
         const zone: Zone = startCenter !== null ? getZone(roomCentre, startCenter) : 'entrance';
 
-        const bossIdx = rooms.length - bossRoomStart;
         const floor = isSafeRoom
           ? SAFE_ROOM_FLOOR
-          : isBossRoom
-            ? bossFloorForType(bossTypes[bossIdx] ?? '')
+          : bossType !== undefined
+            ? BOSS_ROOM_FLOOR[bossType]
             : isQuestRoom
               ? FloorTypeValue.tile_floor
               : randomFromArray(ZONE_FLOORS[zone]);
@@ -2573,7 +2282,6 @@ function buildDungeon(
     isSafeAccessPocket: sr.isSafeAccessPocket,
     servesSpecialRoom: sr.servesSpecialRoom,
   }));
-  antechamberSafeRoom = safeRooms.find((r) => r.guardsBossType === ARENA_BOSS_TYPE) ?? null;
 
   for (const safeRoom of safeRooms) stampSafeRoomThresholds(grid, safeRoom);
   for (const safeRoom of safeRooms) {
@@ -2771,7 +2479,11 @@ function buildDungeon(
     const doorways = roomDoorways(grid, bounds);
     // A self-test fault ships the extra doorway its broken rule makes, so the
     // gate's own checks are what catch it.
-    const underSelfTest = progression?.spine?.stealthGate?.faultForGate !== undefined;
+    const underSelfTest =
+      progression?.gauntlets.some(
+        (gauntlet) =>
+          gauntlet.route.kind === 'spine' && gauntlet.route.stealthGate?.faultForGate !== undefined,
+      ) ?? false;
     if (doorways.length !== STEALTH_GATE_DOORWAY_COUNT && !underSelfTest) {
       return reject('stealth gate doorways');
     }
@@ -2930,17 +2642,13 @@ function buildDungeon(
     // stairwells must never be found in the same sweep of the free region — the
     // hunt for the stairs is the point of the post-gauntlet stretch.
     //
-    // On an arena floor every candidate comes from the beyond pocket instead of
-    // the whole free region: the pocket is far from the exit by construction, so
-    // the distance filter below stays true, but restricting the pool is what
-    // makes "every stairwell sits behind the drum" a guarantee rather than a
-    // likelihood.
-    const stairwellRoomPool = hasArena ? beyondRoomIndices.map((i) => rooms[i]) : regularRooms;
-    // The pocket is only ~`BEYOND_MAX_DIST_FROM_GATE` tiles across, far tighter
-    // than the free region `STAIRWELL_MIN_SEPARATION` was tuned for.
-    const stairwellSeparation = hasArena
-      ? BEYOND_STAIRWELL_MIN_SEPARATION
-      : STAIRWELL_MIN_SEPARATION;
+    // Drawn from the free region's own rooms rather than from every ordinary
+    // room: a spine's treasure pockets are ordinary rooms too, and a stairwell
+    // in one would sit in front of the last boss.
+    const stairwellRoomPool = freeRegionRoomIndices
+      .map((index) => rooms[index])
+      .filter((room) => room.role === 'regular');
+    const stairwellSeparation = STAIRWELL_MIN_SEPARATION;
     const exitBounds = lastGauntletExitBounds;
     const byDistanceFromExit = stairwellRoomPool
       .map((r) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) }))
@@ -2950,20 +2658,13 @@ function buildDungeon(
     );
     // The ceiling is what keeps the stairs off the perimeter: "as far from the
     // exit as possible" is maximised at the map's corners, which is precisely the
-    // sweep a player never makes. The pocket behind an arena is not perimeter to
-    // begin with — its distance from the exit is the arena's geometry, not a
-    // choice — so the ceiling only governs a free-region pool.
-    const bandGovernsPool = !hasArena;
-    // With no ceiling to counteract, the farthest room from the exit is the
-    // placement the floor was tuned around, so an arena floor seeds from it
-    // rather than from anywhere in the pool.
-    const seedStrategy: StairwellSeedStrategy = bandGovernsPool ? 'random' : 'farthest';
+    // sweep a player never makes.
     const insideBand = beyondMinDistance.filter(
       (centre) => distanceToRect(centre, exitBounds) <= STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
     );
-    const bandHoldsEnoughRooms = bandGovernsPool && insideBand.length >= stairwellCount;
+    const bandHoldsEnoughRooms = insideBand.length >= stairwellCount;
     const seatedInsideBand = bandHoldsEnoughRooms
-      ? seatStairwellsByIsolation(insideBand, stairwellCount, stairwellSeparation, seedStrategy)
+      ? seatStairwellsByIsolation(insideBand, stairwellCount, stairwellSeparation)
       : [];
     // A band holding enough rooms by count can still be too cramped to hold them
     // `stairwellSeparation` apart, and a shortfall there is invisible to the
@@ -2977,7 +2678,6 @@ function buildDungeon(
           beyondMinDistance,
           stairwellCount,
           stairwellSeparation,
-          seedStrategy,
           seatedInsideBand,
         );
     // Keeping the banded picks can itself box out the wider pool: a set clustered
@@ -2986,12 +2686,7 @@ function buildDungeon(
     // alone, and the fuller of the two takes the floor.
     const widenedAlone =
       widenedFromBand.length < stairwellCount
-        ? seatStairwellsByIsolation(
-            beyondMinDistance,
-            stairwellCount,
-            stairwellSeparation,
-            seedStrategy,
-          )
+        ? seatStairwellsByIsolation(beyondMinDistance, stairwellCount, stairwellSeparation)
         : [];
     const wideSetWins = widenedAlone.length > widenedFromBand.length;
     const seatedStairwells = wideSetWins ? widenedAlone : widenedFromBand;
@@ -3006,17 +2701,10 @@ function buildDungeon(
     // than the stairs: the farthest room in the pool takes one even when it sits
     // closer to the boss's exit than the rule would like. The validator is told,
     // so it waives the distance rule instead of rejecting a floor that is merely
-    // unlucky. On an arena floor the pool is already beyond-only, so the waiver
-    // can never reach into the free region.
+    // unlucky.
     if (stairwellTiles.length === 0 && byDistanceFromExit.length > 0) {
       stairwellTiles.push(byDistanceFromExit[0]);
       if (progressionLayout !== undefined) progressionLayout.stairwellSpacingWaived = true;
-    }
-    // Under this plan the stairwell count is part of the guarantee on an arena
-    // floor: every stairwell has to seat behind the drum, or the map is unplayable
-    // as designed and must retry rather than ship a shortfall.
-    if (hasArena && stairwellTiles.length < stairwellCount) {
-      return reject('beyond stairwells');
     }
   } else if (rooms.length > 0) {
     const MIN_STAIRWELL_DIST = 20;
@@ -3065,9 +2753,9 @@ function buildDungeon(
 
   // Select treasure rooms from eligible regular rooms — 5% of total rooms, at least 1
   const MIN_ROOM_SIZE = 7;
-  // A spine floor has an order of magnitude fewer ordinary rooms than a free
-  // region does — its dead-end pockets and its beyond pocket are the whole
-  // supply — so a share of that count would leave the floor with a single chest.
+  // A spine floor has far fewer ordinary rooms than a large free region does —
+  // its dead-end pockets and a small free region are the whole supply — so a
+  // share of that count would leave the floor with a single chest.
   // The pockets exist to be worth walking into; a floor-wide minimum is what
   // makes them so.
   const treasureRoomTarget = Math.max(
@@ -3134,10 +2822,18 @@ function buildDungeon(
     y < startRoom.y + startRoom.h + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;
   // A bathroom's queue spills into its corridors, and a rat set down on a tile
   // the queue blocks would start inside ground it cannot walk.
+  // Every tile of a flooded corridor and its barrel seat: kept at full width
+  // and clear of props, signs and hallway spawns, so the approach's staging
+  // always has the whole corridor to work with.
+  const floodedApproachKeepClear = plannedFloodedApproaches.flatMap((approach) =>
+    [...floodedTileDepths(approach).values()].map(({ tile }) => tile),
+  );
   const bathroomTileKeys = new Set(
-    [...bathroomRooms.flatMap(bathroomStandingTiles), ...stealthGateKeepClear(stealthGateRoom)].map(
-      (tile) => tileCoordKey(tile.x, tile.y),
-    ),
+    [
+      ...bathroomRooms.flatMap(bathroomStandingTiles),
+      ...stealthGateKeepClear(stealthGateRoom),
+      ...floodedApproachKeepClear,
+    ].map((tile) => tileCoordKey(tile.x, tile.y)),
   );
   const validHallway = hallwayTiles.filter(
     (t) =>
@@ -3156,180 +2852,6 @@ function buildDungeon(
       chosen.push(t);
   }
   const hallwaySpawnPoints = chosen;
-
-  // 11. Arena
-  const arenaExteriors: ArenaExterior[] = [];
-
-  /**
-   * Carves the arena structure at a chosen centre and records its exterior.
-   *
-   * `antechamber` is the safe room south of the door on a progression floor, and
-   * null on a free-roam one. When it is present the concourse is routed *through*
-   * it: the ring's two ends drop into the safe room and the door row between them
-   * is walled, so the crawler can walk the whole way around the drum but can only
-   * reach its door from inside the antechamber.
-   */
-  const carveArena = (acx: number, acy: number, antechamber: Rect | null): void => {
-    for (let dy = -ARENA_RADIUS; dy <= ARENA_RADIUS; dy++) {
-      for (let dx = -ARENA_RADIUS; dx <= ARENA_RADIUS; dx++) {
-        const rad = Math.hypot(dx, dy);
-        if (rad <= ARENA_RADIUS) {
-          const gx = acx + dx;
-          const gy = acy + dy;
-          if (gy >= 0 && gy < size && gx >= 0 && gx < size) {
-            const isWall = rad > ARENA_RADIUS - ARENA_WALL_THICKNESS;
-            grid[gy][gx].type = isWall ? METAL_WALL : ARENA_FLOOR;
-            // The ring is drawn as a true circle, so the corners of its outer
-            // wall tiles show the concourse's paving past the curve.
-            if (isWall) grid[gy][gx].groundType = FloorTypeValue.concrete;
-          }
-        }
-      }
-    }
-
-    const doorY = acy + ARENA_RADIUS;
-    const doorX = acx;
-    for (let wy = 0; wy < ARENA_WALL_THICKNESS; wy++) {
-      const ty = doorY - wy;
-      if (ty < 0 || ty >= size) continue;
-      for (const offset of ARENA_DOOR_COLUMN_OFFSETS) {
-        grid[ty][doorX + offset].type = FloorTypeValue.concrete;
-      }
-    }
-
-    // The concourse: a walkable ring right around the outside of the wall. It is
-    // what makes the arena read as a building the crawler is walking *past* rather
-    // than a dead end they have arrived at, and it is carved on every floor that
-    // has an arena.
-    //
-    // Tiles already claimed by the antechamber are left alone. The safe room's own
-    // floor material is part of how a crawler knows they are safe, and paving over
-    // its northern strip with concourse would take that away exactly where they
-    // stop to decide whether to fight.
-    const insideAntechamber = (gx: number, gy: number): boolean =>
-      antechamber !== null &&
-      gx >= antechamber.x &&
-      gx < antechamber.x + antechamber.w &&
-      gy >= antechamber.y &&
-      gy < antechamber.y + antechamber.h;
-
-    for (let ry = -ARENA_CONCOURSE_REACH; ry <= ARENA_CONCOURSE_REACH; ry++) {
-      for (let rx = -ARENA_CONCOURSE_REACH; rx <= ARENA_CONCOURSE_REACH; rx++) {
-        const rad = Math.hypot(rx, ry);
-        if (rad <= ARENA_RADIUS || rad > ARENA_CONCOURSE_REACH) continue;
-        const gx = acx + rx;
-        const gy = acy + ry;
-        if (gy < 0 || gy >= size || gx < 0 || gx >= size) continue;
-        if (insideAntechamber(gx, gy)) continue;
-        grid[gy][gx].type = FloorTypeValue.concrete;
-      }
-    }
-
-    if (antechamber !== null) {
-      sealConcourseAcrossDoorRow(grid, size, acx, doorY);
-      linkConcourseToAntechamber(grid, size, acx, doorY, antechamber);
-    }
-
-    setArenaCages(grid, size, acx, acy);
-
-    arenaExteriors.push({
-      centre: { x: acx, y: acy },
-      radius: ARENA_RADIUS,
-      doorTile: { x: doorX, y: doorY },
-      stairwellTile: { x: acx - 1, y: acy - 1 },
-    });
-  };
-
-  if (arenaReservation !== null) {
-    carveArena(arenaReservation.centre.x, arenaReservation.centre.y, arenaReservation.antechamber);
-    if (beyondRoomIndices.length > 0) {
-      const landingRoom = rectOfRoom(rooms[beyondRoomIndices[0]]);
-      carveArenaGate(grid, size, arenaReservation.centre.x, arenaReservation.centre.y, landingRoom);
-    }
-    // The antechamber's arena-side doorway only exists now that the door is cut,
-    // so its traffic band has to be laid after the arena rather than with the
-    // other safe rooms.
-    if (antechamberSafeRoom !== null) stampSafeRoomThresholds(grid, antechamberSafeRoom);
-  } else if (hasArena && rooms.length > 0) {
-    const startCentre = sc;
-    let arenaPlaced = false;
-
-    for (let attempt = 0; attempt < ARENA_PLACEMENT_ATTEMPTS && !arenaPlaced; attempt++) {
-      const angle =
-        (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + worldRandom() * ARENA_ANGLE_JITTER;
-      const dist = ARENA_MIN_DIST + worldRandom() * ARENA_DIST_VARIANCE;
-      const acx = Math.round(startCentre.x + Math.cos(angle) * dist);
-      const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
-
-      if (
-        acx - ARENA_RADIUS - ARENA_CLEARANCE < BORDER ||
-        acx + ARENA_RADIUS + ARENA_CLEARANCE >= size - BORDER ||
-        acy - ARENA_RADIUS - ARENA_CLEARANCE < BORDER ||
-        acy + ARENA_RADIUS + ARENA_CLEARANCE >= size - BORDER
-      )
-        continue;
-
-      const overlapsSpecial = rooms.some((r) => {
-        if (!isSpecialRoom(r)) return false;
-        const closestX = clamp(acx, r.x, r.x + r.w - 1);
-        const closestY = clamp(acy, r.y, r.y + r.h - 1);
-        return Math.hypot(acx - closestX, acy - closestY) < ARENA_RADIUS + ARENA_CLEARANCE;
-      });
-      if (overlapsSpecial) continue;
-
-      // No antechamber on a free-roam floor, so the concourse is a plain ring and
-      // the door opens onto it directly.
-      carveArena(acx, acy, null);
-
-      const doorY = acy + ARENA_RADIUS;
-      const doorX = acx;
-      const nearestRoom = rooms.reduce((best, r) => {
-        const rcx = Math.floor(r.x + r.w / 2);
-        const rcy = Math.floor(r.y + r.h / 2);
-        const d = Math.hypot(acx - rcx, acy - rcy);
-        const bd = Math.hypot(
-          acx - Math.floor(best.x + best.w / 2),
-          acy - Math.floor(best.y + best.h / 2),
-        );
-        return d < bd ? r : best;
-      }, rooms[0]);
-
-      if (doorY + 1 < size) {
-        grid[doorY + 1][doorX - 1].type = FloorTypeValue.concrete;
-        grid[doorY + 1][doorX].type = FloorTypeValue.concrete;
-      }
-
-      const pivotX = Math.min(acx + ARENA_CONCOURSE_REACH, size - BORDER - 1);
-      const pivotY = doorY + 1;
-      carveHallway(doorX, pivotY, pivotX, pivotY, 'standard', FloorTypeValue.concrete);
-      carveHallway(
-        pivotX,
-        pivotY,
-        Math.floor(nearestRoom.x + nearestRoom.w / 2),
-        Math.floor(nearestRoom.y + nearestRoom.h / 2),
-        'standard',
-        FloorTypeValue.concrete,
-      );
-
-      arenaPlaced = true;
-    }
-  }
-
-  const filteredMobSpawns =
-    arenaExteriors.length > 0
-      ? mobSpawnPoints.filter((p) => {
-          const a = arenaExteriors[0];
-          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_STAIRWELL_EXCLUSION_TILES;
-        })
-      : mobSpawnPoints;
-
-  const filteredStairwells =
-    arenaExteriors.length > 0
-      ? stairwellTiles.filter((p) => {
-          const a = arenaExteriors[0];
-          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_STAIRWELL_EXCLUSION_TILES;
-        })
-      : stairwellTiles;
 
   const claimedTiles = new Set<number>();
   const claim = (tile: Point): void => {
@@ -3352,8 +2874,7 @@ function buildDungeon(
       treasureRooms.map((room) => room.centre),
       safeRooms.map((room) => room.centre),
       bossRooms.map((room) => room.centre),
-      arenaExteriors.map((arena) => arena.doorTile),
-      arenaExteriors.map((arena) => arena.stairwellTile),
+      floodedApproachKeepClear,
       questRooms.flatMap((quest) => [
         quest.entranceTile,
         quest.npcTile,
@@ -3407,8 +2928,7 @@ function buildDungeon(
     mobSpawnPoints,
     hallwaySpawnPoints,
     treasureRooms.map((room) => room.centre),
-    arenaExteriors.map((arena) => arena.doorTile),
-    arenaExteriors.map((arena) => arena.stairwellTile),
+    floodedApproachKeepClear,
     bathroomRooms.flatMap(bathroomStandingTiles),
     stealthGateKeepClear(stealthGateRoom),
   ]) {
@@ -3500,7 +3020,6 @@ function buildDungeon(
           })),
           corridorKindAt: (x, y) => corridorKindByTile.get(tileCoordKey(x, y)),
           zoneOf: (point) => getZone(point, sc),
-          arenas: arenaExteriors,
           labApproachTiles:
             spiderLabRoom === null
               ? undefined
@@ -3578,15 +3097,8 @@ function buildDungeon(
         eligible: SIGN_ROOM_ROLES.has(room.role),
       })),
       startRoom: progressionLayout.startRoom,
-      goalRooms: [
-        ...bossRooms.map((boss) => boss.bounds),
-        ...(antechamberSafeRoom === null ? [] : [antechamberSafeRoom.bounds]),
-      ],
+      goalRooms: bossRooms.map((boss) => boss.bounds),
       claimedTiles,
-      keepClear: arenaExteriors.map((arena) => ({
-        centre: arena.centre,
-        radius: arena.radius + SIGN_POCKET_ARENA_MARGIN_TILES,
-      })),
     });
     if (signPlacements === null) return reject('crawler signs never settled');
 
@@ -3641,6 +3153,14 @@ function buildDungeon(
           labApproach: spiderLabRoom ?? undefined,
         });
 
+  // Flooded last, so every pass above saw a carved dry corridor and none of them
+  // has to know what water is.
+  for (const approach of plannedFloodedApproaches) {
+    for (const { tile, depth } of floodedTileDepths(approach).values()) {
+      if (depth > 0) floodDungeonTile(grid[tile.y][tile.x], depth);
+    }
+  }
+
   return {
     grid,
     startTile,
@@ -3651,11 +3171,10 @@ function buildDungeon(
     stealthGateRoom,
     treasureRooms,
     spiderLabRoom,
-    mobSpawnPoints: filteredMobSpawns,
+    mobSpawnPoints,
     hallwaySpawnPoints,
-    stairwellTiles: filteredStairwells,
-    arenaExteriors,
-    arenaDoorTile: arenaExteriors[0]?.doorTile,
+    stairwellTiles,
+    floodedApproaches: plannedFloodedApproaches,
     progressionLayout,
     crawlerSigns,
     regionMap,
@@ -3683,27 +3202,34 @@ function buildDungeon(
  */
 export function progressionExpectations(options: GenerateDungeonOptions): ProgressionExpectations {
   const progression = options.progression;
+  const gauntlets = progression?.gauntlets ?? [];
+  const spineRoute = gauntlets
+    .map((gauntlet) => gauntlet.route)
+    .find((route): route is SpineRoute => route.kind === 'spine');
+  const branchRoutes = gauntlets
+    .map((gauntlet) => gauntlet.route)
+    .filter((route): route is BranchesRoute => route.kind === 'branches');
   return {
     mapSize: options.size,
-    gauntletCount: progression?.gauntlets.length ?? 0,
-    hasArena: options.hasArena ?? false,
+    gauntletCount: gauntlets.length,
     hasQuestChoke:
-      progression !== undefined &&
-      (progression.spine !== undefined ||
-        progression.gauntlets.some((gauntlet) => gauntlet.questChoke === true)),
-    hasBathroomChoke:
-      progression?.gauntlets.some((gauntlet) => gauntlet.bathroomChoke !== undefined) ?? false,
+      spineRoute !== undefined || gauntlets.some((gauntlet) => gauntlet.questChoke === true),
+    hasBathroomChoke: branchRoutes.some((route) => route.bathroomChoke !== undefined),
     bathroomPlumberBlocks: plumberBlocksOnFloor(progression),
     // Disarmed only under a `verify:stealth-gate` self-test fault, so the faulty
     // layout ships and that gate's own checks have to be the ones to catch it.
     hasStealthGate:
-      progression?.spine?.stealthGate !== undefined &&
-      progression.spine.stealthGate.faultForGate === undefined,
-    hasSpine: progression?.spine !== undefined,
-    spiderLabIsDeadEnd: (options.hasSpiderLab ?? false) && progression?.spine !== undefined,
-    spineMinRooms: progression?.spine?.rooms.min ?? 0,
+      spineRoute?.stealthGate !== undefined && spineRoute.stealthGate.faultForGate === undefined,
+    hasSpine: spineRoute !== undefined,
+    spiderLabIsDeadEnd: (options.hasSpiderLab ?? false) && spineRoute !== undefined,
+    spineMinRooms: spineRoute?.rooms.min ?? 0,
     scatterSafeRooms: progression?.scatterSafeRooms ?? 0,
     outskirtsSafeRoomHops: progression?.outskirtsSafeRoomHops === true,
+    floodedApproaches: gauntlets.flatMap((gauntlet, gauntletIndex) =>
+      gauntlet.approach === undefined
+        ? []
+        : [{ gauntletIndex, bossType: gauntlet.bossType, spec: gauntlet.approach }],
+    ),
   };
 }
 

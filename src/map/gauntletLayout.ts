@@ -1,5 +1,16 @@
 import { randomInt, clamp } from '../utils';
 import { worldRandom } from '../core/world/WorldRandom';
+import {
+  barrelSeatSectionIndex,
+  corridorWallOf,
+  isBarrelSeatWall,
+  TRIGGER_SECTIONS_PAST_SEAT,
+  floodedApproachDepths,
+  type CorridorCrossSection,
+  type FloodedApproachLayout,
+  type FloodedApproachSpec,
+} from './floodedApproach';
+import { tileCoordKey } from './tileIndex';
 
 export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -13,10 +24,12 @@ export type CorridorKind = 'narrow' | 'standard' | 'nook';
 const SEGMENT_NONE = 0;
 /** Tile belongs to the free-roam region past the last gateway boss room. */
 export const SEGMENT_FREE = -1;
-/** Tile belongs to the arena structure and the antechamber guarding its door. */
-export const SEGMENT_ARENA = -2;
-/** Tile belongs to the beyond pocket — the rooms seeded behind the arena's north gate. */
-export const SEGMENT_BEYOND = -3;
+/**
+ * Tile is held open for the free region while what comes before it is still
+ * being planned, and handed back with {@link SegmentMap.releaseSegment} before
+ * the free region is seated.
+ */
+export const SEGMENT_FREE_RESERVE = -2;
 
 /**
  * A gauntlet owns three segments: one for the branches and the gateway safe room
@@ -85,7 +98,7 @@ function bathroomApproachSegment(index: number): number {
 
 /**
  * Highest segment id the gauntlets can consume, so anything allocating segments
- * of its own — the floor-2 spine — starts past every gauntlet a floor can hold
+ * of its own — a spine route — starts past every gauntlet a floor can hold
  * rather than guessing at a gap.
  */
 export function gauntletSegmentCeiling(gauntletCount: number): number {
@@ -154,12 +167,17 @@ const COMPACT_MAP_MAX_SIZE = 320;
 const GAUNTLET_FLANK_TURN_MIN_DEG = 60;
 const GAUNTLET_FLANK_TURN_MAX_DEG = 120;
 
-/** Gateway safe room centre to boss room centre distance. */
+/**
+ * Gateway safe room centre to boss room centre distance, for a boss room of
+ * {@link OFFSETS_TUNED_FOR_BOSS_ROOM}'s size. A bigger room is pushed out by
+ * however much further its corners reach; see {@link bossRoomExtraReach}.
+ */
 const BOSS_ROOM_OFFSET_MIN = 26;
 const BOSS_ROOM_OFFSET_MAX = 34;
 
 /**
- * Boss room centre to exit safe room centre distance.
+ * Boss room centre to exit safe room centre distance, for a boss room of
+ * {@link OFFSETS_TUNED_FOR_BOSS_ROOM}'s size.
  *
  * The centres must clear the boss room's half-height, the safe room's half-height
  * and `ROOM_GAP`, with enough left over for the corridor between them to read as
@@ -167,6 +185,27 @@ const BOSS_ROOM_OFFSET_MAX = 34;
  */
 const EXIT_SAFE_ROOM_OFFSET_MIN = 28;
 const EXIT_SAFE_ROOM_OFFSET_MAX = 36;
+
+/** The boss room size the two offsets above were tuned against. */
+const OFFSETS_TUNED_FOR_BOSS_ROOM = { w: 22, h: 18 } as const;
+
+/**
+ * Slack added on top of the shortest centre distance a flooded approach can be
+ * seated at, so the corridor is not always exactly its minimum.
+ */
+const FLOODED_APPROACH_OFFSET_SLACK = 8;
+/**
+ * Cross-sections the bend of an L-shaped corridor may not sit within of the
+ * barrel seat: the seat, the trigger line and the section before the seat all
+ * have to lie on one straight run.
+ */
+const BARREL_SEAT_STRAIGHT_REACH_BEFORE = 1;
+/** Sections the barrel seat may slide along the wet half to find a straight run. */
+const BARREL_SEAT_SLIDE_STEPS = 3;
+/** The alcove sits one tile beyond the corridor's side wall. */
+const BARREL_SEAT_OFFSET_FROM_CENTRE = 2;
+/** Offsets across a wide corridor from its centre line, wall to wall. */
+const WIDE_CROSS_OFFSETS = [-1, 0, 1] as const;
 
 /**
  * Centre-to-centre distance from the room before a choke room to the choke room
@@ -560,6 +599,32 @@ export class SegmentMap {
     return true;
   }
 
+  /**
+   * Claims every tile of a rectangle for `segment` without seating a room
+   * there, so nothing planned afterwards may use it. False, claiming nothing,
+   * when any of it is already owned or off the carvable area.
+   */
+  reserveArea(rect: Rect, segment: number): boolean {
+    if (!this.fitsInMap(rect)) return false;
+    for (let y = rect.y; y < rect.y + rect.h; y++) {
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        if (this.segmentOf[this.indexOf(x, y)] !== SEGMENT_NONE) return false;
+      }
+    }
+    for (let y = rect.y; y < rect.y + rect.h; y++) {
+      for (let x = rect.x; x < rect.x + rect.w; x++) this.claim(x, y, segment, 0);
+    }
+    return true;
+  }
+
+  /** Hands every tile `segment` owns back to nothing, as an undoable write. */
+  releaseSegment(segment: number): void {
+    for (let index = 0; index < this.segmentOf.length; index++) {
+      if (this.segmentOf[index] !== segment) continue;
+      this.claim(index % this.size, Math.floor(index / this.size), SEGMENT_NONE, 0);
+    }
+  }
+
   claimCorridor(tiles: ReadonlyArray<Point>, segment: number): void {
     for (const tile of tiles) {
       if (!this.isInsideUsableArea(tile.x, tile.y)) continue;
@@ -617,7 +682,7 @@ export class SegmentMap {
 
 // ── Gauntlet planning ─────────────────────────────────────────────────────────
 
-interface GauntletRoomSizes {
+export interface GauntletRoomSizes {
   safeRoomW: number;
   safeRoomH: number;
   bossRoomW: number;
@@ -661,6 +726,12 @@ export interface GauntletRequest {
    * that cannot seat its bathroom fails rather than shipping without it.
    */
   bathroom?: BathroomRequest;
+  /**
+   * Floods the corridor from the gateway safe room into the boss room. A
+   * gauntlet with one takes its choke on the stem only: an approach choke would
+   * stand in the way of the corridor.
+   */
+  approach?: FloodedApproachSpec;
   /** Dimensions drawn for a branch's mandatory safe-access pocket. */
   pocketSize: () => { w: number; h: number };
   pickCorridorKind: (isSpecial: boolean, target: Point) => CorridorKind;
@@ -720,6 +791,8 @@ export interface GauntletPlan {
    * in {@link chainRooms}: it is seated as its own role.
    */
   bathroomRooms: PlannedBathroom[];
+  /** The flooded corridor into the boss room, when the request asked for one. */
+  floodedApproach: FloodedApproachLayout | null;
 }
 
 /** The bathroom a gauntlet seats on every branch. */
@@ -851,6 +924,359 @@ function branchWaypoints(
   return waypoints;
 }
 
+/** What {@link planGauntletHead} seats: everything from the gateway safe room on. */
+export interface GauntletHead {
+  safeRoom: Rect;
+  bossRoom: Rect;
+  exitSafeRoom: Rect;
+  corridors: PlannedCorridor[];
+  /** The approach-slot choke room, when one was asked for. */
+  approachChokeRoom: Rect | null;
+  approachChokeEntryCorridor: PlannedCorridor | null;
+  /** The flooded corridor into the boss room, when the request asked for one. */
+  floodedApproach: FloodedApproachLayout | null;
+}
+
+export interface GauntletHeadRequest {
+  index: number;
+  heading: number;
+  /** Where the gateway safe room is centred. */
+  safeRoomCentre: Point;
+  sizes: GauntletRoomSizes;
+  /** A choke room seated between the gateway safe room and the boss room. */
+  approachChoke?: { w: number; h: number };
+  approach?: FloodedApproachSpec;
+  pickCorridorKind: (isSpecial: boolean, target: Point) => CorridorKind;
+}
+
+/**
+ * How much further a boss room's corners reach from its centre than those of
+ * the room the offsets were tuned against, so every boss room clears its
+ * neighbours by the same margin whatever its size.
+ */
+function bossRoomExtraReach(sizes: GauntletRoomSizes): number {
+  const reach = Math.hypot(sizes.bossRoomW / 2, sizes.bossRoomH / 2);
+  const tunedReach = Math.hypot(
+    OFFSETS_TUNED_FOR_BOSS_ROOM.w / 2,
+    OFFSETS_TUNED_FOR_BOSS_ROOM.h / 2,
+  );
+  return Math.max(0, Math.ceil(reach - tunedReach));
+}
+
+/**
+ * Seats a gauntlet's gateway safe room, its optional approach choke, its boss
+ * room and its exit safe room along a heading, claiming tile ownership as it
+ * goes. Returns null when the geometry could not be seated; the caller rolls
+ * the `SegmentMap` back.
+ */
+export function planGauntletHead(
+  segments: SegmentMap,
+  request: GauntletHeadRequest,
+): GauntletHead | null {
+  const segment = gauntletSegment(request.index);
+  const sealed = gatewaySegment(request.index);
+  const choke = chokeSegment(request.index);
+  const exit = exitSegment(request.index);
+  const { heading, sizes } = request;
+  const corridors: PlannedCorridor[] = [];
+
+  const safeRoom = rectCentredOn(request.safeRoomCentre, sizes.safeRoomW, sizes.safeRoomH);
+  if (!segments.canPlaceRoom(safeRoom, segment)) return null;
+  segments.addRoom(safeRoom, segment);
+  const safeCentre = rectCentre(safeRoom);
+
+  // With an approach choke the sealed run is safe room → choke room → boss room.
+  // The two corridors take different segments deliberately: same-segment
+  // corridors may touch, and two that did would join the safe room straight to
+  // the boss room around the choke.
+  let bossOrigin = safeCentre;
+  let bossCorridorFrom = safeRoom;
+  let approachChokeRoom: Rect | null = null;
+  let approachChokeEntryCorridor: PlannedCorridor | null = null;
+  if (request.approachChoke !== undefined) {
+    const approachOffset = polar(heading, randomInt(CHOKE_ROOM_OFFSET_MIN, CHOKE_ROOM_OFFSET_MAX));
+    const approachRoom = rectCentredOn(
+      {
+        x: Math.round(safeCentre.x + approachOffset.x),
+        y: Math.round(safeCentre.y + approachOffset.y),
+      },
+      request.approachChoke.w,
+      request.approachChoke.h,
+    );
+    if (!segments.canPlaceRoom(approachRoom, choke)) return null;
+    segments.addRoom(approachRoom, choke);
+    const approachCorridor = planCorridorBetween(
+      segments,
+      choke,
+      safeRoom,
+      approachRoom,
+      request.pickCorridorKind(true, rectCentre(approachRoom)),
+    );
+    if (approachCorridor === null) return null;
+    segments.claimCorridor(approachCorridor.tiles, choke);
+    corridors.push(approachCorridor);
+    approachChokeRoom = approachRoom;
+    approachChokeEntryCorridor = approachCorridor;
+    bossOrigin = rectCentre(approachRoom);
+    bossCorridorFrom = approachRoom;
+  }
+
+  const extraReach = bossRoomExtraReach(sizes);
+  const bossOffsetRange =
+    request.approach === undefined
+      ? { min: BOSS_ROOM_OFFSET_MIN + extraReach, max: BOSS_ROOM_OFFSET_MAX + extraReach }
+      : floodedBossOffsetRange(request.approach, sizes);
+  const bossOffset = polar(heading, randomInt(bossOffsetRange.min, bossOffsetRange.max));
+  const bossRoom = rectCentredOn(
+    { x: Math.round(bossOrigin.x + bossOffset.x), y: Math.round(bossOrigin.y + bossOffset.y) },
+    sizes.bossRoomW,
+    sizes.bossRoomH,
+  );
+  if (!segments.canPlaceRoom(bossRoom, sealed)) return null;
+  segments.addRoom(bossRoom, sealed);
+  const bossCentre = rectCentre(bossRoom);
+
+  let floodedApproach: FloodedApproachLayout | null = null;
+  if (request.approach === undefined) {
+    const gatewayCorridor = planCorridorBetween(
+      segments,
+      sealed,
+      bossCorridorFrom,
+      bossRoom,
+      request.pickCorridorKind(true, bossCentre),
+    );
+    if (gatewayCorridor === null) return null;
+    segments.claimCorridor(gatewayCorridor.tiles, sealed);
+    corridors.push(gatewayCorridor);
+  } else {
+    const flooded = planFloodedCorridor(
+      segments,
+      sealed,
+      bossCorridorFrom,
+      bossRoom,
+      request.approach,
+    );
+    if (flooded === null) return null;
+    corridors.push(flooded.corridor);
+    floodedApproach = flooded.layout;
+  }
+
+  const exitOffset = polar(
+    heading,
+    randomInt(EXIT_SAFE_ROOM_OFFSET_MIN + extraReach, EXIT_SAFE_ROOM_OFFSET_MAX + extraReach),
+  );
+  const exitSafeRoom = rectCentredOn(
+    { x: Math.round(bossCentre.x + exitOffset.x), y: Math.round(bossCentre.y + exitOffset.y) },
+    sizes.exitSafeRoomW,
+    sizes.exitSafeRoomH,
+  );
+  if (!segments.canPlaceRoom(exitSafeRoom, exit)) return null;
+  segments.addRoom(exitSafeRoom, exit);
+
+  const exitCorridor = planCorridorBetween(
+    segments,
+    exit,
+    bossRoom,
+    exitSafeRoom,
+    request.pickCorridorKind(true, rectCentre(exitSafeRoom)),
+  );
+  if (exitCorridor === null) return null;
+  segments.claimCorridor(exitCorridor.tiles, exit);
+  corridors.push(exitCorridor);
+
+  return {
+    safeRoom,
+    bossRoom,
+    exitSafeRoom,
+    corridors,
+    approachChokeRoom,
+    approachChokeEntryCorridor,
+    floodedApproach,
+  };
+}
+
+/**
+ * Centre distances from the gateway safe room to the boss room that leave a
+ * flooded corridor at least its minimum length: the length itself plus how far
+ * each room reaches from its centre along whichever axis the corridor leaves by.
+ */
+function floodedBossOffsetRange(
+  approach: FloodedApproachSpec,
+  sizes: GauntletRoomSizes,
+): { min: number; max: number } {
+  const safeReach = Math.ceil(Math.max(sizes.safeRoomW, sizes.safeRoomH) / 2);
+  const bossReach = Math.ceil(Math.max(sizes.bossRoomW, sizes.bossRoomH) / 2);
+  const min = approach.minLengthTiles + safeReach + bossReach;
+  return { min, max: min + FLOODED_APPROACH_OFFSET_SLACK };
+}
+
+/**
+ * The tiles an L-shaped corridor's centre line passes through from one centre
+ * to the other, in walking order.
+ */
+function corridorCentreLine(from: Point, to: Point, horizontalFirst: boolean): Point[] {
+  const line: Point[] = [];
+  const stepX = Math.sign(to.x - from.x);
+  const stepY = Math.sign(to.y - from.y);
+  if (horizontalFirst) {
+    for (let x = from.x; x !== to.x; x += stepX) line.push({ x, y: from.y });
+    for (let y = from.y; y !== to.y; y += stepY) line.push({ x: to.x, y });
+  } else {
+    for (let y = from.y; y !== to.y; y += stepY) line.push({ x: from.x, y });
+    for (let x = from.x; x !== to.x; x += stepX) line.push({ x, y: to.y });
+  }
+  line.push({ x: to.x, y: to.y });
+  return line;
+}
+
+/**
+ * Plans the wide corridor from the gateway safe room into the boss room and lays
+ * out its water, its barrel seat and its trigger line, or returns null when no
+ * orientation fits or the result is shorter than the spec allows.
+ *
+ * The barrel seat is an alcove cut one tile past the side wall, claimed in the
+ * corridor's own segment so nothing else can open into it: the corridor keeps
+ * its full width beside the barrels. It is never cut into a south wall (see
+ * `BarrelSeatWall` for why); a corridor whose straight run is east–west and whose
+ * north wall is taken tries the other orientation, then fails the attempt.
+ */
+function planFloodedCorridor(
+  segments: SegmentMap,
+  segment: number,
+  from: Rect,
+  to: Rect,
+  approach: FloodedApproachSpec,
+): { corridor: PlannedCorridor; layout: FloodedApproachLayout } | null {
+  const fromCentre = rectCentre(from);
+  const toCentre = rectCentre(to);
+  const orientations = worldRandom() < EVEN_CHANCE ? [true, false] : [false, true];
+  const seatSides = worldRandom() < EVEN_CHANCE ? [1, -1] : [-1, 1];
+  for (const horizontalFirst of orientations) {
+    const tiles = segments.corridorTiles(fromCentre, toCentre, 'standard', horizontalFirst);
+    if (!segments.canCarveCorridor(tiles, segment, [from, to])) continue;
+    const line = corridorCentreLine(fromCentre, toCentre, horizontalFirst);
+    const sections = crossSectionsBetween(line, from, to);
+    if (sections.length < approach.minLengthTiles) continue;
+    const wetFromIndex = Math.floor(sections.length / 2);
+    const seatIndex = straightSeatIndex(sections, wetFromIndex);
+    if (seatIndex === null) continue;
+    for (const side of seatSides) {
+      const section = sections[seatIndex];
+      const perpendicular = perpendicularOf(section.along);
+      const seatTile = {
+        x: section.centre.x + perpendicular.x * side * BARREL_SEAT_OFFSET_FROM_CENTRE,
+        y: section.centre.y + perpendicular.y * side * BARREL_SEAT_OFFSET_FROM_CENTRE,
+      };
+      const wall = corridorWallOf(section.centre, seatTile);
+      if (!isBarrelSeatWall(wall)) continue;
+      if (!segments.canCarveCorridor([...tiles, seatTile], segment, [from, to])) continue;
+      segments.claimCorridor([...tiles, seatTile], segment);
+      return {
+        corridor: { tiles: [...tiles, seatTile], kind: 'standard', target: toCentre },
+        layout: {
+          crossSections: sections,
+          wetFromIndex,
+          depths: floodedApproachDepths(sections.length, wetFromIndex),
+          bendCorners: bendCornersOf(tiles, sections, from, to),
+          barrelSeat: { tile: seatTile, crossSectionIndex: seatIndex, wall },
+          triggerLine: sections[seatIndex + TRIGGER_SECTIONS_PAST_SEAT].tiles,
+        },
+      };
+    }
+  }
+  return null;
+}
+
+function perpendicularOf(along: Point): Point {
+  return { x: -along.y, y: along.x };
+}
+
+/** The centre line's cross-sections outside both rooms, in walking order. */
+function crossSectionsBetween(
+  line: ReadonlyArray<Point>,
+  from: Rect,
+  to: Rect,
+): CorridorCrossSection[] {
+  const sections: CorridorCrossSection[] = [];
+  for (let index = 0; index + 1 < line.length; index++) {
+    const centre = line[index];
+    if (rectContains(from, centre) || rectContains(to, centre)) continue;
+    const next = line[index + 1];
+    const along = { x: next.x - centre.x, y: next.y - centre.y };
+    const perpendicular = perpendicularOf(along);
+    sections.push({
+      centre,
+      along,
+      tiles: WIDE_CROSS_OFFSETS.map((offset) => ({
+        x: centre.x + perpendicular.x * offset,
+        y: centre.y + perpendicular.y * offset,
+      })),
+    });
+  }
+  return sections;
+}
+
+/**
+ * The carved tiles outside both rooms that no cross-section spans, each paired
+ * with the deepest-along cross-section whose centre neighbours it. Only a bend's
+ * outer corner lands here: everywhere else the width of a section covers what
+ * the corridor carved.
+ */
+function bendCornersOf(
+  carved: ReadonlyArray<Point>,
+  sections: ReadonlyArray<CorridorCrossSection>,
+  from: Rect,
+  to: Rect,
+): { tile: Point; crossSectionIndex: number }[] {
+  const spanned = new Set(
+    sections.flatMap((section) => section.tiles).map((tile) => tileCoordKey(tile.x, tile.y)),
+  );
+  const corners: { tile: Point; crossSectionIndex: number }[] = [];
+  for (const tile of carved) {
+    if (rectContains(from, tile) || rectContains(to, tile)) continue;
+    if (spanned.has(tileCoordKey(tile.x, tile.y))) continue;
+    let crossSectionIndex = -1;
+    for (const [index, section] of sections.entries()) {
+      if (chebyshevDistance(section.centre, tile) <= 1) crossSectionIndex = index;
+    }
+    if (crossSectionIndex >= 0) corners.push({ tile, crossSectionIndex });
+  }
+  return corners;
+}
+
+function chebyshevDistance(a: Point, b: Point): number {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/**
+ * The barrel seat's cross-section: a quarter of the way into the wet half, slid
+ * along it if the corridor's bend falls beside it, so the seat and the trigger
+ * line past it lie on one straight run. Null when no such run exists.
+ */
+function straightSeatIndex(
+  sections: ReadonlyArray<CorridorCrossSection>,
+  wetFromIndex: number,
+): number | null {
+  const nominal = barrelSeatSectionIndex(sections.length, wetFromIndex);
+  const isStraightAround = (index: number): boolean => {
+    const first = index - BARREL_SEAT_STRAIGHT_REACH_BEFORE;
+    const last = index + TRIGGER_SECTIONS_PAST_SEAT;
+    if (first < wetFromIndex || last >= sections.length) return false;
+    const { along } = sections[index];
+    for (let probe = first; probe <= last; probe++) {
+      const other = sections[probe].along;
+      if (other.x !== along.x || other.y !== along.y) return false;
+    }
+    return true;
+  };
+  for (let slide = 0; slide <= BARREL_SEAT_SLIDE_STEPS; slide++) {
+    for (const candidate of [nominal + slide, nominal - slide]) {
+      if (isStraightAround(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
 /**
  * Plans one gauntlet — branch chains, gateway safe room, gateway boss room —
  * claiming tile ownership as it goes. Returns null when the geometry could not
@@ -858,9 +1284,7 @@ function branchWaypoints(
  */
 export function planGauntlet(segments: SegmentMap, request: GauntletRequest): GauntletPlan | null {
   const segment = gauntletSegment(request.index);
-  const sealed = gatewaySegment(request.index);
   const choke = chokeSegment(request.index);
-  const exit = exitSegment(request.index);
   const heading = nextHeading(request.previousHeading);
   const corridors: PlannedCorridor[] = [];
 
@@ -900,96 +1324,27 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   const branchEntryCentre = rectCentre(branchEntryRoom);
   const gatewayRange = gatewayDistanceRange(request.mapSize, request.index);
   const gatewayOffset = polar(heading, randomInt(gatewayRange.min, gatewayRange.max));
-  const safeRoom = rectCentredOn(
-    {
+  const head = planGauntletHead(segments, {
+    index: request.index,
+    heading,
+    safeRoomCentre: {
       x: Math.round(branchEntryCentre.x + gatewayOffset.x),
       y: Math.round(branchEntryCentre.y + gatewayOffset.y),
     },
-    request.sizes.safeRoomW,
-    request.sizes.safeRoomH,
-  );
-  if (!segments.canPlaceRoom(safeRoom, segment)) return null;
-  segments.addRoom(safeRoom, segment);
-
-  const safeCentre = rectCentre(safeRoom);
-
-  // With an approach choke the sealed run is safe room → choke room → boss room.
-  // The two corridors take different segments deliberately: same-segment
-  // corridors may touch, and two that did would join the safe room straight to
-  // the boss room around the choke.
-  let bossOrigin = safeCentre;
-  let bossCorridorFrom = safeRoom;
-  if (request.choke !== undefined && chokeSlot === 'approach') {
-    const approachOffset = polar(heading, randomInt(CHOKE_ROOM_OFFSET_MIN, CHOKE_ROOM_OFFSET_MAX));
-    const approachRoom = rectCentredOn(
-      {
-        x: Math.round(safeCentre.x + approachOffset.x),
-        y: Math.round(safeCentre.y + approachOffset.y),
-      },
-      request.choke.w,
-      request.choke.h,
-    );
-    if (!segments.canPlaceRoom(approachRoom, choke)) return null;
-    segments.addRoom(approachRoom, choke);
-    const approachCorridor = planCorridorBetween(
-      segments,
-      choke,
-      safeRoom,
-      approachRoom,
-      request.pickCorridorKind(true, rectCentre(approachRoom)),
-    );
-    if (approachCorridor === null) return null;
-    segments.claimCorridor(approachCorridor.tiles, choke);
-    corridors.push(approachCorridor);
-    chokeRoom = approachRoom;
-    chokeEntryCorridor = approachCorridor;
-    bossOrigin = rectCentre(approachRoom);
-    bossCorridorFrom = approachRoom;
+    sizes: request.sizes,
+    approachChoke:
+      request.choke !== undefined && chokeSlot === 'approach' ? request.choke : undefined,
+    approach: request.approach,
+    pickCorridorKind: request.pickCorridorKind,
+  });
+  if (head === null) return null;
+  corridors.push(...head.corridors);
+  if (head.approachChokeRoom !== null) {
+    chokeRoom = head.approachChokeRoom;
+    chokeEntryCorridor = head.approachChokeEntryCorridor;
   }
-
-  const bossOffset = polar(heading, randomInt(BOSS_ROOM_OFFSET_MIN, BOSS_ROOM_OFFSET_MAX));
-  const bossRoom = rectCentredOn(
-    { x: Math.round(bossOrigin.x + bossOffset.x), y: Math.round(bossOrigin.y + bossOffset.y) },
-    request.sizes.bossRoomW,
-    request.sizes.bossRoomH,
-  );
-  if (!segments.canPlaceRoom(bossRoom, sealed)) return null;
-  segments.addRoom(bossRoom, sealed);
-
-  const bossCentre = rectCentre(bossRoom);
-  const gatewayCorridor = planCorridorBetween(
-    segments,
-    sealed,
-    bossCorridorFrom,
-    bossRoom,
-    request.pickCorridorKind(true, bossCentre),
-  );
-  if (gatewayCorridor === null) return null;
-  segments.claimCorridor(gatewayCorridor.tiles, sealed);
-  corridors.push(gatewayCorridor);
-
-  const exitOffset = polar(
-    heading,
-    randomInt(EXIT_SAFE_ROOM_OFFSET_MIN, EXIT_SAFE_ROOM_OFFSET_MAX),
-  );
-  const exitSafeRoom = rectCentredOn(
-    { x: Math.round(bossCentre.x + exitOffset.x), y: Math.round(bossCentre.y + exitOffset.y) },
-    request.sizes.exitSafeRoomW,
-    request.sizes.exitSafeRoomH,
-  );
-  if (!segments.canPlaceRoom(exitSafeRoom, exit)) return null;
-  segments.addRoom(exitSafeRoom, exit);
-
-  const exitCorridor = planCorridorBetween(
-    segments,
-    exit,
-    bossRoom,
-    exitSafeRoom,
-    request.pickCorridorKind(true, rectCentre(exitSafeRoom)),
-  );
-  if (exitCorridor === null) return null;
-  segments.claimCorridor(exitCorridor.tiles, exit);
-  corridors.push(exitCorridor);
+  const { safeRoom } = head;
+  const safeCentre = rectCentre(safeRoom);
 
   const exitAngles = branchExitAngles(request, heading, request.branchCount);
   const pullRange =
@@ -1035,8 +1390,8 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   return {
     heading,
     safeRoom,
-    bossRoom,
-    exitSafeRoom,
+    bossRoom: head.bossRoom,
+    exitSafeRoom: head.exitSafeRoom,
     chainRooms,
     branchChains,
     corridors,
@@ -1046,6 +1401,7 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
     chokeSlot: chokeRoom === null ? null : chokeSlot,
     chokeEntryCorridor,
     bathroomRooms,
+    floodedApproach: head.floodedApproach,
   };
 }
 

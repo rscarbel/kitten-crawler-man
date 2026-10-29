@@ -4,12 +4,16 @@
  * bolts will fly along, the cracks and the lit ground of a grave pulse, and the
  * mark where a blink will land.
  *
- * All of them are hollow-blue, the colour of every light he makes, so a player
- * who has learnt the lantern has learnt the warnings. Each takes a `progress`
- * from 0 (the telegraph opens) to 1 (the payload lands) and brightens toward
- * it, so the mark itself counts down.
+ * The marks of ground that will hurt (the bolt fan and the grave pulse) are
+ * the game's red ground warning like every other creature's. The sigils and
+ * the blink mark hurt nobody, so they keep the hollow blue of every light he
+ * makes. Each takes a `progress` from 0 (the telegraph opens) to 1 (the
+ * payload lands) and brightens toward it, so the mark itself counts down.
  */
 
+import { GROUND_WARNING_INK } from '../ui/theme/worldInk';
+import { withAlpha } from '../ui/theme/color';
+import { drawDangerLane } from './dangerTelegraph';
 import { hollowSoulPalette, soulRgba } from './soulPalette';
 
 type Ctx = CanvasRenderingContext2D;
@@ -109,13 +113,15 @@ const FAN_REACH_TILES = 4;
  */
 export const NECROMANCER_VOLLEY_BOLTS = 3;
 export const NECROMANCER_VOLLEY_SPREAD = 0.18;
-/** A fan line's opacity at the lantern, and its width as a share of the tile. */
-const FAN_ALPHA = 0.55;
-const FAN_WIDTH = 0.05;
+/** How far either side of its bolt's line each lane of the fan reaches, in tiles. */
+const FAN_LANE_HALF_TILES = 0.18;
+/** The fan is at full strength for the whole wind-up; its growing fill is the countdown. */
+const FAN_FADE = 1;
 
 /**
- * The fan the volley will fly along: one faint line per bolt from the lantern
- * toward the target, drawing out to full length as the cast winds up.
+ * The fan the volley will fly along: one red lane per bolt from the lantern
+ * toward the target, at the full reach from the start of the cast, filling
+ * down its length as the cast winds up and meeting the end as the bolts fly.
  */
 export function drawBoltFan(
   ctx: Ctx,
@@ -125,39 +131,21 @@ export function drawBoltFan(
   tileSize: number,
   progress: number,
 ): void {
-  const t = ease(progress);
-  const reach = FAN_REACH_TILES * tileSize * t;
-  ctx.save();
-  ctx.lineCap = 'round';
+  const reach = FAN_REACH_TILES * tileSize;
+  const halfWidth = FAN_LANE_HALF_TILES * tileSize;
   for (let i = 0; i < NECROMANCER_VOLLEY_BOLTS; i++) {
     const a = angle + (i - (NECROMANCER_VOLLEY_BOLTS - 1) / 2) * NECROMANCER_VOLLEY_SPREAD;
-    const tx = fromX + Math.cos(a) * reach;
-    const ty = fromY + Math.sin(a) * reach;
-    const line = ctx.createLinearGradient(fromX, fromY, tx, ty);
-    line.addColorStop(0, soulRgba(mid, FAN_ALPHA * t));
-    line.addColorStop(1, soulRgba(mid, 0));
-    ctx.strokeStyle = line;
-    ctx.lineWidth = Math.max(1, tileSize * FAN_WIDTH);
-    ctx.beginPath();
-    ctx.moveTo(fromX, fromY);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
+    drawDangerLane(ctx, fromX, fromY, Math.cos(a), Math.sin(a), reach, halfWidth, FAN_FADE, {
+      fillProgress: progress,
+    });
   }
-  ctx.restore();
 }
 
 const PULSE_CRACKS = 7;
 const PULSE_CRACK_REACH_TILES = 0.55;
 const PULSE_BAND_HALF_TILES = 0.35;
-/** The band narrows toward the staff: its width there, as a share of its width at the target. */
-const PULSE_BAND_STAFF_SHARE = 0.4;
-/** The band's opacity at the staff and at the target, as it opens and at the payload. */
-const PULSE_BAND_ALPHA = {
-  staffFrom: 0.1,
-  staffGain: 0.2,
-  targetFrom: 0.15,
-  targetGain: 0.35,
-} as const;
+/** The band is at full strength for the whole channel; its growing fill is the countdown. */
+const PULSE_BAND_FADE = 1;
 /** How far each crack's direction is jittered off its even spacing, in radians. */
 const PULSE_CRACK_JITTER = 0.7;
 /** The shortest crack, as a share of the longest. */
@@ -183,9 +171,9 @@ function hash01(seed: number): number {
 }
 
 /**
- * A grave pulse's two marks: the ground lit in a band from the planted staff
- * to the target, and glowing cracks spreading over the target itself. Both
- * brighten through the channel, so the player can read how long is left.
+ * A grave pulse's two marks: a band of ground warning from the planted staff
+ * to the target, its fill running down to the target as the channel ends, and
+ * cracks spreading over the target itself.
  */
 export function drawPulseTelegraph(
   ctx: Ctx,
@@ -199,24 +187,21 @@ export function drawPulseTelegraph(
   const t = ease(progress);
   const dx = toX - fromX;
   const dy = toY - fromY;
-  const length = Math.hypot(dx, dy) || 1;
-  const nx = (-dy / length) * PULSE_BAND_HALF_TILES * tileSize;
-  const ny = (dx / length) * PULSE_BAND_HALF_TILES * tileSize * GROUND_SQUASH;
+  const length = Math.hypot(dx, dy);
+  if (length > 0) {
+    drawDangerLane(
+      ctx,
+      fromX,
+      fromY,
+      dx / length,
+      dy / length,
+      length,
+      PULSE_BAND_HALF_TILES * tileSize,
+      PULSE_BAND_FADE,
+      { fillProgress: progress },
+    );
+  }
   ctx.save();
-  const band = ctx.createLinearGradient(fromX, fromY, toX, toY);
-  band.addColorStop(0, soulRgba(mid, PULSE_BAND_ALPHA.staffFrom + PULSE_BAND_ALPHA.staffGain * t));
-  band.addColorStop(
-    1,
-    soulRgba(mid, PULSE_BAND_ALPHA.targetFrom + PULSE_BAND_ALPHA.targetGain * t),
-  );
-  ctx.fillStyle = band;
-  ctx.beginPath();
-  ctx.moveTo(fromX + nx * PULSE_BAND_STAFF_SHARE, fromY + ny * PULSE_BAND_STAFF_SHARE);
-  ctx.lineTo(toX + nx, toY + ny);
-  ctx.lineTo(toX - nx, toY - ny);
-  ctx.lineTo(fromX - nx * PULSE_BAND_STAFF_SHARE, fromY - ny * PULSE_BAND_STAFF_SHARE);
-  ctx.closePath();
-  ctx.fill();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (let i = 0; i < PULSE_CRACKS; i++) {
@@ -232,7 +217,7 @@ export function drawPulseTelegraph(
     const endX = toX + Math.cos(a) * r;
     const endY = toY + Math.sin(a) * r;
     for (const [colour, width, alpha] of CRACK_STROKES) {
-      ctx.strokeStyle = soulRgba(
+      ctx.strokeStyle = withAlpha(
         colour,
         alpha * (PULSE_CRACK_START_ALPHA + (1 - PULSE_CRACK_START_ALPHA) * t),
       );
@@ -248,9 +233,9 @@ export function drawPulseTelegraph(
 }
 
 /** A crack's two strokes: colour, width as a share of the tile, and opacity. */
-const CRACK_STROKES: readonly (readonly [typeof deep | typeof core, number, number])[] = [
-  [deep, 0.08, 0.8],
-  [core, 0.03, 1],
+const CRACK_STROKES: readonly (readonly [string, number, number])[] = [
+  [GROUND_WARNING_INK.deep, 0.08, 0.8],
+  [GROUND_WARNING_INK.outline, 0.03, 1],
 ];
 
 const BLINK_MARK_RADIUS_TILES = 0.5;

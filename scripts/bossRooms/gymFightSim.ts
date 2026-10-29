@@ -193,10 +193,7 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
   const { gameMap, levelDef, room } = found;
   const bossTypes = levelDef.bossRooms?.map((entry) => entry.type) ?? [];
   const parts = buildGauntletRoomDressings(gameMap, bossTypes);
-  const dressings = new BossRoomDressings(
-    { ...parts, spiderLab: null, colosseum: null },
-    bossTypes,
-  );
+  const dressings = new BossRoomDressings({ ...parts, spiderLab: null }, bossTypes);
   const bossRoom = new BossRoomSystem(gameMap, HEADLESS_MINIMAP, new EventBus(), bossTypes);
   bossRoom.fightListener = dressings;
 

@@ -27,8 +27,7 @@
  * - Always the baked chunk layer: walls, floors, occlusion.
  * - `--props` adds what the game draws over the chunks in its Y-sorted pass —
  *   every decoration tile (torches, barrels, crates, shelves, signs) and every
- *   wall fixture — in the order the game sorts them, and the colosseum's ground
- *   dressing (its caged pigs, banners and flood lamps) as it stands before a fight.
+ *   wall fixture — in the order the game sorts them.
  * - `--lighting` applies the floor's lighting pass at a fixed clock, so two runs
  *   with the same seed light identically: the darkness, every static light on
  *   the map (the nursery's sconces included), a crawler's light at the middle
@@ -116,7 +115,6 @@ import { OIL_FIRE_CATCH_FRAMES } from '../src/systems/destruction/wreckageField.
 import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { DungeonLifeSystem } from '../src/systems/dungeon/DungeonLifeSystem.js';
 import { floorSurfaceOf } from '../src/map/dungeon/floorSurface.js';
-import { buildColosseumDressing } from '../src/systems/bossRooms/BossRoomDressings.js';
 import { UINT32_SPAN } from '../src/core/world/WorldRandom.js';
 import { StairwellSystem } from '../src/systems/StairwellSystem.js';
 import { LabHallwayAtmosphere } from '../src/systems/spiderQuest/LabHallwayAtmosphere.js';
@@ -348,15 +346,10 @@ function tileKey(tile: Point): string {
   return `${tile.x},${tile.y}`;
 }
 
-/**
- * Every hallway floor tile, keyed by {@link tileKey}. An arena's drum is
- * recorded as a hallway because no room rectangle covers it, but it is a round
- * floor, not a corridor, so it is left out.
- */
+/** Every hallway floor tile, keyed by {@link tileKey}. */
 function corridorTiles(): Map<string, Point> {
   const tiles = new Map<string, Point>();
   for (const hallway of gameMap.regionMap.hallways) {
-    if (hallway.arena) continue;
     for (const tile of hallway.tiles) tiles.set(tileKey(tile), tile);
   }
   return tiles;
@@ -759,10 +752,6 @@ const labHallway = propsRequested
 smashed?.renderWreckage(ctx, camX, camY);
 const life = buildLife();
 life?.renderGround(ctx, camX, camY, viewW, viewH);
-// The colosseum's caged pigs, banners and flood lamps are its dressing system's
-// ground layer, not tiles: without it the rim shows only the empty cage sockets
-// the tile painter leaves for them, as black squares.
-if (propsRequested) buildColosseumDressing(gameMap)?.renderGround(ctx, camX, camY);
 
 if (propsRequested || smashRequested) {
   // Fixtures go in ahead of props so the stable sort keeps a fixture behind a

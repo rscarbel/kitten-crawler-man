@@ -105,12 +105,35 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     ],
   },
 
-  floor1_caroline_pressure: {
+  floor1_caroline_drained: {
     speaker: 'caroline',
-    trigger: { kind: 'bossDefeated', boss: 'big_rooster' },
+    trigger: { kind: 'bossDefeated', boss: 'kraken' },
     requires: [],
     message: carolineLines.message(
-      'Big Rooster terminated. Performance exceeds projection. Projection revised upward. A system that is never stressed does not improve. You will be stressed.',
+      'The Kraken is terminated. The flood was not there to protect her. It was there to measure whether you would find the pumps before you fought. You did. The route to the stairwell is open.',
+    ),
+  },
+
+  floor1_dave_chosen: {
+    speaker: 'dave',
+    trigger: { kind: 'safeRoomArrival', floor: 1, afterBossDefeated: 'kraken' },
+    requires: ['floor1_dave_the_morning'],
+    get lines(): DaveLines {
+      return [
+        "That pump room was a test. She flooded it and left the pumps where you'd find them. She wanted to see if you'd work it out before you tried to fight.",
+        `I've seen your face when her messages come in, ${crawlerDisplayName('human')}. She talks to you more than she ever talked to me.`,
+        "I think she picked you for something. I think you're the one who's meant to change how all this ends.",
+        "Not yet, though. She won't hand anyone that kind of weight on their first floor. She'll build you up to it, one floor at a time, whether you like her methods or not.",
+      ];
+    },
+  },
+
+  floor1_caroline_motive: {
+    speaker: 'caroline',
+    trigger: { kind: 'afterBeat', beat: 'floor1_dave_chosen' },
+    requires: ['floor1_dave_chosen'],
+    message: carolineLines.message(
+      "Dave's assessment is correct. You were selected. Selection does not include protection. Growth requires pressure, and pressure requires real risk. I will not remove the risk. I do want you to succeed.",
     ),
   },
 
@@ -129,7 +152,7 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
   floor2_dave_his_story: {
     speaker: 'dave',
     trigger: { kind: 'safeRoomArrival', floor: 2 },
-    requires: ['floor1_dave_the_morning'],
+    requires: ['floor1_dave_chosen'],
     lines: [
       "Ever wonder what I'm doing, handing out advice in a room with a cot in it?",
       'I used to be you. Out there every day, getting stronger. I was good at it.',
@@ -148,25 +171,21 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     ],
   },
 
-  floor2_dave_chosen: {
-    speaker: 'dave',
-    trigger: { kind: 'safeRoomArrival', floor: 2, afterBossDefeated: 'krakaren_clone' },
-    requires: ['floor2_dave_how_he_knows'],
-    get lines(): DaveLines {
-      return [
-        `I've seen your face when her messages come in, ${crawlerDisplayName('human')}. She talks to you more than she ever talked to me.`,
-        "I think she picked you for something. I think you're the one who's meant to change how all this ends.",
-        "Not yet, though. She doesn't hand anyone that kind of weight on day one. She'll build you up to it, a floor at a time, whether you like her methods or not.",
-      ];
-    },
+  floor2_caroline_current: {
+    speaker: 'caroline',
+    trigger: { kind: 'bossDefeated', boss: 'electric_goblin' },
+    requires: [],
+    message: carolineLines.message(
+      'The Current Goblin is terminated. His generator is offline. Every system on this floor is still running. None of them ran on his power.',
+    ),
   },
 
-  floor2_caroline_motive: {
+  floor2_caroline_pressure: {
     speaker: 'caroline',
-    trigger: { kind: 'afterBeat', beat: 'floor2_dave_chosen' },
-    requires: ['floor2_dave_chosen'],
+    trigger: { kind: 'bossDefeated', boss: 'big_rooster' },
+    requires: [],
     message: carolineLines.message(
-      "Dave's assessment is correct. You were selected. Selection does not include protection. Growth requires pressure, and pressure requires real risk. I will not remove the risk. I do want you to succeed.",
+      'Big Rooster terminated. Performance exceeds projection. Projection revised upward. A system that is never stressed does not improve. You will be stressed.',
     ),
   },
 
@@ -184,7 +203,7 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
   floor3_dave_allies: {
     speaker: 'dave',
     trigger: { kind: 'safeRoomArrival', floor: 3 },
-    requires: ['floor2_dave_chosen'],
+    requires: ['floor2_dave_how_he_knows'],
     lines: [
       "Bigger place. More people. More people means more help, if you're smart about who you trust. You can't do the rest of this alone. Nobody can.",
     ],

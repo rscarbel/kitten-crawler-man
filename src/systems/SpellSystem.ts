@@ -37,7 +37,7 @@ import {
   SHOCKWAVE_STATE,
   shieldTileSizeFor,
 } from '../sprites/art/energyShieldFigure';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { standByForShieldCast } from '../creatures/humanGestures';
 import { energyShieldMagicScale } from '../core/party/crawlerFormulas';
 import type { DynamicLightSink } from './lighting/dynamicLights';
@@ -750,8 +750,8 @@ export class SpellSystem implements GameSystem {
     if (
       sx + extent < 0 ||
       sy + extent < 0 ||
-      sx - extent > viewportWidth() ||
-      sy - extent > viewportHeight()
+      sx - extent > worldViewWidth() ||
+      sy - extent > worldViewHeight()
     )
       return;
 
@@ -889,8 +889,8 @@ export class SpellSystem implements GameSystem {
   }
 
   renderFogs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
+    const cw = worldViewWidth();
+    const ch = worldViewHeight();
     for (const fog of this.activeFogs) {
       const cx = fog.x - camX;
       const cy = fog.y - camY;

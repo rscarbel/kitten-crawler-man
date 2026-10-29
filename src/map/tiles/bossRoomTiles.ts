@@ -7,20 +7,18 @@ import {
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
+  GYM_KETTLEBELL_RACK,
   GYM_TREADMILL_BELT,
-  KRAKAREN_WADE,
-  KRAKAREN_TANK,
-  KRAKAREN_CONSOLE,
+  POWER_LAB_TANK,
+  POWER_LAB_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
   LAB_WEB,
-  ARENA_MUD,
 } from '../tileTypes';
 import { drawTrashGremlinTile } from './bossRooms/trashGremlinTiles';
 import { drawGymTile } from './bossRooms/gymTiles';
-import { drawKrakarenTile } from './bossRooms/krakarenTiles';
+import { drawPowerLabTile } from './bossRooms/powerLabTiles';
 import { drawLabTile } from './bossRooms/labTiles';
-import { drawColosseumTile } from './bossRooms/colosseumTiles';
 
 /**
  * Paints any boss-room dressing tile, or returns false for a type that is not
@@ -40,9 +38,8 @@ export function drawBossRoomTile(
   return (
     drawTrashGremlinTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
     drawGymTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
-    drawKrakarenTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
-    drawLabTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
-    drawColosseumTile(ctx, structure, type, sx, sy, ts, tx, ty)
+    drawPowerLabTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
+    drawLabTile(ctx, structure, type, sx, sy, ts, tx, ty)
   );
 }
 
@@ -54,14 +51,13 @@ const BOSS_ROOM_MINIMAP_COLORS: ReadonlyMap<number, string> = new Map([
   [GYM_RACK, '#4a4a52'],
   [GYM_SQUAT_RACK, '#5a5a64'],
   [GYM_CABLE_STACK, '#5a5a64'],
+  [GYM_KETTLEBELL_RACK, '#4a4a52'],
   [GYM_TREADMILL_BELT, '#262626'],
-  [KRAKAREN_WADE, '#1f4a60'],
-  [KRAKAREN_TANK, '#3a8078'],
-  [KRAKAREN_CONSOLE, '#4e5e68'],
+  [POWER_LAB_TANK, '#3a8078'],
+  [POWER_LAB_CONSOLE, '#4e5e68'],
   [LAB_BENCH, '#5a5048'],
   [LAB_SHELF, '#4a4038'],
   [LAB_WEB, '#9a9a92'],
-  [ARENA_MUD, '#4e3824'],
 ]);
 
 /**

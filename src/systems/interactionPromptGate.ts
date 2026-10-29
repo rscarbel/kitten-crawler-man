@@ -30,7 +30,7 @@ export function hostileWithinRadius(
   const px = player.x + TILE_SIZE * TILE_CENTRE_FRACTION;
   const py = player.y + TILE_SIZE * TILE_CENTRE_FRACTION;
   for (const mob of mobGrid.queryCircle(px, py, radiusPx)) {
-    if (mob.isAlive && mob.isHostile) return true;
+    if (mob.isHostileTarget) return true;
   }
   return false;
 }

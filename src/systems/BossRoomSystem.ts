@@ -1,6 +1,7 @@
 import { crawlerTurnsShot } from '../gear/incomingBlows';
 import { displayHp } from '../core/party/crawlerFormulas';
 import { BOSS_IDENTITY_COLOR, SEALED_ROOM_BORDER_COLOR } from '../sprites/bossRoomColors';
+import type { GauntletBossType } from '../map/bossRoomSizes';
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
 import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
@@ -22,37 +23,36 @@ import {
   unpinTrashGremlinEncounterRows,
 } from '../sprites/trashGremlinSprite';
 import { pinGremlinBile, prewarmGremlinBile, unpinGremlinBile } from '../sprites/gremlinBileSprite';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
-import type { BossRoomFightListener } from './bossRooms/BossRoomDressing';
+import { SEAL_ON_ENTRY, type BossRoomFightListener } from './bossRooms/BossRoomDressing';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import type { EventBus } from '../core/EventBus';
 import { worldText } from '../ui/world/worldText';
 import { drawGremlinAcidPool, drawGremlinBile } from '../sprites/gremlinBileSprite';
-import { bileLobHeight, drawBileShadow, stopsBile } from './bossRooms/gremlinBile';
+import { bileLobHeight, drawBileGroundMark, stopsBile } from './bossRooms/gremlinBile';
 import {
-  KrakarenClone,
+  Kraken,
   MAX_GUARD_TENTACLES,
-  KRAKAREN_VISUAL_SCALE,
-  SLAM_KILL_RADIUS_PX,
-} from '../creatures/KrakarenClone';
-import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
+  KRAKEN_VISUAL_SCALE,
+  KRAKEN_SLAM_RADIUS_PX,
+} from '../creatures/Kraken';
+import { KrakenTentacle } from '../creatures/KrakenTentacle';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { roomDoorways, type Point } from '../map/roomDoorways';
-import { isLabFloodAtPx } from './bossRooms/krakarenLabLayout';
 import {
-  drawSlamShadow,
   drawSlamImpact,
-  drawKrakarenSlamTentacle,
-  krakarenScaledArtOrigin,
-  prewarmKrakarenGore,
-} from '../sprites/krakarenSprite';
-import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
+  drawKrakenSlamTentacle,
+  krakenScaledArtOrigin,
+  prewarmKrakenGore,
+} from '../sprites/krakenSprite';
+import { drawSlamShadow } from '../sprites/krakenTelegraphs';
+import { prewarmKrakenTentacle } from '../sprites/krakenTentacleSprite';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import type { MeterKind } from '../ui/theme/skins';
 import { stackedBandEntry, type BandRow, type BandTextRow } from '../ui/hud/topBandStack';
@@ -130,11 +130,16 @@ export interface BossRoomCheckpoint {
   regenNoticeGiven: boolean[];
 }
 
-export const BOSS_META: Record<string, { displayName: string; color: string }> = {
+export const BOSS_META: Readonly<
+  Record<GauntletBossType, { readonly displayName: string; readonly color: string }>
+> = {
   trash_gremlin: { displayName: 'THE TRASH GREMLIN', color: BOSS_IDENTITY_COLOR.trash_gremlin },
   big_rooster: { displayName: 'BIG ROOSTER', color: BOSS_IDENTITY_COLOR.big_rooster },
-  ball_of_swine: { displayName: 'BALL OF SWINE', color: BOSS_IDENTITY_COLOR.ball_of_swine },
-  krakaren_clone: { displayName: 'KRAKAREN CLONE', color: BOSS_IDENTITY_COLOR.krakaren_clone },
+  kraken: { displayName: 'THE KRAKEN', color: BOSS_IDENTITY_COLOR.kraken },
+  electric_goblin: {
+    displayName: 'CURRENT GOBLIN',
+    color: BOSS_IDENTITY_COLOR.electric_goblin,
+  },
 };
 
 /** 30 seconds at 60 fps. */
@@ -235,13 +240,13 @@ const PROJECTILE_HIT_RADIUS = TILE_SIZE * PROJECTILE_HIT_RADIUS_FRACTION;
 const POOLS_TANGENT_MULTIPLIER = 2;
 const PUDDLE_CROWDING_RADIUS = ACID_PUDDLE_RADIUS * POOLS_TANGENT_MULTIPLIER;
 /**
- * How far past the slam's actual kill radius a companion treats as "still
+ * How far past the slam's actual reach a companion treats as "still
  * standing in it" — clears the ring with room to spare instead of tracking
  * its exact edge, so a frame of drift into the AOE while it's fleeing doesn't
  * turn the escape vector back on and stall it at the boundary.
  */
 const SLAM_HAZARD_MARGIN_PX = TILE_SIZE;
-const SLAM_HAZARD_RADIUS_PX = SLAM_KILL_RADIUS_PX + SLAM_HAZARD_MARGIN_PX;
+const SLAM_HAZARD_RADIUS_PX = KRAKEN_SLAM_RADIUS_PX + SLAM_HAZARD_MARGIN_PX;
 /**
  * No acid forms this close to a living Trash Gremlin, so a bolus landing at the edge
  * of the bubble still cannot burn back into the ring a melee attacker stands in.
@@ -299,7 +304,6 @@ const BOSS_LABEL_ASCENT_OFFSET = 8;
 const BOSS_DEFEATED_TEXT = 'DEFEATED';
 /**
  * What a boss fight shows while its hard-mode healer keeps the way out shut.
- * Shared with the Ball of Swine arena, so every sealed fight words it alike.
  */
 export const BOSS_HEALER_ALIVE_NOTICE = 'The healer still flies!';
 
@@ -394,13 +398,14 @@ const BORDER_CROSS_LINE_WIDTH = 2;
  * Read each frame, since the viewport changes with the window.
  */
 function trashGremlinSightingRangePx(): number {
-  const halfDiagonalPx = Math.hypot(viewportWidth(), viewportHeight()) / 2;
+  const halfDiagonalPx = Math.hypot(worldViewWidth(), worldViewHeight()) / 2;
   return halfDiagonalPx + TILE_SIZE * MAX_MOB_CULL_MARGIN_TILES;
 }
 
 export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private readonly states: BossRoomState[];
-  private readonly bossTypes: string[];
+  /** One entry per room, index-aligned with `states`. */
+  private readonly roomBossTypes: readonly GauntletBossType[];
   private readonly enteredRooms = new Set<number>();
 
   private readonly vomitProjectiles: VomitProjectile[] = [];
@@ -410,7 +415,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * Rebuilt from the mob list every frame rather than kept across frames, so a
    * checkpoint restore can never leave a disposed boss in here.
    */
-  private readonly liveKrakarens: KrakarenClone[] = [];
+  private readonly liveKrakens: Kraken[] = [];
   private humanAcidTick = 0;
   private catAcidTick = 0;
 
@@ -488,14 +493,14 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private readonly catHeldForLoot: boolean[];
 
   /** Set when a boss room is entered for the first time; cleared by DungeonScene. */
-  newlyLockedBossType: string | null = null;
+  newlyLockedBossType: GauntletBossType | null = null;
 
   /**
    * Set each time a room seals, the first time or again after its fight was
    * aborted or rewound; cleared by DungeonScene, which claims the boss's track.
    * The intro and `bossFightInitiated` belong to the first entry only.
    */
-  sealedBossType: string | null = null;
+  sealedBossType: GauntletBossType | null = null;
 
   /** Set when a sealed fight is aborted with its boss alive; cleared by DungeonScene, which lets go of the boss's track. */
   fightAbortedPending = false;
@@ -530,10 +535,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     private readonly gameMap: GameMap,
     private readonly miniMap: BossRoomMiniMap,
     private readonly bus: EventBus,
-    bossTypes: string[] = [],
+    bossTypes: readonly GauntletBossType[],
     private readonly hasUnopenedChest: (roomIndex: number) => boolean = () => false,
   ) {
-    this.bossTypes = bossTypes;
+    if (bossTypes.length !== gameMap.bossRooms.length) {
+      throw new Error(
+        `BossRoomSystem: ${bossTypes.length} boss types for ${gameMap.bossRooms.length} boss rooms`,
+      );
+    }
+    this.roomBossTypes = bossTypes;
     this.states = gameMap.bossRooms.map((br) => ({
       bounds: br.bounds,
       locked: false,
@@ -697,7 +707,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * case a companion — and anything acting for one — must leave it alone.
    *
    * Engagement is harm or entry, never notice. A mob's `currentTarget` cannot
-   * stand in for "the fight is on": the Krakaren's aggro radius reaches out
+   * stand in for "the fight is on": the Kraken's aggro radius reaches out
    * through its own doorway, so it acquires a crawler standing in the corridor,
    * and a veto keyed on that would let the companion shoot an untouched boss to
    * death through a wall — no intro, no room lock, no chest.
@@ -793,22 +803,20 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   /**
    * Which boss types have been killed, by the snake_case ids from
-   * `levelDef.bossRooms[].type` (`'trash_gremlin'`, `'big_rooster'`, `'krakaren_clone'`).
+   * `levelDef.bossRooms[].type` (`'trash_gremlin'`, `'big_rooster'`, `'kraken'`).
    *
-   * A set of what is dead rather than a widening of `bossTypes` to public: that
+   * A set of what is dead rather than exposing the per-room boss types: that
    * is the question every caller actually has, and it is the only answer that
    * survives a scene rebuild. The `bossDefeated` event says the same thing in
    * the same vocabulary, but it says it once, at the moment of the kill — a
    * listener built after the fact, or rebuilt on a floor re-entry, never hears
    * it at all.
    */
-  get defeatedBossTypes(): ReadonlySet<string> {
-    const defeated = new Set<string>();
-    // `bossTypes` can be shorter than `states`: the states come from the map's
-    // generated boss rooms and the types from the level definition, and a level
-    // that asked for more rooms than it named types for leaves the tail unnamed.
+  get defeatedBossTypes(): ReadonlySet<GauntletBossType> {
+    const defeated = new Set<GauntletBossType>();
     this.states.forEach((state, index) => {
-      if (state.defeated && index < this.bossTypes.length) defeated.add(this.bossTypes[index]);
+      const bossType = this.roomBossTypes[index];
+      if (state.defeated) defeated.add(bossType);
     });
     return defeated;
   }
@@ -820,9 +828,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * room reads the same either way: revealed on the minimap, no chest guard,
    * no re-lock on a later visit.
    */
-  markPreDefeated(bossType: string): void {
-    const roomIndex = this.bossTypes.indexOf(bossType);
-    if (roomIndex < 0 || roomIndex >= this.states.length) return;
+  markPreDefeated(bossType: GauntletBossType): void {
+    const roomIndex = this.roomBossTypes.indexOf(bossType);
+    if (roomIndex < 0) return;
     const state = this.states[roomIndex];
     state.locked = false;
     state.defeated = true;
@@ -875,7 +883,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   /**
    * If the given pixel position is inside an active acid puddle or a charging
-   * Krakaren slam, returns the unit escape vector pointing away from the
+   * Kraken slam, returns the unit escape vector pointing away from the
    * nearest hazard's centre. Returns null when the position is safe.
    */
   getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
@@ -894,7 +902,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         found = true;
       }
     }
-    for (const boss of this.liveKrakarens) {
+    for (const boss of this.liveKrakens) {
       const shadow = boss.slamShadow;
       if (!shadow) continue;
       const dist = Math.hypot(cx - shadow.x, cy - shadow.y);
@@ -1044,20 +1052,25 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         continue;
       }
 
-      // Start a new fight when a player enters a room with a living boss.
-      if (!state.locked && bossAlive && (humanInRoom || catInRoom)) {
+      // Start a new fight when a player enters a room with a living boss, or
+      // when a room that holds its own seal says it is shut.
+      const sealRule = this.fightListener?.sealRule(i) ?? SEAL_ON_ENTRY;
+      const sealsNow = sealRule.kind === 'on_entry' ? humanInRoom || catInRoom : sealRule.sealed;
+      if (!state.locked && bossAlive && sealsNow) {
         state.locked = true;
-        this.sealedBossType = this.bossTypes[i] ?? 'trash_gremlin';
+        this.sealedBossType = this.roomBossTypes[i];
         this.fightListener?.onSeal(i);
         // They walked in, so the lesson landed. A later retreat and a second
         // poke earns it again.
         this.regenNoticeGiven[i] = false;
-        state.entryWindowTimer = ENTRY_WINDOW_FRAMES;
+        // A room that seals itself has already gathered the whole party
+        // inside; nobody is owed a way in after it.
+        state.entryWindowTimer = sealRule.kind === 'on_entry' ? ENTRY_WINDOW_FRAMES : 0;
         this.humanIsInsider[i] = humanInRoom;
         this.catIsInsider[i] = catInRoom;
         if (!this.enteredRooms.has(i)) {
           this.enteredRooms.add(i);
-          this.newlyLockedBossType = this.bossTypes[i] ?? 'trash_gremlin';
+          this.newlyLockedBossType = this.roomBossTypes[i];
         }
         // Sealing the room is the moment with real lead on the swarm: the
         // Trash Gremlin's first purge is five seconds of fighting away, and its
@@ -1082,9 +1095,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         // severed pieces are all drawn on the single frame she comes apart with
         // no telegraph of their own. Sealing the room is the last moment with
         // real lead on either.
-        if (boss instanceof KrakarenClone) {
-          prewarmKrakarenGore();
-          prewarmKrakarenTentacle();
+        if (boss instanceof Kraken) {
+          prewarmKrakenGore();
+          prewarmKrakenTentacle();
         }
       }
 
@@ -1253,9 +1266,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       }
     }
 
-    this.cacheLiveKrakarens(mobs);
+    this.cacheLiveKrakens(mobs);
     this.syncTrashGremlins(ctx.roster, human.isActive ? human : cat);
-    this.spawnKrakarenTentacles(ctx.roster);
+    this.spawnKrakenTentacles(ctx.roster);
     this.tickSummonedMobTTLs(mobs, mobGrid);
     // The boss's shots and the acid they leave run on the hostile world's
     // clock, which a crawler's last stand slows.
@@ -1283,7 +1296,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * The room lock is what makes a boss a boss fight — the intro, the entry
    * window, the clamp, the abort-heal when the party is wiped or runs. All of
    * it is skipped by standing in the corridor and shooting through the doorway,
-   * and a boss that cannot close the distance (the Krakaren does not move at
+   * and a boss that cannot close the distance (the Kraken does not move at
    * all) has no answer to it whatsoever. The abort-heal already refuses that
    * trade for a fight that *started*; this refuses it for one that never did.
    *
@@ -1373,7 +1386,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
     // Not strictly inside one of *this* system's rooms. Unlike a boss, a
     // healer's confinement can belong to a different owner entirely — the
-    // arena, the spider lab, the circus — each running its own confinement
+    // spider lab, the circus — each running its own confinement
     // pass over every healer fairy the same way this one does. Clearing here
     // on a miss would erase whatever one of those owners set for a healer
     // that belongs to them, so a healer not in one of ours is left exactly as
@@ -1477,10 +1490,10 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     entity.y = clamp(entity.y, minPy, maxPy);
   }
 
-  private cacheLiveKrakarens(mobs: Mob[]): void {
-    this.liveKrakarens.length = 0;
+  private cacheLiveKrakens(mobs: Mob[]): void {
+    this.liveKrakens.length = 0;
     for (const mob of mobs) {
-      if (mob instanceof KrakarenClone && mob.isAlive) this.liveKrakarens.push(mob);
+      if (mob instanceof Kraken && mob.isAlive) this.liveKrakens.push(mob);
     }
   }
 
@@ -1731,8 +1744,10 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * on the same exit, so an add the player walked away from cannot go on
    * quartering their damage from across the room.
    */
-  private tickGuardTentacle(tentacle: KrakarenTentacle): number {
-    if (!tentacle.isAlive) return tentacle.justDied ? 0 : 1;
+  private tickGuardTentacle(tentacle: KrakenTentacle): number {
+    if (!tentacle.isAlive) return tentacle.justDied || !tentacle.corpseGone ? 0 : 1;
+    // A raft or pump tentacle belongs to its room and keeps no clock.
+    if (tentacle.role.kind !== 'guard') return 0;
     const ownerFell = tentacle.owner !== null && !tentacle.owner.isAlive;
     if (ownerFell) {
       tentacle.beginRetreat();
@@ -1745,26 +1760,26 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * Drains the Krakaren's pending guard tentacles.
+   * Drains the Kraken's pending guard tentacles.
    *
    * The map test is `hasRoomToMove` rather than a bare walkability check: a
    * one-tile pocket between props is walkable ground that would root an add the
    * player then has to squeeze in to reach, in a fight whose whole mechanic is
    * reaching it.
    */
-  private spawnKrakarenTentacles(roster: MobRoster): void {
+  private spawnKrakenTentacles(roster: MobRoster): void {
     const { mobs } = roster;
     let bosses = 0;
     let liveCount = 0;
     for (const mob of mobs) {
       if (!mob.isAlive) continue;
-      if (mob instanceof KrakarenTentacle) liveCount++;
-      else if (mob instanceof KrakarenClone) bosses++;
+      if (mob instanceof KrakenTentacle && mob.role.kind === 'guard') liveCount++;
+      else if (mob instanceof Kraken) bosses++;
     }
     if (bosses === 0) return;
 
     for (const mob of mobs) {
-      if (!(mob instanceof KrakarenClone) || !mob.isAlive) continue;
+      if (!(mob instanceof Kraken) || !mob.isAlive) continue;
 
       mob.guardTentacleAtCap = liveCount >= MAX_GUARD_TENTACLES;
       if (mob.tentacleSpawns.length === 0) continue;
@@ -1775,11 +1790,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const tileY = Math.floor(sp.y / TILE_SIZE);
         if (!hasRoomToMove(this.gameMap, tileX, tileY)) continue;
         const tentacle = spawnMob(
-          'krakaren_tentacle',
+          'kraken_tentacle',
           { x: tileX, y: tileY },
           this.gameMap,
-          liveSpawnContext('boss:krakaren_clone'),
-          { owner: mob },
+          liveSpawnContext('boss:kraken'),
+          { role: { kind: 'guard', owner: mob } },
         );
         tentacle.isBossAdd = true;
         // Once, at spawn, from the boss that raised it: an add levelled to a
@@ -1807,7 +1822,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private tickSummonedMobTTLs(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     let expired = 0;
     for (const mob of mobs) {
-      if (mob instanceof KrakarenTentacle) {
+      if (mob instanceof KrakenTentacle) {
         expired += this.tickGuardTentacle(mob);
         continue;
       }
@@ -1834,7 +1849,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // impossible — the rewind can only reach what is still in the array.
       const isOwedToCheckpoint = mob.presentAtCheckpoint && mob.aliveAtCheckpoint;
       const isSpentSummon =
-        !mob.isAlive && (mob instanceof Cockroach || mob instanceof KrakarenTentacle);
+        !mob.isAlive &&
+        (mob instanceof Cockroach || (mob instanceof KrakenTentacle && mob.corpseGone));
       // A death the kill resolver has not seen yet is not spent: compacting it
       // out of the array here is the one way to lose its gore and its rewards
       // outright, and this pass now runs on any frame a roach times out rather
@@ -1859,12 +1875,19 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (let i = 0; i < this.states.length; i++) {
-      const bossType = this.bossTypes[i] ?? 'trash_gremlin';
-      this.renderSingleBossRoomObjects(ctx, camX, camY, this.states[i].bounds, bossType);
+      this.renderSingleBossRoomObjects(
+        ctx,
+        camX,
+        camY,
+        this.states[i].bounds,
+        this.roomBossTypes[i],
+      );
     }
     this.renderAcidPuddles(ctx, camX, camY);
-    for (const proj of this.vomitProjectiles) drawBileShadow(ctx, proj.x - camX, proj.y - camY);
-    this.renderKrakarenSlams(ctx, camX, camY);
+    for (const proj of this.vomitProjectiles) {
+      drawBileGroundMark(ctx, proj.x - camX, proj.y - camY, PROJECTILE_HIT_RADIUS);
+    }
+    this.renderKrakenSlams(ctx, camX, camY);
   }
 
   renderProjectiles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -1899,8 +1922,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * survives the boss being culled off screen and the silhouette composite that
    * clips whatever a flashing mob draws beyond its own tile.
    */
-  private renderKrakarenSlams(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const boss of this.liveKrakarens) {
+  private renderKrakenSlams(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const boss of this.liveKrakens) {
       const tentacle = boss.slamTentacle;
       const shadow = boss.slamShadow;
       if (shadow) {
@@ -1915,8 +1938,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         );
       }
       const impact = boss.slamImpact;
-      // In flood water the room throws a splash ring instead of this dust skirt.
-      if (impact && !isLabFloodAtPx(this.gameMap.structure, impact.x, impact.y)) {
+      if (impact) {
         drawSlamImpact(ctx, impact.x - camX, impact.y - camY, TILE_SIZE, impact.progress);
       }
       if (tentacle) {
@@ -1926,17 +1948,17 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const worldX = standsAtTarget ? tentacle.targetX : tentacle.riseX;
         const worldY = standsAtTarget ? tentacle.targetY : tentacle.riseY;
         const tileOriginOffset = TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
-        const artTileSize = TILE_SIZE * KRAKAREN_VISUAL_SCALE;
+        const artTileSize = TILE_SIZE * KRAKEN_VISUAL_SCALE;
         // Drawn at the boss's own visual scale, standing on the same world
         // point, so it reads as belonging to her rather than to a smaller,
         // separate creature.
-        const art = krakarenScaledArtOrigin(
+        const art = krakenScaledArtOrigin(
           worldX - camX - tileOriginOffset,
           worldY - camY - tileOriginOffset,
           TILE_SIZE,
           artTileSize,
         );
-        drawKrakarenSlamTentacle(ctx, art.x, art.y, artTileSize, tentacle);
+        drawKrakenSlamTentacle(ctx, art.x, art.y, artTileSize, tentacle);
       }
     }
   }
@@ -1946,10 +1968,10 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     camX: number,
     camY: number,
     b: { x: number; y: number; w: number; h: number },
-    bossType: string,
+    bossType: GauntletBossType,
   ): void {
     const ts = TILE_SIZE;
-    const meta = BOSS_META[bossType] ?? BOSS_META.trash_gremlin;
+    const meta = BOSS_META[bossType];
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
     worldText(ctx, 'BOSS ROOM', {
@@ -2022,8 +2044,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (!relevantState) return null;
 
     const relevantStateIdx = this.states.indexOf(relevantState);
-    const bossType = this.bossTypes[relevantStateIdx] ?? 'trash_gremlin';
-    const meta = BOSS_META[bossType] ?? BOSS_META.trash_gremlin;
+    const bossType = this.roomBossTypes[relevantStateIdx];
+    const meta = BOSS_META[bossType];
 
     const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds));
     if (!boss) return null;
@@ -2031,8 +2053,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     const isEnraged = boss.isEnraged ?? false;
     // The mobs array keeps corpses, so this find still returns a dead boss. The
     // room flag covers the frames between the killing blow and the defeat being
-    // recorded, and `isAlive` covers a boss like the Ball of Swine that stays
-    // alive through a post-death burst phase.
+    // recorded, and `isAlive` covers a boss that stays alive through a
+    // post-death phase.
     const isDeceased = !boss.isAlive || relevantState.defeated;
     // Dead but sealed: the boss bar alone reads as a bug (the boss is shown
     // deceased while the room stays locked) without this to explain why.

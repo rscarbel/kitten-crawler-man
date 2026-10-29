@@ -74,8 +74,11 @@ export const DAVE_DEBRIEF_CONGRATS = {
   big_rooster: say.line(
     "Big Rooster's down and you're both still standing. That's the right way round. Not how I'd have bet it.",
   ),
-  krakaren_clone: say.line(
-    "You killed the Krakaren Clone. I'll be honest, I wasn't sure you would. Catch your breath.",
+  kraken: say.line(
+    "The Kraken's dead, and neither of you ended up as shark food. I'll be honest, I wasn't sure. Dry off and catch your breath.",
+  ),
+  electric_goblin: say.line(
+    "The Current Goblin's down and neither of you is smoking. Good. Sit down a minute and let your hair settle.",
   ),
 } as const satisfies Record<DebriefBossType, DialogLine>;
 
@@ -118,9 +121,10 @@ export const DAVE_ADVICE = {
   ]),
 
   big_rooster: say.line([
-    'The two at his door peck and punch. The neck goes back before a peck. Watch for it.',
-    'Inside, he fights with a dumbbell. Get close and he swings it like a club. The floor shows you where it passes before it does, so get out of that patch.',
-    'Stay well back and he throws it instead. Anywhere in between, he walks you down. Pick a distance and keep it.',
+    "The two at his door peck and punch. The neck goes back before a peck. Watch for it. And don't roll dynamite at any of them; they kick it straight back.",
+    'Inside, he fights with a dumbbell. Get close and he swings it like a club. The floor shows you where it passes before it does, so get out of that patch. Stay well back and he throws it instead.',
+    "Once he's hurting, or one of his birds is down, he flings a rack of kettlebells into the air. Watch the floor. The shadows grow before the iron lands, and there's always a gap.",
+    "Hurt him enough and he stops feeling it for a bit. He'll kick every exercise ball in the place loose. Keep off him till they're all rolling, then go back to work.",
   ]),
 
   defend_goblin_mother: say.line([
@@ -128,10 +132,18 @@ export const DAVE_ADVICE = {
     'Hit it as it comes up, before it reaches the little ones.',
   ]),
 
-  krakaren_clone: say.line([
-    "A copy's still dangerous. Don't treat it like one.",
-    'Watch the floor. When a tentacle starts coming up, move. If the ground under you turns red, move faster. Red floor always means move.',
-    "She'll call up smaller tentacles to guard her. The floor cracks first. Kill the small ones first. While they're alive you won't do her much real damage.",
+  kraken: say.line([
+    "Don't waste a swing on her while that room's full. Nothing touches her under the water. Shut the pumps off and drain it first.",
+    "Stay on the rafts. The shark circles whichever one you're on. Wait till it's round the far side of its loop, then go. Go early and it'll have you.",
+    "Every raft's got a tentacle under it, and it comes up when you climb on. Kill it before you leave, or it'll knock you flat in the water. Can't reach one? Switch to the cat and shoot it.",
+    "Once it's dry she fights back. Red floor means a slam. It won't kill you outright, but it takes a big piece out of you. The little tentacles come up out of the drains and they hit hard, so keep an eye on them.",
+  ]),
+
+  electric_goblin: say.line([
+    "He throws little shock grenades. One for each of you, and a few more wherever he likes. Each one marks the floor where it'll land. Get out of the ring before it comes down.",
+    "Keep an eye on the puddles. If he wades into one and lifts both rods, get off the water. When those rods go in, the whole puddle's live. Not him, though. Rubber boots.",
+    'Up close he swings a rod and the shock throws you backwards. If he slams both rods down, a wave runs along the floor at where you were standing. Step sideways, not back.',
+    "He crosses the rods and swats your missiles away, about half of them. Not while he's winding up, or while he's catching his breath after. Throw then. And light a stick of dynamite if you want to watch him run.",
   ]),
 
   stealth_gate: say.line([
@@ -151,17 +163,6 @@ export const DAVE_ADVICE = {
   spider_lab_station: say.line([
     "Have a seat. The cot's less comfortable than it looks.",
     "Whatever the scientist wants, it's at the end of that hallway. You don't have to go. I'd think about it, if I were you.",
-  ]),
-
-  ball_of_swine: say.line([
-    "Every boss down here has a trick. This one's a wheel of fused swine. Rolls fast enough to turn you into paste, and it never gets tired.",
-    "You won't win just by staying out of its way.",
-    "I'll say this much. Nothing's unstoppable when it's got nowhere to go. And that arena's made of iron.",
-  ]),
-
-  ball_of_swine_distant: say.line([
-    "If you go after that wheel, don't just dodge it. It doesn't get tired. You will.",
-    "Nothing's unstoppable when it's got nowhere to go. And that arena's made of iron.",
   ]),
 
   krasue_murders: say.line([

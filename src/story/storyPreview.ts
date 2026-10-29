@@ -14,8 +14,9 @@ import type { StoryFloor } from './storyTypes';
 /** The floor each boss with a story beat is fought on. */
 const BOSS_FLOORS = {
   trash_gremlin: 1,
-  big_rooster: 1,
-  krakaren_clone: 2,
+  big_rooster: 2,
+  kraken: 1,
+  electric_goblin: 2,
 } as const satisfies Record<DebriefBossType, StoryFloor>;
 
 const FLOOR_LEVELS = {

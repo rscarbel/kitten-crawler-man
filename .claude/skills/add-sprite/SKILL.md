@@ -69,8 +69,8 @@ look at cannot be different art.
   `docs/asset-management.md`).
   Boss-room families are the exception to registering one by one: each room's
   plans live in `src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its
-  asset group (`boss_trash_gremlin`, `boss_big_rooster`, `boss_krakaren`,
-  `boss_grotesque_spider`, `boss_colosseum`) in `bossRoomSheets.ts`, and
+  asset group (`boss_trash_gremlin`, `boss_big_rooster`, `boss_power_lab`, `boss_flooded_pump_room`,
+  `boss_grotesque_spider`) in `bossRoomSheets.ts`, and
   `requestEnvironmentSheetsForGroups` paints every declared one in a single
   loop. `npm run gates:boss-rooms` checks those sheets against the manifest.
 - A multi-tile structure (a tent, a wagon, a village prop) is drawn whole from

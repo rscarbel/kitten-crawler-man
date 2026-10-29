@@ -6,13 +6,16 @@
 
 import { TILE_SIZE } from '../../src/core/constants.js';
 import type { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
-import { BigRooster } from '../../src/creatures/BigRooster.js';
+import { BigRooster, ENRAGE_THRESHOLD, FURY_HP_SHARE } from '../../src/creatures/BigRooster.js';
 import type { SystemContext } from '../../src/systems/GameSystem.js';
 import type { GymRoomSystem } from '../../src/systems/GymRoomSystem.js';
 import type { TilePoint } from '../../src/systems/bossRooms/bossRoomLayout.js';
 
-/** Enraged: under the share of max HP his enrage fires at. */
-const ENRAGED_HP_SHARE = 0.3;
+/**
+ * Enraged and not yet in his fury: between the share of max HP his enrage
+ * fires at and the one his fury does, where the plate roll is his to throw.
+ */
+const ENRAGED_HP_SHARE = (ENRAGE_THRESHOLD + FURY_HP_SHARE) / 2;
 /** How many tiles down the room from him the crawler stands for a plate roll. */
 export const PLATE_TARGET_DISTANCE_TILES = 7;
 /**

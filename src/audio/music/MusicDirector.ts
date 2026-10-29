@@ -1,6 +1,7 @@
 import { activeMusicLibrary, onMusicLibraryBound } from '../../core/music/MusicLibrary';
 import type { MusicBusId, MusicTrackId } from '../sounds';
 import { musicLoopStartS } from '../sounds';
+import { MUSIC_STEM_SETS, type MusicStemOf, type MusicStemSetId } from './stemSets';
 
 /**
  * The layers a claim is made on, lowest first. The highest layer holding a
@@ -15,6 +16,14 @@ export type MusicLayer = (typeof MUSIC_LAYERS)[number];
  * - `silence`: nothing.
  * - `loop`: one recording, looping from its loop point; `skipIntro` starts
  *   there too, for a play site that wants the body without the intro.
+ * - `stems`: one stem of a {@link MUSIC_STEM_SETS} set, looping from the top.
+ *   A claim naming another stem of the set already playing crossfades to it
+ *   at the same point in the loop, on the audio clock, rather than starting
+ *   over.
+ * - `fromTop` (on `loop` and `stems`): the claim starts its music from the
+ *   top once when it wins, even over the same music playing or remembered,
+ *   for a fight that restarts as a whole. When it wins again later it
+ *   resumes as any claim does.
  * - `playlist`: a shuffled set, one song after another. `advance` moves on to
  *   another song when the claim takes over a set that is already playing,
  *   so walking through a door into the same set is still heard as a change.
@@ -25,9 +34,25 @@ export type MusicLayer = (typeof MUSIC_LAYERS)[number];
  */
 export type MusicSelection =
   | { readonly kind: 'silence' }
-  | { readonly kind: 'loop'; readonly id: MusicBusId; readonly skipIntro?: boolean }
+  | {
+      readonly kind: 'loop';
+      readonly id: MusicBusId;
+      readonly skipIntro?: boolean;
+      readonly fromTop?: boolean;
+    }
+  | MusicStemsSelection
   | { readonly kind: 'playlist'; readonly ids: readonly MusicBusId[]; readonly advance?: boolean }
   | { readonly kind: 'held'; readonly id: MusicBusId };
+
+/** A `stems` selection; the stem must belong to the set it names. */
+type MusicStemsSelection = {
+  readonly [S in MusicStemSetId]: {
+    readonly kind: 'stems';
+    readonly set: S;
+    readonly stem: MusicStemOf<S>;
+    readonly fromTop?: boolean;
+  };
+}[MusicStemSetId];
 
 /** Every system that may claim music. A closed set, so a misspelt owner is a type error. */
 export type MusicClaimOwner =
@@ -46,6 +71,7 @@ export type MusicClaimOwner =
   | 'escort'
   | 'siege'
   | 'boss'
+  | 'flooded_pump_room'
   | 'tower_finale'
   | 'keyboard_hero'
   | 'player'
@@ -85,6 +111,12 @@ export const MUSIC_LAYER_FADE_MS = {
 export const MUSIC_SILENCE_FADE_MS = 500;
 
 /**
+ * How far ahead on the audio clock a stem change is laid, so both stems can
+ * be scheduled for the same instant before the audio thread reaches it.
+ */
+const MUSIC_STEM_SWITCH_LEAD_S = 0.1;
+
+/**
  * How a track repeats: from its loop point (`loopPoint`), from the top
  * (`whole`), or not at all (`once`).
  */
@@ -95,7 +127,14 @@ export type TrackStopShape = 'db' | 'equalPowerOut';
 export interface MusicTrackRequest {
   readonly id: MusicBusId;
   readonly loop: TrackLoopMode;
+  /** Where in the recording it starts: its position at {@link startAtS} when that is given. */
   readonly offsetS: number;
+  /**
+   * When on the audio clock the track starts, for a track laid in sync with
+   * another. A decoded track that cannot start by then starts later at the
+   * position it would have reached. Default: as soon as it can.
+   */
+  readonly startAtS?: number;
   readonly fadeInMs: number;
   /** Runs when a track that does not loop plays to its end; never on a stop. */
   readonly onEnded: () => void;
@@ -106,9 +145,10 @@ export interface MusicTrackRequest {
 }
 
 export interface MusicTrackHandle {
-  /** Where in the recording playback stands, in seconds. */
-  positionS(): number;
-  stop(fadeMs: number, shape: TrackStopShape): void;
+  /** Where in the recording playback stands, in seconds: now, or at `atS` on the audio clock. */
+  positionS(atS?: number): number;
+  /** Fades the track out from now, or from `fromS` on the audio clock. */
+  stop(fadeMs: number, shape: TrackStopShape, fromS?: number): void;
   /**
    * Stops the recording advancing, keeping its place, so a song that does
    * not loop cannot reach its end while nobody can hear it. The bus is
@@ -159,13 +199,15 @@ interface ClaimEntry {
   readonly seq: number;
   /** Whether this claim's `advance` has been spent; it moves a set on once, not on every resolve. */
   advanceSpent: boolean;
+  /** Whether this claim's `fromTop` has been spent; it restarts its music once, on its first win. */
+  fromTopSpent: boolean;
 }
 
 /** The song the director is playing, or is waiting on audio to play. */
 interface PlayingTrack {
   /** The selection it plays, as {@link selectionKey} names it. */
   key: string;
-  readonly kind: 'loop' | 'playlist' | 'held';
+  readonly kind: PlayingKind;
   readonly id: MusicBusId;
   /**
    * The claim it plays for. A claim that takes over the same selection (a
@@ -177,11 +219,15 @@ interface PlayingTrack {
   selection: MusicSelection;
   readonly loop: TrackLoopMode;
   readonly offsetS: number;
+  /** When on the audio clock it is laid to start, for a stem taking over in sync; else null. */
+  readonly startAtS: number | null;
   readonly fadeInMs: number;
   /** Null while audio is locked, or for a held song. */
   handle: MusicTrackHandle | null;
   audible: boolean;
 }
+
+type PlayingKind = 'loop' | 'stems' | 'playlist' | 'held';
 
 interface PlaylistState {
   order: MusicBusId[];
@@ -203,9 +249,16 @@ function idsOf(selection: MusicSelection): readonly MusicBusId[] {
     case 'loop':
     case 'held':
       return [selection.id];
+    case 'stems':
+      return MUSIC_STEM_SETS[selection.set];
     case 'playlist':
       return selection.ids;
   }
+}
+
+/** Whether `selection` restarts its music when claimed, so even the same claim made again counts. */
+function startsFromTop(selection: MusicSelection): boolean {
+  return (selection.kind === 'loop' || selection.kind === 'stems') && selection.fromTop === true;
 }
 
 function playlistKey(ids: readonly MusicBusId[]): string {
@@ -216,13 +269,26 @@ function loopKey(id: MusicBusId, loop: TrackLoopMode): string {
   return `${loop}:${id}`;
 }
 
+/** A stem set is one piece whichever stem plays, so it carries on, and is remembered, as one. */
+function stemsKey(set: MusicStemSetId): string {
+  return `stems:${set}`;
+}
+
 function sameSelection(a: MusicSelection, b: MusicSelection): boolean {
   switch (a.kind) {
     case 'silence':
       return b.kind === 'silence';
     case 'loop':
       return (
-        b.kind === 'loop' && a.id === b.id && (a.skipIntro ?? false) === (b.skipIntro ?? false)
+        b.kind === 'loop' &&
+        a.id === b.id &&
+        (a.skipIntro ?? false) === (b.skipIntro ?? false) &&
+        (a.fromTop ?? false) === (b.fromTop ?? false)
+      );
+    case 'stems':
+      // A recording is a stem of one set only, so the stem names its set too.
+      return (
+        b.kind === 'stems' && a.stem === b.stem && (a.fromTop ?? false) === (b.fromTop ?? false)
       );
     case 'held':
       return b.kind === 'held' && a.id === b.id;
@@ -295,10 +361,15 @@ export class MusicDirector implements MusicPlayerControls {
   claim(claim: MusicClaim, holder: MusicClaimHolder | null): void {
     activeMusicLibrary()?.markRequested(idsOf(claim.selection));
     const existing = this.claims.get(claim.owner);
-    if (existing?.holder === holder && sameClaim(existing.claim, claim)) {
-      return;
-    }
-    this.claims.set(claim.owner, { claim, holder, seq: this.nextSeq++, advanceSpent: false });
+    const repeatsExisting = existing?.holder === holder && sameClaim(existing.claim, claim);
+    if (repeatsExisting && !startsFromTop(claim.selection)) return;
+    this.claims.set(claim.owner, {
+      claim,
+      holder,
+      seq: this.nextSeq++,
+      advanceSpent: false,
+      fromTopSpent: false,
+    });
     this.resolve();
   }
 
@@ -366,6 +437,8 @@ export class MusicDirector implements MusicPlayerControls {
         return false;
       case 'loop':
         return current.key === loopKey(selection.id, 'loopPoint');
+      case 'stems':
+        return current.key === stemsKey(selection.set) && current.id === selection.stem;
       case 'held':
         return current.kind === 'held' && current.id === selection.id;
       case 'playlist':
@@ -577,6 +650,9 @@ export class MusicDirector implements MusicPlayerControls {
       case 'loop':
         this.resolveLoop(winner, selection, fadeMs);
         return;
+      case 'stems':
+        this.resolveStems(winner, selection, fadeMs);
+        return;
       case 'playlist':
         this.resolvePlaylist(winner, selection, fadeMs);
         return;
@@ -600,10 +676,18 @@ export class MusicDirector implements MusicPlayerControls {
       selection,
       loop: 'once',
       offsetS: 0,
+      startAtS: null,
       fadeInMs: fadeMs,
       handle: null,
       audible: false,
     };
+  }
+
+  /** Whether `winner` restarts its music now: its `fromTop`, spent on the first win. */
+  private takeFromTop(winner: ClaimEntry, selection: MusicSelection): boolean {
+    const fromTop = startsFromTop(selection) && !winner.fromTopSpent;
+    winner.fromTopSpent = true;
+    return fromTop;
   }
 
   private resolveLoop(
@@ -613,12 +697,57 @@ export class MusicDirector implements MusicPlayerControls {
   ): void {
     const loop = this.loopModeOf(winner);
     const key = loopKey(selection.id, loop);
-    if (this.carriesOn(winner, key, selection)) return;
+    const fromTop = this.takeFromTop(winner, selection);
+    if (!fromTop && this.carriesOn(winner, key, selection)) return;
     const loopStartS = loop === 'loopPoint' ? (musicLoopStartS(selection.id) ?? 0) : 0;
     const remembered = this.takeRemembered(key);
     let offsetS = selection.skipIntro === true ? loopStartS : 0;
-    if (remembered !== null) offsetS = remembered.fresh ? remembered.track.positionS : loopStartS;
+    if (remembered !== null && !fromTop) {
+      offsetS = remembered.fresh ? remembered.track.positionS : loopStartS;
+    }
     this.startTrack(winner, selection, key, 'loop', selection.id, loop, offsetS, fadeMs);
+  }
+
+  /**
+   * A stem set: carried on across a change of stem, which crossfades to the
+   * new stem at the old one's place in the loop. Stems loop from the top of
+   * the recording, the whole of it, so every stem's loop lines up.
+   */
+  private resolveStems(winner: ClaimEntry, selection: MusicStemsSelection, fadeMs: number): void {
+    const key = stemsKey(selection.set);
+    const fromTop = this.takeFromTop(winner, selection);
+    const current = this.current;
+    if (!fromTop && current !== null && this.carriesOn(winner, key, selection)) {
+      if (current.id !== selection.stem) this.switchStem(current, selection.stem, fadeMs);
+      return;
+    }
+    const remembered = this.takeRemembered(key);
+    const offsetS =
+      remembered !== null && remembered.fresh && !fromTop ? remembered.track.positionS : 0;
+    this.startTrack(winner, selection, key, 'stems', selection.stem, 'whole', offsetS, fadeMs);
+  }
+
+  /**
+   * Hands `current` over to `stem` of its set: the new stem is laid to start
+   * a moment ahead on the audio clock at the position the old one will have
+   * reached by then, and the old one fades out from that same instant.
+   */
+  private switchStem(current: PlayingTrack, stem: MusicBusId, fadeMs: number): void {
+    // Held or locked, nothing sounds: the new stem waits at the old one's place.
+    const startAtS = this.canStart() ? this.engine.nowS() + MUSIC_STEM_SWITCH_LEAD_S : null;
+    const offsetS = current.handle?.positionS(startAtS ?? undefined) ?? current.offsetS;
+    current.handle?.stop(fadeMs, 'equalPowerOut', startAtS ?? undefined);
+    const track: PlayingTrack = {
+      ...current,
+      id: stem,
+      offsetS,
+      startAtS,
+      fadeInMs: fadeMs,
+      handle: null,
+      audible: false,
+    };
+    this.current = track;
+    if (this.canStart()) this.startHandle(track);
   }
 
   private resolvePlaylist(
@@ -767,7 +896,7 @@ export class MusicDirector implements MusicPlayerControls {
     winner: ClaimEntry,
     selection: MusicSelection,
     key: string,
-    kind: 'loop' | 'playlist',
+    kind: Exclude<PlayingKind, 'held'>,
     id: MusicBusId,
     loop: TrackLoopMode,
     offsetS: number,
@@ -783,6 +912,7 @@ export class MusicDirector implements MusicPlayerControls {
       selection,
       loop,
       offsetS,
+      startAtS: null,
       fadeInMs: fadeMs,
       handle: null,
       audible: false,
@@ -796,6 +926,7 @@ export class MusicDirector implements MusicPlayerControls {
       id: track.id,
       loop: track.loop,
       offsetS: track.offsetS,
+      ...(track.startAtS === null ? {} : { startAtS: track.startAtS }),
       fadeInMs: track.fadeInMs,
       onEnded: () => this.trackEnded(track),
       onUnavailable: () => this.trackUnavailable(track),

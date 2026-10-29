@@ -195,9 +195,8 @@ export function figureCacheByteBudget(): number {
  * ceiling below the declared total is one a boss reaches mid-fight, and reaching
  * it evicts the row it is about to play again; above it, the only figure that
  * can reach the ceiling is one holding every row it has, which is the leak the
- * ceiling is there to catch. For the fleet's other extremes this is six of the
- * Ball of Swine's ~3.8 MB rows, or about forty-two of the Grotesque Spider's
- * 384×384 cells of ~576 KB each.
+ * ceiling is there to catch. For the fleet's other extreme this is about
+ * forty-two of the Grotesque Spider's 384×384 cells of ~576 KB each.
  *
  * A figure whose `FigureDef.budgetMegabytes` is set is measured against that
  * number instead — see {@link figureByteBudgetFor} — but the number here is
@@ -3216,6 +3215,21 @@ export function figureInkRadiusPx(
   tileSize: number,
 ): number {
   return figureInkBounds(def, state, frame).radius * (tileSize / def.tileScale);
+}
+
+/**
+ * How far one frame's drawn pixels rise above the top of its tile, in tiles.
+ *
+ * Measured on the spot the first time it is asked for and kept, unlike
+ * {@link figureRowInkTop}, whose answer is a stand-in until a queued
+ * measurement lands. A still picture sized from this one frame (a boss's
+ * portrait) is therefore the right size on its very first draw rather than
+ * growing once the measurement arrives.
+ */
+export function figureFrameHeadroomTiles(row: DrawnFigureRow, frame: number): number {
+  const { def, state } = row;
+  const inkTopCellPx = figureInkBounds(def, state, clampFrame(def, state, frame)).top;
+  return (def.tileY - inkTopCellPx) / def.tileScale;
 }
 
 const rowInkTopByRow = new Map<DrawnFigureRow, number>();

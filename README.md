@@ -268,18 +268,18 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 ### Three Levels
 
-**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and lava-spitting llamas roam the corridors. Two boss rooms await: the Trash Gremlin and Big Rooster. Little Rooster and Slightly Bent Rooster peck and punch at the gym door.
+**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and lava-spitting llamas roam the corridors. Two boss rooms await: the Trash Gremlin and the Kraken, whose huge flooded pump room you cross by raft while a shark patrols the water.
 
-**Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins, brindle grubs). Features the Krakaren Clone boss, an arena with the Ball of Swine and Grotesque Spider, and Bugaboos that spawn from floor grates.
+**Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins, brindle grubs). Two boss rooms await: the Current Goblin in his power lab and Big Rooster in his gym, where Little Rooster and Slightly Bent Rooster peck and punch at the door. Also features the Grotesque Spider and Bugaboos that spawn from floor grates.
 
 **Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and a restaurant whose kitchen is a safe room). Hawkfolk roam the outskirts.
 
 ### Bosses
 
 - **The Trash Gremlin** — flees, spits acid and shrieks cockroaches out of its trash piles. Drops the Fire Axe and the Scrapmail Vest
-- **Big Rooster** — clubs you with dumbbells up close, throws them from afar, enrages at 40% HP. Drops the Cockscomb Crest and the Plumed Coat
-- **Krakaren Clone** — Immobile 20-ft octopus with human-mouthed tentacles, arena encounter in Level 2
-- **Ball of Swine** — Orbiting arena boss (280 HP), contact-kills while moving, only vulnerable when stopped by barriers. Spawns 8 dazed Tusklings on death
+- **Kraken** — Immobile 20-ft octopus with a nest of tentacles and too many eyes. It waits in a huge flooded pump room in Level 1: shut off three pumps from the rafts moored beside them while a shark circles whichever raft you stand on, then fight it once the room drains
+- **Current Goblin** — A huge goblin in insulated rubber gear with a generator backpack and two shock rods, fought in a power lab full of puddles in Level 2
+- **Big Rooster** — fights in his gym in Level 2: clubs you with dumbbells up close, rains kettlebells, calls a fury and kicks exercise balls at you. Drops the Cockscomb Crest and the Plumed Coat
 - **Grotesque Spider** — Spits venom that applies Stuck and Spit Venom status, immobilizing targets for 4 seconds
 
 ### Companion: Deinonychus
@@ -290,7 +290,7 @@ Kill 200 monsters in the dungeon to earn a pet Deinonychus, a green-feathered di
 
 Four stats — Health (+2 max HP per point), Melee (melee damage), Magic (missile damage), Evasiveness (dodge chance). Kill enemies for XP (85% to top damage dealer, 15% to the other). Level up to earn skill points, allocated in the pause menu.
 
-**Status effects:** Burn, Poison (troglodyte tongue lash — 30s, 1 dmg/2 sec), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (slow + damage), Stuck (immobilized).
+**Status effects:** Burn, Poison (troglodyte tongue lash — 30s, 1 dmg/2 sec), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (a zap every 3 s, each seizing movement and attacks for 1 s), Stun (no moving or attacking), Stuck (immobilized).
 
 **Revive:** If a character goes down, the other can revive them by staying close for 90 seconds.
 
@@ -384,7 +384,6 @@ src/
 │   ├── MiniMapSystem.ts       ← fog of war, corpse markers
 │   ├── SafeRoomSystem.ts      ← save point, Dave NPC
 │   ├── BossRoomSystem.ts      ← boss room state, cockroach spawning
-│   ├── ArenaSystem.ts         ← Ball of Swine arena encounters
 │   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode
 │   ├── SpellSystem.ts         ← energy shield, confusing fog
 │   ├── DestructiblePropSystem.ts ← smashable barrels/crates, splinters, coin drops
@@ -405,8 +404,8 @@ src/
 │   └── ...
 ├── levels/
 │   ├── types.ts               ← LevelDef and MobSpawnRule interfaces
-│   ├── level1.ts              ← "The Dungeon" (goblins, llamas, rats, 2 bosses)
-│   ├── level2.ts              ← "Safe Haven" (troglodytes, Krakaren, Ball of Swine)
+│   ├── level1.ts              ← "The Dungeon" (goblins, llamas, rats, Trash Gremlin, Kraken)
+│   ├── level2.ts              ← "Safe Haven" (troglodytes, Current Goblin, Big Rooster)
 │   ├── level3.ts              ← "The Overworld" (outdoor town, buildings)
 │   ├── spawner.ts             ← mob factory: LevelDef + map → Mob[]
 │   └── index.ts               ← level registry
@@ -417,9 +416,9 @@ src/
 │   ├── Mob.ts                 ← enemy AI base (aggro, pathfinding, LOS, health bar)
 │   ├── Goblin.ts, Rat.ts, Llama.ts, Troglodyte.ts
 │   ├── Tuskling.ts, Cockroach.ts, Bugaboo.ts, BrindleGrub.ts
-│   ├── TrashGremlin.ts, BigRooster.ts
+│   ├── TrashGremlin.ts, BigRooster.ts, ElectricGoblin.ts
 │   ├── RoosterMinion.ts, LittleRooster.ts, SlightlyBentRooster.ts
-│   ├── KrakarenClone.ts, BallOfSwine.ts, GrotesqueSpider.ts
+│   ├── Kraken.ts, KrakenTentacle.ts, GrotesqueSpider.ts
 │   ├── Hawkfolk.ts
 │   ├── Deinonychus.ts               ← dinosaur companion
 │   ├── QuestNPC.ts, NonCombatantNPC.ts
@@ -487,14 +486,14 @@ Player (base: position, HP, stats, walk animation)
 ├── CatPlayer
 └── Mob (AI: aggro, pathfinding, LOS, health bar)
     ├── Goblin, Rat, Llama, Troglodyte, Tuskling, Bugaboo, BrindleGrub, ...
-    ├── TrashGremlin, BigRooster (bosses)
+    ├── TrashGremlin, Kraken, ElectricGoblin, BigRooster (bosses)
     ├── LittleRooster, SlightlyBentRooster (gym minions)
-    └── BallOfSwine, KrakarenClone, GrotesqueSpider (arena bosses)
+    └── GrotesqueSpider (quest boss)
 ```
 
 **Modular systems**: ~30 independent `GameSystem` subclasses plugged into `DungeonScene` via composition. Each system owns its own state and rendering. Systems communicate through an `EventBus`.
 
-**Map generation**: procedural dungeon rooms + L-shaped hallways, boss rooms, safe rooms, arenas, and an overworld with roads, buildings, and forests.
+**Map generation**: procedural dungeon rooms + L-shaped hallways, boss rooms, safe rooms, and an overworld with roads, buildings, and forests.
 
 **Pathfinding**: A\* with cached paths (recalculated every ~30 frames). Line-of-sight checks for attack validation.
 

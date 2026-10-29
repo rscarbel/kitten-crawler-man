@@ -5,7 +5,7 @@ import { RoosterMinion, type RoosterMinionBuild } from './RoosterMinion';
  * lead with the fist.
  */
 export const SLIGHTLY_BENT_ROOSTER: RoosterMinionBuild = {
-  maxHp: 26,
+  maxHp: 65,
   speed: 0.6,
   xpValue: 24,
   peckShare: 0.25,

@@ -33,9 +33,9 @@ import { mulberry32 } from '../../src/sprites/person/rng.js';
 import { BossRoomSystem, type BossRoomMiniMap } from '../../src/systems/BossRoomSystem.js';
 import {
   BossRoomDressings,
-  TRASH_GREMLIN_BOSS_TYPE,
   buildGauntletRoomDressings,
 } from '../../src/systems/bossRooms/BossRoomDressings.js';
+import { TRASH_GREMLIN_BOSS_TYPE } from '../../src/core/mobs/bossTypes.js';
 import type { DoorSide, TilePoint } from '../../src/systems/bossRooms/bossRoomLayout.js';
 import { applyMovement } from '../../src/systems/GameLoopPhases.js';
 import type { SystemContext } from '../../src/systems/GameSystem.js';
@@ -131,6 +131,8 @@ function describeSource(source: DamageSource | undefined): string {
     case 'wheelPenalty':
     case 'siege':
       return source.kind;
+    case 'scripted':
+      return `${source.kind} ${source.death}`;
   }
 }
 
@@ -201,10 +203,7 @@ export function stageTrashGremlinFight(side: DoorSide): StagedTrashGremlinFight 
   roster.add(boss);
   const bossRoom = new BossRoomSystem(gameMap, undrawnMiniMap, new EventBus(), bossTypes);
   const parts = buildGauntletRoomDressings(gameMap, bossTypes);
-  const dressings = new BossRoomDressings(
-    { ...parts, spiderLab: null, colosseum: null },
-    bossTypes,
-  );
+  const dressings = new BossRoomDressings({ ...parts, spiderLab: null }, bossTypes);
   bossRoom.fightListener = dressings;
   const mobLoop = new MobUpdateLoop();
   mobLoop.registerHazardSource(bossRoom);

@@ -9,7 +9,6 @@ import { TILE_SIZE } from '../core/constants';
 import { perfMonitor } from '../core/perf/PerfMonitor';
 import type { Player } from '../Player';
 import { BrindleGrub } from '../creatures/BrindleGrub';
-import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
@@ -22,6 +21,8 @@ import type { DefenseStructures } from './briarHollow/DefenseStructures';
 import { setVisibleWorldView } from '../core/rendering/visibleWorldView';
 import { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { setMarkedGroundSources } from '../creatures/tactics/markedGround';
+import { setExplosiveSources } from '../creatures/explosiveAwareness';
+import type { ExplosiveSource } from './ExplosiveSource';
 import type { GroundHazardSource } from './GroundHazardSource';
 import { SeparationGrid } from '../core/world/SeparationGrid';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
@@ -116,6 +117,8 @@ export class MobUpdateLoop implements GameSystem {
   private readonly separationGrid = new SeparationGrid<Mob>();
   /** Whose damaging ground a mob's tactics must never walk it onto. */
   private readonly hazardSources: GroundHazardSource[] = [];
+  /** Whose lit explosives a mob's own AI may see and kick. */
+  private readonly explosiveSources: ExplosiveSource[] = [];
   /**
    * The village's defenses, so an ordinary hostile can notice and attack a
    * live trebuchet the same way it notices a crawler. Null outside Briar
@@ -134,6 +137,16 @@ export class MobUpdateLoop implements GameSystem {
     this.hazardSources.push(source);
   }
 
+  /**
+   * Registers a system whose lit explosives mobs may see and kick, through
+   * `creatures/explosiveAwareness.ts`. Nothing reacts to them unless its own
+   * AI asks.
+   */
+  registerExplosiveSource(source: ExplosiveSource): void {
+    if (this.explosiveSources.includes(source)) return;
+    this.explosiveSources.push(source);
+  }
+
   /** Registers (or clears, with null) the village's defenses for trebuchet threat. */
   setTrebuchetDefense(defense: DefenseStructures | null): void {
     this.trebuchetDefense = defense;
@@ -150,6 +163,7 @@ export class MobUpdateLoop implements GameSystem {
     resetPathfindBudget();
     setPackAlertGrid(mobGrid);
     setMarkedGroundSources(this.hazardSources);
+    setExplosiveSources(this.explosiveSources);
     setTrebuchetThreatDefense(this.trebuchetDefense);
 
     // Over the whole roster rather than the active mobs: a grub evolves off
@@ -201,6 +215,10 @@ export class MobUpdateLoop implements GameSystem {
       } else if (mob.isReviving) {
         // Still standing back up where it fell: it neither acts nor chases
         // until the rise it is immune through has finished.
+        mob.isMoving = false;
+      } else if (!mob.canAct) {
+        // Stunned, seized or frozen: it keeps its target to come back to, but
+        // neither walks nor swings until the hold lifts.
         mob.isMoving = false;
       } else if (mob.isConfused) {
         mob.currentTarget = null;
@@ -273,8 +291,7 @@ export class MobUpdateLoop implements GameSystem {
       // physics: a held or confused mob is still pushed.
       mob.advanceKnockback();
 
-      // Keep bosses (specifically Big Rooster) confined to their room
-      if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom?.clampBossToRoom(mob);
+      if (mob.isBoss) bossRoom?.clampBossToRoom(mob);
       // Any healer fairy standing in a boss room is held to it, bonded or not
       // — see confineHealerToBossRoom's own comment for why bond is not the test.
       if (mob instanceof HealingFairy) bossRoom?.confineHealerToBossRoom(mob);
@@ -314,7 +331,7 @@ export class MobUpdateLoop implements GameSystem {
     // cockroaches are displaced proportionally to their mass relative to the player.
     // AI-controlled follower, or a mob nothing can move (`separationAnchored`): full push
     // back onto the player only — the mob acts as a wall. That covers every anchored mob,
-    // a rooted one as much as the Krakaren Clone: a mass share handed to a mob that
+    // a rooted one as much as the Kraken: a mass share handed to a mob that
     // cannot move is simply lost, and the crawler would stay partly inside it.
     // A party companion (`yieldsToParty`) never moves a crawler: it takes the
     // whole push itself. A pet or hireling pathing to a fight through its
@@ -371,9 +388,11 @@ export class MobUpdateLoop implements GameSystem {
     setAirspaceBodies([]);
     setVisibleWorldView(null);
     setMarkedGroundSources([]);
+    setExplosiveSources([]);
     setTrebuchetThreatDefense(null);
     this.trebuchetDefense = null;
     this.hazardSources.length = 0;
+    this.explosiveSources.length = 0;
   }
 
   /**

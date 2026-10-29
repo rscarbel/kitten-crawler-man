@@ -111,13 +111,11 @@ interface RollAim {
  * The Rock Golem bounty target: a normal golem's whole kit plus the boulder
  * roll.
  *
- * The roll is Ball-of-Swine-shaped but bounded and world-safe. Ball of Swine
- * orbits its arena and ignores walls, which it can do because the arena is an
- * empty box; the overworld has trees, cliffs and boulders, so this rolls in
- * straight charges through `moveWithCollision` instead and counts passes rather
- * than seconds. The two ideas it does take verbatim are the one-line damage cap
- * while rolled and reading `isSlowed` for the interrupt — which makes dropped
- * gym equipment the counterplay, at the cost of no new coupling at all.
+ * The roll is a bounded, world-safe charge: the overworld has trees, cliffs and
+ * boulders, so it rolls in straight charges through `moveWithCollision` and
+ * counts passes rather than seconds. While rolled, every hit is capped to a
+ * scratch, and reading `isSlowed` interrupts the roll — which makes dropped gym
+ * equipment the counterplay, at the cost of no new coupling at all.
  */
 export class RockGolemBoss extends RockGolem {
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
@@ -212,8 +210,8 @@ export class RockGolemBoss extends RockGolem {
   }
 
   /**
-   * The exact Ball of Swine shape: everything is capped to a scratch while the
-   * shell is closed, and only while it is closed. The stun that a barrier
+   * Everything is capped to a scratch while the shell is closed, and only while
+   * it is closed. The stun that a barrier
    * causes is therefore a real damage window, not a cosmetic one.
    */
   override takeDamageFrom(
@@ -295,8 +293,8 @@ export class RockGolemBoss extends RockGolem {
   private updateRolling(targets: Player[]): void {
     // Gym equipment inside its slow radius is the counterplay: hitting one
     // stops the charge dead and opens the only full-damage window in the fight.
-    // Read through `isSlowed` rather than `slowedByBarrier` so an electrified
-    // golem stops for the same reason a barriered one does.
+    // Read through `isSlowed` rather than `slowedByBarrier` so a hit-slowed
+    // or hazard-slowed golem stops for the same reason a barriered one does.
     if (this.isSlowed) {
       this.enterState('uncurling');
       this.aim = null;

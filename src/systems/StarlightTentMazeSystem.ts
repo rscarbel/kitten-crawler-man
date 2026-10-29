@@ -60,9 +60,9 @@ import {
   drawSpotlightBeam,
   drawSpotlightClear,
   drawSpotlightDock,
-  drawSpotlightWarm,
   drawTargetNameChip,
 } from '../sprites/starlightTentMazeProps';
+import { drawSpotlightWarm } from '../sprites/starlightTentTelegraphs';
 import { drawIntervalRoomLamp } from '../sprites/art/starlightTent/starlightTentShellArt';
 import { clearStarlightTentPropCache } from '../sprites/art/starlightTent/starlightTentPropCache';
 import {
@@ -1663,6 +1663,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
   private liveLights(): LiveLights {
     return {
       ventFlames: this.litVents(),
+      ventKindles: this.kindlingVents(),
       spotlightBeams: this.litSpotlightCells(),
       beamSteps: this.liveBeamSteps(),
       stars: this.starLights(),
@@ -1674,6 +1675,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     for (const vent of this.liveVents) {
       const burn = ventFlameProgress(vent, this.frame);
       if (burn > 0) yield { tile: { x: vent.tileX, y: vent.tileY }, burn };
+    }
+  }
+
+  private *kindlingVents(): Generator<{ tile: MazeTile; heat: number }> {
+    for (const vent of this.liveVents) {
+      const heat = ventTelegraphProgress(vent, this.frame);
+      if (heat > 0) yield { tile: { x: vent.tileX, y: vent.tileY }, heat };
     }
   }
 

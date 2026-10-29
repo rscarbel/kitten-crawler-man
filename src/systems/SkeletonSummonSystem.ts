@@ -2,7 +2,7 @@
  * Places the reinforcements a skeleton caster calls up, and holds the ceiling on
  * how many of them can exist.
  *
- * The boss queues requests and a system drains them, the way the Krakaren's
+ * The boss queues requests and a system drains them, the way the Kraken's
  * guard tentacles are placed, so the cap is enforced in one place by something that can see the whole mob list
  * rather than by a creature guessing at it. The count is written back to the
  * lord so he stops *casting* summon at the cap instead of casting it and having

@@ -1,9 +1,9 @@
 /**
- * Decides which of floor 3's gated SFX groups stay decoded.
+ * Decides which gated SFX groups stay decoded.
  *
- * The village's siege, the bounty questline and the circus carry tens of
- * megabytes of decoded sound between them, and most of a session is spent
- * where none of it can play. Each gated group is held while something that
+ * Floor 3's siege, bounty questline and circus, and floor 1's boss fight
+ * music, carry tens of megabytes of decoded sound each, and most of a session
+ * is spent where none of it can play. Each gated group is held while something that
  * plays it is under way, or while the party is near the place it belongs to,
  * with a wider radius to let go than to take hold so walking the edge never
  * thrashes the decoder.
@@ -13,8 +13,7 @@
  * anything that sounds it. A recall's landing counts as where the party stands
  * from the moment the channel starts, which gives a warp the channel's three
  * seconds. A scene built mid-quest asks before its first frame, beside the
- * floor's own groups. Every group without a gate here — any floor but the
- * overworld — is let go.
+ * floor's own groups. Every group without a gate on the current floor is let go.
  */
 
 import { GATED_SFX_GROUPS, type GatedSfxGroup } from '../audio/sfxGroups';
@@ -46,7 +45,8 @@ export interface OverworldActivity {
 /**
  * Which gated groups `activity` can play anywhere. A siege fields bounty bosses
  * as its marks, so it holds the bounty group as well as its own. The circus is
- * only ever heard on its grounds and in its tent.
+ * only ever heard on its grounds and in its tent, and floor 1's fight music
+ * never on the overworld.
  */
 export function groupsActiveAnywhere(
   activity: OverworldActivity,
@@ -56,6 +56,8 @@ export function groupsActiveAnywhere(
     briarHollowSiege: siege || activity.escortUnderWay || activity.escortAmbushersStanding,
     bounty: activity.bountyOut || siege,
     starlightTent: false,
+    floodedPumpRoomMusic: false,
+    trashGremlinMusic: false,
   };
 }
 

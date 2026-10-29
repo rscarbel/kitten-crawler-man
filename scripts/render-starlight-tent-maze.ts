@@ -49,9 +49,9 @@ import {
   drawSpotlightBeam,
   drawSpotlightClear,
   drawSpotlightDock,
-  drawSpotlightWarm,
   drawTargetNameChip,
 } from '../src/sprites/starlightTentMazeProps';
+import { drawSpotlightWarm } from '../src/sprites/starlightTentTelegraphs';
 import {
   drawBeamMirrorFlare,
   drawMazeBeamTile,

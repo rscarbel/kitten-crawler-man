@@ -13,7 +13,7 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -501,9 +501,9 @@ export class TutorialGates {
     const bottom = (def.y2 + 1) * TILE_SIZE;
     return (
       left >= camera.x &&
-      right <= camera.x + viewportWidth() &&
+      right <= camera.x + worldViewWidth() &&
       top >= camera.y &&
-      bottom <= camera.y + viewportHeight()
+      bottom <= camera.y + worldViewHeight()
     );
   }
 
@@ -515,9 +515,9 @@ export class TutorialGates {
     const bottom = (def.y2 + 1) * TILE_SIZE;
     return (
       right > camera.x &&
-      left < camera.x + viewportWidth() &&
+      left < camera.x + worldViewWidth() &&
       bottom > camera.y &&
-      top < camera.y + viewportHeight()
+      top < camera.y + worldViewHeight()
     );
   }
 

@@ -26,7 +26,7 @@ import { QuestManager, type QuestId, type QuestStatus } from '../../core/quests/
 import { settings } from '../../core/input/Settings';
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { makeRefreshed } from '../../core/combat/StatusEffect';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import {
   BathroomGoblin,
   bathroomSeedFraction,
@@ -1221,9 +1221,9 @@ export class CloggedBathroomSystem
     const { reach } = copy;
     return (
       (reach.x + reach.w) * TILE_SIZE >= camX &&
-      reach.x * TILE_SIZE <= camX + viewportWidth() &&
+      reach.x * TILE_SIZE <= camX + worldViewWidth() &&
       (reach.y + reach.h) * TILE_SIZE >= camY &&
-      reach.y * TILE_SIZE <= camY + viewportHeight()
+      reach.y * TILE_SIZE <= camY + worldViewHeight()
     );
   }
 

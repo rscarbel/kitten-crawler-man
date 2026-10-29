@@ -39,7 +39,7 @@ import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SpatialGrid } from '../core/world/SpatialGrid';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { buildingKeeper, residentSpecies } from './townResidents';
 import type { CrowdSpecies, TownSpecies } from './townSpecies';
 import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';
@@ -388,10 +388,10 @@ export class TownLifeSystem implements GameSystem {
     if (this.fullDetail()) return this.townsfolk;
     const minX = camX - REDUCED_DETAIL_VIEW_MARGIN_PX;
     const minY = camY - REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const maxX = camX + viewportWidth() + REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const maxY = camY + viewportHeight() + REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const viewCentreX = camX + viewportWidth() / 2;
-    const viewCentreY = camY + viewportHeight() / 2;
+    const maxX = camX + worldViewWidth() + REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const maxY = camY + worldViewHeight() + REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const viewCentreX = camX + worldViewWidth() / 2;
+    const viewCentreY = camY + worldViewHeight() / 2;
     const drawn = this.renderScratch;
     const nearest = this.nearestLoiterers;
     const nearestDistancesSq = this.nearestLoitererDistancesSq;
@@ -450,8 +450,8 @@ export class TownLifeSystem implements GameSystem {
    * crowd's behaviour depend on window size.
    */
   private fullUpdateRadiusSq(): number {
-    const halfViewW = viewportWidth() / 2;
-    const halfViewH = viewportHeight() / 2;
+    const halfViewW = worldViewWidth() / 2;
+    const halfViewH = worldViewHeight() / 2;
     const visibleReach = Math.hypot(halfViewW, halfViewH) + TILE_SIZE;
     const radius = Math.max(FULL_UPDATE_RADIUS_PX, visibleReach);
     return radius * radius;

@@ -7,7 +7,7 @@
  *   approaching crawler through the cast; a boss by the boss share, and never
  *   past the boss's
  *   phase ceiling — every phased boss, with its own AI running — and a
- *   Krakaren standing exactly on its enrage line is already past it.
+ *   Kraken standing exactly on its enrage line is already past it.
  * - What it restores per second on any target is held under
  *   `HEAL_MAX_SHARE_OF_PARTY_DPS` of the reference party's damage per second
  *   at every level, and what it really restores never beats that published
@@ -26,9 +26,8 @@ import type { Player } from '../../src/Player';
 import type { ActiveFairyCast, FairyCast } from '../../src/creatures/fairies/Fairy';
 import { Goblin } from '../../src/creatures/Goblin';
 import { TrashGremlin } from '../../src/creatures/TrashGremlin';
-import { KrakarenClone } from '../../src/creatures/KrakarenClone';
+import { Kraken } from '../../src/creatures/Kraken';
 import { TheLich } from '../../src/creatures/TheLich';
-import { BallOfSwine } from '../../src/creatures/BallOfSwine';
 import { LichBattleSystem, type LichBattleHooks } from '../../src/systems/LichBattleSystem';
 import { applyFairyHeal } from '../../src/creatures/fairies/fairyHeal';
 import {
@@ -153,8 +152,7 @@ const CURVES: ReadonlyArray<readonly [string, LevelledCurve]> = [
 const PHASED_BOSS_KEYS = [
   'trash_gremlin',
   'big_rooster',
-  'krakaren_clone',
-  'ball_of_swine',
+  'kraken',
   'massive_clown',
   'the_lich',
 ] as const;
@@ -459,8 +457,7 @@ const SILENT_LICH_HOOKS: LichBattleHooks = {
 /**
  * A phased boss by spawn key beside the healer. The Lich's phase line is
  * reported by the battle that choreographs it, and a Lich with no battle
- * attached has none, so it gets one. The Ball of Swine is a prop that refuses
- * every heal until its arena starts the fight, so it is put into its fight.
+ * attached has none, so it gets one.
  */
 function addPhasedBoss(
   s: ReturnType<typeof healStage>,
@@ -468,7 +465,8 @@ function addPhasedBoss(
 ): Mob {
   const boss = s.add(key, HEALER_TILE + NEIGHBOR_OFFSET_TILES, HEALER_TILE);
   if (boss instanceof TheLich) new LichBattleSystem(s.map, boss, null, null, SILENT_LICH_HOOKS);
-  if (boss instanceof BallOfSwine) boss.fightStarted = true;
+  // Under her room's flood she refuses damage, and a fairy heals nothing that does.
+  if (boss instanceof Kraken) boss.setRoomDrained(true);
   return boss;
 }
 
@@ -837,15 +835,15 @@ function checkDeathWave(report: FairyGateReport): void {
   );
 }
 
-/** A Krakaren that only counts itself past its enrage line strictly below it. */
-class StrictLineKrakaren extends KrakarenClone {
+/** A Kraken that only counts itself past its enrage line strictly below it. */
+class StrictLineKraken extends Kraken {
   override get fairyHealCeiling(): number {
     const line = super.fairyHealCeiling;
     return this.isEnraged || this.hp < line ? line : this.maxHp;
   }
 }
 
-/** Far more than any Krakaren's max HP, so only the ceiling limits the heal. */
+/** Far more than any Kraken's max HP, so only the ceiling limits the heal. */
 const OVERSIZED_HEAL = 1e6;
 
 interface EnrageLineRead {
@@ -857,19 +855,20 @@ interface EnrageLineRead {
 }
 
 /**
- * The Krakaren's heal ceiling read at its enrage line exactly. The line is
+ * The Kraken's heal ceiling read at its enrage line exactly. The line is
  * read off the boss itself — the ceiling it reports once badly hurt — and
  * confirmed as the boundary by the ceiling one HP above it.
  */
-function krakarenAtEnrageLine(make?: (tileX: number, tileY: number) => KrakarenClone) {
+function krakenAtEnrageLine(make?: (tileX: number, tileY: number) => Kraken) {
   const s = buildStage();
   let boss: Mob;
   if (make === undefined) {
-    boss = s.add('krakaren_clone', HEALER_TILE, HEALER_TILE);
+    boss = s.add('kraken', HEALER_TILE, HEALER_TILE);
   } else {
     boss = make(HEALER_TILE, HEALER_TILE);
     s.roster.add(boss);
   }
+  if (boss instanceof Kraken) boss.setRoomDrained(true);
   boss.hp = 1;
   const line = boss.fairyHealCeiling;
   boss.hp = line + ONE_HP;
@@ -887,22 +886,22 @@ function krakarenAtEnrageLine(make?: (tileX: number, tileY: number) => KrakarenC
   return read;
 }
 
-function checkKrakarenEnrageLine(report: FairyGateReport): void {
+function checkKrakenEnrageLine(report: FairyGateReport): void {
   const heldAtLine = (read: EnrageLineRead): boolean =>
     read.line < read.maxHp &&
     read.ceilingAboveLine === read.maxHp &&
     read.ceilingAtLine === read.line &&
     read.healedAtLine === 0;
-  const read = krakarenAtEnrageLine();
+  const read = krakenAtEnrageLine();
   report.check(
     heldAtLine(read),
-    'a Krakaren standing exactly on its enrage line is held there: the ceiling is the line, not full HP',
+    'a Kraken standing exactly on its enrage line is held there: the ceiling is the line, not full HP',
     `line ${read.line}/${read.maxHp}, ceiling ${read.ceilingAtLine}, healed ${read.healedAtLine}`,
   );
-  const strict = krakarenAtEnrageLine((x, y) => new StrictLineKrakaren(x, y, TILE_SIZE));
+  const strict = krakenAtEnrageLine((x, y) => new StrictLineKraken(x, y, TILE_SIZE));
   report.checkCatches(
     heldAtLine(strict),
-    'a Krakaren counting the line itself as above it is caught healed back to full',
+    'a Kraken counting the line itself as above it is caught healed back to full',
     `ceiling ${strict.ceilingAtLine}, healed ${strict.healedAtLine}`,
   );
 }
@@ -1017,7 +1016,7 @@ export function verifyHealingFairy(report: FairyGateReport): void {
   report.section('Healing fairy');
   checkTargetChoice(report);
   checkBossHealing(report);
-  checkKrakarenEnrageLine(report);
+  checkKrakenEnrageLine(report);
   checkHealRate(report);
   checkHealInFlight(report);
   checkDeathWave(report);

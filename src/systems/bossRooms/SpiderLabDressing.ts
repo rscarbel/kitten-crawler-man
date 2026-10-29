@@ -1,7 +1,7 @@
 import { TILE_SIZE } from '../../core/constants';
 import type { CanvasSurface } from '../../core/rendering/canvasSurface';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GrotesqueSpider } from '../../creatures/GrotesqueSpider';
 import {
@@ -822,9 +822,9 @@ export class SpiderLabDressing
     const margin = VIEW_MARGIN_TILES * TILE_SIZE;
     return (
       (b.x + b.w) * TILE_SIZE >= camX - margin &&
-      b.x * TILE_SIZE <= camX + viewportWidth() + margin &&
+      b.x * TILE_SIZE <= camX + worldViewWidth() + margin &&
       (b.y + b.h) * TILE_SIZE >= camY - margin &&
-      b.y * TILE_SIZE <= camY + viewportHeight() + margin
+      b.y * TILE_SIZE <= camY + worldViewHeight() + margin
     );
   }
 
@@ -854,11 +854,11 @@ export class SpiderLabDressing
     const top = Math.max(pad, Math.floor((camY - originY) / worldPerMaskPx));
     const right = Math.min(
       mask.width - pad,
-      Math.ceil((camX + viewportWidth() - originX) / worldPerMaskPx),
+      Math.ceil((camX + worldViewWidth() - originX) / worldPerMaskPx),
     );
     const bottom = Math.min(
       mask.height - pad,
-      Math.ceil((camY + viewportHeight() - originY) / worldPerMaskPx),
+      Math.ceil((camY + worldViewHeight() - originY) / worldPerMaskPx),
     );
     if (right <= left || bottom <= top) return;
     const fading = alpha < 1;
@@ -913,8 +913,8 @@ export class SpiderLabDressing
     ctx.globalAlpha = level;
     const minX = Math.floor(camX / TILE_SIZE) - 1;
     const minY = Math.floor(camY / TILE_SIZE) - 1;
-    const maxX = Math.ceil((camX + viewportWidth()) / TILE_SIZE) + 1;
-    const maxY = Math.ceil((camY + viewportHeight()) / TILE_SIZE) + 1;
+    const maxX = Math.ceil((camX + worldViewWidth()) / TILE_SIZE) + 1;
+    const maxY = Math.ceil((camY + worldViewHeight()) / TILE_SIZE) + 1;
     for (const key of this.originalWebs) {
       const tile = this.tileOf(key);
       if (tile.x < minX || tile.x > maxX || tile.y < minY || tile.y > maxY) continue;

@@ -3,7 +3,7 @@
  *
  * Two halves. The layout half runs `validateProgression`'s S7 on the
  * generator's own output: the gate room is the halfway chain room, every route
- * to the antechamber passes through it, and the nursery, the lanes, the spider
+ * to Big Rooster's gateway passes through it, and the nursery, the lanes, the spider
  * lab and the safe and treasure pockets all stay off it and away from it. The
  * live half builds a `GameMap` and walks it with the map's own walkability: shut
  * while the gate is locked without shutting the party out of the guard or the
@@ -30,7 +30,7 @@ import { level2 } from '../src/levels/level2.js';
 import type { LevelDef } from '../src/levels/types.js';
 import { stealthGateChainIndex, type StealthGatePlanFault } from '../src/map/spineLayout.js';
 import { pastSafeRoomTest } from '../src/map/pastSafeRoom.js';
-import { ARENA_BOSS_TYPE } from '../src/map/progressionValidation.js';
+import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/mobs/bossTypes.js';
 import { roomDoorways } from '../src/map/roomDoorways.js';
 import { tileIndex } from '../src/map/tileIndex.js';
 import { STEALTH_GATE_CLOSED, STEALTH_GATE_OPEN } from '../src/map/tileTypes.js';
@@ -150,15 +150,23 @@ function chebyshev(a: Point, b: Point): number {
 
 /** Level 2, or for a planner fault the same floor with that rule switched off. */
 function floorUnderTest(): LevelDef {
-  const spine = level2.progression?.spine;
-  if (!isPlanFault(fault) || level2.progression === undefined || spine?.stealthGate === undefined) {
-    return level2;
-  }
+  const progression = level2.progression;
+  if (!isPlanFault(fault) || progression === undefined) return level2;
   return {
     ...level2,
     progression: {
-      ...level2.progression,
-      spine: { ...spine, stealthGate: { ...spine.stealthGate, faultForGate: fault } },
+      ...progression,
+      gauntlets: progression.gauntlets.map((gauntlet) =>
+        gauntlet.route.kind !== 'spine' || gauntlet.route.stealthGate === undefined
+          ? gauntlet
+          : {
+              ...gauntlet,
+              route: {
+                ...gauntlet.route,
+                stealthGate: { ...gauntlet.route.stealthGate, faultForGate: fault },
+              },
+            },
+      ),
     },
   };
 }
@@ -441,7 +449,7 @@ function verifySpawnsClear(gameMap: GameMap, room: StealthGateRoomData, label: s
 }
 
 /**
- * Which rooms lie past the arena's safe room is a question about the route as
+ * Which rooms lie past Big Rooster's gateway safe room is a question about the route as
  * built, asked at floor load while the gate is shut. Unlocking it must not move
  * any room to the other side.
  */
@@ -461,16 +469,16 @@ function verifyPastSafeRoomIgnoresGate(gameMap: GameMap, label: string): void {
         })
       : gameMap;
   gameMap.setStealthGate('locked');
-  const whileLocked = pastSafeRoomTest(asked, ARENA_BOSS_TYPE);
+  const whileLocked = pastSafeRoomTest(asked, BIG_ROOSTER_BOSS_TYPE);
   const lockedAnswers = roomBounds.map((room) => whileLocked?.(room) ?? null);
   gameMap.setStealthGate('open');
-  const whileOpen = pastSafeRoomTest(asked, ARENA_BOSS_TYPE);
+  const whileOpen = pastSafeRoomTest(asked, BIG_ROOSTER_BOSS_TYPE);
   const changed = roomBounds.filter(
     (room, index) => (whileOpen?.(room) ?? null) !== lockedAnswers[index],
   ).length;
   check(
     changed === 0,
-    `${label}: ${changed} rooms change sides of the arena's safe room when the gate opens`,
+    `${label}: ${changed} rooms change sides of Big Rooster's gateway safe room when the gate opens`,
   );
   gameMap.setStealthGate('locked');
 }
@@ -491,9 +499,9 @@ function verifyFloor(run: number): void {
   gameMap.setBathroomPlumbing('fixed');
   const size = gameMap.gridSize;
   const room = gameMap.stealthGateRoom;
-  const antechamber = gameMap.safeRooms.find((safe) => safe.guardsBossType === ARENA_BOSS_TYPE);
-  if (room === null || antechamber === undefined) {
-    check(false, `${label}: the floor has no stealth gate room or no antechamber`);
+  const gateway = gameMap.safeRooms.find((safe) => safe.guardsBossType === BIG_ROOSTER_BOSS_TYPE);
+  if (room === null || gateway === undefined) {
+    check(false, `${label}: the floor has no stealth gate room or no gateway for Big Rooster`);
     return;
   }
   check(
@@ -515,9 +523,9 @@ function verifyFloor(run: number): void {
     !anyTileReachable(
       reachableTiles(gameMap, gameMap.startTile, [closedRoom]),
       size,
-      antechamber.bounds,
+      gateway.bounds,
     ),
-    `${label}: the antechamber is reachable without walking through the gate room`,
+    `${label}: Big Rooster's gateway is reachable without walking through the gate room`,
   );
 
   // Locked: shut, without shutting the party out of the guard or the door.
@@ -525,8 +533,8 @@ function verifyFloor(run: number): void {
   const lockedReach = reachableTiles(gameMap, gameMap.startTile, [], [room.guardTile]);
   const reaches = (tile: Point): boolean => lockedReach.has(tileIndex(tile.x, tile.y, size));
   check(
-    !anyTileReachable(lockedReach, size, antechamber.bounds),
-    `${label}: the antechamber is reachable while the gate is locked`,
+    !anyTileReachable(lockedReach, size, gateway.bounds),
+    `${label}: Big Rooster's gateway is reachable while the gate is locked`,
   );
   for (const tile of room.gateTiles) {
     check(
@@ -562,8 +570,8 @@ function verifyFloor(run: number): void {
     );
   }
   check(
-    anyTileReachable(reachableTiles(gameMap, gameMap.startTile), size, antechamber.bounds),
-    `${label}: the antechamber is still unreachable once the gate is open`,
+    anyTileReachable(reachableTiles(gameMap, gameMap.startTile), size, gateway.bounds),
+    `${label}: Big Rooster's gateway is still unreachable once the gate is open`,
   );
 
   // An opening is banked by a checkpoint taken after it, and undone by one taken before.

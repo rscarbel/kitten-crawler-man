@@ -1,13 +1,20 @@
 import type { TileContent } from '../../tileTypes';
-import { GYM_RACK, GYM_SQUAT_RACK, GYM_CABLE_STACK, GYM_TREADMILL_BELT } from '../../tileTypes';
+import {
+  GYM_RACK,
+  GYM_SQUAT_RACK,
+  GYM_CABLE_STACK,
+  GYM_KETTLEBELL_RACK,
+  GYM_TREADMILL_BELT,
+} from '../../tileTypes';
 import { drawGymBeltTile } from '../../../sprites/art/gymRoomArt';
 import {
   drawGymCableStackSprite,
+  drawGymKettlebellRackSprite,
   drawGymRackSprite,
   drawGymSquatRackSprite,
 } from '../../../sprites/gymRoomSprites';
 import { gymLayoutOf, type GymLayout, type GymWallRun } from './gymLayout';
-import { gymRackFill, gymSquatRackLoaded } from './gymPropState';
+import { gymKettlebellRackStocked, gymRackFill, gymSquatRackLoaded } from './gymPropState';
 import { UINT32_SPAN } from '../../../core/world/WorldRandom';
 
 /**
@@ -37,6 +44,9 @@ export function drawGymTile(
       return true;
     case GYM_CABLE_STACK:
       drawGymCableStackSprite(ctx, sx, sy, ts);
+      return true;
+    case GYM_KETTLEBELL_RACK:
+      drawGymKettlebellRackSprite(ctx, sx, sy, ts, gymKettlebellRackStocked(tx, ty));
       return true;
     case GYM_TREADMILL_BELT:
       drawGymBeltDecal(ctx, structure, sx, sy, ts, tx, ty);

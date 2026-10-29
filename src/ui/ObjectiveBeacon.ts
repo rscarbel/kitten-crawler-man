@@ -1,4 +1,4 @@
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { drawLightBeam, lightBeamBounds, type LightBeamPlacement } from '../sprites/lightBeam';
 
 /**
@@ -101,9 +101,9 @@ function isOffScreen(placement: LightBeamPlacement, tileSize: number): boolean {
   const margin = tileSize * OFFSCREEN_MARGIN_TILES;
   return (
     bounds.right < -margin ||
-    bounds.left > viewportWidth() + margin ||
+    bounds.left > worldViewWidth() + margin ||
     bounds.bottom < -margin ||
-    bounds.top > viewportHeight() + margin
+    bounds.top > worldViewHeight() + margin
   );
 }
 

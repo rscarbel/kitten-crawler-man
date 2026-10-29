@@ -26,9 +26,10 @@ import { Hawkfolk, HAWKFOLK_TOUGH_FAMILY } from '../creatures/Hawkfolk';
 import { Necromancer } from '../creatures/Necromancer';
 import { RaisedRatkin, RAISED_RATKIN_FAMILY } from '../creatures/RaisedRatkin';
 import { GraveBull } from '../creatures/GraveBull';
-import { BallOfSwine } from '../creatures/BallOfSwine';
-import { KrakarenClone } from '../creatures/KrakarenClone';
-import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
+import { Kraken } from '../creatures/Kraken';
+import { ElectricGoblin } from '../creatures/ElectricGoblin';
+import { prewarmElectricGoblin, prewarmElectricGoblinGore } from '../sprites/electricGoblinSprite';
+import { KrakenTentacle, type KrakenTentacleRole } from '../creatures/KrakenTentacle';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { GrotesqueSpider, type SpiderBroodBounds } from '../creatures/GrotesqueSpider';
@@ -497,23 +498,26 @@ const MOB_KIND_DEFS = {
     protected: null,
     prewarm: prewarmGraveBull,
   }),
-  ball_of_swine: kind({
-    create: (tile) => new BallOfSwine(tile.x, tile.y, TILE_SIZE),
-    threat: 340,
-    role: 'charger',
-    protected: 'boss',
-    prewarm: null,
-  }),
-  krakaren_clone: kind({
-    create: (tile) => new KrakarenClone(tile.x, tile.y, TILE_SIZE),
+  kraken: kind({
+    create: (tile) => new Kraken(tile.x, tile.y, TILE_SIZE),
     threat: 180,
     role: 'melee',
     protected: 'boss',
     prewarm: null,
   }),
-  krakaren_tentacle: kind<KrakarenTentacle, { readonly owner: KrakarenClone }>({
+  electric_goblin: kind({
+    create: (tile) => new ElectricGoblin(tile.x, tile.y, TILE_SIZE),
+    threat: 180,
+    role: 'ranged',
+    protected: 'boss',
+    prewarm: () => {
+      prewarmElectricGoblin();
+      prewarmElectricGoblinGore();
+    },
+  }),
+  kraken_tentacle: kind<KrakenTentacle, { readonly role: KrakenTentacleRole }>({
     create: (tile, _look, _random, options) =>
-      new KrakarenTentacle(tile.x, tile.y, TILE_SIZE, options.owner),
+      new KrakenTentacle(tile.x, tile.y, TILE_SIZE, options.role),
     threat: 4.6,
     role: 'melee',
     protected: 'boss-add',
@@ -811,7 +815,7 @@ export function allMobKinds(): readonly MobKind[] {
 /** Every kind that needs per-spawn options; a `Record` so the list cannot drift from the types. */
 const KINDS_NEEDING_OPTIONS: Readonly<Record<Exclude<MobKind, StandaloneMobKind>, true>> = {
   tutorial_goblin: true,
-  krakaren_tentacle: true,
+  kraken_tentacle: true,
   spider_hatchling: true,
   miss_quill: true,
 };

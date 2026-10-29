@@ -8,7 +8,7 @@
  * - Spawn rules: every chance is its design rate plus the flat bonus, held to
  *   certainty, with rates designed off still off, and the scatter roll's
  *   guaranteed shield on every difficulty.
- * - The Ball of Swine upgrade on a real built floor 2: untouched rooms gain,
+ * - Big Rooster's upgrade on a real built floor 2: untouched rooms gain,
  *   an occupied or engaged room does not, a second run adds nothing, and the
  *   reload path gives the upgraded rates. Fairies that fled into a room count
  *   as its own when it is topped up.

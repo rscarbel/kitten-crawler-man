@@ -36,8 +36,6 @@ import {
   drawChillBlastRing,
   drawIceBolt,
   drawFireballFlight,
-  drawLandingReticle,
-  drawFillingDangerCircle,
   drawChargeCore,
   drawFlamePatch,
   drawExplosion,
@@ -47,6 +45,7 @@ import {
   drawTelekineticRing,
   type FireballTrailPoint,
 } from '../sprites/art/fairyEffectsArt';
+import { drawFireBlastWarning, drawLandingReticle } from '../sprites/fairyTelegraphs';
 import { previewInk } from '../ui/theme/previewInk';
 
 type Tab = FairyKind | 'effects';
@@ -274,9 +273,9 @@ const EFFECTS: ReadonlyArray<EffectSpec> = [
       drawLandingReticle(ctx, cx, cy, Math.min(w, h) * CELL_REACH_WIDE, progress, frame),
   },
   {
-    name: 'filling danger circle',
+    name: 'fire blast warning',
     draw: (ctx, cx, cy, w, h, progress) =>
-      drawFillingDangerCircle(ctx, cx, cy, Math.min(w, h) * CELL_RADIUS_MEDIUM, progress),
+      drawFireBlastWarning(ctx, cx, cy, Math.min(w, h) * CELL_RADIUS_MEDIUM, progress),
   },
   {
     name: 'charge core',

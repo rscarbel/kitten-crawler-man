@@ -1,6 +1,6 @@
 /**
  * The fairy spawn rates against their design rates: every chance a floor
- * ships — room rates per region and difficulty, the Ball of Swine's upgrade,
+ * ships — room rates per region and difficulty, Big Rooster's upgrade,
  * the room healer, floor 3's scatter fairy and scatter healer — is its design
  * rate plus {@link FAIRY_CHANCE_BONUS}, held to 1, while a rate designed off
  * stays off and every count range stays as designed. Measured twice: on the
@@ -26,7 +26,7 @@ import { level3 } from '../../src/levels/level3';
 import type { FairyRoomRate, FairySpawnTable } from '../../src/levels/types';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import type { FairyGateReport } from './report';
-import { DIFFICULTIES } from './spawnTables';
+import { DIFFICULTIES, FLOOR_TWO_UPGRADE_BOSS } from './spawnTables';
 
 /** What every enabled fairy chance gains over its design rate. */
 const FAIRY_CHANCE_BONUS = 0.15;
@@ -44,7 +44,6 @@ const SPAWN_RULES_SEED = 0x5ba_e7e5;
  */
 const CHANCE_TOLERANCE = 0.015;
 const DECIMALS = 3;
-const SWINE_BOSS_TYPE = 'ball_of_swine';
 
 type PerDifficulty = Readonly<Record<Difficulty, number>>;
 
@@ -64,7 +63,7 @@ interface DesignTable {
   readonly shipped: FairySpawnTable;
   /** Indexed by region; null means the region was designed with no fairies. */
   readonly roomRates: readonly (FairyRoomRate | null)[];
-  readonly swineUpgrade: FairyRoomRate | null;
+  readonly bossUpgrade: FairyRoomRate | null;
   readonly roomHealerChance: number;
   readonly scatterChance: PerDifficulty | null;
   readonly scatterHealerChance: number;
@@ -78,10 +77,15 @@ function shippedTable(name: string, table: FairySpawnTable | undefined): FairySp
 const LEVEL1_COUNT = same(1);
 const LEVEL2_COUNT_MIN = same(1);
 const LEVEL2_COUNT_MAX = same(2);
-const LEVEL2_POST_KRAKAREN_COUNT_MAX: PerDifficulty = { easy: 2, normal: 2, hard: 3 };
-const LEVEL2_POST_SWINE_COUNT_MIN: PerDifficulty = { easy: 1, normal: 1, hard: 2 };
+const LEVEL2_POST_POWER_LAB_COUNT_MAX: PerDifficulty = { easy: 2, normal: 2, hard: 3 };
+const LEVEL2_UPGRADED_COUNT_MIN: PerDifficulty = { easy: 1, normal: 1, hard: 2 };
 const DESIGN_HEALER_CHANCE = 0.05;
 const DISABLED = 0;
+const LEVEL2_POST_POWER_LAB_RATE = designRate(
+  { easy: 0.4, normal: 0.5, hard: 0.75 },
+  LEVEL2_COUNT_MIN,
+  LEVEL2_POST_POWER_LAB_COUNT_MAX,
+);
 
 const DESIGN_TABLES: readonly DesignTable[] = [
   {
@@ -92,7 +96,7 @@ const DESIGN_TABLES: readonly DesignTable[] = [
       designRate({ easy: 0.08, normal: 0.15, hard: 0.25 }, LEVEL1_COUNT, LEVEL1_COUNT),
       designRate({ easy: 0.15, normal: 0.25, hard: 0.5 }, LEVEL1_COUNT, LEVEL1_COUNT),
     ],
-    swineUpgrade: null,
+    bossUpgrade: null,
     roomHealerChance: DISABLED,
     scatterChance: null,
     scatterHealerChance: DISABLED,
@@ -100,18 +104,16 @@ const DESIGN_TABLES: readonly DesignTable[] = [
   {
     name: 'floor 2',
     shipped: shippedTable('level2', level2.fairies),
+    // Big Rooster's gym leaves the rooms past it at the power lab's rate until he dies.
     roomRates: [
       designRate({ easy: 0.3, normal: 0.4, hard: 0.6 }, LEVEL2_COUNT_MIN, LEVEL2_COUNT_MAX),
-      designRate(
-        { easy: 0.4, normal: 0.5, hard: 0.75 },
-        LEVEL2_COUNT_MIN,
-        LEVEL2_POST_KRAKAREN_COUNT_MAX,
-      ),
+      LEVEL2_POST_POWER_LAB_RATE,
+      LEVEL2_POST_POWER_LAB_RATE,
     ],
-    swineUpgrade: designRate(
+    bossUpgrade: designRate(
       { easy: 0.5, normal: 0.7, hard: 1 },
-      LEVEL2_POST_SWINE_COUNT_MIN,
-      LEVEL2_POST_KRAKAREN_COUNT_MAX,
+      LEVEL2_UPGRADED_COUNT_MIN,
+      LEVEL2_POST_POWER_LAB_COUNT_MAX,
     ),
     roomHealerChance: DESIGN_HEALER_CHANCE,
     scatterChance: null,
@@ -121,7 +123,7 @@ const DESIGN_TABLES: readonly DesignTable[] = [
     name: 'floor 3',
     shipped: shippedTable('level3', level3.fairies),
     roomRates: [],
-    swineUpgrade: null,
+    bossUpgrade: null,
     roomHealerChance: DISABLED,
     scatterChance: { easy: 0.08, normal: 0.12, hard: 0.2 },
     scatterHealerChance: DESIGN_HEALER_CHANCE,
@@ -211,8 +213,10 @@ function auditRate(
   }
 }
 
-function swineUpgradeOf(table: FairySpawnTable): FairyRoomRate | null {
-  return table.upgrades?.find((upgrade) => upgrade.bossType === SWINE_BOSS_TYPE)?.rate ?? null;
+function bossUpgradeOf(table: FairySpawnTable): FairyRoomRate | null {
+  return (
+    table.upgrades?.find((upgrade) => upgrade.bossType === FLOOR_TWO_UPGRADE_BOSS)?.rate ?? null
+  );
 }
 
 function auditTable(design: DesignTable, shipped: FairySpawnTable): TableAudit {
@@ -233,7 +237,7 @@ function auditTable(design: DesignTable, shipped: FairySpawnTable): TableAudit {
       design.roomRates[region] ?? null,
     );
   }
-  auditRate(audit, `${design.name} post-Swine`, swineUpgradeOf(shipped), design.swineUpgrade);
+  auditRate(audit, `${design.name} after Big Rooster`, bossUpgradeOf(shipped), design.bossUpgrade);
   auditChance(
     audit,
     `${design.name} room healer`,
@@ -327,8 +331,8 @@ function measureFrequencies(
     for (let region = 0; region < design.roomRates.length; region++) {
       for (const upgraded of [false, true]) {
         const designed =
-          upgraded && design.swineUpgrade !== null
-            ? design.swineUpgrade
+          upgraded && design.bossUpgrade !== null
+            ? design.bossUpgrade
             : (design.roomRates[region] ?? null);
         if (
           upgraded &&
@@ -390,8 +394,8 @@ function measureFrequencies(
 /** A floor's table carrying its design rates, with no bonus at all. */
 function unbonusedTable(design: DesignTable): FairySpawnTable {
   const upgrades = (design.shipped.upgrades ?? []).map((upgrade) =>
-    upgrade.bossType === SWINE_BOSS_TYPE && design.swineUpgrade !== null
-      ? { ...upgrade, rate: design.swineUpgrade }
+    upgrade.bossType === FLOOR_TWO_UPGRADE_BOSS && design.bossUpgrade !== null
+      ? { ...upgrade, rate: design.bossUpgrade }
       : upgrade,
   );
   return {
@@ -415,10 +419,10 @@ function bonusEverywhere(chance: PerDifficulty): PerDifficulty {
 /** A floor's table with the bonus added past certainty wherever a rate reaches it. */
 function uncappedTable(design: DesignTable): FairySpawnTable {
   const upgrades = (design.shipped.upgrades ?? []).map((upgrade) =>
-    upgrade.bossType === SWINE_BOSS_TYPE && design.swineUpgrade !== null
+    upgrade.bossType === FLOOR_TWO_UPGRADE_BOSS && design.bossUpgrade !== null
       ? {
           ...upgrade,
-          rate: { ...upgrade.rate, chance: bonusEverywhere(design.swineUpgrade.chance) },
+          rate: { ...upgrade.rate, chance: bonusEverywhere(design.bossUpgrade.chance) },
         }
       : upgrade,
   );

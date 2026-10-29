@@ -12,14 +12,14 @@ import {
   PLACED_MAX_PAN,
   type PlayedCue,
 } from '../../src/audio/AudioManager.js';
-import { soundTraits, STINGER_IDS } from '../../src/audio/soundTraits.js';
+import { DEFAULT_SOUND_TRAITS, soundTraits, STINGER_IDS } from '../../src/audio/soundTraits.js';
 import { SOUND_MANIFEST, type SoundId } from '../../src/audio/sounds.js';
 import { dbToGain } from '../../src/audio/voiceFades.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
 import { EventBus } from '../../src/core/EventBus.js';
-import { BallOfSwine } from '../../src/creatures/BallOfSwine.js';
-import { ARENA_INTERIOR_RADIUS_TILES } from '../../src/map/arenaGeometry.js';
+import { BigRooster } from '../../src/creatures/BigRooster.js';
 import { playMobAudioCues } from '../../src/systems/GameLoopPhases.js';
+import { mobVoiceTakes } from '../../src/systems/mobVoices.js';
 import {
   setVisibleWorldView,
   visibleWorldView,
@@ -80,8 +80,8 @@ const NEAR_RIGHT_TILES = 5;
 const FAR_LEFT_TILES = 12;
 /** Beyond any default hearing range. */
 const OUT_OF_RANGE_TILES = 30;
-/** From one side of the boss arena's floor to the other: further than ordinary hearing. */
-const ACROSS_ARENA_TILES = ARENA_INTERIOR_RADIUS_TILES * 2;
+/** From one side of a large boss room's floor to the other: twice ordinary hearing. */
+const ACROSS_BOSS_ROOM_TILES = DEFAULT_SOUND_TRAITS.hearingTiles * 2;
 const LISTENER_X = 1000;
 const LISTENER_Y = 1000;
 /** A siege engine's throw, which carries further muffled when out of sight. */
@@ -403,25 +403,26 @@ export async function checkPlacedSounds(harness: AudioHarness, check: Check): Pr
     placed.length === 2 && cues.length === 3,
     `every started cue is reported, the placed ones with their source (${placed.length} of ${cues.length})`,
   );
-  const audioFar = 'deep_rumbling' as const satisfies SoundId;
-  await audio.createScope().preload([audioFar, 'cat_missile_impact', 'arrow_impact']);
-  await harness.flush();
-  harness.advance(PAST_INTERVAL_MS);
-
-  const swine = new BallOfSwine(
-    LISTENER_X / TILE_SIZE + ACROSS_ARENA_TILES,
+  const boss = new BigRooster(
+    LISTENER_X / TILE_SIZE + ACROSS_BOSS_ROOM_TILES,
     LISTENER_Y / TILE_SIZE,
     TILE_SIZE,
   );
-  swine.spinupSoundPending = true;
-  const swineBefore = harness.sources.length;
-  playMobAudioCues([swine], audio);
-  const telegraph = startedSince(harness, swineBefore).find(
-    (source) => source.label === labelOf(audioFar),
+  const telegraphTakes = mobVoiceTakes(boss, 'special');
+  await audio.createScope().preload([...telegraphTakes, 'cat_missile_impact', 'arrow_impact']);
+  await harness.flush();
+  harness.advance(PAST_INTERVAL_MS);
+
+  boss.specialSoundPending = true;
+  const bossBefore = harness.sources.length;
+  playMobAudioCues([boss], audio);
+  const telegraphLabels = telegraphTakes.map(labelOf);
+  const telegraph = startedSince(harness, bossBefore).find((source) =>
+    telegraphLabels.includes(source.label),
   );
   check(
     telegraph !== undefined && levelOf(telegraph) > 0 && panOf(telegraph) > 0,
-    `a boss's telegraph from across its arena still plays, panned toward it (${
+    `a boss's telegraph from across its room still plays, panned toward it (${
       telegraph === undefined ? 'dropped' : `level ${levelOf(telegraph).toFixed(2)}`
     })`,
   );

@@ -226,7 +226,9 @@ export const NECRO_PULSE_STRUCTURE_DAMAGE = Math.round(
 const NECRO_PULSE_INTERRUPT_SHARE_OF_DIRECT_HIT = 0.8;
 /**
  * Flat, unscaled: the lit band is ground a crawler is standing in by the time
- * it goes off, which P2 of `docs/difficulty-fairness-rules.md` keeps flat.
+ * it goes off, and `docs/difficulty-fairness-rules.md` holds that "damage that
+ * is undodgeable once you are already inside it ... stays flat and does not
+ * scale at all".
  */
 export const NECRO_PULSE_BAND_DAMAGE = 3;
 /** The pulse's name on the death screen. */

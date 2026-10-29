@@ -41,7 +41,7 @@ import {
   PRISON_MUSIC,
   prisonCueSound,
 } from '../systems/stealthKeySnatch/prisonSoundCues';
-import { PRISON_TRAIL_SPACING_TILES } from '../systems/stealthKeySnatch/prisonTuning';
+import { PARTY_TRAIL_SPACING_TILES } from '../systems/partyTrail';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
@@ -60,7 +60,7 @@ import { type AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { CarolineMessage } from '../dialog/caroline';
 import { StoryDelivery, partyIsEngaged } from '../systems/StoryDelivery';
 import { walkUpTo } from '../systems/cutscene/walkUp';
-import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
+import { noWorldActions, type WalkToStep } from '../systems/cutscene/cutsceneSteps';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import { pixelToTile } from '../utils';
 import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
@@ -97,6 +97,7 @@ import {
   applyMovement,
   triggerPlayerAttack,
   KNOCKOUT_TIMEOUT_FRAMES,
+  playCrawlerSeizureJolts,
 } from '../systems/GameLoopPhases';
 import {
   downedCompanionArrowCandidate,
@@ -179,7 +180,7 @@ import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { RespawnMode } from '../ui/DeathScreen';
 import { causeFromDamageSource } from '../systems/DeathCauseSystem';
-import { pickDeathExplanation } from '../ui/DeathExplanations';
+import { pickDeathMessage, plainDeathMessage, type DeathMessage } from '../ui/DeathExplanations';
 import type { LootDrop, Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
@@ -346,7 +347,7 @@ import {
 } from '../core/quests/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit } from '../systems/kits/ChatKit';
-import { CutsceneKit } from '../systems/kits/CutsceneKit';
+import { CutsceneKit, cutsceneSoundPlayer } from '../systems/kits/CutsceneKit';
 import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
@@ -394,8 +395,8 @@ import {
   hudClearView,
   interiorCameraBounds,
   interiorFocusRange,
-  type WorldRect,
 } from './interiorCamera';
+import type { WorldRect } from '../core/rendering/worldRect';
 import {
   hotbarBandHeightCss,
   interiorHudOccluders,
@@ -1144,6 +1145,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.cutscenes = new CutsceneKit({
       conversation: this.conversation,
       teleportDaveOut: () => this.dave?.teleportOut(),
+      playSound: cutsceneSoundPlayer(this.audio),
+      runWorldAction: noWorldActions,
       pauseButton: () => {
         const rect = this.hud.frame?.dock.get('pause');
         return rect === undefined ? null : { rect, press: () => this.pauseScreen.toggle() };
@@ -1378,7 +1381,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.companion.setMap(this.map, this.human, this.cat);
     }
     if (prisonPlan !== null) {
-      this.companion.setTrailFollow(PRISON_TRAIL_SPACING_TILES * TILE_SIZE);
+      this.companion.setTrailFollow(PARTY_TRAIL_SPACING_TILES * TILE_SIZE);
       this.prisonKey = new PrisonKeySystem({
         plan: prisonPlan,
         human: this.human,
@@ -3492,6 +3495,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.human.tickTimers();
     this.cat.tickTimers();
     drainBloodVomitRetches([this.human, this.cat], this.bus);
+    playCrawlerSeizureJolts([this.human, this.cat], this.audio);
     drainHpThresholdCrossings({ human: this.human, cat: this.cat }, this.bus);
     this.updateSafeRoomProtection();
     this.safeRoom?.tickBeds();
@@ -4048,7 +4052,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * than to anything in the room. So a named hazard wins; anything else falls
    * back to the room, and then to the building.
    */
-  private deathScreenMessage(): string {
+  private deathScreenMessage(): DeathMessage {
     const fallen =
       this.human.isActive && !this.human.isAlive
         ? this.human
@@ -4057,9 +4061,9 @@ export class BuildingInteriorScene extends GameplayScene {
           : null;
     const source = fallen?.lastDamageSource ?? null;
     if (source !== null && source.kind === 'environmental') {
-      return pickDeathExplanation(causeFromDamageSource(source));
+      return pickDeathMessage(causeFromDamageSource(source));
     }
-    return this.activeEncounter?.defeatMessage ?? INTERIOR_DEFEAT_MESSAGE;
+    return plainDeathMessage(this.activeEncounter?.defeatMessage ?? INTERIOR_DEFEAT_MESSAGE);
   }
 
   /**
@@ -5084,6 +5088,11 @@ export class BuildingInteriorScene extends GameplayScene {
     );
   }
 
+  protected override cameraFocus(): { x: number; y: number } {
+    const leader = super.cameraFocus();
+    return this.cutscenes.director.cameraFocus(leader) ?? leader;
+  }
+
   protected override cameraFocusRange(map: GameMap): WorldRect {
     return interiorFocusRange(map);
   }
@@ -5098,7 +5107,9 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   protected override cameraShake(): { x: number; y: number } {
-    return this.explosionShake.cameraOffset;
+    const blast = this.explosionShake.cameraOffset;
+    const cutscene = this.cutscenes.director.cameraShake;
+    return { x: blast.x + cutscene.x, y: blast.y + cutscene.y };
   }
 
   render(ctx: CanvasRenderingContext2D): void {

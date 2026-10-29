@@ -18,6 +18,9 @@ export interface LoopLevel {
  */
 export const AMBIENT_RAMP_MS = 100;
 
+/** The rain's wind swells and dies over a second, so it reads as weather rather than a switch. */
+const KETTLEBELL_RAIN_WIND_FADE_MS = 1000;
+
 export const WALKING_LOOP = {
   id: 'player_walking',
   volume: 0.25,
@@ -57,6 +60,22 @@ export const SPIDER_WALKING_LOOP = {
 export const MACHINERY_LOOP = {
   id: 'tech_machinery_running',
   volume: 0.35,
+  fadeInMs: AMBIENT_RAMP_MS,
+  fadeOutMs: AMBIENT_RAMP_MS,
+} as const satisfies LoopLevel;
+
+/** The wind of Big Rooster's kettlebell rain at its floor level: one bell in the air. */
+export const KETTLEBELL_RAIN_WIND_LOOP = {
+  id: 'kettlebell_rain_wind_loop',
+  volume: 0.5,
+  fadeInMs: KETTLEBELL_RAIN_WIND_FADE_MS,
+  fadeOutMs: KETTLEBELL_RAIN_WIND_FADE_MS,
+} as const satisfies LoopLevel;
+
+/** The generator on the Current Goblin's back, heard from wherever he stands while he lives. */
+export const GENERATOR_RIG_HUM_LOOP = {
+  id: 'generator_rig_hum_loop',
+  volume: 0.4,
   fadeInMs: AMBIENT_RAMP_MS,
   fadeOutMs: AMBIENT_RAMP_MS,
 } as const satisfies LoopLevel;

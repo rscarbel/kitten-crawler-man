@@ -179,6 +179,15 @@ const POOLED_HAZARD_FIDELITY_MIN = 0.7;
 const HAZARDS_OVER_THEIR_OWN_POOL: ReadonlySet<HazardState> = new Set<HazardState>([
   'spotlight-beam',
 ]);
+/**
+ * The lanterns' warning is a near-opaque ring of the red ground-warning ink,
+ * and a dark laid over saturated red shifts it less than it shifts the paler
+ * hazards: drawn beneath the lights the ring still keeps about 0.86 of its
+ * full-bright colour, while drawn over them it keeps about 0.93 or more. The
+ * shared minimum would let the dark through, so this one sits between the two.
+ */
+const RED_RING_FIDELITY_MIN = 0.9;
+const RED_RING_HAZARDS: ReadonlySet<HazardState> = new Set<HazardState>(['spotlight-warm']);
 
 /**
  * The sawdust of the act on stage, per tile, as WCAG relative luminance. The
@@ -295,7 +304,9 @@ console.log(
     const fidelity = measureHazardFidelity(shown, fullBright, fullBrightBare, forced);
     const fidelityMin = HAZARDS_OVER_THEIR_OWN_POOL.has(state)
       ? POOLED_HAZARD_FIDELITY_MIN
-      : HAZARD_FIDELITY_MIN;
+      : RED_RING_HAZARDS.has(state)
+        ? RED_RING_FIDELITY_MIN
+        : HAZARD_FIDELITY_MIN;
     check(
       fidelity.pixels > 0 && fidelity.fidelity >= fidelityMin,
       `${state}: its own pixels keep ${fidelity.fidelity.toFixed(DIGITS)} of their full-bright ` +

@@ -117,7 +117,7 @@ export const ITEM_PRICES = {
   demolition_apron:         gearPrice('demolition_apron', 1),
   foremans_hardhat:         gearPrice('foremans_hardhat', 1),
   silkspinner_gloves:       gearPrice('silkspinner_gloves', 1),
-  hamhock_boots:            gearPrice('hamhock_boots', 1),
+  lineman_boots:            gearPrice('lineman_boots', 1),
   pot_lid_buckler:          gearPrice('pot_lid_buckler', 1),
   velvet_harness:           gearPrice('velvet_harness', 1),
   mousehide_booties:        gearPrice('mousehide_booties', 1),

@@ -8,8 +8,8 @@ import {
   LAB_STATION_THRESHOLD,
   TRASH_GREMLIN_FLOOR,
   GYM_FLOOR,
-  KRAKAREN_BOSS_ROOM_FLOOR,
-  ARENA_FLOOR,
+  POWER_LAB_FLOOR,
+  FLOODED_PUMP_ROOM_FLOOR,
   FLOOR_GRATE,
   SPIDER_LAB_FLOOR,
   CLUB_FLOOR,
@@ -28,11 +28,10 @@ import {
 } from '../tileTypes';
 import { isWalkableTileType } from '../walkability';
 import { drawWallShadow } from './helpers';
-import { drawColosseumTile } from './bossRooms/colosseumTiles';
 import { drawSpiderLabFloor } from './bossRooms/labFloorPainter';
 import { drawGroundTile } from './groundTiles';
 import { drawNurseryGrateTile } from './nurseryGrateTile';
-import { drawKrakarenLabFloor } from './bossRooms/krakarenTiles';
+import { drawPowerLabFloor } from './bossRooms/powerLabTiles';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
 import { drawHollowDecalTile } from './hollowVillageTiles';
@@ -658,18 +657,17 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Krakaren Clone lair — dark wet cavern floor
-    case KRAKAREN_BOSS_ROOM_FLOOR:
-      drawKrakarenLabFloor(ctx, structure, sx, sy, ts, tx, ty);
+    case POWER_LAB_FLOOR:
+      drawPowerLabFloor(ctx, structure, sx, sy, ts, tx, ty);
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
 
-    // Arena floor — the colosseum's sand, painted against the arena's true
-    // circle, so the ring's edge reads round wherever it cuts a tile.
-    case ARENA_FLOOR: {
-      drawColosseumTile(ctx, structure, type, sx, sy, ts, tx, ty);
+    // The flooded room's own dressing paints its fittings; the floor under the
+    // water is the floor's ordinary concrete.
+    case FLOODED_PUMP_ROOM_FLOOR:
+      drawGroundTile(ctx, dungeonFloorTheme().ground, structure, sx, sy, ts, tx, ty);
+      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
-    }
 
     // The goblin nursery's grates, over the room's own floor.
     case FLOOR_GRATE: {

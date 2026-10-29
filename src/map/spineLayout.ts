@@ -18,8 +18,9 @@ import { worldRandom } from '../core/world/WorldRandom';
  *
  * Unlike a gauntlet branch, which grows outward from an entry room toward a
  * gateway it is free to approach from any side, both of the spine's endpoints
- * are decided before it is planned — the last gateway boss room at one end and
- * the arena's antechamber at the other. What makes the journey long is therefore
+ * are decided before it is planned — the previous gauntlet's exit safe room at
+ * one end and the next gauntlet's gateway safe room at the other. What makes the
+ * journey long is therefore
  * not the distance between them, which on a compact floor is only a few dozen
  * tiles, but how far the route winds on the way: the room count is a contract
  * about the walk.
@@ -43,8 +44,9 @@ const SPINE_ROOM_PITCH = 20;
 /**
  * Clearance kept from both endpoints, as a straight-line distance.
  *
- * The boss room is 22×18 and the antechamber is wider still, so a chain room
- * seated much closer than this to either centre simply will not fit beside it.
+ * Both endpoints are safe rooms with a boss room just beyond them, so a chain
+ * room seated much closer than this to either centre simply will not fit beside
+ * it.
  */
 const SPINE_END_CLEARANCE = 28;
 
@@ -83,12 +85,12 @@ const START_HEADING_JITTER = 1;
 /**
  * Headings tried for one room, as offsets from the leaned heading, nearest
  * first. The first is the one the lean asked for; the rest are how the route
- * steps around ground the gauntlet, the arena or the map's edge has taken.
+ * steps around ground the gauntlets or the map's edge have taken.
  */
 const HEADING_NUDGE_STEP_RADIANS = 0.4;
 const HEADING_NUDGE_STEPS = 5;
 const HEADING_NUDGES = alternatingOffsets(HEADING_NUDGE_STEP_RADIANS, HEADING_NUDGE_STEPS);
-/** Furthest the last chain room may sit from the antechamber it must reach. */
+/** Furthest the last chain room may sit from the gateway safe room it must reach. */
 const SPINE_FINAL_GAP_MAX = 55;
 /** Sideways offsets a dog-leg corridor's pivot is tried at, when a plain L will not fit. */
 const CORRIDOR_PIVOT_STEP_TILES = 7;
@@ -180,7 +182,7 @@ export interface StealthGateRequest {
 
 /**
  * Chain index of the stealth gate room: halfway between the room the spine
- * leaves and the antechamber it reaches. Every chain room is a cut vertex, so
+ * leaves and the gateway safe room it reaches. Every chain room is a cut vertex, so
  * the halfway room is on every route through.
  */
 export function stealthGateChainIndex(roomCount: number): number {
@@ -275,9 +277,9 @@ export interface SpinePocketRequest {
 }
 
 export interface SpineRequest {
-  /** The room the spine leaves: the last gateway boss room. */
+  /** The room the spine leaves: the previous gauntlet's exit safe room. */
   entryRoom: Rect;
-  /** The room the spine arrives at: the arena's antechamber. */
+  /** The room the spine arrives at: the next gauntlet's gateway safe room. */
   exitRoom: Rect;
   rooms: { min: number; max: number };
   splits: { min: number; max: number };
@@ -300,7 +302,7 @@ export interface SpineRequest {
   safeRoomSize: () => { w: number; h: number };
   /**
    * Centres every safe pocket must keep {@link safeRoomSeparation} away from —
-   * the floor's gateway safe rooms and its antechamber. A safe pocket seated a
+   * the floor's gateway and exit safe rooms. A safe pocket seated a
    * dozen tiles from the one the player just left is not a mid-journey anchor.
    */
   safeRoomKeepAway: ReadonlyArray<Point>;
@@ -330,12 +332,13 @@ function wrapAngle(radians: number): number {
  * more rooms left than the remaining distance needs, so the chain is free to
  * wander almost sideways and the walk winds; as the budget is spent the slack
  * closes and the deviation is squeezed to nothing, so the last rooms march
- * straight at the antechamber and the chain always arrives where it was told to.
+ * straight at the gateway safe room and the chain always arrives where it was
+ * told to.
  *
  * Grown greedily rather than sampled off an analytic curve, and that is the
  * point: a wave laid between two fixed points goes where the equation says,
- * which on this floor is repeatedly through the gauntlet, through the arena's
- * reserve, or off the map. A route that picks its next step can be told to try
+ * which on this floor is repeatedly through a gauntlet, through the next boss's
+ * room, or off the map. A route that picks its next step can be told to try
  * another direction when the ground it wanted is taken.
  */
 function allowedDeviation(roomsLeft: number, distanceLeft: number): number {
@@ -431,7 +434,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   const roomCount = randomInt(request.rooms.min, request.rooms.max);
 
   // The quest room is never the first or the last room on the chain: a nursery
-  // on the boss room's doorstep, or on the antechamber's, reads as part of that
+  // on either safe room's doorstep reads as part of that
   // landmark rather than as a room of its own. A chain too short to hold an
   // interior room is refused rather than fudged into breaking that.
   if (roomCount < MIN_CHAIN_ROOMS) return null;
@@ -498,7 +501,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     current = rectCentre(seated);
   }
 
-  // The last room has to end up within a corridor's reach of the antechamber, or
+  // The last room has to end up within a corridor's reach of the gateway, or
   // the route ends in a long blind run rather than at a door.
   if (Math.hypot(to.x - current.x, to.y - current.y) > SPINE_FINAL_GAP_MAX) return null;
 
@@ -732,7 +735,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
 
   // ── Dead-end treasure pockets ────────────────────────────────────────────
   //
-  // A dead end is not a route to the antechamber, so these buy exploration back
+  // A dead end is not a route to the gateway, so these buy exploration back
   // without buying a second way through. Best-effort: a pocket that will not
   // seat is dropped rather than failing the spine, since it is decoration and
   // takes nothing away from the route if it is missing.
@@ -906,7 +909,7 @@ function seatLane(
  *
  * The straight L is all a gauntlet branch ever needs, because its rooms are
  * strung along one sweeping curve with open ground either side. A spine winds
- * back on itself between an arena and a gauntlet that have already taken the
+ * back on itself between two gauntlets that have already taken the
  * ground, so the corner of an L lands on a neighbouring room often enough to
  * cost most of the layouts that would otherwise have worked — and a route that
  * simply steps around it is the difference.

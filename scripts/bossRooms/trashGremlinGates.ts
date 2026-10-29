@@ -44,7 +44,7 @@ import {
 } from '../../src/map/tileTypes.js';
 import { slowestTileSpeedFactor } from '../../src/map/tileSpeed.js';
 import type { DamageOptions, DamageSource } from '../../src/Player.js';
-import { TRASH_GREMLIN_BOSS_TYPE } from '../../src/systems/bossRooms/BossRoomDressings.js';
+import { TRASH_GREMLIN_BOSS_TYPE } from '../../src/core/mobs/bossTypes.js';
 import {
   approachLaneTiles,
   spawnClearTiles,

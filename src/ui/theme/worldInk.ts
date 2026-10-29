@@ -111,6 +111,16 @@ export const worldPalette = {
     /** The console cyan the intrusion HUD is drawn in, so the boot line matches it. */
     console: '#4fc3f7',
   },
+  /**
+   * The Grotesque Spider's harmless marks: the pale violet rings of her
+   * phase-change roar, kept unlike any attack, and the gold pool round her
+   * legs while she is open to punishment.
+   */
+  grotesqueSpider: {
+    roarRing: '#f3e8ff',
+    roarRingUnder: '#581c87',
+    exposedGlow: '#facc15',
+  },
   /** Pulsing markers that say "the way on is here": stairwells, stairs, doors, a wreck to mend. */
   waymark: {
     stairwellEdge: '#a855f7',
@@ -215,11 +225,13 @@ export const worldPalette = {
     /** The Grotesque Spider's card, in the lab's toxic green. */
     spiderAccent: '#22c55e',
   },
-  /** The Starlight Tent: the hint over a stuck crawler, and the white-out of a failed act. */
+  /** The Starlight Tent: the hint over a stuck crawler, the white-out of a failed act and the dust in a lantern's pool. */
   starlightTent: {
     hint: '#ffe9a8',
     hintOutline: 'rgba(0,0,0,0.85)',
     burnoutFlash: '#ffe8c0',
+    /** The warm dust turning in a lantern's lit pool. */
+    spotlightMote: '#ffb02e',
   },
   /**
    * The Goblin High Security Prison: the glyph over a guard whose suspicion is
@@ -342,6 +354,42 @@ export const worldPalette = {
     /** The necromancer's lantern soul-blue, for his boss intro. */
     necromancerIntro: '#7dd3fc',
   },
+  /**
+   * Every ground warning in the game: the marking that says "this floor is
+   * about to hurt" or "this floor hurts now". It is always red, for every
+   * creature, trap and hazard, so a player who has learned one warning can
+   * read them all. A creature's own colour belongs on the attack's effect (its
+   * arcs, flames or bile), never on the warning. Drawn through the painters in
+   * `src/sprites/dangerTelegraph.ts`, which take no colour.
+   */
+  groundWarning: {
+    fill: '#ff1020',
+    stripe: '#ff0000',
+    outline: '#ff1020',
+    /** The pale core inside a locked outline, so it reads as lit rather than just thicker. */
+    lockedCore: '#ffe0d0',
+    /** The strike flash: a red wash under a white one, together reading as white-hot red. */
+    strikeRed: '#ff3020',
+    strikeWhite: '#fff4ee',
+    /** A dark under-stroke laid beneath a red line, so the line reads on any floor. */
+    deep: '#200000',
+  },
+  /**
+   * The Current Goblin's attack effects: the crackle of the wave his slam sends
+   * down the floor and the grenade itself. Electric blue and white; the ground
+   * warnings under them are `groundWarning`'s red like everyone else's.
+   */
+  electricGoblin: {
+    waveGlow: 'rgba(56, 189, 248, 0.45)',
+    waveCore: '#f0f9ff',
+    grenadeBody: '#1e293b',
+    grenadeGlow: '#bae6fd',
+    shadow: 'rgba(0, 0, 0, 0.35)',
+    /** The flash and arcs of a grenade going off where it lands. */
+    burstCore: '#ffffff',
+    burstGlow: '#7dd3fc',
+    burstArc: '#bae6fd',
+  },
   /** The stand-in dungeon the UI gallery lays its screens over: a dark fade, faint tile lines and one torch's warm pool. */
   galleryBackdrop: {
     top: '#1d2433',
@@ -351,6 +399,9 @@ export const worldPalette = {
     torchFade: 'rgba(255, 170, 70, 0)',
   },
 } as const;
+
+/** The one ink every ground warning is drawn in. See `worldPalette.groundWarning`. */
+export const GROUND_WARNING_INK = worldPalette.groundWarning;
 
 /** How a piece of world text is set. Every field is optional on a call; a style fills the gaps. */
 export interface WorldTextStyle {

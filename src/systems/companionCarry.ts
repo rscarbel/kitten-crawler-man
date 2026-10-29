@@ -2,6 +2,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
+import { ANY_TILE, type TileFilter } from '../map/findWalkableTile';
 import type { MobRoster } from './kits/SceneWorld';
 
 /**
@@ -17,10 +18,11 @@ export interface CarriedCompanion {
   /** The live creature, or null when this companion is not out. */
   readonly body: Mob | null;
   /**
-   * Where it should stand on `map` beside the crawler it follows, or null when
-   * there is nowhere it could stand and move.
+   * Where it should stand on `map` beside the crawler it follows, among the
+   * tiles `isAcceptable` admits, or null when there is nowhere it could stand
+   * and move.
    */
-  landingTile(map: GameMap): { x: number; y: number } | null;
+  landingTile(map: GameMap, isAcceptable: TileFilter): { x: number; y: number } | null;
   /**
    * Put it away from the roster it is in right now. Used when no landing tile
    * exists, because a creature placed on an unchecked tile can be walled in for
@@ -82,17 +84,20 @@ function releaseTargetsOn(body: Mob, mobs: readonly Mob[]): void {
  * its hit-test entry where it was, and every blow aimed at it misses.
  *
  * A companion with nowhere to stand is put away instead of placed blind.
+ * `isAcceptable` keeps every landing inside a region the caller owns, such as
+ * the rect a script gathers the party into.
  */
 export function carryCompanions(
   companions: readonly CarriedCompanion[],
   from: MobRoster,
   to: MobRoster,
   map: GameMap,
+  isAcceptable: TileFilter = ANY_TILE,
 ): void {
   for (const companion of companions) {
     const body = companion.body;
     if (body === null) continue;
-    const landing = companion.landingTile(map);
+    const landing = companion.landingTile(map, isAcceptable);
     if (landing === null) {
       companion.putAway(from.mobs, from.grid);
       continue;

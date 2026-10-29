@@ -4584,6 +4584,20 @@ const standsInHerWay = (style: ReaderStyle): boolean => style === 'tank' || styl
  */
 const TANK_BUDGET_SECONDS = 120;
 
+/**
+ * Where a web camper heads next on its way to `camp`: the next tile of a
+ * walkable route there. The reader's step only looks one step ahead, so
+ * aimed straight at a patch of web behind a bench it would stand against the
+ * bench all fight, out of her reach, where a player would walk round.
+ */
+function campWaypoint(lab: Lab, me: Vec, camp: Vec): Vec {
+  const myTile = { x: Math.floor(me.x / TILE_SIZE), y: Math.floor(me.y / TILE_SIZE) };
+  const labSpanTiles = labSite.bounds.w + labSite.bounds.h;
+  const route = lab.map.findPath(myTile.x, myTile.y, camp.x, camp.y, labSpanTiles);
+  const next = route[1] ?? camp;
+  return tileCentre(next.x, next.y);
+}
+
 function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): FightResult {
   const lab = buildLab({
     seed,
@@ -4669,7 +4683,7 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
             (a, b) => distance(tileCentre(a.x, a.y), her) - distance(tileCentre(b.x, b.y), her),
           ),
         );
-        if (camp !== undefined) goal = tileCentre(camp.x, camp.y);
+        if (camp !== undefined) goal = campWaypoint(lab, me, camp);
       }
       const threats = standsInHerWay(style) ? [] : visibleThreats(spider, me);
       if (standsInHerWay(style)) player.hp = player.maxHp;

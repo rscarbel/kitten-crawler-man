@@ -44,12 +44,11 @@ import {
 import {
   drawChargeCore,
   drawExplosion,
-  drawFillingDangerCircle,
   drawFireballFlight,
   drawFlamePatch,
-  drawLandingReticle,
   type FireballTrailPoint,
 } from '../sprites/art/fairyEffectsArt';
+import { drawFireBlastWarning, drawLandingReticle } from '../sprites/fairyTelegraphs';
 import { collectFairyPartyTargets } from './fairyPartyTargets';
 import { FairyImmunityFeedback } from './fairyImmunityFeedback';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -528,7 +527,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
       const progress = flame.age / DEATH_FLAME_FRAMES;
       const sx = flame.x - camX;
       const sy = flame.y - camY;
-      drawFillingDangerCircle(ctx, sx, sy, TILE_SIZE * DEATH_EXPLOSION_RADIUS_TILES, progress);
+      drawFireBlastWarning(ctx, sx, sy, TILE_SIZE * DEATH_EXPLOSION_RADIUS_TILES, progress);
       drawFlamePatch(
         ctx,
         sx,
@@ -543,7 +542,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
       const progress = charge.age / FIREBALL_FUSE_FRAMES;
       const sx = charge.x - camX;
       const sy = charge.y - camY;
-      drawFillingDangerCircle(ctx, sx, sy, blastPx, progress);
+      drawFireBlastWarning(ctx, sx, sy, blastPx, progress);
       drawChargeCore(ctx, sx, sy, TILE_SIZE, progress, this.frame, charge.seed);
     }
   }
@@ -562,7 +561,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     flightProgress: number,
   ): void {
     const blastPx = TILE_SIZE * FIREBALL_BLAST_RADIUS_TILES;
-    drawFillingDangerCircle(ctx, sx, sy, blastPx, flightProgress);
+    drawFireBlastWarning(ctx, sx, sy, blastPx, flightProgress);
     drawLandingReticle(
       ctx,
       sx,

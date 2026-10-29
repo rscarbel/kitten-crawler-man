@@ -14,8 +14,7 @@
  *   held back from the entity pass until the darkness has been drawn.
  * - Breaking a light puts it out; standing the prop up again relights it.
  * - The spider lab is never darkened by this pass.
- * - A boss room and the colosseum are never darkened, take at least one mood
- *   light each, and the spider lab takes none.
+ * - A boss room is never darkened, takes at least one mood light, and the spider lab takes none.
  * - A wall face takes light only from its open side, never from a light behind it.
  * - A crawler's light walked through a doorway never jumps between frames,
  *   and no frame, moving light or torch-lit, shows a hard line.
@@ -540,7 +539,7 @@ function checkSpiderLab(gameMap: GameMap, label: string): boolean {
 
 // ── Check: boss rooms ───────────────────────────────────────────────────────
 
-/** The tiles of every boss fight's ground: each boss room, and the colosseum's drum. */
+/** The tiles of every boss fight's ground: each boss room. */
 function bossFightRegions(
   gameMap: GameMap,
 ): Array<{ name: string; id: number; tiles: Array<{ x: number; y: number }> }> {
@@ -552,10 +551,6 @@ function bossFightRegions(
       for (let x = room.bounds.x; x < room.bounds.x + room.bounds.w; x++) tiles.push({ x, y });
     }
     regions.push({ name: `boss room ${room.id}`, id: room.id, tiles });
-  }
-  for (const hallway of gameMap.regionMap.hallways) {
-    if (!hallway.arena) continue;
-    regions.push({ name: `colosseum ${hallway.id}`, id: hallway.id, tiles: [...hallway.tiles] });
   }
   return regions;
 }

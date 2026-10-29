@@ -109,6 +109,8 @@ export function describeDamageSource(source: DamageSource | null): string {
       return 'their own siege engine';
     case 'wheelPenalty':
       return 'the Wheel of Fortune';
+    case 'scripted':
+      return humanize(source.death);
   }
 }
 

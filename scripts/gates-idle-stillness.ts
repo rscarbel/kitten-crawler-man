@@ -3,8 +3,8 @@
  * Idle stillness gates for every figure that stands on the human's breathing idle —
  * The human, the human townsfolk cast and named residents, Baggi, the city elf
  * cultists, the Demon Liaison — and for the Hawkfolk cast and the Earth Elemental hirelings that
- * stand beside them, and the goblins (all five archetypes and the plumber), whose
- * camps and bathroom queue stand about in groups.
+ * stand beside them, and the goblins (all five archetypes, the bombers, the plumber
+ * and the electric goblin), whose camps and bathroom queue stand about in groups.
  *
  *   I1  a standing figure does not sway: across its idle row, the head, the
  *       hips and the whole silhouette each travel sideways less than
@@ -73,6 +73,7 @@ import {
   GOBLIN_PLUMBER_FIGURE,
 } from '../src/sprites/art/goblinFigure.js';
 import { GOBLIN_BOMBER_FIGURES } from '../src/sprites/art/goblinBomberFigure.js';
+import { ELECTRIC_GOBLIN_FIGURE } from '../src/sprites/art/electricGoblinFigure.js';
 import { bathroomGoblinAnimator, type GoblinPassiveAnimator } from '../src/sprites/goblinSprite.js';
 import { hawkfolkCastLoopFrame } from '../src/sprites/hawkfolkCastSprite.js';
 
@@ -185,6 +186,7 @@ function idleSubjects(): IdleSubject[] {
     subjects.push({ label: `${def.id}.idle`, def, state: 'idle' });
   }
   subjects.push({ label: 'goblin_plumber.idle', def: GOBLIN_PLUMBER_FIGURE, state: 'idle' });
+  subjects.push({ label: 'electric_goblin.idle', def: ELECTRIC_GOBLIN_FIGURE, state: 'idle' });
   return subjects;
 }
 

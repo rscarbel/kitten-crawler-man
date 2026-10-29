@@ -1,7 +1,7 @@
 import type { SoundId } from '../audio/sounds';
 import type { AudioManager } from '../audio/AudioManager';
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
@@ -369,9 +369,9 @@ export class DaveGuideSystem {
     const margin = TILE_SIZE;
     return (
       worldX + margin >= camera.x &&
-      worldX - margin <= camera.x + viewportWidth() &&
+      worldX - margin <= camera.x + worldViewWidth() &&
       worldY + margin >= camera.y &&
-      worldY - margin <= camera.y + viewportHeight()
+      worldY - margin <= camera.y + worldViewHeight()
     );
   }
 

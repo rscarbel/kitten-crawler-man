@@ -1,14 +1,13 @@
 import { isRecord } from '../../core/util/guards';
 import {
-  parseColosseumDressingCheckpoint,
-  type ColosseumDressingCheckpoint,
-} from './colosseumDressingCheckpoint';
-import {
   parseTrashGremlinRoomCheckpoint,
   type TrashGremlinRoomCheckpoint,
 } from './trashGremlinRoomCheckpoint';
 import { parseGymRoomCheckpoint, type GymRoomCheckpoint } from './gymRoomCheckpoint';
-import { parseKrakarenRoomCheckpoint, type KrakarenRoomCheckpoint } from './krakarenRoomCheckpoint';
+import {
+  parseFloodedPumpRoomCheckpoint,
+  type FloodedPumpRoomCheckpoint,
+} from './floodedPumpRoom/floodedPumpRoomState';
 import {
   parseSpiderLabDressingCheckpoint,
   type SpiderLabDressingCheckpoint,
@@ -18,9 +17,8 @@ import {
 export interface BossRoomDressingCheckpoint {
   trashGremlin: TrashGremlinRoomCheckpoint | null;
   gym: GymRoomCheckpoint | null;
-  krakaren: KrakarenRoomCheckpoint | null;
+  floodedPumpRoom: FloodedPumpRoomCheckpoint | null;
   spiderLab: SpiderLabDressingCheckpoint | null;
-  colosseum: ColosseumDressingCheckpoint | null;
 }
 
 /**
@@ -32,20 +30,14 @@ export function parseBossRoomDressingCheckpoint(
 ): BossRoomDressingCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const trashGremlin = parseTrashGremlinRoomCheckpoint(value.trashGremlin);
-  const krakaren = parseKrakarenRoomCheckpoint(value.krakaren);
   const gym = value.gym === null ? null : parseGymRoomCheckpoint(value.gym);
+  const floodedPumpRoom =
+    value.floodedPumpRoom === null ? null : parseFloodedPumpRoomCheckpoint(value.floodedPumpRoom);
   const spiderLab =
     value.spiderLab === null ? null : parseSpiderLabDressingCheckpoint(value.spiderLab);
-  const colosseum =
-    value.colosseum === null ? null : parseColosseumDressingCheckpoint(value.colosseum);
-  if (
-    trashGremlin === undefined ||
-    gym === undefined ||
-    krakaren === undefined ||
-    spiderLab === undefined ||
-    colosseum === undefined
-  ) {
+  if (trashGremlin === undefined || gym === undefined || spiderLab === undefined) {
     return undefined;
   }
-  return { trashGremlin, gym, krakaren, spiderLab, colosseum };
+  if (floodedPumpRoom === undefined) return undefined;
+  return { trashGremlin, gym, floodedPumpRoom, spiderLab };
 }

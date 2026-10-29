@@ -33,6 +33,8 @@ import {
 } from '../src/audio/sounds';
 import {
   BUS_TARGET_LUFS,
+  FEATURED_SFX_TARGET_LUFS,
+  FEATURED_TRUE_PEAK_CEILING_DBTP,
   MAX_TRIM_DB,
   SFX_FAMILIES,
   SFX_FAMILY_TARGET_LUFS,
@@ -138,7 +140,11 @@ function busOf(id: SoundId, path: string): LoudnessBus {
   return 'sfx';
 }
 
+const featuredTargets: Partial<Record<SoundId, number>> = FEATURED_SFX_TARGET_LUFS;
+
 function targetLufsOf(id: SoundId, path: string, bus: LoudnessBus): number {
+  const featured = featuredTargets[id];
+  if (bus === 'sfx' && featured !== undefined) return featured;
   if (bus !== 'sfx') return BUS_TARGET_LUFS[bus];
   return familyTargets[sfxFamilyOf(id, path)] ?? BUS_TARGET_LUFS.sfx;
 }
@@ -248,7 +254,11 @@ function entryFor(id: SoundId, path: string, measurement: Measurement): Measured
   if (cappedTrim !== desiredTrim) {
     reexportReasons.push(`capped ${roundDb(desiredTrim)} → ${cappedTrim} dB`);
   }
-  const peakHeadroomTrim = TRIMMED_TRUE_PEAK_CEILING_DBTP - measurement.truePeakDbtp;
+  const peakCeiling =
+    featuredTargets[id] === undefined
+      ? TRIMMED_TRUE_PEAK_CEILING_DBTP
+      : FEATURED_TRUE_PEAK_CEILING_DBTP;
+  const peakHeadroomTrim = peakCeiling - measurement.truePeakDbtp;
   const peakClamped = cappedTrim > peakHeadroomTrim;
   const trim = peakClamped ? peakHeadroomTrim : cappedTrim;
   if (cappedTrim - trim >= REEXPORT_CLAMP_SHORTFALL_DB) {

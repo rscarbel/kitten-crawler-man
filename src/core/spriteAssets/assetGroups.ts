@@ -23,9 +23,9 @@ export type AssetGroup =
   | 'floor2_tileset'
   | 'boss_trash_gremlin'
   | 'boss_big_rooster'
-  | 'boss_krakaren'
-  | 'boss_grotesque_spider'
-  | 'boss_colosseum';
+  | 'boss_power_lab'
+  | 'boss_flooded_pump_room'
+  | 'boss_grotesque_spider';
 
 /**
  * Every creature/effect/environment sheet a group covers.
@@ -312,24 +312,20 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'gym_chalk_puff',
     'gym_mirror_crack',
     'gym_pickups',
+    'gym_kettlebell_rack',
+    'gym_kettlebell',
+    'gym_exercise_ball',
   ],
-  boss_krakaren: [
-    'krakaren_vat',
-    'krakaren_console',
-    'krakaren_junction',
-    'krakaren_fx',
-    'krakaren_wash',
-    'krakaren_splash',
-    'krakaren_seal',
-  ],
-  boss_colosseum: [
-    'colosseum_portcullis',
-    'colosseum_cage',
-    'colosseum_cheer',
-    'colosseum_banner',
-    'colosseum_mud_splatter',
-    // The gym kit lying in the ring, borrowed from the gym's own sheet.
-    'gym_pickups',
+  boss_power_lab: ['power_lab_vat', 'power_lab_console', 'power_lab_fx', 'power_lab_wash'],
+  boss_flooded_pump_room: [
+    'flooded_pump_raft',
+    'flooded_pump_pump',
+    'flooded_pump_valve',
+    'flooded_pump_chute',
+    'flooded_pump_dead_shark',
+    'flooded_pump_barrel',
+    'flooded_pump_barrel_stack',
+    'flooded_pump_drain',
   ],
 };
 
@@ -359,8 +355,8 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   slightly_bent_rooster: [],
   troglodyte: [],
   tuskling: [],
-  ball_of_swine: [],
-  krakaren_clone: [],
+  kraken: [],
+  electric_goblin: [],
   brindle_grub: [],
   bugaboo: [],
   grotesque_spider: [],
@@ -398,7 +394,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   miss_quill: [],
   remex: [],
   /** Boss adds and set-piece hostiles, all procedural or painted. */
-  krakaren_tentacle: [],
+  kraken_tentacle: [],
   spider_hatchling: [],
   spider_egg: [],
   tutorial_goblin: [],

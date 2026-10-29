@@ -3,7 +3,6 @@ import {
   parseBossRoomDressingCheckpoint,
   type BossRoomDressingCheckpoint,
 } from '../../systems/bossRooms/bossRoomDressingCheckpoint';
-import type { ArenaCheckpoint } from '../../systems/ArenaSystem';
 import type {
   ChestLockProgress,
   TreasureChestProgressSnapshot,
@@ -71,7 +70,6 @@ import {
  */
 export interface PersistedWorldState {
   bossRoom: BossRoomCheckpoint;
-  arena: PersistedArenaCheckpoint;
   treasureChests: PersistedTreasureChestCheckpoint;
   defendQuest: PersistedDefendQuestCheckpoint;
   spiderQuest: PersistedSpiderQuestCheckpoint;
@@ -106,12 +104,10 @@ export interface PersistedWorldState {
   /** The stealth gate's key quest and whether the prison's explainer was seen. */
   stealthKeySnatch: StealthKeySnatchCheckpoint;
 
-  krakarenKilled: boolean;
+  krakenKilled: boolean;
   bigRoosterKilled: boolean;
   bigRoosterBossRoomIdx: number;
 }
-
-export type PersistedArenaCheckpoint = Omit<ArenaCheckpoint, 'arenaLiveTusklings'>;
 
 /** One chest's state, keyed by its tile rather than by the chest object. */
 export type PersistedTreasureChestEntry = Omit<TreasureChestProgressSnapshot, 'chest'> & {
@@ -311,36 +307,6 @@ function parseBossRoomCheckpoint(value: unknown): BossRoomCheckpoint | undefined
     catIsInsider,
     unenteredRegenDelay,
     regenNoticeGiven,
-  };
-}
-
-function parsePersistedArenaCheckpoint(value: unknown): PersistedArenaCheckpoint | undefined {
-  if (!isRecord(value)) return undefined;
-  const {
-    arenaLocked,
-    arenaPhase2Active,
-    arenaStairwellUnlocked,
-    entryWindowTimer,
-    humanIsInsider,
-    catIsInsider,
-  } = value;
-  if (
-    !isBoolean(arenaLocked) ||
-    !isBoolean(arenaPhase2Active) ||
-    !isBoolean(arenaStairwellUnlocked) ||
-    !isNumber(entryWindowTimer) ||
-    !isBoolean(humanIsInsider) ||
-    !isBoolean(catIsInsider)
-  ) {
-    return undefined;
-  }
-  return {
-    arenaLocked,
-    arenaPhase2Active,
-    arenaStairwellUnlocked,
-    entryWindowTimer,
-    humanIsInsider,
-    catIsInsider,
   };
 }
 
@@ -1126,7 +1092,6 @@ function parseBountyProgressCheckpoint(value: unknown): BountyProgressCheckpoint
 export function parsePersistedWorldState(value: unknown): PersistedWorldState | undefined {
   if (!isRecord(value)) return undefined;
   const bossRoom = parseBossRoomCheckpoint(value.bossRoom);
-  const arena = parsePersistedArenaCheckpoint(value.arena);
   const treasureChests = parsePersistedTreasureChestCheckpoint(value.treasureChests);
   const defendQuest = parsePersistedDefendQuestCheckpoint(value.defendQuest);
   const spiderQuest = parsePersistedSpiderQuestCheckpoint(value.spiderQuest);
@@ -1149,11 +1114,10 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const briarHollow = parseBriarHollowStateSnapshot(value.briarHollow);
   const cloggedBathroom = parseCloggedBathroomCheckpoint(value.cloggedBathroom);
   const stealthKeySnatch = parseStealthKeySnatchCheckpoint(value.stealthKeySnatch);
-  const { krakarenKilled, bigRoosterKilled, bigRoosterBossRoomIdx } = value;
+  const { krakenKilled, bigRoosterKilled, bigRoosterBossRoomIdx } = value;
 
   if (
     bossRoom === undefined ||
-    arena === undefined ||
     treasureChests === undefined ||
     defendQuest === undefined ||
     spiderQuest === undefined ||
@@ -1176,7 +1140,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     briarHollow === undefined ||
     cloggedBathroom === undefined ||
     stealthKeySnatch === undefined ||
-    !isBoolean(krakarenKilled) ||
+    !isBoolean(krakenKilled) ||
     !isBoolean(bigRoosterKilled) ||
     !isNumber(bigRoosterBossRoomIdx)
   ) {
@@ -1185,7 +1149,6 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
 
   return {
     bossRoom,
-    arena,
     treasureChests,
     defendQuest,
     spiderQuest,
@@ -1208,7 +1171,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     briarHollow,
     cloggedBathroom,
     stealthKeySnatch,
-    krakarenKilled,
+    krakenKilled,
     bigRoosterKilled,
     bigRoosterBossRoomIdx,
   };

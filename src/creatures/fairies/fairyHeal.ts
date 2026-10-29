@@ -14,9 +14,9 @@ const HEAL_BAR_SHOW_FRAMES = 90;
 /**
  * Restores up to `amount` HP to `target`, never past its `fairyHealCeiling`.
  * A dead target, or one refusing damage (a boss between phases), gets nothing.
- * Nor does one already at zero HP: a body playing out its death (the Ball of
- * Swine bursting) still counts as alive, and a heal then would leave it
- * standing past the death it had already begun.
+ * Nor does one already at zero HP: a body playing out its death may still
+ * count as alive, and a heal then would leave it standing past the death it
+ * had already begun.
  * Returns the HP actually restored.
  */
 export function applyFairyHeal(target: Mob, amount: number): number {

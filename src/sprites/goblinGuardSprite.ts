@@ -109,8 +109,8 @@ export function prewarmPrisonGoblins(): void {
 const EYE_SPACING_TILES = 0.08;
 const TILE_CENTRE = 0.5;
 
-/** A profile-only figure's eye placement from where its rig paints the eyes. */
-function profileEyes(anchor: TileAnchor): EyePlacement {
+/** A profile-only goblin figure's eye placement from where its rig paints the eyes. */
+export function profileEyes(anchor: TileAnchor): EyePlacement {
   const forward = anchor.x - TILE_CENTRE;
   return {
     sideForward: forward,

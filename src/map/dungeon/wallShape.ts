@@ -24,7 +24,6 @@
  */
 
 import {
-  ARENA_CAGE,
   CRAWLER_SIGN,
   FloorTypeValue,
   METAL_WALL,
@@ -35,16 +34,11 @@ import {
 /**
  * Tile types that are solid structure rather than something standing on a floor.
  *
- * The colosseum's metal ring is here so the rock around it is mass, not a face
- * looking at a wall; everything else that is not a wall — floors, props, doorways,
+ * Riveted steel is here so the rock around it is mass, not a face looking at a
+ * wall; everything else that is not a wall — floors, props, doorways,
  * stairwells — is somewhere the player can see into, and so is open.
  */
-const CLOSED_TYPES: ReadonlySet<number> = new Set([
-  FloorTypeValue.wall,
-  VOID_TYPE,
-  METAL_WALL,
-  ARENA_CAGE,
-]);
+const CLOSED_TYPES: ReadonlySet<number> = new Set([FloorTypeValue.wall, VOID_TYPE, METAL_WALL]);
 
 function typeAt(structure: TileContent[][], tx: number, ty: number): number | undefined {
   return structure[ty]?.[tx]?.type;
@@ -161,7 +155,7 @@ export function isDungeonWallMap(structure: TileContent[][]): boolean {
 
 /**
  * {@link classifyWallTile} against a map's own tiles. A face whose tile above is
- * solid but not drawn as wall — the colosseum's ring, the edge of the map — has no
+ * solid but not drawn as wall — riveted steel, the edge of the map — has no
  * upper tile to carry its top, so it is squeezed into its own tile, cap and all.
  */
 export function wallShapeAt(structure: TileContent[][], tx: number, ty: number): WallShape {

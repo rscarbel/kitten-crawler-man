@@ -10,7 +10,7 @@ import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { clamp } from '../utils';
 
 const TILE_CENTER_OFFSET = 0.5;
@@ -787,9 +787,9 @@ export class StairwellSystem implements GameSystem {
       const sy = y * ts - camY;
       if (
         sx < -bw * STAIRWELL_OFFSCREEN_MARGIN ||
-        sx > viewportWidth() ||
+        sx > worldViewWidth() ||
         sy < -bh * STAIRWELL_OFFSCREEN_MARGIN ||
-        sy > viewportHeight()
+        sy > worldViewHeight()
       )
         continue;
 
@@ -833,8 +833,8 @@ export class StairwellSystem implements GameSystem {
    * the screen at all, so its margin has to cover the full mote spread.
    */
   private renderDraftMotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
     for (const pool of this.draftPools.values()) {
       const centerScreenX = pool.centerX - camX;
       const centerScreenY = pool.centerY - camY;
@@ -883,8 +883,8 @@ export class StairwellSystem implements GameSystem {
    * learned what the dust means reads them without being told anything.
    */
   private renderWayfinderMotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
     for (const mote of this.wayfinderMotes) {
       const screenX = mote.x - camX;
       const screenY = mote.y - camY;

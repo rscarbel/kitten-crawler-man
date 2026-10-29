@@ -34,7 +34,8 @@ import {
   drawPrisonKey,
   prisonKeyPulse,
 } from '../../sprites/art/prisonKeyArt';
-import { drawQuestBeacon, setQuestBeaconViewer } from '../../sprites/questBeacon';
+import { setQuestBeaconViewer } from '../../sprites/questBeacon';
+import { drawObjectiveMark, type ObjectiveMarkPlacement } from '../../sprites/objectiveMark';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { heldPrizeBandEntry } from '../../ui/hud/heldPrizeEntry';
 import { objectiveBandEntry } from '../../ui/hud/objectiveLine';
@@ -49,9 +50,9 @@ import {
   prisonExplainerSurface,
   type PrisonExplainerModel,
 } from '../../ui/screens/dialogs/prisonExplainer';
-import { worldPalette } from '../../ui/theme/worldInk';
+import { worldPalette, type WorldTextStyleId } from '../../ui/theme/worldInk';
 import { drawArrowAbovePlayer, ARROW_PRIORITY, type ArrowCandidate } from '../../ui/WorldArrow';
-import { worldText } from '../../ui/world/worldText';
+import { worldLineHeight, worldText } from '../../ui/world/worldText';
 import type { TownPropRenderable } from '../townPropRenderable';
 import { playPrisonCue } from './prisonSoundCues';
 import {
@@ -92,6 +93,7 @@ const CELEBRATION_SURFACE_ID = 'prison-key-celebration';
 const TOAST_TAKE_OUT = 'Take the key to the gate guard.';
 const TOAST_KEY_RETURNED = 'The key went back to its pedestal in the prison vault.';
 const LABEL_TEXT = 'THE KEY';
+const LABEL_STYLE = 'prizeLabel' as const satisfies WorldTextStyleId;
 const OBJECTIVE_BAND_ID = 'prison-objective';
 
 /** A light the prison's darkness should cut a pool for, in world pixels. */
@@ -330,24 +332,37 @@ export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationMo
     camY: number,
     tileSize: number,
   ): void {
-    const lit = this.keyOnPedestal;
-    if (lit) {
-      drawQuestBeacon(
-        ctx,
-        this.pedestal.x * tileSize - camX,
-        this.pedestal.y * tileSize - camY,
-        tileSize,
-        camX,
-        camY,
-        this.seconds * MS_PER_SECOND,
-        worldPalette.objective.ready,
-      );
-    }
     const base = this.pedestalBase();
-    drawKeyPedestal(ctx, base.x - camX, base.y - camY, lit, tileSize);
-    if (!lit) return;
+    const paintPedestal = (lit: boolean): void =>
+      drawKeyPedestal(ctx, base.x - camX, base.y - camY, lit, tileSize);
+    if (!this.keyOnPedestal) {
+      paintPedestal(false);
+      return;
+    }
     const centre = this.keyCentre();
-    drawPrisonKey(ctx, centre.x - camX, centre.y - camY, this.seconds, tileSize);
+    const placement: ObjectiveMarkPlacement = {
+      tileLeft: this.pedestal.x * tileSize - camX,
+      tileTop: this.pedestal.y * tileSize - camY,
+      tileSize,
+      camX,
+      camY,
+      artTop: this.labelTop() - camY,
+      timeMs: this.seconds * MS_PER_SECOND,
+    };
+    drawObjectiveMark(ctx, placement, () => {
+      paintPedestal(true);
+      drawPrisonKey(ctx, centre.x - camX, centre.y - camY, this.seconds, tileSize);
+    });
+  }
+
+  /** The world y of the middle of the "THE KEY" caption. */
+  private labelCentreY(): number {
+    return this.keyCentre().y - LABEL_ABOVE_KEY_TILES * TILE_SIZE;
+  }
+
+  /** The world y of the top of the "THE KEY" caption, which the objective mark's `!` clears. */
+  private labelTop(): number {
+    return this.labelCentreY() - worldLineHeight({ style: LABEL_STYLE }) / 2;
   }
 
   /**
@@ -373,8 +388,8 @@ export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationMo
     const centre = this.keyCentre();
     worldText(ctx, LABEL_TEXT, {
       x: centre.x - camX,
-      y: centre.y - camY - LABEL_ABOVE_KEY_TILES * TILE_SIZE,
-      style: 'prizeLabel',
+      y: this.labelCentreY() - camY,
+      style: LABEL_STYLE,
       align: 'center',
       baseline: 'middle',
     });

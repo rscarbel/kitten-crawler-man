@@ -13,6 +13,8 @@
  * prop and its owner from the colours alone at a 32-pixel tile.
  */
 
+import { worldPalette } from '../ui/theme/worldInk';
+import { withAlpha } from '../ui/theme/color';
 import { worldPlate } from '../ui/world/worldShapes';
 import { measureWorldText, worldText } from '../ui/world/worldText';
 import { crawlerDisplayName } from '../characters/characters';
@@ -862,29 +864,6 @@ function paintFlameEmbers(
 
 // ── Spotlights ────────────────────────────────────────────────────────────────
 
-/**
- * The two states of the menagerie's lanterns have to be told apart in one
- * glance, because getting them the wrong way round is a death.
- *
- * They are separated on three axes at once rather than on brightness alone:
- * the warning is amber and the strike is white-hot, the warning is a ring round
- * a nearly-empty pool and the strike is a filled disc, and the warning's edge
- * closes inward while the strike's edge is fixed. Any one of the three read on
- * its own is enough to name the state.
- */
-const SPOT_WARM_INK: Ink = { r: 255, g: 176, b: 46 };
-const SPOT_WARM_OUTER_RADIUS = 0.68;
-const SPOT_WARM_CLOSE = 0.22;
-const SPOT_WARM_FILL_ALPHA = 0.34;
-/** The pool is already a warning on its first frame, so it never starts from nothing. */
-const SPOT_WARM_FILL_FLOOR = 0.55;
-const SPOT_WARM_RING_ALPHA = 0.95;
-const SPOT_WARM_RING_WIDTH = 0.1;
-/** Where the closing ring will finally land, marked from the first frame. */
-const SPOT_WARM_LANDING_RADIUS = 0.46;
-const SPOT_WARM_LANDING_ALPHA = 0.45;
-const SPOT_WARM_LANDING_WIDTH = 0.04;
-
 const SPOT_BEAM_RADIUS = 0.5;
 const SPOT_BEAM_CORE_ALPHA = 0.72;
 const SPOT_BEAM_BLOOM_RINGS = 3;
@@ -901,39 +880,12 @@ const SPOT_DOCK_RADIUS = 0.46;
 const SPOT_DOCK_FILL_ALPHA = 0.22;
 const SPOT_DOCK_ARC_WIDTH = 0.07;
 
-/** The warning pool: an amber ring closing on the tile the lamps are about to find. */
-export function drawSpotlightWarm(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  progress: number,
-): void {
-  const closing = Math.max(0, Math.min(1, progress));
-  ctx.save();
-  const centreX = x + size / 2;
-  const centreY = y + size / 2;
-
-  ctx.fillStyle = inkRgba(
-    SPOT_WARM_INK,
-    SPOT_WARM_FILL_ALPHA * (SPOT_WARM_FILL_FLOOR + (1 - SPOT_WARM_FILL_FLOOR) * closing),
-  );
-  ctx.beginPath();
-  ctx.arc(centreX, centreY, size * SPOT_WARM_LANDING_RADIUS, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = inkRgba(SPOT_WARM_INK, SPOT_WARM_LANDING_ALPHA);
-  ctx.lineWidth = Math.max(1, size * SPOT_WARM_LANDING_WIDTH);
-  ctx.stroke();
-
-  ctx.strokeStyle = inkRgba(SPOT_WARM_INK, SPOT_WARM_RING_ALPHA);
-  ctx.lineWidth = Math.max(2, size * SPOT_WARM_RING_WIDTH);
-  ctx.beginPath();
-  ctx.arc(centreX, centreY, size * (SPOT_WARM_OUTER_RADIUS - SPOT_WARM_CLOSE * closing), 0, TAU);
-  ctx.stroke();
-  ctx.restore();
-}
-
-/** The lamps themselves, on the floor: a hard white pool with dust turning in it. */
+/**
+ * The lamps themselves, on the floor: a hard white pool with dust turning in
+ * it. The warning before it is the red ground warning
+ * (`starlightTentTelegraphs.ts`); white-hot and filled, the strike never reads
+ * like it, because getting the two the wrong way round is a death.
+ */
 export function drawSpotlightBeam(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -964,7 +916,7 @@ export function drawSpotlightBeam(
   ctx.lineWidth = Math.max(2, size * SPOT_BEAM_RIM_WIDTH);
   ctx.stroke();
 
-  ctx.fillStyle = inkRgba(SPOT_WARM_INK, SPOT_MOTE_ALPHA * strength);
+  ctx.fillStyle = withAlpha(worldPalette.starlightTent.spotlightMote, SPOT_MOTE_ALPHA * strength);
   for (let mote = 0; mote < SPOT_MOTE_COUNT; mote++) {
     const angle = phase * SPOT_MOTE_SPEED + (TAU / SPOT_MOTE_COUNT) * mote;
     const reach = radius * (0.3 + 0.55 * hashUnit(mote, mote));
@@ -990,7 +942,7 @@ const SPOT_CLEAR_BREATH = 0.12;
 /**
  * The mark on a stretch of boards whose lanterns a bell has called away.
  *
- * Deliberately cool green rather than the warning's amber, and a *shrinking*
+ * Deliberately cool green rather than the warning's red, and a *shrinking*
  * ring rather than a closing one. Drawing the warning's own outline at zero
  * progress was tried first and read as "about to light" — playtesters would not
  * step onto ground they had just paid to clear, because it was still painted

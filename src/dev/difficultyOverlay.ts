@@ -63,7 +63,7 @@ const HUNT_FLOOR_LABELS: Record<number, string> = {
 const SEGMENT_LABELS: Record<DifficultySegment, string> = {
   'floor1-pre-gremlin': 'f1 pre-gremlin',
   'floor1-post-gremlin': 'f1 post-gremlin',
-  'floor1-post-rooster': 'f1 post-rooster',
+  'floor1-post-kraken': 'f1 post-kraken',
   floor2: 'floor 2',
   floor3: 'floor 3',
 };

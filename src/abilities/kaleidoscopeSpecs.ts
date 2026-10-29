@@ -353,7 +353,7 @@ export class KaleidoscopeCopies {
     let best: Mob | null = null;
     let bestDistSq = KALEIDOSCOPE_SEEK_RADIUS_PX * KALEIDOSCOPE_SEEK_RADIUS_PX;
     for (const mob of candidates) {
-      if (!mob.isAlive || !mob.isHostile || !mob.takesPlayerDamage('missile')) continue;
+      if (!mob.isHostileTarget || !mob.takesPlayerDamage('missile')) continue;
       const mobX = mob.x + HALF_TILE;
       const mobY = mob.y + HALF_TILE;
       const dx = mobX - x;

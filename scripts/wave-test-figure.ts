@@ -52,8 +52,8 @@ const PERCENT = 100;
  * Frames between the spawn being scheduled and the bodies appearing.
  *
  * Two thirds of a second at 60 Hz, which is less lead than any of the Tuskling's
- * own spawn sites give: the Ball of Swine's death burst is longer than this, and
- * a floor's spawner runs a whole level generation ahead of the first render. A
+ * own spawn sites give: a floor's spawner runs a whole level generation ahead
+ * of the first render. A
  * shorter default is the harder test.
  */
 const DEFAULT_LEAD_FRAMES = 40;

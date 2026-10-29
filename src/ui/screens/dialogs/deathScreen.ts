@@ -1,6 +1,7 @@
 /**
  * The death screen: the world darkens, then "YOU DIED", where the party
- * will wake, what killed them, and the one button that wakes them.
+ * will wake, a hint for the deaths that have one, what killed them, and the
+ * one button that wakes them.
  *
  * The darkening runs on {@link DeathScreen}'s own fade, one step per render
  * frame. The text fades in only once the backdrop is dark enough to hold it,
@@ -26,6 +27,7 @@ import {
   type PanelOptions,
 } from '../../widgets/panel';
 import { measureTextHeight, text } from '../../widgets/text';
+import type { TextRole } from '../../theme/skins';
 import { drawBackdrop, fitPanelBody, glowText, headlineStyle } from './endScreenParts';
 
 const HEADLINE = 'YOU DIED';
@@ -40,6 +42,7 @@ const RESPAWN_SUBTITLE: Readonly<Record<RespawnMode, string>> = {
   checkpoint: 'Respawning where you last saved — the floor rewinds to how you left it.',
 };
 
+const HINT_ROLE = 'accent' as const satisfies TextRole;
 const HEADLINE_GLOW_ALPHA = 0.55;
 const VIGNETTE_ALPHA = 0.28;
 /** Where the red vignette starts to show, as a fraction of the screen's half-diagonal. */
@@ -60,10 +63,14 @@ interface DeathLayout {
 function layout(ui: Ui, model: DeathScreen, width: number): DeathLayout {
   const headline = headlineStyle(ui, HEADLINE, width).lineHeight;
   const explanation = model.explanation;
+  const hint = model.hint;
   const tracks = [
     headline,
     measureTextHeight(ui, width, { text: RESPAWN_SUBTITLE[model.respawnMode], role: 'muted' }),
   ];
+  if (hint !== null) {
+    tracks.push(measureTextHeight(ui, width, { text: hint, role: HINT_ROLE }));
+  }
   if (explanation.length > 0) {
     tracks.push(measureTextHeight(ui, width, { text: explanation, role: 'body' }));
   }
@@ -157,6 +164,10 @@ function render(
         align: 'center',
         wrap: true,
       });
+      const hint = model.hint;
+      if (hint !== null) {
+        text(ui, next(), { text: hint, role: HINT_ROLE, align: 'center', wrap: true });
+      }
       if (model.explanation.length > 0) {
         text(ui, next(), { text: model.explanation, role: 'body', align: 'center', wrap: true });
       }

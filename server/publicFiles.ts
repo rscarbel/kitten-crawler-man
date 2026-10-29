@@ -24,7 +24,7 @@ const PUBLIC_FILES: ReadonlySet<string> = new Set([
 
 /** Asset directories, each served only for the asset extensions below. */
 const PUBLIC_ASSET_DIRS = ['/src/images/', '/src/audio/', '/src/fonts/'] as const;
-const PUBLIC_ASSET_EXTENSION = /\.(png|jpe?g|ico|mp3|woff2|ttf|json|txt)$/;
+const PUBLIC_ASSET_EXTENSION = /\.(png|jpe?g|ico|mp3|ogg|woff2|ttf|json|txt)$/;
 
 function decodedPath(raw: string): string | null {
   try {

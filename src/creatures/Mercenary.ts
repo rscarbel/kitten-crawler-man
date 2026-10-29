@@ -398,11 +398,20 @@ export class Mercenary extends Mob {
 
   /** Back on its feet with the revive's sliver of health, drawn in its idle. */
   getUp(): void {
+    this.standUp();
+    this.bark('revived');
+  }
+
+  /** {@link getUp} without a word, for a script that moves the party where nobody is watching. */
+  getUpQuietly(): void {
+    this.standUp();
+  }
+
+  private standUp(): void {
     this.hp = this.survival.getUp(this.maxHp);
     this.isKnockedOut = false;
     this.reviveProgress = 0;
     this.damageFlash = 0;
-    this.bark('revived');
   }
 
   /**
@@ -638,7 +647,17 @@ export class Mercenary extends Mob {
     );
   }
 
+  /**
+   * Set while its system walks it along the party's trail: it neither picks a
+   * fight nor walks itself anywhere, and stands where the trail puts it.
+   */
+  walksTrail = false;
+
   private think(): void {
+    if (this.walksTrail) {
+      this.engaged = null;
+      return;
+    }
     const ctx = this.kitContext;
     this.reactToWounds();
     this.checkLowHp();
@@ -865,7 +884,7 @@ export class Mercenary extends Mob {
     let heldOffInRange = false;
     this.holdOffs.beginScan();
     for (const mob of this.allMobs) {
-      if (mob === this || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === this || !mob.isHostileTarget) continue;
       // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
       if (mob.offLimitsToAllies) continue;
       if (ownerInsideWalls && this.map?.isInsideTownWall(mob.x, mob.y) !== true) continue;
@@ -940,7 +959,7 @@ export class Mercenary extends Mob {
     let best: Mob | null = null;
     let bestScore = Infinity;
     for (const mob of this.allMobs) {
-      if (mob === this || !mob.isAlive || !mob.isHostile) continue;
+      if (mob === this || !mob.isHostileTarget) continue;
       // Held out of its fight by a script, it wounded nobody and is nobody's to answer.
       if (mob.offLimitsToAllies) continue;
       const d = Math.hypot(mob.x - friend.x, mob.y - friend.y);

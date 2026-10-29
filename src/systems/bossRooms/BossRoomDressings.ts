@@ -1,34 +1,38 @@
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
+import type { GauntletBossType } from '../../map/bossRoomSizes';
 import type { GameMap } from '../../map/GameMap';
 import type { SystemContext } from '../GameSystem';
 import type { GroundHazardSource } from '../GroundHazardSource';
 import { GymRoomSystem } from '../GymRoomSystem';
-import type {
-  BossRoomDressing,
-  BossRoomFightListener,
-  DressingRenderable,
+import {
+  SEAL_ON_ENTRY,
+  type BossRoomDressing,
+  type BossRoomFightListener,
+  type BossRoomSealRule,
+  type DressingRenderable,
 } from './BossRoomDressing';
 import type { BossRoomDressingCheckpoint } from './bossRoomDressingCheckpoint';
-import { ColosseumDressingSystem } from './ColosseumDressingSystem';
 import { TrashGremlinRoomSystem } from './TrashGremlinRoomSystem';
-import { KrakarenRoomSystem } from './KrakarenRoomSystem';
-import { buildKrakarenLabLayout } from './krakarenLabLayout';
+import { PowerLabRoomSystem } from './PowerLabRoomSystem';
+import { buildPowerLabLayout } from './powerLabLayout';
 import { gymLayoutOf } from '../../map/tiles/bossRooms/gymLayout';
 import {
-  colosseumFloodLamps,
   gymStripLights,
   trashGremlinBulb,
-  krakarenMoodLights,
+  powerLabMoodLights,
+  floodedPumpRoomMoodLights,
   type BossRoomMoodLight,
   type MoodLightSink,
 } from './bossRoomMoodLights';
 import type { SpiderLabDressing } from './SpiderLabDressing';
-import { BIG_ROOSTER_BOSS_TYPE } from '../../core/mobs/bossTypes';
-
-/** The boss-type ids from `levelDef.bossRooms[].type` that own a rectangular boss room. */
-export const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';
-export const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
+import {
+  BIG_ROOSTER_BOSS_TYPE,
+  ELECTRIC_GOBLIN_BOSS_TYPE,
+  KRAKEN_BOSS_TYPE,
+  TRASH_GREMLIN_BOSS_TYPE,
+} from '../../core/mobs/bossTypes';
+import { FloodedPumpRoomSystem, type FloodedPumpRoomStage } from './FloodedPumpRoomSystem';
 
 /**
  * Every room dressing on a floor, each null where the floor has no such room.
@@ -39,17 +43,16 @@ export const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
 export interface BossRoomDressingParts {
   trashGremlin: TrashGremlinRoomSystem | null;
   gym: GymRoomSystem | null;
-  krakaren: KrakarenRoomSystem | null;
+  powerLab: PowerLabRoomSystem | null;
+  floodedPumpRoom: FloodedPumpRoomSystem | null;
   spiderLab: SpiderLabDressing | null;
-  colosseum: ColosseumDressingSystem | null;
 }
 
 /** Which bosses are already dead, for {@link BossRoomDressings.replayDefeats}. */
 export interface BossRoomDefeats {
   /** Gauntlet boss types whose rooms are won, as `BossRoomSystem.defeatedBossTypes` reports them. */
-  gauntletBossTypes: ReadonlySet<string>;
+  gauntletBossTypes: ReadonlySet<GauntletBossType>;
   spiderLab: boolean;
-  colosseum: boolean;
 }
 
 /**
@@ -60,9 +63,14 @@ export interface BossRoomDefeats {
  */
 export function buildGauntletRoomDressings(
   gameMap: GameMap,
-  bossTypes: readonly string[],
-): Pick<BossRoomDressingParts, 'trashGremlin' | 'krakaren'> & { gym: GymRoomSystem } {
-  const boundsOf = (bossType: string): GameMap['bossRooms'][number]['bounds'] | undefined => {
+  bossTypes: readonly GauntletBossType[],
+  floodedRoomStage: FloodedPumpRoomStage | null = null,
+): Pick<BossRoomDressingParts, 'trashGremlin' | 'powerLab' | 'floodedPumpRoom'> & {
+  gym: GymRoomSystem;
+} {
+  const boundsOf = (
+    bossType: GauntletBossType,
+  ): GameMap['bossRooms'][number]['bounds'] | undefined => {
     const index = bossTypes.indexOf(bossType);
     const roomExists = index >= 0 && index < gameMap.bossRooms.length;
     return roomExists ? gameMap.bossRooms[index].bounds : undefined;
@@ -70,7 +78,8 @@ export function buildGauntletRoomDressings(
   const trashGremlinBounds = boundsOf(TRASH_GREMLIN_BOSS_TYPE);
   const gymIndex = bossTypes.indexOf(BIG_ROOSTER_BOSS_TYPE);
   const gymRoomExists = gymIndex >= 0 && gymIndex < gameMap.bossRooms.length;
-  const krakarenBounds = boundsOf(KRAKAREN_BOSS_TYPE);
+  const powerLabBounds = boundsOf(ELECTRIC_GOBLIN_BOSS_TYPE);
+  const floodedPumpRoomBounds = boundsOf(KRAKEN_BOSS_TYPE);
   return {
     trashGremlin:
       trashGremlinBounds === undefined
@@ -79,21 +88,16 @@ export function buildGauntletRoomDressings(
     // Built even on a floor with no gym: it stands inert without bounds, and the
     // scene reads its camera shake every frame.
     gym: new GymRoomSystem(gymRoomExists ? gameMap : null, gymIndex),
-    krakaren: krakarenBounds === undefined ? null : new KrakarenRoomSystem(gameMap, krakarenBounds),
+    powerLab: powerLabBounds === undefined ? null : new PowerLabRoomSystem(gameMap, powerLabBounds),
+    floodedPumpRoom:
+      floodedPumpRoomBounds === undefined
+        ? null
+        : new FloodedPumpRoomSystem(gameMap, floodedPumpRoomBounds, floodedRoomStage),
   };
 }
 
 /**
- * The colosseum's dressing, or null on a floor with no arena. The first arena
- * only, matching `ArenaSystem`, which runs the fight in no other.
- */
-export function buildColosseumDressing(gameMap: GameMap): ColosseumDressingSystem | null {
-  if (gameMap.arenaExteriors.length === 0) return null;
-  return new ColosseumDressingSystem(gameMap, gameMap.arenaExteriors[0]);
-}
-
-/**
- * Every boss room's mood lights on the floor — and the colosseum's — handed
+ * Every boss room's mood lights on the floor, handed
  * to the lighting pass. Reads the floor alone, the same placements each
  * room's dressing paints its fixtures at, so a gate can light a floor without
  * building its rooms. Returns how many lights were taken.
@@ -101,24 +105,22 @@ export function buildColosseumDressing(gameMap: GameMap): ColosseumDressingSyste
 export function registerBossRoomMoodLights(
   sink: MoodLightSink,
   gameMap: GameMap,
-  bossTypes: readonly string[],
+  bossTypes: readonly GauntletBossType[],
 ): number {
   const lights: BossRoomMoodLight[] = [];
   bossTypes.forEach((bossType, index) => {
     if (index >= gameMap.bossRooms.length) return;
     const room = gameMap.bossRooms[index];
     if (bossType === TRASH_GREMLIN_BOSS_TYPE) lights.push(trashGremlinBulb(room.bounds).light);
-    if (bossType === KRAKAREN_BOSS_TYPE) {
-      const lab = buildKrakarenLabLayout(gameMap.structure, room.bounds, room.centre);
-      lights.push(...krakarenMoodLights(lab));
+    if (bossType === ELECTRIC_GOBLIN_BOSS_TYPE) {
+      const lab = buildPowerLabLayout(gameMap.structure, room.bounds, room.centre);
+      lights.push(...powerLabMoodLights(lab));
     }
+    if (bossType === KRAKEN_BOSS_TYPE)
+      lights.push(...floodedPumpRoomMoodLights(room.bounds, gameMap));
   });
   const gym = bossTypes.includes(BIG_ROOSTER_BOSS_TYPE) ? gymLayoutOf(gameMap.structure) : null;
   if (gym !== null) lights.push(...gymStripLights(gym).map((strip) => strip.light));
-  if (gameMap.arenaExteriors.length > 0) {
-    const arena = gameMap.arenaExteriors[0];
-    lights.push(...colosseumFloodLamps(arena.centre, gameMap.structure).map((lamp) => lamp.light));
-  }
   let taken = 0;
   for (const light of lights) if (sink.registerMoodLight(light)) taken++;
   return taken;
@@ -140,21 +142,22 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
 
   constructor(
     readonly parts: BossRoomDressingParts,
-    private readonly bossTypes: readonly string[],
+    private readonly bossTypes: readonly GauntletBossType[],
   ) {
     this.all = [
       parts.trashGremlin,
       parts.gym,
-      parts.krakaren,
+      parts.powerLab,
+      parts.floodedPumpRoom,
       parts.spiderLab,
-      parts.colosseum,
     ].filter((dressing): dressing is NonNullable<typeof dressing> => dressing !== null);
-    this.byBossRoomIndex = bossTypes.map((bossType) => {
-      if (bossType === TRASH_GREMLIN_BOSS_TYPE) return parts.trashGremlin;
-      if (bossType === BIG_ROOSTER_BOSS_TYPE) return parts.gym;
-      if (bossType === KRAKAREN_BOSS_TYPE) return parts.krakaren;
-      return null;
-    });
+    const dressingByBossType: Readonly<Record<GauntletBossType, BossRoomDressing | null>> = {
+      [TRASH_GREMLIN_BOSS_TYPE]: parts.trashGremlin,
+      [BIG_ROOSTER_BOSS_TYPE]: parts.gym,
+      [ELECTRIC_GOBLIN_BOSS_TYPE]: parts.powerLab,
+      [KRAKEN_BOSS_TYPE]: parts.floodedPumpRoom,
+    };
+    this.byBossRoomIndex = bossTypes.map((bossType) => dressingByBossType[bossType]);
   }
 
   onSeal(roomIndex: number): void {
@@ -169,6 +172,10 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
     this.byBossRoomIndex[roomIndex]?.onFightAborted();
   }
 
+  sealRule(roomIndex: number): BossRoomSealRule {
+    return this.byBossRoomIndex[roomIndex]?.sealRule ?? SEAL_ON_ENTRY;
+  }
+
   /**
    * Tells every room whose boss is already dead that it was won. A room built
    * after its kill — a dev preset that skips the boss, a floor rebuilt from a
@@ -180,7 +187,6 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
       if (dead.gauntletBossTypes.has(bossType)) this.onBossDefeated(roomIndex);
     });
     if (dead.spiderLab) this.parts.spiderLab?.onBossDefeated();
-    if (dead.colosseum) this.parts.colosseum?.onBossDefeated();
   }
 
   update(ctx: SystemContext): void {
@@ -194,6 +200,10 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     for (const dressing of this.all) dressing.renderGround(ctx, camX, camY, promptFor);
+  }
+
+  renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const dressing of this.all) dressing.renderGroundWarnings(ctx, camX, camY);
   }
 
   /** Every room's Y-sorted objects this frame, in one reused list. */
@@ -231,22 +241,22 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
   }
 
   captureCheckpoint(): BossRoomDressingCheckpoint {
-    const { trashGremlin, gym, krakaren, spiderLab, colosseum } = this.parts;
+    const { trashGremlin, gym, floodedPumpRoom, spiderLab } = this.parts;
     return {
       trashGremlin: trashGremlin?.captureCheckpoint() ?? null,
       gym: gym?.captureCheckpoint() ?? null,
-      krakaren: krakaren?.captureCheckpoint() ?? null,
+      floodedPumpRoom: floodedPumpRoom?.captureCheckpoint() ?? null,
       spiderLab: spiderLab?.captureCheckpoint() ?? null,
-      colosseum: colosseum?.captureCheckpoint() ?? null,
     };
   }
 
   restoreCheckpoint(snapshot: BossRoomDressingCheckpoint): void {
-    const { trashGremlin, gym, krakaren, spiderLab, colosseum } = this.parts;
+    const { trashGremlin, gym, floodedPumpRoom, spiderLab } = this.parts;
     if (snapshot.trashGremlin !== null) trashGremlin?.restoreCheckpoint(snapshot.trashGremlin);
     if (snapshot.gym !== null) gym?.restoreCheckpoint(snapshot.gym);
-    if (snapshot.krakaren !== null) krakaren?.restoreCheckpoint(snapshot.krakaren);
+    if (snapshot.floodedPumpRoom !== null) {
+      floodedPumpRoom?.restoreCheckpoint(snapshot.floodedPumpRoom);
+    }
     if (snapshot.spiderLab !== null) spiderLab?.restoreCheckpoint(snapshot.spiderLab);
-    if (snapshot.colosseum !== null) colosseum?.restoreCheckpoint(snapshot.colosseum);
   }
 }

@@ -1,4 +1,7 @@
 import type { LevelId } from '../../levels/levelIds';
+import { getLevelDef } from '../../levels';
+import { bossFightTracks } from '../../audio/music/bossTracks';
+import { BIG_ROOSTER_BOSS_TYPE, KRAKEN_BOSS_TYPE } from '../mobs/bossTypes';
 import { TUTORIAL_LEVEL_ID } from '../../levels/tutorial';
 import type { QuestId } from '../quests/QuestManager';
 import type { GameProgressInput } from '../../auth/AuthClient';
@@ -40,19 +43,13 @@ const LEVEL_3_ID = 'level3' satisfies LevelId;
 const DUNGEON_FLOOR_IDS: ReadonlySet<LevelId> = new Set([LEVEL_1_ID, LEVEL_2_ID, LEVEL_3_ID]);
 const FLOORS_PAST_LEVEL_1: ReadonlySet<LevelId> = new Set([LEVEL_2_ID, LEVEL_3_ID]);
 
-/** Floor 1's two boss rooms, by their index in the boss-room checkpoint. */
-const FLOOR_1_FIRST_BOSS_ROOM_INDEX = 0;
-const FLOOR_1_SECOND_BOSS_ROOM_INDEX = 1;
-
 /** The quests the wheel ledger records a free spin under, by their quest ids. */
 const SPIDER_LAB_QUEST_ID = 'grotesque_spider' as const satisfies QuestId;
 const BRIAR_HOLLOW_QUEST_ID = 'briar_hollow_plea' as const satisfies QuestId;
 
 /** Kill tallies are keyed by each creature's display name. */
 const GROTESQUE_SPIDER_NAME = 'Grotesque Spider';
-const BALL_OF_SWINE_NAME = 'Ball of Swine';
 const MISS_QUILL_NAME = 'Miss Quill';
-const KRAKAREN_CLONE_NAME = 'Krakaren Clone';
 const RUINS_GHOUL_NAME = 'Ruins Ghoul';
 const SHRINE_VERMIN_NAME = 'Shrine Vermin';
 
@@ -78,6 +75,19 @@ const POST_SIEGE_PHASES: ReadonlySet<VillageQuestPhase> = new Set([
   'victory',
   'complete',
 ]);
+
+/** The tracks a floor's gauntlet bosses fight to, read off its boss types. */
+function floorBossTracks(levelId: LevelId): MusicTrackId[] {
+  return (getLevelDef(levelId).bossRooms ?? []).flatMap((room) => bossFightTracks(room.type));
+}
+
+/** The tracks of the boss rooms on `levelId` that `indices` name. */
+function bossTracksAt(levelId: LevelId, indices: readonly number[]): MusicTrackId[] {
+  const rooms = getLevelDef(levelId).bossRooms ?? [];
+  return rooms
+    .filter((_, index) => indices.includes(index))
+    .flatMap((room) => bossFightTracks(room.type));
+}
 
 function atLeast<T>(order: readonly T[], value: T, threshold: T): boolean {
   return order.indexOf(value) >= order.indexOf(threshold);
@@ -179,15 +189,16 @@ export function musicUnlocksFromProgress(
   if (levelId === TUTORIAL_LEVEL_ID || DUNGEON_FLOOR_IDS.has(levelId)) unlock(['tutorial_island']);
 
   if (DUNGEON_FLOOR_IDS.has(levelId)) unlock(['bg_level_1']);
-  if (FLOORS_PAST_LEVEL_1.has(levelId)) unlock(['bg_level_2', 'boss_music_1', 'boss_music_2']);
+  if (FLOORS_PAST_LEVEL_1.has(levelId)) unlock(['bg_level_2', ...floorBossTracks(LEVEL_1_ID)]);
+  if (onLevel3) unlock(floorBossTracks(LEVEL_2_ID));
 
-  const floor1BossRoomsEntered = level1State?.bossRoom.enteredRoomIndices ?? [];
-  if (floor1BossRoomsEntered.includes(FLOOR_1_FIRST_BOSS_ROOM_INDEX)) unlock(['boss_music_1']);
-  if (floor1BossRoomsEntered.includes(FLOOR_1_SECOND_BOSS_ROOM_INDEX)) unlock(['boss_music_2']);
-  if (level1State?.bigRoosterKilled === true) unlock(['boss_music_2']);
+  if (persisted !== undefined && DUNGEON_FLOOR_IDS.has(levelId)) {
+    unlock(bossTracksAt(levelId, persisted.bossRoom.enteredRoomIndices));
+  }
+  if (level1State?.krakenKilled === true) unlock(bossFightTracks(KRAKEN_BOSS_TYPE));
+  if (level2State?.bigRoosterKilled === true) unlock(bossFightTracks(BIG_ROOSTER_BOSS_TYPE));
 
   if (onLevel3) unlock(['boss_music_3', 'fix_the_plumbing_music', 'stealth_music']);
-  if (killed(KRAKAREN_CLONE_NAME) || persisted?.krakarenKilled === true) unlock(['boss_music_3']);
   const bathroomPhase = level2State?.cloggedBathroom.phase;
   if (bathroomPhase !== undefined && BATHROOM_SOLVED_PHASES.has(bathroomPhase)) {
     unlock(['fix_the_plumbing_music']);
@@ -204,11 +215,8 @@ export function musicUnlocksFromProgress(
     (names) => names ?? [],
   );
   const killedBossOnBossMusic3 =
-    killed(GROTESQUE_SPIDER_NAME) ||
-    killed(BALL_OF_SWINE_NAME) ||
-    killed(MISS_QUILL_NAME) ||
-    bountyBossNames.some(killed);
-  if (killedBossOnBossMusic3 || bountiesCompleted || persisted?.arena.arenaLocked === true) {
+    killed(GROTESQUE_SPIDER_NAME) || killed(MISS_QUILL_NAME) || bountyBossNames.some(killed);
+  if (killedBossOnBossMusic3 || bountiesCompleted) {
     unlock(['boss_music_3']);
   }
 

@@ -21,6 +21,18 @@ import {
   type RoosterStrikeBody,
   type RoosterStrikeKind,
 } from './roosterStrikes';
+import { kickExplosive, liveExplosives } from './explosiveAwareness';
+import {
+  DYNAMITE_KICK_CONTACT_TILES,
+  DYNAMITE_KICK_COOLDOWN_FRAMES,
+  DYNAMITE_SEEK_GIVE_UP_FRAMES,
+  RoosterKickMotion,
+  dynamiteKickVelocity,
+  stickNow,
+  stickToKick,
+  type RoosterFlockView,
+} from './roosterKicks';
+import type { LiveStickId } from '../systems/ExplosiveSource';
 
 const AGGRO_RANGE_TILES = 8;
 /** He walks in to this share of his longest reach, so either blow lands from where he stops. */
@@ -28,6 +40,13 @@ const FOLLOW_STOP_FRACTION = 0.85;
 const TILE_CENTER = 0.5;
 /** Energy Shield XP per blocked peck or punch. */
 const STRIKE_BLOCK_XP = 3;
+/**
+ * What the flock's blows land harder by than Big Rooster's own peck and punch,
+ * which they share: the flock guards a boss at the top of floor 2's curve.
+ */
+const FLOCK_STRIKE_DAMAGE_BONUS = 1;
+/** How fast a minion runs to a stick it means to kick, as a share over his walk. */
+const DYNAMITE_SEEK_SPEED_MULTIPLIER = 1.5;
 
 /** The painted builds the flock is drawn from: every rooster but Big Rooster himself. */
 type RoosterMinionArt = Exclude<RoosterBuild, 'big'>;
@@ -74,6 +93,13 @@ export abstract class RoosterMinion extends Mob {
   private readonly soundCues = new SoundCueQueue<RoosterSoundCue>();
   /** Whether this encounter has warmed his fight rows yet. */
   private fightRowsWarmed = false;
+  private readonly kick = new RoosterKickMotion();
+  /** The stick he is walking to or kicking. */
+  private stickTarget: LiveStickId | null = null;
+  private stickSeekFrames = 0;
+  private dynamiteKickCooldown = 0;
+  /** The gym as every rooster sees it, or null outside the gym; set each frame by the gym. */
+  flockView: RoosterFlockView | null = null;
   private readonly animationClock: RoosterAnimationClock;
 
   protected constructor(
@@ -116,6 +142,10 @@ export abstract class RoosterMinion extends Mob {
 
   protected override clearEncounterPhase(): void {
     this.strikes.reset();
+    this.kick.reset();
+    this.stickTarget = null;
+    this.stickSeekFrames = 0;
+    this.dynamiteKickCooldown = 0;
     this.fightRowsWarmed = false;
     this.soundCues.clear();
   }
@@ -146,6 +176,7 @@ export abstract class RoosterMinion extends Mob {
     this.walkFrameSpeed = this.animationClock.walkRadians;
     if (this.animationClock.footfall) this.soundCues.raise('step');
     this.strikes.update(this.strikeBody(), targets);
+    if (this.dynamiteKickCooldown > 0) this.dynamiteKickCooldown--;
 
     const nearest = this.acquireTarget(targets, this.tileSize * AGGRO_RANGE_TILES);
     this.currentTarget = nearest;
@@ -153,6 +184,7 @@ export abstract class RoosterMinion extends Mob {
       this.isMoving = false;
       return;
     }
+    if (this.updateDynamiteKick()) return;
     if (nearest === null) {
       this.returnHomeOrWander();
       return;
@@ -181,6 +213,64 @@ export abstract class RoosterMinion extends Mob {
     if (!this.isMoving) this.faceToward(nearest);
   }
 
+  /**
+   * Walks to a landed stick of the party's dynamite near him and kicks it,
+   * the way Big Rooster does. Returns whether that is what he did this frame.
+   */
+  private updateDynamiteKick(): boolean {
+    if (this.kick.active) {
+      this.isMoving = false;
+      if (this.kick.tick() === 'impact') this.kickStickNow();
+      return true;
+    }
+    const half = this.tileSize * TILE_CENTER;
+    const view = this.flockView;
+    if (this.stickTarget === null) {
+      if (view === null || this.dynamiteKickCooldown > 0) return false;
+      const found = stickToKick(this.x + half, this.y + half, liveExplosives());
+      if (found === null) return false;
+      this.stickTarget = found.id;
+      this.stickSeekFrames = 0;
+    }
+    const id = this.stickTarget;
+    const stick = stickNow(id, liveExplosives());
+    this.stickSeekFrames++;
+    if (stick === null || this.stickSeekFrames > DYNAMITE_SEEK_GIVE_UP_FRAMES) {
+      this.stickTarget = null;
+      this.dynamiteKickCooldown = DYNAMITE_KICK_COOLDOWN_FRAMES;
+      return false;
+    }
+    const distance = Math.hypot(stick.x - (this.x + half), stick.y - (this.y + half));
+    if (distance <= this.tileSize * DYNAMITE_KICK_CONTACT_TILES) {
+      this.isMoving = false;
+      this.clearAStarPath();
+      this.faceToward({ x: stick.x - half, y: stick.y - half });
+      prewarmRoosterRow(this.build.art, 'punch');
+      this.kick.begin();
+      this.soundCues.raise('effort');
+      return true;
+    }
+    this.followTargetAStar(
+      stick.x - half,
+      stick.y - half,
+      this.speed * DYNAMITE_SEEK_SPEED_MULTIPLIER,
+      this.tileSize * DYNAMITE_KICK_CONTACT_TILES,
+    );
+    return true;
+  }
+
+  private kickStickNow(): void {
+    const id = this.stickTarget;
+    const stick = id === null ? null : stickNow(id, liveExplosives());
+    const view = this.flockView;
+    if (stick !== null && view !== null) {
+      kickExplosive(stick.id, dynamiteKickVelocity(stick, view));
+      this.soundCues.raise('kick');
+    }
+    this.stickTarget = null;
+    this.dynamiteKickCooldown = DYNAMITE_KICK_COOLDOWN_FRAMES;
+  }
+
   /** The blow he favours if it is ready and in reach, else the other one, else none. */
   private chooseStrike(distance: number): RoosterStrikeKind | null {
     const preferred: RoosterStrikeKind = Math.random() < this.build.peckShare ? 'peck' : 'punch';
@@ -207,7 +297,7 @@ export abstract class RoosterMinion extends Mob {
           this.spells.addBlockXp(STRIKE_BLOCK_XP);
           return;
         }
-        this.dealDamage(target, spec.damage, spec.attackType);
+        this.dealDamage(target, spec.damage + FLOCK_STRIKE_DAMAGE_BONUS, spec.attackType);
       },
       scaledCooldown: (baseFrames) => this.scaledCooldownFrames(baseFrames),
       impact: (kind) => {
@@ -234,7 +324,7 @@ export abstract class RoosterMinion extends Mob {
         facingX: this.facingX,
         facingY: this.facingY,
         peckProgress: strike === 'peck' ? strikeProgress : null,
-        punchProgress: strike === 'punch' ? strikeProgress : null,
+        punchProgress: strike === 'punch' ? strikeProgress : this.kick.progress,
         isDamageFlashing: this.damageFlash > 0,
         idleSeconds: this.animationClock.idleSeconds,
       });

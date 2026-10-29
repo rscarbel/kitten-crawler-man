@@ -58,16 +58,13 @@ export interface CrawlerSignInput {
   readonly startRoom: Rect;
   /**
    * The rooms the player is required to reach, in the order they are required to
-   * reach them: each gateway boss in turn, then the arena's antechamber on a floor
-   * whose way onward is a forced chain. Signs exist only on the path to these;
+   * reach them: each gateway boss in turn. Signs exist only on the path to these;
    * everything past the last one is territory the player searches for the stairs,
    * and pointing the way there would give the search away.
    */
   readonly goalRooms: ReadonlyArray<Rect>;
   /** Keys (see `tileCoordKey`) of every tile another system has spoken for. */
   readonly claimedTiles: ReadonlySet<number>;
-  /** Circles, in tiles, no wall pocket may be cut into. */
-  readonly keepClear: ReadonlyArray<{ readonly centre: Point; readonly radius: number }>;
 }
 
 /**
@@ -857,9 +854,7 @@ function planHallwaySigns(
         if (inRoom(pocket.x + dx, pocket.y + dy)) return false;
       }
     }
-    return input.keepClear.every(
-      ({ centre, radius }) => Math.hypot(pocket.x - centre.x, pocket.y - centre.y) > radius,
-    );
+    return true;
   };
 
   const forks = findHallwayForks({ columns, rows, walkable, inRoom });

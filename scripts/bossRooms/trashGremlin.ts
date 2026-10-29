@@ -5,7 +5,7 @@
 
 import { TILE_SIZE } from '../../src/core/constants.js';
 import { TrashGremlin } from '../../src/creatures/TrashGremlin.js';
-import { TRASH_GREMLIN_BOSS_TYPE } from '../../src/systems/bossRooms/BossRoomDressings.js';
+import { TRASH_GREMLIN_BOSS_TYPE } from '../../src/core/mobs/bossTypes.js';
 import {
   TOWER_WOBBLE_FRAMES,
   type TrashGremlinRoomSystem,

@@ -209,7 +209,7 @@ export const ENERGY_SHIELD_DEF: AbilityDef = {
     {
       level: 15,
       description:
-        'Overcharged: the field flares gold. Raising it heals allies to full and clears their status effects, and it turns aside magic attacks. Enemies killed inside it arc lightning to their neighbours, and when it collapses it lets go as a shockwave that leaves everything nearby Electrified, damaged and slowed over time.',
+        'Overcharged: the field flares gold. Raising it heals allies to full and clears their status effects, and it turns aside magic attacks. Enemies killed inside it arc lightning to their neighbours, and when it collapses it lets go as a shockwave that leaves everything nearby Electrified: zapped every few seconds and seized for a moment by each zap.',
     },
   ],
   renderIcon: renderEnergyShieldIcon,

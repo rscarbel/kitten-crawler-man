@@ -302,7 +302,6 @@ export type SpecialRegionTag =
   | 'spider_lab'
   | 'clogged_bathroom'
   | 'stealth_gate'
-  | 'arena'
   | 'lab_hallway';
 
 const FIXED_ONE: CountRange = { min: 1, max: 1 };
@@ -333,7 +332,6 @@ export const SPECIAL_REGION_LIGHTING = {
   // Never dark: the gate, its guard and the prison sign have to read the moment
   // the party walks in.
   stealth_gate: { ambient: 'lit', colour: 'sodium', sources: [] },
-  arena: { ambient: 'lit', colour: 'cool_white', sources: [] },
   // Darker than any other hallway on the floor, and darkening further toward
   // the lab (`DungeonLightingSystem` grades it along the walk); its one dying
   // tube and its smashed one are hung by `wallFixtures.ts`, not counted here.

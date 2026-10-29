@@ -1,7 +1,7 @@
 import type { GameSystem } from './GameSystem';
 import { randomInt } from '../utils';
 import { getSpriteDef } from '../core/spriteAssets/SpriteLoader';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 
 const PUDDLE_LIFETIME = 18000; // 300s @ 60fps
 const PUDDLE_FADE_START = 3000; // start fading 50s before despawn
@@ -192,8 +192,8 @@ export class GoreSystem implements GameSystem {
     if (!stateDef) return;
     const { img, frameWidth, frameHeight } = def;
 
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
 
     ctx.save();
     for (const p of this.puddles) {
@@ -227,8 +227,8 @@ export class GoreSystem implements GameSystem {
     if (!dropState || !tearState) return;
     const { img, frameWidth, frameHeight } = def;
 
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
 
     ctx.save();
     for (const p of this.particles) {

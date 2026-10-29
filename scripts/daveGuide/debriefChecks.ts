@@ -16,7 +16,8 @@ import {
 import type { StatId } from '../../src/core/party/stats.js';
 import { type CrawlerKind } from '../../src/core/skills/SkillManager.js';
 import { BigRooster } from '../../src/creatures/BigRooster.js';
-import { KrakarenClone } from '../../src/creatures/KrakarenClone.js';
+import { Kraken } from '../../src/creatures/Kraken.js';
+import { ElectricGoblin } from '../../src/creatures/ElectricGoblin.js';
 import { TrashGremlin } from '../../src/creatures/TrashGremlin.js';
 import {
   BOSS_DISPLAY_NAMES,
@@ -194,7 +195,8 @@ export function debriefCheckResults(): {
   const bossMobs = {
     trash_gremlin: new TrashGremlin(0, 0, TILE_SIZE),
     big_rooster: new BigRooster(0, 0, TILE_SIZE),
-    krakaren_clone: new KrakarenClone(0, 0, TILE_SIZE),
+    kraken: new Kraken(0, 0, TILE_SIZE),
+    electric_goblin: new ElectricGoblin(0, 0, TILE_SIZE),
   } as const satisfies Record<DebriefBossType, { displayName: string }>;
 
   check(ALL_DEBRIEF_BOSS_TYPES.length === Object.keys(bossMobs).length, 'boss list drifted');
@@ -215,7 +217,10 @@ export function debriefCheckResults(): {
     }
     check(debriefBossType(boss) === boss, `debriefBossType('${boss}') does not narrow to itself`);
   }
-  check(debriefBossType('ball_of_swine') === null, "debriefBossType('ball_of_swine') is not null");
+  check(
+    debriefBossType('grotesque_spider') === null,
+    "debriefBossType('grotesque_spider') is not null",
+  );
   check(debriefBossType(undefined) === null, 'debriefBossType(undefined) is not null');
 
   {
@@ -543,23 +548,20 @@ export function debriefCheckResults(): {
 
   {
     check(
-      isSupersededDebrief('trash_gremlin', new Set(['trash_gremlin', 'big_rooster'])),
-      'the Trash Gremlin is not superseded once Big Rooster is also dead',
+      isSupersededDebrief('trash_gremlin', new Set(['trash_gremlin', 'kraken'])),
+      'the Trash Gremlin is not superseded once the Kraken is also dead',
     );
     check(
       !isSupersededDebrief('trash_gremlin', new Set(['trash_gremlin'])),
       'control: the Trash Gremlin is superseded with no later boss dead',
     );
     check(
-      !isSupersededDebrief('big_rooster', new Set(['trash_gremlin', 'big_rooster'])),
-      'Big Rooster is superseded by a boss earlier than it in the order',
+      !isSupersededDebrief('kraken', new Set(['trash_gremlin', 'kraken'])),
+      'the Kraken is superseded by a boss earlier than it in the order',
     );
     check(
-      !isSupersededDebrief(
-        'krakaren_clone',
-        new Set(['trash_gremlin', 'big_rooster', 'krakaren_clone']),
-      ),
-      'the Krakaren Clone, last in the boss order, is superseded by an earlier boss',
+      !isSupersededDebrief('big_rooster', new Set(['trash_gremlin', 'kraken', 'big_rooster'])),
+      'Big Rooster, last in the boss order, is superseded by an earlier boss',
     );
   }
 

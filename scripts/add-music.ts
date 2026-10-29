@@ -1,19 +1,21 @@
 /**
  * Registers a credited song in one step: copies the file into
- * `src/audio/music/<id>.mp3` (unless it is already there), adds the id to
- * `MUSIC_TRACK_IDS`, `SOUND_MANIFEST` and `STREAMING_SOUND_IDS`, writes its
+ * `src/audio/music/<id>.<mp3|ogg>` (unless it is already there), adds the id to
+ * `MUSIC_TRACK_IDS`, `SOUND_MANIFEST` and (unless `--decoded`) `STREAMING_SOUND_IDS`, writes its
  * `MUSIC_CATALOG` entry (and a new music area when asked), optionally an intro
  * length in `MUSIC_LOOP_START_S`, then measures loudness, formats and runs
  * `check:audio`. Making something claim the song is left to the caller.
  *
  * Usage:
- *   npm run add:music -- <file.mp3> --title "Shown Title" --area <area>
+ *   npm run add:music -- <file.mp3|file.ogg> --title "Shown Title" --area <area>
  *     (--author-name "Real Name" | --author-username handle)
  *     [--original-title "Recording's own title"]   default: --title
  *     [--pixabay]                                  licensed from Pixabay; omit for originals
  *     [--id snake_case_id]                         default: the file name
  *     [--area-label "Label"]                       creates --area as a new music area
  *     [--loop-start <seconds>]                     intro heard once before the loop body
+ *     [--decoded]                                  played from a decoded buffer, not streamed:
+ *                                                  a gapless loop or a stem; needs a preload group
  */
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -30,6 +32,11 @@ const MUSIC_DIR = 'src/audio/music';
 const EXPECTED_SAMPLE_RATE_HZ = 44100;
 const EXPECTED_CHANNELS = 2;
 const SNAKE_CASE_ID = /^[a-z][a-z0-9_]*$/;
+/**
+ * Song formats. Ogg Vorbis carries its exact length, so a decoded loop of it
+ * repeats with no gap; an MP3 is padded by its encoder at both ends.
+ */
+const SONG_EXTENSIONS: ReadonlySet<string> = new Set(['.mp3', '.ogg']);
 
 function fail(message: string): never {
   console.error(`add:music: ${message}`);
@@ -113,14 +120,16 @@ function main(): void {
       pixabay: { type: 'boolean', default: false },
       id: { type: 'string' },
       'loop-start': { type: 'string' },
+      decoded: { type: 'boolean', default: false },
     },
   });
 
   const [sourceArg] = positionals;
-  if (sourceArg === undefined) fail('pass the .mp3 file as the first argument');
+  if (sourceArg === undefined) fail('pass the .mp3 or .ogg file as the first argument');
   const sourceFile = resolve(sourceArg);
   if (!existsSync(sourceFile)) fail(`${sourceArg} does not exist`);
-  if (extname(sourceFile).toLowerCase() !== '.mp3') fail('songs must be .mp3');
+  const extension = extname(sourceFile).toLowerCase();
+  if (!SONG_EXTENSIONS.has(extension)) fail('songs must be .mp3 or .ogg');
 
   const { title, area } = values;
   if (title === undefined || title.trim() === '') fail('--title is required');
@@ -153,7 +162,7 @@ function main(): void {
     fail('--loop-start must be a positive number of seconds');
   }
 
-  const repoRelativePath = `${MUSIC_DIR}/${id}.mp3`;
+  const repoRelativePath = `${MUSIC_DIR}/${id}${extension}`;
   const destination = join(REPO_ROOT, repoRelativePath);
   if (sourceFile !== destination) {
     if (existsSync(destination)) fail(`${repoRelativePath} already exists`);
@@ -176,7 +185,9 @@ function main(): void {
     `  ${id}: ${quoted(`./${repoRelativePath}`)},\n`,
     'sounds.ts',
   );
-  sounds = insertAfter(sounds, '  // music/ and jingles/\n', `  ${quoted(id)},\n`, 'sounds.ts');
+  if (!values.decoded) {
+    sounds = insertAfter(sounds, '  // music/ and jingles/\n', `  ${quoted(id)},\n`, 'sounds.ts');
+  }
   if (loopStartS !== undefined) {
     sounds = insertAfter(
       sounds,
@@ -220,6 +231,12 @@ function main(): void {
   writeFileSync(SOUNDS_PATH, sounds);
   writeFileSync(CATALOG_PATH, catalog);
   console.log(`add:music: registered ${id} (${repoRelativePath})`);
+  if (values.decoded) {
+    console.log(
+      `add:music: ${id} is decoded, not streamed: until it is in the SFX_GROUPS group ` +
+        '(src/audio/sfxGroups.ts) of the place that claims it, check:audio below fails.',
+    );
+  }
 
   run('npx', ['tsx', 'scripts/measure-audio.ts']);
   run('npx', ['prettier', '--write', '--log-level', 'warn', SOUNDS_PATH, CATALOG_PATH]);

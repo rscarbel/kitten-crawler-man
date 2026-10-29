@@ -19,7 +19,7 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { REFRESHED_SPEED_FACTOR } from '../core/combat/StatusEffect';
 import { SPEED_FIZZ_MULTIPLIER } from '../Player';
 import type { TileRect } from '../map/town/townPlan';
@@ -64,8 +64,8 @@ export interface ResidencyOutlook {
  * `area` comes into view: zero while some of it is in view already.
  */
 export function tilesUntilInView(focus: ResidencyFocus, area: TileRect): number {
-  const halfViewW = viewportWidth() / 2 / TILE_SIZE;
-  const halfViewH = viewportHeight() / 2 / TILE_SIZE;
+  const halfViewW = worldViewWidth() / 2 / TILE_SIZE;
+  const halfViewH = worldViewHeight() / 2 / TILE_SIZE;
   const focusTileX = focus.x / TILE_SIZE;
   const focusTileY = focus.y / TILE_SIZE;
   const dx = Math.max(area.x - focusTileX, 0, focusTileX - (area.x + area.w)) - halfViewW;

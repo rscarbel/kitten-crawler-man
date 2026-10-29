@@ -1,11 +1,11 @@
 /**
- * The boots the human crawler can put on: the Hobnail Boots, the Hamhock
+ * The boots the human crawler can put on: the Hobnail Boots, the Lineman's
  * Boots and the Hearthguard Boots. Each is the boot painter's boot in its own
  * leather, sole and height, worn over his trousers with the cuff tucked in.
  *
  * At the tile a boot is a few pixels of colour below the trouser leg, so each
  * pair is told apart by what those pixels can carry: the Hobnails' tall brown
- * shaft over a dark sole pricked with iron, the Hamhocks' pink pig-leather
+ * shaft over a dark sole pricked with iron, the Lineman's pink pig-leather
  * ending in a dark split trotter, the Hearthguards' short black garrison boot.
  */
 
@@ -95,30 +95,30 @@ export const HUMAN_HOBNAIL_BOOTS = defineGarment({
 });
 
 /** Pig leather, pink going to raw ham in the shade. */
-const HAMHOCK_LEATHER: GlossRamp = deriveGlossRamp('#d48f86');
-const HAMHOCK_SOLE = deriveRamp('#4a3a36');
+const LINEMAN_LEATHER: GlossRamp = deriveGlossRamp('#d48f86');
+const LINEMAN_SOLE = deriveRamp('#4a3a36');
 /** The trotter cap: dark grey hoof, split down the middle. */
-const HAMHOCK_TROTTER = '#3a3230';
+const LINEMAN_TROTTER = '#3a3230';
 /** Ankle boots: the shaft stops a little above the ankle. */
-const HAMHOCK_SHAFT_AT = 0.62;
+const LINEMAN_SHAFT_AT = 0.62;
 
-const HAMHOCK_BOOTS: BootLook = {
-  leather: HAMHOCK_LEATHER,
-  sole: HAMHOCK_SOLE,
-  shaftTopAt: HAMHOCK_SHAFT_AT,
+const LINEMAN_BOOTS: BootLook = {
+  leather: LINEMAN_LEATHER,
+  sole: LINEMAN_SOLE,
+  shaftTopAt: LINEMAN_SHAFT_AT,
   soleBuild: BOOT_SOLE,
-  trotter: HAMHOCK_TROTTER,
+  trotter: LINEMAN_TROTTER,
 };
 
-export const HUMAN_HAMHOCK_BOOTS = defineGarment({
-  id: 'human_hamhock_boots',
-  name: 'Hamhock Boots',
+export const HUMAN_LINEMAN_BOOTS = defineGarment({
+  id: 'human_lineman_boots',
+  name: "Lineman's Boots",
   wearer: 'human',
   material: 'leather',
   layer: 'outer',
   region: ['leg'],
   covers: ['feet'],
-  paint: { leg: humanEveryView(bootPainter(HAMHOCK_BOOTS)) },
+  paint: { leg: humanEveryView(bootPainter(LINEMAN_BOOTS)) },
 });
 
 /** Garrison black, polished before it was handed in. */

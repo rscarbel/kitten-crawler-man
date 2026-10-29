@@ -386,6 +386,21 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
+  the_kraken_flooded: {
+    title: 'The Kraken: Flooded',
+    area: 'battles',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'The Kraken: Flooded' },
+  },
+  the_kraken_battle: {
+    title: 'The Kraken: Battle',
+    area: 'battles',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'The Kraken: Battle' },
+  },
+  king_of_the_heap: {
+    title: 'King of the Heap',
+    area: 'battles',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'King of the Heap' },
+  },
 } as const satisfies Record<MusicTrackId, MusicTrackDef>;
 
 const ORIGINAL_COMPOSITION_LABEL = 'Original';

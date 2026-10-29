@@ -300,7 +300,7 @@ export class GearSystem implements GameSystem, GearWorld {
     // Widened by a tile because the grid keys a mob by its origin while the
     // test measures its centre.
     for (const mob of this.world.roster.grid.queryCircle(x, y, radiusPx + TILE_SIZE)) {
-      if (!mob.isAlive || !mob.isHostile || !mob.takesPlayerDamage('melee')) continue;
+      if (!mob.isHostileTarget || !mob.takesPlayerDamage('melee')) continue;
       const at = centreOf(mob);
       const dist = Math.hypot(at.x - x, at.y - y);
       if (dist <= radiusPx) found.push({ mob, dist });

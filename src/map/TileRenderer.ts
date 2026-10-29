@@ -102,6 +102,7 @@ import {
 } from '../core/spriteAssets/SpriteLoader';
 
 import { CHUNK_TILES } from './tiles/chunkTiles';
+import { drawImageSnapped } from './tiles/deviceSnap';
 
 /**
  * Milliseconds of chunk baking a frame of play may spend, matching the figure
@@ -1168,10 +1169,15 @@ export class TileChunkCache {
     const cx1 = Math.min(this.chunksX - 1, Math.floor((cameraX + viewW) / chunkPx));
     const cy1 = Math.min(this.chunksY - 1, Math.floor((cameraY + viewH) / chunkPx));
 
-    // Floor the camera-relative offset once so all chunks share the same
-    // sub-pixel alignment — prevents hairline gaps between adjacent chunks.
+    // Floored once so every chunk shares one alignment; each blit is then
+    // snapped to whole device pixels, since under a fractional render scale or
+    // camera zoom a whole world pixel is still a fractional device pixel and
+    // neighbouring chunks would leave a hairline between them.
     const baseX = Math.floor(-cameraX);
     const baseY = Math.floor(-cameraY);
+    const transform = ctx.getTransform();
+    const blit = (canvas: CanvasSurface, x: number, y: number): void =>
+      drawImageSnapped(ctx, canvas, x, y, canvas.width, canvas.height, transform);
 
     const budgetMs = unbounded ? Number.POSITIVE_INFINITY : CHUNK_BAKE_BUDGET_MS;
     let spentMs = 0;
@@ -1195,7 +1201,7 @@ export class TileChunkCache {
         if (cached) {
           cached.lastUsedFrame = this.frameCounter;
           touchEnvironmentSheets(cached.sheets);
-          ctx.drawImage(cached.canvas, dx, dy);
+          blit(cached.canvas, dx, dy);
           probeChunk = cached;
           probeChunkDrawnSinceProbe = true;
           if (cached.stale) staleVisible.push(cx, cy);
@@ -1207,7 +1213,7 @@ export class TileChunkCache {
           spentMs += elapsedMs;
           if (!unbounded) perfMonitor.count('chunkColdBakes', 1);
           if (chunk !== null) {
-            ctx.drawImage(chunk.canvas, dx, dy);
+            blit(chunk.canvas, dx, dy);
             continue;
           }
         }
@@ -1246,7 +1252,7 @@ export class TileChunkCache {
       const jobDeadlineMs = inView || blocksStaleRebake ? deadlineMs : speculativeDeadlineMs;
       const chunk = this.advanceJob(job, jobDeadlineMs);
       if (chunk === null) break;
-      if (inView) ctx.drawImage(chunk.canvas, baseX + job.cx * chunkPx, baseY + job.cy * chunkPx);
+      if (inView) blit(chunk.canvas, baseX + job.cx * chunkPx, baseY + job.cy * chunkPx);
     }
 
     if (WATCHES_STALE_DRAIN) this.watchStaleDrain(staleVisible.length > 0, rebakedStale);

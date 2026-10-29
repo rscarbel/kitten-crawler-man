@@ -229,12 +229,14 @@ const SPEED_HALF = 0.5;
 const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
 
-/** The floor mids the roosters actually stand on, from `src/map/tilegen/palette.ts`. */
+/**
+ * The floor mids the roosters stand on, from `src/map/tilegen/palette.ts`: the
+ * gym's mat and floor 2's concrete, lit and unlit.
+ */
 const BACKDROPS: ReadonlyArray<{ readonly name: string; readonly color: string }> = [
   { name: 'gym mat', color: previewInk.floor.gymMat },
-  { name: 'floor 1 — cellar stone', color: previewInk.floor.cellarStone },
-  { name: 'floor 1 — dressed stone', color: previewInk.floor.dressedStone },
   { name: 'floor 2 — poured concrete', color: previewInk.floor.pouredConcrete },
+  { name: 'floor 2 — unlit concrete', color: previewInk.floor.unlitConcrete },
   { name: 'unlit cave', color: previewInk.floor.unlitCave },
 ];
 

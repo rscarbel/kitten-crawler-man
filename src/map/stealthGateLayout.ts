@@ -51,7 +51,7 @@ export interface StealthGateRoomData {
   /** Middle perimeter tile of the doorway the party arrives through. */
   entranceTile: Point;
   entranceDoorway: RoomDoorway;
-  /** The doorway the gate shuts, toward the arena antechamber. */
+  /** The doorway the gate shuts, toward the gateway safe room the spine reaches. */
   onwardDoorway: RoomDoorway;
   /** Every tile the gate spans: the onward doorway's full width. */
   gateTiles: Point[];

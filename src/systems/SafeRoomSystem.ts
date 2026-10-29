@@ -307,7 +307,7 @@ export class SafeRoomSystem implements GameSystem {
     }
   }
 
-  /** The room banner along the bottom of the screen, while `active` is inside a safe room. */
+  /** The room banner along the bottom of the screen, in CSS pixels, while `active` is inside a safe room. */
   renderUI(ctx: CanvasRenderingContext2D, active: { x: number; y: number }): void {
     if (this.isEntityInSafeRoom(active)) {
       worldText(ctx, '~ Safe Room ~', {

@@ -52,7 +52,6 @@ const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
   await import('../src/core/party/mercenaryTemplates.js');
 const { SOLDIER_IDS } = await import('../src/core/quests/villagerIds.js');
-const { BallOfSwine } = await import('../src/creatures/BallOfSwine.js');
 const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
 const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
 const { Lemur } = await import('../src/creatures/Lemur.js');
@@ -81,8 +80,9 @@ const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
 const { Baggi } = await import('../src/creatures/Baggi.js');
 const { DireBear } = await import('../src/creatures/DireBear.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
-const { KrakarenClone } = await import('../src/creatures/KrakarenClone.js');
-const { KrakarenTentacle } = await import('../src/creatures/KrakarenTentacle.js');
+const { Kraken } = await import('../src/creatures/Kraken.js');
+const { ElectricGoblin } = await import('../src/creatures/ElectricGoblin.js');
+const { KrakenTentacle } = await import('../src/creatures/KrakenTentacle.js');
 const { Krasue } = await import('../src/creatures/Krasue.js');
 const { LittleRooster } = await import('../src/creatures/LittleRooster.js');
 const { Llama } = await import('../src/creatures/Llama.js');
@@ -202,7 +202,7 @@ function bugabooBreakingIn(): MobInstance {
 
 /** A tentacle is built underground, where it draws only the floor breaking. */
 function surfacedTentacle(): MobInstance {
-  const tentacle = new KrakarenTentacle(...at);
+  const tentacle = new KrakenTentacle(...at);
   Reflect.set(tentacle, 'state', 'idle');
   return tentacle;
 }
@@ -230,7 +230,6 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyed('attack cow', new AttackCow(...at, new CatPlayer(...at), ATTACK_COW_EYE_FLOOR, null)),
   ],
   Baggi: () => [eyed('Baggi', new Baggi(...at))],
-  BallOfSwine: () => [eyeless('Ball of Swine', new BallOfSwine(...at))],
   BrindleGrub: () => [
     eyeless('brindle grub', grubAt(1)),
     eyeless('cow-tailed grub', grubAt(2)),
@@ -271,10 +270,11 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   GrotesqueSpider: () => [eyed('grotesque spider', new GrotesqueSpider(...at), 'turnsToFace')],
   DireBear: () => [eyed('dire bear', new DireBear(...at))],
   BigRooster: () => [eyed('Big Rooster', new BigRooster(...at))],
-  KrakarenClone: () => [eyeless('Krakaren', new KrakarenClone(...at))],
-  KrakarenTentacle: () => [
-    eyeless('Krakaren tentacle buried', new KrakarenTentacle(...at)),
-    eyeless('Krakaren tentacle', surfacedTentacle()),
+  Kraken: () => [eyeless('Kraken', new Kraken(...at))],
+  ElectricGoblin: () => [eyed('the Current Goblin', new ElectricGoblin(...at))],
+  KrakenTentacle: () => [
+    eyeless('Kraken tentacle buried', new KrakenTentacle(...at)),
+    eyeless('Kraken tentacle', surfacedTentacle()),
   ],
   Krasue: () => [eyed('krasue', new Krasue(...at))],
   LittleRooster: () => [eyed('Little Rooster', new LittleRooster(...at))],

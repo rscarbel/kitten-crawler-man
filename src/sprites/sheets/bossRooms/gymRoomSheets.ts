@@ -1,8 +1,8 @@
 /**
  * Big Rooster's gym, as painted sheets: its racks, its treadmills' belts and
  * consoles, the boombox, the shutter, the bowled plate, chalk, the mirror
- * crack, and the three pieces of kit a crawler can carry off (bench,
- * treadmill, dumbbell). The colosseum's pickups blit the same frames.
+ * crack, the kettlebell rack and its falling bells, the exercise balls, and the three pieces of kit a crawler can carry off (bench,
+ * treadmill, dumbbell).
  *
  * Painted at twice the game's tile size so the chrome and the lettering survive
  * the downscale. Nothing here is seeded: a squat rack is the same squat rack on
@@ -31,6 +31,14 @@ import {
   drawDumbbellFloor,
   drawTreadmillFloor,
 } from '../../gymEquipmentSprite';
+import {
+  GYM_EXERCISE_BALL_COLOURS,
+  GYM_EXERCISE_BALL_FRAMES,
+  GYM_FALLING_KETTLEBELL_FRAMES,
+  drawExerciseBall,
+  drawFallingKettlebell,
+  drawGymKettlebellRack,
+} from '../../art/gymKettlebellArt';
 import type { FramePainter, PropSheetPlan } from '../propSheetPlan';
 
 /** Source pixels per game tile. */
@@ -70,6 +78,14 @@ const CRACK_MARGIN_TILES = 0.125;
 const PICKUP_FRAME_TILES = 2;
 const PICKUP_SIDE_MARGIN_TILES = 0.5;
 const PICKUP_HEADROOM_TILES = 0.75;
+
+const KETTLEBELL_RACK_FRAME_TILES = 1.25;
+const KETTLEBELL_RACK_HEADROOM_TILES = 0.25;
+/** An exercise ball overhangs its tile by a quarter tile on every side. */
+const BALL_FRAME_TILES = 1.5;
+const BALL_MARGIN_TILES = 0.25;
+/** A ball is painted about its tile's centre. */
+const HALF_TILE = 0.5;
 
 /** Two frames of a blink: lit, then dim. */
 const BLINK_FRAMES = 2;
@@ -255,6 +271,67 @@ export function gymRoomSheetPlans(_artSeed: number): PropSheetPlan[] {
       tileY: S * CRACK_MARGIN_TILES,
       tileScale: S,
       rows: [{ state: 'crack', frames: [(ctx, ox, oy) => drawGymMirrorCrack(ctx, ox, oy, S)] }],
+    },
+    {
+      key: 'gym_kettlebell_rack',
+      file: 'gym_kettlebell_rack.png',
+      frameWidth: S,
+      frameHeight: S * KETTLEBELL_RACK_FRAME_TILES,
+      tileX: 0,
+      tileY: S * KETTLEBELL_RACK_HEADROOM_TILES,
+      tileScale: S,
+      rows: [
+        {
+          state: 'stocked',
+          frames: [(ctx, ox, oy) => drawGymKettlebellRack(ctx, ox, oy, S, true)],
+        },
+        {
+          state: 'heaved',
+          frames: [(ctx, ox, oy) => drawGymKettlebellRack(ctx, ox, oy, S, false)],
+        },
+      ],
+    },
+    {
+      key: 'gym_kettlebell',
+      file: 'gym_kettlebell.png',
+      frameWidth: S,
+      frameHeight: S,
+      tileX: 0,
+      tileY: 0,
+      tileScale: S,
+      rows: [
+        {
+          state: 'fall',
+          frames: frames(
+            GYM_FALLING_KETTLEBELL_FRAMES,
+            (band) => (ctx, ox, oy) => drawFallingKettlebell(ctx, ox, oy, S, band),
+          ),
+        },
+      ],
+    },
+    {
+      key: 'gym_exercise_ball',
+      file: 'gym_exercise_ball.png',
+      frameWidth: S * BALL_FRAME_TILES,
+      frameHeight: S * BALL_FRAME_TILES,
+      tileX: S * BALL_MARGIN_TILES,
+      tileY: S * BALL_MARGIN_TILES,
+      tileScale: S,
+      rows: GYM_EXERCISE_BALL_COLOURS.map((colour) => ({
+        state: colour,
+        frames: frames(
+          GYM_EXERCISE_BALL_FRAMES,
+          (index) => (ctx, ox, oy) =>
+            drawExerciseBall(
+              ctx,
+              ox + S * HALF_TILE,
+              oy + S * HALF_TILE,
+              S,
+              colour,
+              phaseOf(index, GYM_EXERCISE_BALL_FRAMES),
+            ),
+        ),
+      })),
     },
     {
       key: 'gym_pickups',

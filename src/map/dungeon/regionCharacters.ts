@@ -104,7 +104,7 @@ export class RegionCharacters {
 
   /**
    * How a region is lit: its character's profile, the special profile of a
-   * start, safe, boss, quest or arena region, or null where lighting must
+   * start, safe, boss or quest region, or null where lighting must
    * leave it alone (the spider lab) or nothing was assigned. An unlit room
    * keeps its character's colour and loses every source.
    */
@@ -170,8 +170,8 @@ export function rollRoomCharacter(
 }
 
 /**
- * The assignment of a hallway segment: the arena's drum and concourse and the
- * spider lab's approach hallways are special regions, every other segment a
+ * The assignment of a hallway segment: the spider lab's approach hallways are
+ * special regions, every other segment a
  * hallway character.
  */
 export function rollHallwayCharacter(
@@ -179,7 +179,6 @@ export function rollHallwayCharacter(
   hallway: HallwayRegion,
   rng: Rng,
 ): RegionAssignment | null {
-  if (hallway.arena) return { type: 'special', tag: 'arena' };
   if (hallway.labApproach) return { type: 'special', tag: 'lab_hallway' };
   const eligible = HALLWAY_CHARACTERS_BY_FLOOR[floor].filter((character) =>
     character.zones.includes(hallway.zone),

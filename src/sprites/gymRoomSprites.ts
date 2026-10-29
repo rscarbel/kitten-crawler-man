@@ -16,6 +16,11 @@ import {
   type GymBoomboxLook,
   type GymConsoleState,
 } from './art/gymRoomArt';
+import {
+  GYM_EXERCISE_BALL_FRAMES,
+  GYM_FALLING_KETTLEBELL_FRAMES,
+  type GymExerciseBallColour,
+} from './art/gymKettlebellArt';
 
 const HALF = 0.5;
 const QUARTER_TURN = Math.PI / 2;
@@ -95,6 +100,42 @@ export function drawGymSquatRackSprite(
   loaded: boolean,
 ): void {
   drawSpriteKey(ctx, 'gym_squat_rack', loaded ? 'loaded' : 'stripped', 0, sx, sy, ts);
+}
+
+/** A kettlebell rack, stocked or heaved bare. */
+export function drawGymKettlebellRackSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  stocked: boolean,
+): void {
+  drawSpriteKey(ctx, 'gym_kettlebell_rack', stocked ? 'stocked' : 'heaved', 0, sx, sy, ts);
+}
+
+/** A kettlebell on its way down; `band` picks which of the sheet's weight colours it wears. */
+export function drawGymFallingKettlebellSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  band: number,
+): void {
+  drawSpriteKey(ctx, 'gym_kettlebell', 'fall', band % GYM_FALLING_KETTLEBELL_FRAMES, sx, sy, ts);
+}
+
+/** An exercise ball whose tile's top-left is at (sx, sy), turned to `frame` of its roll. */
+export function drawGymExerciseBallSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  colour: GymExerciseBallColour,
+  frame: number,
+): void {
+  const wrapped =
+    ((frame % GYM_EXERCISE_BALL_FRAMES) + GYM_EXERCISE_BALL_FRAMES) % GYM_EXERCISE_BALL_FRAMES;
+  drawSpriteKey(ctx, 'gym_exercise_ball', colour, wrapped, sx, sy, ts);
 }
 
 export function drawGymCableStackSprite(

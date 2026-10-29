@@ -3,9 +3,6 @@ import type { LevelDef } from './types';
 import { BASE_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
 import { DEFAULT_DUNGEON_FLOOR_THEME } from '../map/dungeon/floorTheme';
 
-/** Boss rooms carved when a level declares none. */
-const DEFAULT_BOSS_ROOM_COUNT = 1;
-
 /**
  * The generator settings a level implies, everything except the map's size.
  *
@@ -15,11 +12,9 @@ const DEFAULT_BOSS_ROOM_COUNT = 1;
  */
 export function dungeonOptionsForLevel(levelDef: LevelDef): DungeonLevelOptions {
   return {
-    numBossRooms: levelDef.bossRooms?.length ?? DEFAULT_BOSS_ROOM_COUNT,
+    bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
     numStairwellsOverride: levelDef.numStairwells,
     stairwellCountMultiplier: levelDef.stairwellCountMultiplier,
-    hasArena: levelDef.hasArena ?? false,
-    bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
     hasSpiderLab: levelDef.hasSpiderLab ?? false,
     progression: levelDef.progression,
     questGrateCount: (levelDef.defendQuestIntensity ?? BASE_DEFEND_QUEST_INTENSITY).grateCount,

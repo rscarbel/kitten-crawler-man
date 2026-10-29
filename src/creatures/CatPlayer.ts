@@ -31,7 +31,7 @@ import { catMouthOf } from '../sprites/crawlerMouths';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
 import type { AbilityManager } from '../core/skills/AbilityManager';
-import { getMagicMissileStats } from '../abilities/magicMissile';
+import { getMagicMissileStats, missileBaseRangeTiles } from '../abilities/magicMissile';
 import {
   KaleidoscopeCopies,
   steerMissileToward,
@@ -127,8 +127,6 @@ export class CatPlayer extends Player {
    * out-swings the player who is holding the attack key.
    */
   private static readonly AUTO_SWIPE_COOLDOWN_FRAMES = 90;
-  private static readonly MISSILE_BASE_RANGE = 3.5;
-  private static readonly MISSILE_RANGE_MAGIC_MULTIPLIER = 0.5;
   private static readonly SUBMISSILE_MAX_DIST_TILES = 1.8;
   /** Half a tile: what you add to a tile origin to get its centre. */
   private static readonly TILE_CENTER_OFFSET = 0.5;
@@ -299,10 +297,7 @@ export class CatPlayer extends Player {
 
   /** A missile's flight before its level's range multiplier. */
   private missileBaseRangePx(): number {
-    return (
-      (CatPlayer.MISSILE_BASE_RANGE + this.magic * CatPlayer.MISSILE_RANGE_MAGIC_MULTIPLIER) *
-      this.tileSize
-    );
+    return missileBaseRangeTiles(this.magic) * this.tileSize;
   }
 
   /**
@@ -855,7 +850,7 @@ export class CatPlayer extends Player {
               // into a bystander is the one way a shot the player aimed
               // correctly can still land on a friend, and it reads as the spell
               // choosing the target for them.
-              if (!mob.isAlive || !mob.isHostile) continue;
+              if (!mob.isHostileTarget) continue;
               const ddx = mob.x + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.x;
               const ddy = mob.y + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.y;
               const distSq = ddx * ddx + ddy * ddy;

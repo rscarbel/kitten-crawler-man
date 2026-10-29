@@ -28,7 +28,7 @@ import {
 } from '../src/sprites/blackPowderBombSprite.js';
 import { drawLitDynamiteStick } from '../src/sprites/dynamiteSprite.js';
 import { paintFuseFloorGlow } from '../src/sprites/fuseEffects.js';
-import { DANGER_CIRCLE_PALETTE, drawDangerCircle } from '../src/sprites/dangerTelegraph.js';
+import { drawDangerCircle } from '../src/sprites/dangerTelegraph.js';
 import {
   BLACK_POWDER_BLAST_RADIUS_PX,
   GOBLIN_DYNAMITE_BLAST_RADIUS_PX,
@@ -274,7 +274,7 @@ export function renderGoblinBombSheet(out: string): string {
     );
     const cx = cellX + CIRCLE_CELL / 2;
     const cy = y + CIRCLE_CELL / 2;
-    drawDangerCircle(ctx, cx, cy, circle.radius, 1, DANGER_CIRCLE_PALETTE, {
+    drawDangerCircle(ctx, cx, cy, circle.radius, 1, {
       fillProgress: circle.progress,
     });
     if (circle.stick) {

@@ -26,7 +26,8 @@ import { NecromancerPreviewScene } from '../scenes/NecromancerPreviewScene';
 import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
 import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
 import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
-import { KrakarenPreviewScene } from '../scenes/KrakarenPreviewScene';
+import { KrakenPreviewScene } from '../scenes/KrakenPreviewScene';
+import { ElectricGoblinPreviewScene } from '../scenes/ElectricGoblinPreviewScene';
 import { TrashGremlinPreviewScene } from '../scenes/TrashGremlinPreviewScene';
 import { BigRoosterPreviewScene } from '../scenes/BigRoosterPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
@@ -248,9 +249,8 @@ function withPlaytestBoot(options: DungeonSceneOptions, boot: PlaytestBoot): Dun
     humanSnap: boot.humanSnap,
     catSnap: boot.catSnap,
     abilityManager: boot.abilityManager,
-    // The pet is unlocked from a treasure chest most presets start well past,
-    // and a playtest drop-in that cannot summon him cannot test him.
-    deinonychusUnlocked: true,
+    deinonychusUnlocked: boot.deinonychus !== 'locked',
+    deinonychusWasOut: boot.deinonychus === 'out',
     petNames: playtestPetNames(options),
     resolveSpawnTile: (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap),
     bathroomSolvedAtStart: (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap),
@@ -321,7 +321,7 @@ function prisonLayoutNamed(value: string): PrisonLayout | null {
  * seeds the Krasue Murders questline. `?prison=1&difficulty=hard`
  * walks the `prison` preset's party straight into the Goblin High Security
  * Prison, built from that layout on that difficulty; leaving it comes out in
- * floor 2's gate room. `?story=floor2_dave_chosen` boots the floor a story beat
+ * floor 2's gate room. `?story=floor1_dave_chosen` boots the floor a story beat
  * is heard on, with every beat before it already heard, and plays the beat at
  * once. The rest are art preview harnesses.
  *
@@ -464,8 +464,12 @@ function devRouteNamed(
     return () => sceneManager.replace(new TusklingPreviewScene());
   }
 
-  if (params.get('krakaren') !== null) {
-    return () => sceneManager.replace(new KrakarenPreviewScene());
+  if (params.get('kraken') !== null) {
+    return () => sceneManager.replace(new KrakenPreviewScene());
+  }
+
+  if (params.get('electric-goblin') !== null) {
+    return () => sceneManager.replace(new ElectricGoblinPreviewScene());
   }
 
   if (params.get('gremlin') !== null) {
@@ -603,7 +607,6 @@ function devRouteNamed(
             floorLevelId: null,
           };
         }
-        if (preset.deinonychusOut === true) floorOptions.deinonychusWasOut = true;
         const defences = preset.briarHollowDefences;
         if (defences !== undefined) {
           const wallsFlag = params.get('walls');

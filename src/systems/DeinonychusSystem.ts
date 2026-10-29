@@ -29,8 +29,8 @@ import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
 import type { SummonModel } from '../ui/hud/hudModel';
 import { paintOffscreenPetMarker } from '../ui/hud/offscreenPetMarker';
 import { CAT_SPEECH_STYLE, TimedSpeech, drawTimedSpeechBubble } from '../sprites/speechBubble';
-import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { ANY_TILE, findNearbyWalkableTile, type TileFilter } from '../map/findWalkableTile';
+import { getWorldZoom, viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { DEINONYCHUS_LINES } from '../dialog/scripts/deinonychus';
 import { petWords, type PetNames, type PetWords } from '../core/party/petNames';
 
@@ -379,7 +379,7 @@ export class DeinonychusSystem implements GameSystem {
   asCarriedCompanion(cat: CatPlayer): CarriedCompanion {
     return {
       body: this.deinonychus,
-      landingTile: (map) => this.findSpawnTile(cat, map),
+      landingTile: (map, isAcceptable) => this.findSpawnTile(cat, map, isAcceptable),
       putAway: (mobs, grid) => this.dismiss(mobs, grid),
       onPlaced: (mobs) => {
         const deinonychus = this.deinonychus;
@@ -423,7 +423,7 @@ export class DeinonychusSystem implements GameSystem {
     const catCentreX = cat.x + TILE_SIZE * TILE_CENTER;
     const catCentreY = cat.y + TILE_SIZE * TILE_CENTER;
     for (const mob of nearby) {
-      if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+      if (!mob.isHostileTarget || mob.avoidInstead) continue;
       // Held out of the fight by a script, it is not a threat to send him at.
       if (mob.offLimitsToAllies) continue;
       // An unstarted boss fight is the player's to start. Sending the pet at it
@@ -464,11 +464,15 @@ export class DeinonychusSystem implements GameSystem {
    *
    * Returns null when there is nowhere he can stand, and the summon is refused.
    * There is deliberately no "just use the cat's tile" fallback: the only way to
-   * reach one is for the cat herself to be standing somewhere unwalkable — an
-   * arena door closing under her, a scripted placement — which is precisely the
+   * reach one is for the cat herself to be standing somewhere unwalkable — a
+   * boss room's door sealing under her, a scripted placement — which is precisely the
    * case where that tile is the wrong answer.
    */
-  private findSpawnTile(cat: CatPlayer, gameMap: GameMap): { x: number; y: number } | null {
+  private findSpawnTile(
+    cat: CatPlayer,
+    gameMap: GameMap,
+    isAcceptable: TileFilter = ANY_TILE,
+  ): { x: number; y: number } | null {
     const catTileX = Math.floor((cat.x + TILE_SIZE * TILE_CENTER) / TILE_SIZE);
     const catTileY = Math.floor((cat.y + TILE_SIZE * TILE_CENTER) / TILE_SIZE);
     const facedTileX = catTileX + Math.round(cat.facingX);
@@ -487,7 +491,7 @@ export class DeinonychusSystem implements GameSystem {
       facedTileX,
       facedTileY,
       SPAWN_SEARCH_RADIUS_TILES,
-      (x, y) => inSightOfCat(x, y) && !gameMap.isStairwellTile(x, y),
+      (x, y) => inSightOfCat(x, y) && !gameMap.isStairwellTile(x, y) && isAcceptable(x, y),
     );
   }
 
@@ -564,7 +568,7 @@ export class DeinonychusSystem implements GameSystem {
     const landing = this.findSpawnTile(cat, gameMap);
     if (landing === null) {
       // Nowhere beside the cat he could stand — she is somewhere unwalkable
-      // herself, which is an arena door closing under her or a scripted
+      // herself, which is a boss room's door sealing under her or a scripted
       // placement. Put him away instead: `finishDespawn` preserves his HP and
       // hands the button back as Summon, so the unrecoverable state ends either
       // way and neither branch costs the player anything.
@@ -1058,7 +1062,8 @@ export class DeinonychusSystem implements GameSystem {
    * small enough that the fog never draws, the same test marks a pet who is
    * technically still lit; a redundant icon is the right way round to be wrong.
    * Called from the scene after the fog and before the HUD; see the call site for
-   * why it is pinned between them.
+   * why it is pinned between them. It paints in the screen's own CSS pixels, so
+   * it is drawn outside the world pass's zoom.
    */
   renderOffscreenMarker(
     ctx: CanvasRenderingContext2D,
@@ -1071,8 +1076,9 @@ export class DeinonychusSystem implements GameSystem {
     // Nothing to point at during the fade: he is at her feet and on his way out.
     if (deinonychus === null || deinonychus.recallArrived) return;
 
-    const screenX = deinonychus.x - camX + TILE_SIZE * TILE_CENTER;
-    const screenY = deinonychus.y - camY + TILE_SIZE * TILE_CENTER;
+    const zoom = getWorldZoom();
+    const screenX = (deinonychus.x - camX + TILE_SIZE * TILE_CENTER) * zoom;
+    const screenY = (deinonychus.y - camY + TILE_SIZE * TILE_CENTER) * zoom;
     const width = viewportWidth();
     const height = viewportHeight();
     const insideViewport = screenX >= 0 && screenY >= 0 && screenX <= width && screenY <= height;

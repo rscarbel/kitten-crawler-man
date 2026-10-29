@@ -42,11 +42,11 @@ import { getManifestKeys } from '../src/core/spriteAssets/SpriteLoader.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import {
-  ARENA_MUD,
   BOSS_ROOM_FLAT_TILE_TYPES,
   BOSS_ROOM_PROP_TILE_TYPES,
   FloorTypeValue,
   GYM_CABLE_STACK,
+  GYM_KETTLEBELL_RACK,
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_TREADMILL_BELT,
@@ -54,9 +54,8 @@ import {
   TRASH_PILE,
   TRASH_RUBBLE,
   TRASH_TOWER,
-  KRAKAREN_CONSOLE,
-  KRAKAREN_TANK,
-  KRAKAREN_WADE,
+  POWER_LAB_CONSOLE,
+  POWER_LAB_TANK,
   LAB_BENCH,
   LAB_SHELF,
   LAB_WEB,
@@ -206,19 +205,21 @@ const TILE_CONTRACTS: ReadonlyMap<number, TileContract> = new Map([
   [GYM_SQUAT_RACK, { name: 'GYM_SQUAT_RACK', walkable: false, blocksSight: true, ySorted: true }],
   [GYM_CABLE_STACK, { name: 'GYM_CABLE_STACK', walkable: false, blocksSight: true, ySorted: true }],
   [
+    GYM_KETTLEBELL_RACK,
+    { name: 'GYM_KETTLEBELL_RACK', walkable: false, blocksSight: false, ySorted: true },
+  ],
+  [
     GYM_TREADMILL_BELT,
     { name: 'GYM_TREADMILL_BELT', walkable: true, blocksSight: false, ySorted: false },
   ],
-  [KRAKAREN_WADE, { name: 'KRAKAREN_WADE', walkable: true, blocksSight: false, ySorted: false }],
-  [KRAKAREN_TANK, { name: 'KRAKAREN_TANK', walkable: false, blocksSight: true, ySorted: true }],
+  [POWER_LAB_TANK, { name: 'POWER_LAB_TANK', walkable: false, blocksSight: true, ySorted: true }],
   [
-    KRAKAREN_CONSOLE,
-    { name: 'KRAKAREN_CONSOLE', walkable: false, blocksSight: false, ySorted: true },
+    POWER_LAB_CONSOLE,
+    { name: 'POWER_LAB_CONSOLE', walkable: false, blocksSight: false, ySorted: true },
   ],
   [LAB_BENCH, { name: 'LAB_BENCH', walkable: false, blocksSight: false, ySorted: true }],
   [LAB_SHELF, { name: 'LAB_SHELF', walkable: false, blocksSight: true, ySorted: true }],
   [LAB_WEB, { name: 'LAB_WEB', walkable: true, blocksSight: false, ySorted: false }],
-  [ARENA_MUD, { name: 'ARENA_MUD', walkable: true, blocksSight: false, ySorted: false }],
 ]);
 
 /** Side of the square test map a single tile is judged on. */
@@ -484,7 +485,7 @@ function gateRoomOnFloor(harness: BossRoomHarness, found: FoundRoom): void {
     pendingViolations.set(harness.id, (pendingViolations.get(harness.id) ?? 0) + 1);
   };
 
-  const invariants = harness.invariantTiles?.(room) ?? defaultInvariantTiles(room);
+  const invariants = harness.invariantTiles?.(room, gameMap) ?? defaultInvariantTiles(room);
   if (fault === 'block-approach') {
     const first = firstOf(invariants.approach);
     if (first !== undefined) gameMap.blockTilePermanently(first.x, first.y);

@@ -9,6 +9,9 @@
  * stops when the leader stops and never moves faster than the leader did.
  */
 
+import { TILE_SIZE } from '../core/constants';
+import type { GameMap } from '../map/GameMap';
+
 /** A body the trail reads or places: top-left world position, the same frame of reference the crawlers use. */
 export interface TrailBody {
   x: number;
@@ -32,6 +35,37 @@ export interface TrailPoint {
  * trail has to start again; null when there is no way through.
  */
 export type TrailRouter = (from: TrailBody, to: TrailBody) => readonly TrailPoint[] | null;
+
+/** From a body's top-left to its tile's centre. */
+const TILE_CENTRE = 0.5;
+/** How far a restarted trail may route between the two bodies before the follower is stood on the leader instead. */
+const TRAIL_ROUTE_MAX_TILES = 24;
+
+/** The tile corners of a walkable path between two bodies on `map`, for a trail starting again. */
+export function routeTrailBetween(
+  map: Pick<GameMap, 'findPath'>,
+  from: TrailBody,
+  to: TrailBody,
+): readonly TrailPoint[] | null {
+  const tileOf = (body: TrailBody): TrailPoint => ({
+    x: Math.floor((body.x + TILE_SIZE * TILE_CENTRE) / TILE_SIZE),
+    y: Math.floor((body.y + TILE_SIZE * TILE_CENTRE) / TILE_SIZE),
+  });
+  const start = tileOf(from);
+  const goal = tileOf(to);
+  if (start.x === goal.x && start.y === goal.y) return [];
+  const path = map.findPath(start.x, start.y, goal.x, goal.y, TRAIL_ROUTE_MAX_TILES);
+  if (path.length === 0) return null;
+  return path.map((tile) => ({ x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE }));
+}
+
+/**
+ * How far behind the leader, along the leader's own trail, a follower walks
+ * wherever the route the player chose has to decide every body's ground (the
+ * prison's lights, the flooded pump room's shark). One tile keeps the
+ * follower exactly where the leader stood one step ago.
+ */
+export const PARTY_TRAIL_SPACING_TILES = 1;
 
 /** Below this the leader is taken to be standing still, and no breadcrumb is laid. */
 const MOVE_EPSILON_PX = 0.01;

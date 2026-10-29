@@ -16,7 +16,8 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { AudioManager, PlacedCuePlayer, PlacedReach } from '../audio/AudioManager';
-import type { SoundId } from '../audio/sounds';
+import { ELECTRIFIED_JOLT_SOUNDS, type SoundId } from '../audio/sounds';
+import { FLOODED_PUMP_ROOM_CUES } from './bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
 import { applyIntoxicatedWalkWobble, intoxicationOf } from '../core/combat/Intoxication';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
@@ -27,18 +28,24 @@ import { RoosterMinion } from '../creatures/RoosterMinion';
 import { TrashGremlin } from '../creatures/TrashGremlin';
 import type { RoosterSoundCue } from '../creatures/creatureSoundCues';
 import type { RoosterBuild } from '../sprites/roosterSprite';
-import { ROOSTER_CUES, ROOSTER_STEP_VOLUME, TRASH_GREMLIN_CUES } from './bossSoundCues';
+import {
+  ELECTRIC_GOBLIN_CUES,
+  ROOSTER_CUES,
+  ROOSTER_STEP_VOLUME,
+  TRASH_GREMLIN_CUES,
+} from './bossSoundCues';
+import { ElectricGoblin } from '../creatures/ElectricGoblin';
 import { Mantid } from '../creatures/Mantid';
-import { BallOfSwine } from '../creatures/BallOfSwine';
 import { AttackCow } from '../creatures/AttackCow';
 import { Cow, type CowVoice } from '../creatures/Cow';
 import { Deinonychus } from '../creatures/Deinonychus';
 import { mobVoiceTakes } from './mobVoices';
-import { KrakarenClone } from '../creatures/KrakarenClone';
-import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
+import { Kraken } from '../creatures/Kraken';
+import { KrakenTentacle } from '../creatures/KrakenTentacle';
 import { playFairyCastCues } from './fairyAudioCues';
 import { playUndeadCues } from './undeadAudioCues';
 import { GoblinBomber } from '../creatures/GoblinBomber';
+import { getWorldZoom } from '../core/rendering/Viewport';
 import {
   BOMBER_GOBLIN_CUES,
   BOMBER_SOUND_CUE_PLAYS,
@@ -61,7 +68,7 @@ import {
  *   5. updateSystems         — barriers, gym room, companion, spells, etc.
  *   6. updateMobAI           — activate nearby mobs, run AI, clamp bosses
  *   7. resolveCombat         — attack hits, kills, XP split, loot drops
- *   8. postCombat            — gore, grub spawns, arena phases, Deinonychus
+ *   8. postCombat            — gore, grub spawns, Deinonychus
  *   9. tickTimers            — player timers, loot TTL, dynamite, seismic stomp blasts, level timer
  *   10. checkDeath           — game over conditions
  */
@@ -122,8 +129,9 @@ export function readMovement(
     dx === 0 &&
     dy === 0
   ) {
-    const wx = mobileMoveTarget.x + camera.x;
-    const wy = mobileMoveTarget.y + camera.y;
+    const zoom = getWorldZoom();
+    const wx = mobileMoveTarget.x / zoom + camera.x;
+    const wy = mobileMoveTarget.y / zoom + camera.y;
     const ddx = wx - (player.x + TILE_SIZE / 2);
     const ddy = wy - (player.y + TILE_SIZE / 2);
     const dist = Math.hypot(ddx, ddy);
@@ -379,7 +387,7 @@ export function snapTargetAlong(
   for (const mob of nearPlayer) {
     // Allies share the mob grid: turning to swing at a companion is a miss at
     // best, and a blow thrown at the one enemy beside it goes the wrong way.
-    if (!mob.isAlive || !mob.isHostile) continue;
+    if (!mob.isHostileTarget) continue;
     const dx = mob.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - px;
     const dy = mob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - py;
     const dist = Math.hypot(dx, dy);
@@ -504,9 +512,29 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       : null;
     playCuesOf(mob, voice);
     playBomberGoblinCues(mob, voice, audio?.clockSeconds ?? 0);
+    if (mob.seizureJoltSoundPending) {
+      mob.seizureJoltSoundPending = false;
+      voice?.playRandom(ELECTRIFIED_JOLT_SOUNDS);
+    }
     // The damage cue only takes the flag down for voices that have one; a
     // creature silenced now must not bring an old cue with it once heard.
     if (!heard) mob.damageSoundPending = false;
+  }
+}
+
+/**
+ * The jolt of a crawler's electrified seizure, at the crawler. Every scene the
+ * crawlers fight in drains it each frame, so a jolt raised in one never waits
+ * to sound in the next.
+ */
+export function playCrawlerSeizureJolts(
+  crawlers: readonly Player[],
+  audio: AudioManager | null,
+): void {
+  for (const crawler of crawlers) {
+    if (!crawler.seizureJoltSoundPending) continue;
+    crawler.seizureJoltSoundPending = false;
+    audio?.playRandomAt(ELECTRIFIED_JOLT_SOUNDS, crawler.x, crawler.y);
   }
 }
 
@@ -552,7 +580,6 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
     playTakes(mobVoiceTakes(mob, 'special'), audio);
   }
   playMantidHiss(mob, audio);
-  playSwineSpinup(mob, audio);
   playCowVoice(mob, audio);
   playAttackCowCues(mob, audio);
   playCastWindup(mob, audio);
@@ -560,8 +587,9 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   playBigRoosterCues(mob, audio);
   playRoosterFlockCues(mob, audio);
   playTrashGremlinCues(mob, audio);
-  playKrakarenCloneCues(mob, audio);
-  playKrakarenTentacleCues(mob, audio);
+  playElectricGoblinCues(mob, audio);
+  playKrakenCues(mob, audio);
+  playKrakenTentacleCues(mob, audio);
   playFairyCastCues(mob, audio);
   playUndeadCues(mob, audio);
 }
@@ -580,33 +608,52 @@ function playBomberGoblinCues(mob: Mob, audio: PlacedCuePlayer | null, clockS: n
 }
 
 /**
- * The Krakaren Clone's slam telegraph rise — the "look at the boss" cue at the
- * start of the 90-frame warning, ahead of the impact `krakaren_ground_slam`
+ * The Kraken's slam telegraph rise — the "look at the boss" cue at the
+ * start of the 90-frame warning, ahead of the impact `kraken_ground_slam`
  * already covers.
  */
-function playKrakarenCloneCues(mob: Mob, audio: PlacedCuePlayer | null): void {
-  if (!(mob instanceof KrakarenClone) || !mob.slamRiseSoundPending) return;
+function playKrakenCues(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (!(mob instanceof Kraken) || !mob.slamRiseSoundPending) return;
   mob.slamRiseSoundPending = false;
-  audio?.play('krakaren_slam_rise');
+  audio?.play('kraken_slam_rise');
 }
 
 /**
- * The guard tentacle's own two cues — its death squelch is not among them: it
- * dies through `resolveKills`' `mobKilled` event (see `AudioManager.wireEvents`)
- * rather than a drained flag here, because by the time this function would see
- * one on a later frame `BossRoomSystem`'s summon-cleanup pass has already
- * compacted the spent tentacle out of the mob array `justDied` no longer
- * protects.
+ * A tentacle's own cues, its slam on a raft among them. Its death
+ * squelch is not one: it dies through `resolveKills`' `mobKilled` event (see
+ * `AudioManager.wireEvents`) rather than a drained flag here, because by the
+ * time this function would see one on a later frame `BossRoomSystem`'s
+ * summon-cleanup pass may already have compacted the spent tentacle out of the
+ * mob array `justDied` no longer protects.
  */
-function playKrakarenTentacleCues(mob: Mob, audio: PlacedCuePlayer | null): void {
-  if (!(mob instanceof KrakarenTentacle)) return;
+function playKrakenTentacleCues(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (!(mob instanceof KrakenTentacle)) return;
   if (mob.emergeSoundPending) {
     mob.emergeSoundPending = false;
-    audio?.play('krakaren_tentacle_emerge');
+    audio?.play('kraken_tentacle_emerge');
   }
   if (mob.strikeSoundPending) {
     mob.strikeSoundPending = false;
-    audio?.play('krakaren_tentacle_strike');
+    audio?.play('kraken_tentacle_strike');
+  }
+  if (mob.slamSoundPending) {
+    mob.slamSoundPending = false;
+    playTakes(slamTakesOf(mob), audio);
+  }
+}
+
+/** What a raft or pump tentacle's slam lands on: the planks of a raft, either way. */
+function slamTakesOf(tentacle: KrakenTentacle): readonly SoundId[] {
+  switch (tentacle.role.kind) {
+    case 'raft':
+    case 'pump':
+      return FLOODED_PUMP_ROOM_CUES.raftSlam;
+    case 'guard':
+      return [];
+    default: {
+      const unhandled: never = tentacle.role;
+      throw new Error(`unhandled tentacle role ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -651,6 +698,11 @@ function playRoosterCues(
 function playTrashGremlinCues(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof TrashGremlin)) return;
   for (const cue of mob.takeSoundCues()) audio?.playRandom(TRASH_GREMLIN_CUES[cue]);
+}
+
+function playElectricGoblinCues(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (!(mob instanceof ElectricGoblin)) return;
+  for (const cue of mob.takeSoundCues()) playTakes(ELECTRIC_GOBLIN_CUES[cue], audio);
 }
 
 /** What each of a cow's voices plays; `playRandom` picks one of several takes. */
@@ -713,17 +765,6 @@ function playMantidHiss(mob: Mob, audio: PlacedCuePlayer | null): void {
     'mantid_hiss_4',
     'mantid_hiss_5',
   ]);
-}
-
-/**
- * The Ball of Swine's charge wind-up — the beat the whole fight is read off,
- * split out of `specialSoundPending` because that flag already carries the
- * lunge, the carom, the wall slam and the collapse.
- */
-function playSwineSpinup(mob: Mob, audio: PlacedCuePlayer | null): void {
-  if (!(mob instanceof BallOfSwine) || !mob.spinupSoundPending) return;
-  mob.spinupSoundPending = false;
-  audio?.play('deep_rumbling');
 }
 
 /**

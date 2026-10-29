@@ -417,10 +417,10 @@ export class DungeonLightingSystem implements GameSystem {
   private readonly regionAmbient = new Map<number, { level: number; colour: LightColour }>();
   /**
    * The regions this pass never darkens, nor lets a hallway's dark spill into:
-   * the spider lab, the boss rooms and the colosseum.
+   * the spider lab and the boss rooms.
    */
   private readonly pinnedRegions = new Set<number>();
-  /** The regions that take mood lights and nothing else: the boss rooms and the colosseum. */
+  /** The regions that take mood lights and nothing else: the boss rooms. */
   private readonly moodRegions = new Set<number>();
   /** Ambient darkness per tile before the cap, worked out once. */
   private readonly uncappedDarkness: Float32Array;
@@ -515,7 +515,7 @@ export class DungeonLightingSystem implements GameSystem {
   }
 
   /**
-   * Adds a mood light to a boss room or the colosseum. Those regions are
+   * Adds a mood light to a boss room. Those regions are
    * never darkened, so the light only adds its colour, at the sharp preset;
    * every fight in them reads exactly as it was tuned. Returns false anywhere
    * else, or where a light already stands.
@@ -575,8 +575,12 @@ export class DungeonLightingSystem implements GameSystem {
     };
     this.staticLights.push(light);
     this.lightsByTile.set(key, light);
-    if (light.carrierTileType !== null || light.carrier !== null) this.carriedLights.push(light);
-    if (light.carrier !== null && !this.isCarried(light)) this.putOut(light, false);
+    const followsSomething =
+      light.carrierTileType !== null || light.carrier !== null || light.powered !== null;
+    if (followsSomething) this.carriedLights.push(light);
+    if ((light.carrier !== null || light.powered !== null) && !this.isCarried(light)) {
+      this.putOut(light, false);
+    }
     this.applyStaticLevel(light);
     this.cacheDirty = true;
     return true;
@@ -731,7 +735,8 @@ export class DungeonLightingSystem implements GameSystem {
     const whole =
       light.carrier !== null
         ? light.carrier()
-        : this.deps.gameMap.structure[light.tileY][light.tileX].type === light.carrierTileType;
+        : light.carrierTileType === null ||
+          this.deps.gameMap.structure[light.tileY][light.tileX].type === light.carrierTileType;
     const powered = light.powered?.() ?? true;
     light.poweredDown = whole && !powered;
     return whole && powered;
@@ -1001,7 +1006,7 @@ export class DungeonLightingSystem implements GameSystem {
   /** A boss fight's ground: lit through, whatever the hallways round it. */
   private isMoodRegion(region: number): boolean {
     const tag = this.specialTag(region);
-    return tag === 'boss' || tag === 'arena';
+    return tag === 'boss';
   }
 
   private profileOf(region: number): LightingProfile | null {

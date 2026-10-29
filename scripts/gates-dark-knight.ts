@@ -736,7 +736,7 @@ const DISTINCT_MASK = 16;
  *
  * Re-derived from the shipped art rather than inherited. Measured over five
  * converted gore sets — the knight's seven pieces, Big Rooster's five, a
- * six-piece boss set and the Krakaren's seven and four, 73 pairs in all — the
+ * six-piece boss set and the Kraken's seven and four, 73 pairs in all — the
  * worst honest pairs sit in the low sixties: the knight's own worst is his helm
  * against his breastplate at 61%, and Big Rooster's is his comb-topped head
  * against his tail fan at 55%. Two pieces

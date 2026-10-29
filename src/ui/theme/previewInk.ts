@@ -21,7 +21,7 @@ const floor = {
   dirtTrack: '#6b5638',
   rubble: '#6f6a5e',
   unlitCave: '#2a2f2b',
-  /** The Krakaren's lair floor. */
+  /** The Kraken's lair floor. */
   wetStone: '#3c4644',
   /** Big Rooster's gym. */
   gymMat: '#3a3f46',

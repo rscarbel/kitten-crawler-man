@@ -33,13 +33,28 @@ const RANGE_INFINITE = 9999;
 const SPEED_FULL_POWER = 9.0;
 const SPEED_BASE = 4.5;
 
+/** A missile's flight before any level boost, in tiles, at no Magic at all. */
+const MISSILE_BASE_RANGE_TILES = 3.5;
+/** Tiles of flight each point of Magic adds. */
+const MISSILE_RANGE_PER_MAGIC_TILES = 0.5;
+
+/** How far a missile flies before its level's range multiplier, in tiles, for a cat with `magic`. */
+export function missileBaseRangeTiles(magic: number): number {
+  return MISSILE_BASE_RANGE_TILES + magic * MISSILE_RANGE_PER_MAGIC_TILES;
+}
+
+/** How far a missile cast at `level` flies for a cat with `magic`, in tiles, measured from her centre. */
+export function missileRangeTiles(magic: number, level: number): number {
+  return missileBaseRangeTiles(magic) * getMagicMissileStats(level).rangeMultiplier;
+}
+
 /** Runtime stats computed from the current ability level. */
 interface MagicMissileStats {
   /** Frames between allowed player-triggered shots (0 = no cooldown). */
   cooldownFrames: number;
   /** Multiplier applied to base missile damage (2 + magic). */
   damageMultiplier: number;
-  /** Multiplier applied to base range (3.5 + magic * 0.5 tiles). */
+  /** Multiplier applied to {@link missileBaseRangeTiles}. */
   rangeMultiplier: number;
   /** Speed in px/frame. Increases to 9 at level 15. */
   speed: number;

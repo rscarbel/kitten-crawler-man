@@ -18,8 +18,8 @@
 ## Floors
 
 - Tutorial: a short hand-built introduction.
-- Floor 1, "The Dungeon": procedurally generated rooms and corridors on a collapse countdown (find a stairwell before the floor collapses), safe rooms with a Bopca shop, the "Defend the Goblin Mother" quest, and the bosses The Trash Gremlin and Big Rooster.
-- Floor 2, "The Dungeon, Level 2": bosses Krakaren Clone, Ball of Swine (in a colosseum arena) and Grotesque Spider ("The Arachnid Experiment"); mini quests "The Stealth Key Snatch" (a prison stealth mission) and "The Clogged Bathroom" (a pipe puzzle).
+- Floor 1, "The Dungeon": procedurally generated rooms and corridors on a collapse countdown (find a stairwell before the floor collapses), safe rooms with a Bopca shop, the "Defend the Goblin Mother" quest, and the bosses The Trash Gremlin and The Kraken (a huge flooded pump room: shut off three pumps from the rafts moored beside them while a shark circles whichever raft you stand on, then fight it once the room drains).
+- Floor 2, "The Dungeon, Level 2": bosses The Current Goblin (a huge goblin in insulated rubber gear with a generator backpack and two shock rods, fought in a power lab with puddles), Big Rooster (fought in his gym, with kettlebell rain, a fury and kicked exercise balls) and the Grotesque Spider ("The Arachnid Experiment"); mini quests "The Stealth Key Snatch" (a prison stealth mission) and "The Clogged Bathroom" (a pipe puzzle).
 - Floor 3, "The Overworld": Taloncrest, with the Sleeping Cat Inn, shops, the Cloak & Dagger and the Town Center Tower. A circus with a Starlight Tent maze stands outside town. Quests include "The Krasue Murders" (a murder mystery), "Briar Hollow's Plea" (gather, build and defend a ratkin village against a siege led by the necromancer Vordrick Boneharrow), "The Anchor is Broken", and the finale, the Doomsday Scenario, named after the player's crawler.
 
 ## Features

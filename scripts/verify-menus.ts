@@ -66,6 +66,7 @@ import type { UiSize } from '../src/core/input/Settings.js';
 import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
 import type { ChestKit } from '../src/systems/kits/ChestKit.js';
+import type { CutsceneScript } from '../src/systems/cutscene/cutsceneSteps.js';
 import type { CutsceneKit } from '../src/systems/kits/CutsceneKit.js';
 import { CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
 import type { AIInteractionStage } from '../src/ai/interactions/AIInteractionStage.js';
@@ -77,6 +78,7 @@ import type { ResidentId } from '../src/core/state/residentIds.js';
 import { buildingDisplayName } from '../src/map/buildingIds.js';
 import { PetNameBook, petWords } from '../src/core/party/petNames.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { plainDeathMessage } from '../src/ui/DeathExplanations.js';
 
 export {};
 
@@ -1413,12 +1415,17 @@ function menusKitOpeners<S>(menusOf: (scene: S) => MenusKit): Opener<S>[] {
 /** Longer than the audit settles and plays an entrance for, so the cutscene is still running when audited. */
 const CUTSCENE_AUDIT_WAIT_FRAMES = MAX_SETTLE_FRAMES * 2;
 
+/** The slice of any scene's cutscene kit the audit drives, whatever world actions the scene has. */
+interface AuditedCutsceneKit extends Pick<CutsceneKit, 'dispose'> {
+  readonly director: { play(script: CutsceneScript): void };
+}
+
 /**
  * A cutscene holding the party still with nothing to read, the state its own
  * surface is the topmost claimant in: a talk inside one is the conversation,
  * audited on its own.
  */
-function cutsceneOpener<S>(kitOf: (scene: S) => CutsceneKit): Opener<S> {
+function cutsceneOpener<S>(kitOf: (scene: S) => AuditedCutsceneKit): Opener<S> {
   return opener<S>(
     'cutscene',
     (scene) => kitOf(scene).director.play([{ kind: 'wait', frames: CUTSCENE_AUDIT_WAIT_FRAMES }]),
@@ -1548,7 +1555,10 @@ function townOpeners(): Opener<Town>[] {
     menu(
       'death-screen',
       (scene) => {
-        scene['combat'].deathScreen.activate('The audit found you wanting.', 'checkpoint');
+        scene['combat'].deathScreen.activate(
+          plainDeathMessage('The audit found you wanting.'),
+          'checkpoint',
+        );
         scene['gameOver'] = true;
       },
       (scene) => {

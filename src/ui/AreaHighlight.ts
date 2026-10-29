@@ -3,7 +3,7 @@ import { roundRectPath } from './widgets/paint';
 import { withAlpha } from './theme/color';
 import { worldPalette } from './theme/worldInk';
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 
 /**
  * A highlight that hugs a rectangle of any size — one tile, a whole grain
@@ -151,9 +151,9 @@ const BRACKET_GLOW_ALPHA = 0.3;
 function isOffScreen(rect: Rect): boolean {
   return (
     rect.x + rect.w < -OFFSCREEN_MARGIN_PX ||
-    rect.x > viewportWidth() + OFFSCREEN_MARGIN_PX ||
+    rect.x > worldViewWidth() + OFFSCREEN_MARGIN_PX ||
     rect.y + rect.h < -OFFSCREEN_MARGIN_PX ||
-    rect.y > viewportHeight() + OFFSCREEN_MARGIN_PX
+    rect.y > worldViewHeight() + OFFSCREEN_MARGIN_PX
   );
 }
 

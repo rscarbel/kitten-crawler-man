@@ -5,7 +5,7 @@ import { RoosterMinion, type RoosterMinionBuild } from './RoosterMinion';
  * pair to lead with the beak.
  */
 export const LITTLE_ROOSTER: RoosterMinionBuild = {
-  maxHp: 18,
+  maxHp: 45,
   speed: 0.85,
   xpValue: 16,
   peckShare: 0.75,

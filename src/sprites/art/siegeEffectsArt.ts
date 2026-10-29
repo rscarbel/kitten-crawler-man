@@ -1,8 +1,9 @@
 /**
  * The moving pictures of the village's siege engines, painted live: a
- * tumbling boulder and the shadow it throws, the ring where it will land, the
- * burst of dust and stone where it does, the embers and miasma of an infernal
- * shot, and the soul-green marks of an enemy a snare has turned.
+ * tumbling boulder and the shadow it throws, the burst of dust and stone
+ * where it lands, the embers and miasma of an infernal shot, and the
+ * soul-green marks of an enemy a snare has turned. The red warning where a
+ * boulder will land is the shared ground warning (`dangerTelegraph.ts`).
  *
  * Painted live because every one of them moves every frame and there are
  * only ever a handful at once. The systems that own them hand in positions
@@ -78,44 +79,6 @@ export function drawBoulderShadow(
   ctx.fillStyle = `rgba(0,0,0,${(SHADOW_GROUNDED_ALPHA - lift * SHADOW_HEIGHT_FADE).toFixed(3)})`;
   ctx.beginPath();
   ctx.ellipse(x, y, radius * SHADOW_WIDTH, radius * SHADOW_DEPTH, 0, 0, FULL_TURN);
-  ctx.fill();
-  ctx.restore();
-}
-
-/** The landing ring's outline brightens from this alpha by the next over the flight. */
-const RING_EDGE_ALPHA = 0.25;
-const RING_EDGE_ALPHA_RISE = 0.5;
-/** Its fill swells from nothing to the full ring, faint throughout. */
-const RING_FILL_ALPHA = 0.06;
-const RING_FILL_ALPHA_RISE = 0.14;
-const RING_LINE_WIDTH = 1.5;
-const RING_DASH: readonly number[] = [5, 4];
-
-/**
- * The warning where a boulder will land, brightening as it falls. It spans
- * the whole shatter, so a friend standing inside it knows to step out.
- */
-export function drawLandingRing(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radiusPx: number,
-  progress: number,
-  infernal: boolean,
-): void {
-  ctx.save();
-  ctx.globalAlpha = RING_EDGE_ALPHA + progress * RING_EDGE_ALPHA_RISE;
-  ctx.strokeStyle = infernal ? '#fb923c' : '#fde68a';
-  ctx.lineWidth = RING_LINE_WIDTH;
-  ctx.setLineDash([...RING_DASH]);
-  ctx.beginPath();
-  ctx.ellipse(x, y, radiusPx, radiusPx * GROUND_SQUASH, 0, 0, FULL_TURN);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.globalAlpha = RING_FILL_ALPHA + progress * RING_FILL_ALPHA_RISE;
-  ctx.fillStyle = infernal ? '#f97316' : '#fef3c7';
-  ctx.beginPath();
-  ctx.ellipse(x, y, radiusPx * progress, radiusPx * GROUND_SQUASH * progress, 0, 0, FULL_TURN);
   ctx.fill();
   ctx.restore();
 }

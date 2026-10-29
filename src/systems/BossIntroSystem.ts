@@ -6,7 +6,12 @@ import {
   GROUND_OFFSET_PX,
   roosterStateName,
 } from '../sprites/art/roosterFigure';
-import { BIG_ROOSTER_BOSS_TYPE } from '../core/mobs/bossTypes';
+import {
+  BIG_ROOSTER_BOSS_TYPE,
+  ELECTRIC_GOBLIN_BOSS_TYPE,
+  KRAKEN_BOSS_TYPE,
+  TRASH_GREMLIN_BOSS_TYPE,
+} from '../core/mobs/bossTypes';
 import {
   drawTrashGremlinSprite,
   prewarmTrashGremlinLocomotion,
@@ -15,21 +20,21 @@ import {
   GROUND_OFFSET_PX as TRASH_GREMLIN_GROUND_OFFSET_PX,
   TRASH_GREMLIN_FIGURE,
 } from '../sprites/art/trashGremlinFigure';
-import { type DrawnFigureRow, drawnFigureRow } from '../sprites/figure/figureDef';
-import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
+import { drawnFigureRow } from '../sprites/figure/figureDef';
+import { figureFrameHeadroomTiles } from '../sprites/figure/figureFrameCache';
 import {
   drawNecromancerSprite,
   necromancerArtHeightTiles,
   necromancerArtTopTiles,
 } from '../sprites/necromancerSprite';
 import {
-  drawKrakarenSprite,
-  krakarenArtHeightTiles,
-  krakarenArtTopTiles,
-  prewarmKrakarenBody,
-} from '../sprites/krakarenSprite';
-import { ballOfSwinePortrait, drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
-import { BOS_BODY_RADIUS_TILES } from '../sprites/ballOfSwineSheet';
+  drawKrakenSprite,
+  KRAKEN_ART_HEIGHT_TILES,
+  KRAKEN_ART_TOP_TILES,
+  prewarmKrakenBody,
+} from '../sprites/krakenSprite';
+import { ELECTRIC_GOBLIN_FIGURE } from '../sprites/art/electricGoblinFigure';
+import { drawElectricGoblinSprite, prewarmElectricGoblin } from '../sprites/electricGoblinSprite';
 import { drawGrotesqueSpiderPoseSprite } from '../sprites/grotesqueSpiderSprite';
 import { GROTESQUE_SPIDER_IDLE_REACH_TILES } from '../sprites/art/grotesqueSpiderFigure';
 import { SPIDER_FRAMES_PER_SECOND } from '../creatures/grotesqueSpiderTimeline';
@@ -134,7 +139,10 @@ const BIG_ROOSTER_PORTRAIT_ROW = drawnFigureRow(
  * toes into his name.
  */
 function bigRoosterPortraitPlacement(): { size: number; yOffset: number } {
-  const headroomTiles = rowHeadroomTiles(BIG_ROOSTER_PORTRAIT_ROW);
+  const headroomTiles = figureFrameHeadroomTiles(
+    BIG_ROOSTER_PORTRAIT_ROW,
+    BIG_ROOSTER_INTRO_IDLE_FRAME,
+  );
   const size = Math.floor(
     (BIG_ROOSTER_PANEL_ART_BOTTOM - BIG_ROOSTER_PANEL_TOP_PAD) /
       (headroomTiles + BIG_ROOSTER_GROUND_TILE_FRACTION),
@@ -152,28 +160,12 @@ const BIG_ROOSTER_INTRO_IDLE_FRAME = 0;
  * tiles tall, so a flat size picked as a height would draw her at triple it and
  * out through both ends of the panel. The tile size is divided back out of this.
  */
-const KRAKAREN_SPRITE_SIZE = 120;
+const KRAKEN_SPRITE_SIZE = 120;
 /** How much clear panel is left above the top of her mantle. */
-const KRAKAREN_PANEL_TOP_PAD = 18;
-/** Used only until the sheet loads: her cell is about this many tiles tall/high. */
-const KRAKAREN_FALLBACK_ART_HEIGHT_TILES = 2.9;
-const KRAKAREN_FALLBACK_ART_TOP_TILES = 1.6;
+const KRAKEN_PANEL_TOP_PAD = 18;
 /** She is posed head-on in the panel, and a portrait holds one frame. */
-const KRAKAREN_INTRO_FACING_Y = 1;
-const KRAKAREN_INTRO_IDLE_FRAME = 0;
-/**
- * How wide the ball is drawn in its panel, and the tile size that produces it.
- *
- * Derived rather than picked, because the ball's `ts` argument is not a height the
- * way every other boss's is: it is a *tile* size, and the body is
- * `BOS_BODY_RADIUS_TILES * 2` of them across. Set as a flat 64 it drew 179px in a
- * 200px panel and hung out over the top of it.
- */
-const BOS_PANEL_DIAMETER = 112;
-const BOS_SPRITE_SIZE = Math.round(BOS_PANEL_DIAMETER / (BOS_BODY_RADIUS_TILES * 2));
-/** Where the ball's own centre sits down the panel, leaving room for its name. */
-const BOS_PANEL_CENTRE_Y = 86;
-const BOS_SPRITE_Y_OFFSET = BOS_PANEL_CENTRE_Y - BOS_SPRITE_SIZE / 2;
+const KRAKEN_INTRO_FACING_Y = 1;
+const KRAKEN_INTRO_IDLE_FRAME = 0;
 /** Clear panel kept round the Grotesque Spider: above her tail, below her fangs, and at either side. */
 const SPIDER_PANEL_PAD = 8;
 /** How far down the panel her art may reach: clear of the name label under her. */
@@ -210,22 +202,12 @@ const TRASH_GREMLIN_GROUND_TILE_FRACTION =
 /** The head-on idle the portrait holds. */
 const TRASH_GREMLIN_PORTRAIT_ROW = drawnFigureRow(TRASH_GREMLIN_FIGURE, 'idle');
 
-/**
- * How far a portrait row's ink rises above the top of its tile, in tiles,
- * measured off the painted row rather than frozen so a redraw cannot push a
- * head through the top of the panel or the feet into the name. Asked for when
- * the intro starts, so the measurement lands during the title; until it does
- * the answer is the whole cell's headroom, which only ever draws it smaller.
- */
-function rowHeadroomTiles(row: DrawnFigureRow): number {
-  const tileScale = row.def.tileScale;
-  const inkTopAboveTile = -figureRowInkTop(row, 0, tileScale);
-  return inkTopAboveTile / tileScale;
-}
-
 /** Its tile size and tile top in the panel, fitted crown to sole between the pads. */
 function trashGremlinPortraitPlacement(): { size: number; yOffset: number } {
-  const headroomTiles = rowHeadroomTiles(TRASH_GREMLIN_PORTRAIT_ROW);
+  const headroomTiles = figureFrameHeadroomTiles(
+    TRASH_GREMLIN_PORTRAIT_ROW,
+    TRASH_GREMLIN_PORTRAIT_FRAME,
+  );
   const size = Math.floor(
     (TRASH_GREMLIN_PANEL_ART_BOTTOM - TRASH_GREMLIN_PANEL_TOP_PAD) /
       (headroomTiles + TRASH_GREMLIN_GROUND_TILE_FRACTION),
@@ -234,6 +216,40 @@ function trashGremlinPortraitPlacement(): { size: number; yOffset: number } {
 }
 /** Pinned rather than clock-driven: a portrait that breathes reads as a bug. */
 const TRASH_GREMLIN_PORTRAIT_FRAME = 0;
+/** How much clear panel is left above the top of his generator's coils. */
+const ELECTRIC_GOBLIN_PANEL_TOP_PAD = 12;
+/** Clear panel kept between his boots and the name label under him. */
+const ELECTRIC_GOBLIN_PANEL_BOTTOM_PAD = 8;
+/** How far down the panel his boots may reach: clear of the name label. */
+const ELECTRIC_GOBLIN_PANEL_ART_BOTTOM =
+  VERSUS_PANEL_H -
+  TEAM_LABEL_Y_OFFSET_FROM_BOTTOM -
+  LABEL_TEXT_ADJUST -
+  ELECTRIC_GOBLIN_PANEL_BOTTOM_PAD;
+/** His boots stand on the bottom edge of his tile, like every goblin's. */
+const ELECTRIC_GOBLIN_GROUND_TILE_FRACTION = 1;
+const ELECTRIC_GOBLIN_PORTRAIT_STATE = 'idle' as const;
+const ELECTRIC_GOBLIN_PORTRAIT_ROW = drawnFigureRow(
+  ELECTRIC_GOBLIN_FIGURE,
+  ELECTRIC_GOBLIN_PORTRAIT_STATE,
+);
+/** Pinned rather than clock-driven, like every portrait. */
+const ELECTRIC_GOBLIN_PORTRAIT_FRAME = 0;
+/** Painted in profile only, so the portrait faces into the panel towards the crawlers. */
+const ELECTRIC_GOBLIN_PORTRAIT_FACING_X = -1;
+
+/** His tile size and tile top in the panel, fitted coil to boot between the pads. */
+function electricGoblinPortraitPlacement(): { size: number; yOffset: number } {
+  const headroomTiles = figureFrameHeadroomTiles(
+    ELECTRIC_GOBLIN_PORTRAIT_ROW,
+    ELECTRIC_GOBLIN_PORTRAIT_FRAME,
+  );
+  const size = Math.floor(
+    (ELECTRIC_GOBLIN_PANEL_ART_BOTTOM - ELECTRIC_GOBLIN_PANEL_TOP_PAD) /
+      (headroomTiles + ELECTRIC_GOBLIN_GROUND_TILE_FRACTION),
+  );
+  return { size, yOffset: ELECTRIC_GOBLIN_PANEL_TOP_PAD + Math.round(size * headroomTiles) };
+}
 /** Cat sprite x fraction of panel width. */
 const CAT_SPRITE_X_FRACTION = 0.52;
 /** Cat sprite y offset in versus panel. */
@@ -267,15 +283,12 @@ const TEAM_LABEL_SIDE_MARGIN = 8;
 const PANEL_CAPTION_SIZE = 9;
 const FIGHT_LABEL_SIZE = 10;
 
-/** The `bossRooms[].type` the Krakaren Clone is spawned under. */
-const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
 /** The boss type the Briar Hollow siege passes for Vordrick Boneharrow. */
 const NECROMANCER_BOSS_TYPE = 'necromancer';
-const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';
 
 /**
  * Total pixel height of the necromancer's portrait cell — sized larger than
- * the Krakaren Clone's, since his cell is proportionally taller and the same
+ * the Kraken's, since his cell is proportionally taller and the same
  * pixel budget reads him too small to recognize at panel scale.
  */
 const NECROMANCER_SPRITE_SIZE = 140;
@@ -301,16 +314,20 @@ export class BossIntroSystem implements GameSystem {
     // The intro is seven seconds during which the boss is drawn only as a
     // portrait, which is more lead than anything else in the fight can offer a
     // figure whose cells cost milliseconds rather than microseconds to paint.
-    if (bossType === KRAKAREN_BOSS_TYPE) prewarmKrakarenBody();
+    if (bossType === KRAKEN_BOSS_TYPE) prewarmKrakenBody();
     if (bossType === TRASH_GREMLIN_BOSS_TYPE) {
       // Its portrait holds the head-on idle, one of the rows it stands in.
       prewarmTrashGremlinLocomotion();
-      rowHeadroomTiles(TRASH_GREMLIN_PORTRAIT_ROW);
+      figureFrameHeadroomTiles(TRASH_GREMLIN_PORTRAIT_ROW, TRASH_GREMLIN_PORTRAIT_FRAME);
+    }
+    if (bossType === ELECTRIC_GOBLIN_BOSS_TYPE) {
+      prewarmElectricGoblin([ELECTRIC_GOBLIN_PORTRAIT_STATE]);
+      figureFrameHeadroomTiles(ELECTRIC_GOBLIN_PORTRAIT_ROW, ELECTRIC_GOBLIN_PORTRAIT_FRAME);
     }
     if (bossType === BIG_ROOSTER_BOSS_TYPE) {
       prewarmRoosterRow('big', 'idle');
       prewarmRoosterRow('big', 'crow');
-      rowHeadroomTiles(BIG_ROOSTER_PORTRAIT_ROW);
+      figureFrameHeadroomTiles(BIG_ROOSTER_PORTRAIT_ROW, BIG_ROOSTER_INTRO_IDLE_FRAME);
     }
   }
 
@@ -515,27 +532,24 @@ export class BossIntroSystem implements GameSystem {
             idleFrame: BIG_ROOSTER_INTRO_IDLE_FRAME,
           },
         );
-      } else if (intro.bossType === KRAKAREN_BOSS_TYPE) {
-        const kS =
-          KRAKAREN_SPRITE_SIZE / krakarenArtHeightTiles(KRAKAREN_FALLBACK_ART_HEIGHT_TILES);
-        const kY =
-          panelY +
-          KRAKAREN_PANEL_TOP_PAD +
-          kS * krakarenArtTopTiles(KRAKAREN_FALLBACK_ART_TOP_TILES);
-        drawKrakarenSprite(ctx, rightX + panelW / 2 - kS / 2, kY, kS, {
+      } else if (intro.bossType === KRAKEN_BOSS_TYPE) {
+        const kS = KRAKEN_SPRITE_SIZE / KRAKEN_ART_HEIGHT_TILES;
+        const kY = panelY + KRAKEN_PANEL_TOP_PAD + kS * KRAKEN_ART_TOP_TILES;
+        drawKrakenSprite(ctx, rightX + panelW / 2 - kS / 2, kY, kS, {
           facingX: 0,
-          facingY: KRAKAREN_INTRO_FACING_Y,
-          idleFrame: KRAKAREN_INTRO_IDLE_FRAME,
+          facingY: KRAKEN_INTRO_FACING_Y,
+          idleFrame: KRAKEN_INTRO_IDLE_FRAME,
         });
-      } else if (intro.bossType === 'ball_of_swine') {
-        const bS = BOS_SPRITE_SIZE;
-        drawBallOfSwineSprite(
-          ctx,
-          rightX + panelW / 2 - bS / 2,
-          panelY + BOS_SPRITE_Y_OFFSET,
-          bS,
-          ballOfSwinePortrait(),
-        );
+      } else if (intro.bossType === ELECTRIC_GOBLIN_BOSS_TYPE) {
+        const portrait = electricGoblinPortraitPlacement();
+        drawElectricGoblinSprite(ctx, {
+          x: rightX + panelW / 2 - portrait.size / 2,
+          y: panelY + portrait.yOffset,
+          tileSize: portrait.size,
+          facingX: ELECTRIC_GOBLIN_PORTRAIT_FACING_X,
+          row: ELECTRIC_GOBLIN_PORTRAIT_STATE,
+          frame: ELECTRIC_GOBLIN_PORTRAIT_FRAME,
+        });
       } else if (intro.bossType === 'grotesque_spider') {
         const spS = spiderPortraitTileSize(panelW);
         const tailTop = panelY + SPIDER_PANEL_PAD;

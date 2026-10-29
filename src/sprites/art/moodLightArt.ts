@@ -1,7 +1,6 @@
 /**
  * The fixtures a boss room's mood lights hang from, painted live: a bare bulb
- * on a cord, a fluorescent strip on a wall face, a floodlight on the
- * colosseum's rim.
+ * on a cord, a fluorescent strip on a wall face.
  *
  * Only each fixture's own emitter is painted bright; the light it throws on
  * the room is the lighting pass's glow, so the art and the pool agree.
@@ -119,58 +118,5 @@ export function drawStripLight(
   ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = STRIP_TUBE_COLOUR;
   ctx.fillRect(tubeX, tubeY, tubeW, STRIP_TUBE_H_PX);
-  ctx.restore();
-}
-
-// ── Flood lamp ──────────────────────────────────────────────────────────────
-
-const FLOOD_HOUSING_RADIUS_PX = 5;
-const FLOOD_HOUSING_COLOUR = '#24282e';
-const FLOOD_RIM_COLOUR = '#6e7783';
-const FLOOD_LENS_RADIUS_PX = 3.2;
-/** How far toward its aim the lens sits off the housing's centre, so the lamp reads as pointed. */
-const FLOOD_LENS_OFFSET_PX = 1.6;
-const FLOOD_LENS_COLOUR = '#ffd28a';
-const FLOOD_LENS_CORE_COLOUR = '#fff3dc';
-const FLOOD_LENS_CORE_RADIUS_PX = 1.4;
-const FLOOD_HALO_RADIUS_PX = 12;
-const FLOOD_HALO_STOPS: ReadonlyArray<GlowStop> = [
-  { offset: 0, color: 'rgba(255,200,120,0.5)' },
-  { offset: 0.4, color: 'rgba(255,160,70,0.16)' },
-  { offset: 1, color: 'rgba(255,140,40,0)' },
-];
-
-/**
- * A floodlight on a rim, its housing centred at `(x, y)` in screen pixels and
- * its lens turned toward `aim` (radians, y growing south).
- */
-export function drawFloodLamp(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  aim: number,
-): void {
-  ctx.save();
-  ctx.fillStyle = FLOOD_RIM_COLOUR;
-  ctx.beginPath();
-  ctx.arc(x, y, FLOOD_HOUSING_RADIUS_PX + 1, 0, FULL_TURN);
-  ctx.fill();
-  ctx.fillStyle = FLOOD_HOUSING_COLOUR;
-  ctx.beginPath();
-  ctx.arc(x, y, FLOOD_HOUSING_RADIUS_PX, 0, FULL_TURN);
-  ctx.fill();
-  const lensX = x + Math.cos(aim) * FLOOD_LENS_OFFSET_PX;
-  const lensY = y + Math.sin(aim) * FLOOD_LENS_OFFSET_PX;
-  ctx.globalCompositeOperation = 'lighter';
-  drawRadialGlow(ctx, lensX, lensY, FLOOD_HALO_RADIUS_PX, FLOOD_HALO_STOPS);
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = FLOOD_LENS_COLOUR;
-  ctx.beginPath();
-  ctx.arc(lensX, lensY, FLOOD_LENS_RADIUS_PX, 0, FULL_TURN);
-  ctx.fill();
-  ctx.fillStyle = FLOOD_LENS_CORE_COLOUR;
-  ctx.beginPath();
-  ctx.arc(lensX, lensY, FLOOD_LENS_CORE_RADIUS_PX, 0, FULL_TURN);
-  ctx.fill();
   ctx.restore();
 }

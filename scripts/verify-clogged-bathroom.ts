@@ -23,7 +23,7 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level2 } from '../src/levels/level2.js';
 import type { LevelDef } from '../src/levels/types.js';
 import { pastSafeRoomTest } from '../src/map/pastSafeRoom.js';
-import { ARENA_BOSS_TYPE } from '../src/map/progressionValidation.js';
+import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/mobs/bossTypes.js';
 import { tileIndex } from '../src/map/tileIndex.js';
 import {
   SINK_COUNT,
@@ -333,11 +333,14 @@ function floorUnderTest(): LevelDef {
     progression: {
       ...level2.progression,
       gauntlets: level2.progression.gauntlets.map((gauntlet) =>
-        gauntlet.bathroomChoke === undefined
+        gauntlet.route.kind !== 'branches' || gauntlet.route.bathroomChoke === undefined
           ? gauntlet
           : {
               ...gauntlet,
-              bathroomChoke: { ...gauntlet.bathroomChoke, ...gateSwitches },
+              route: {
+                ...gauntlet.route,
+                bathroomChoke: { ...gauntlet.route.bathroomChoke, ...gateSwitches },
+              },
             },
       ),
     },
@@ -392,23 +395,23 @@ function verifySpawnsClear(gameMap: GameMap, label: string): void {
 }
 
 /**
- * Which rooms lie past the arena's safe room is a question about the route as
+ * Which rooms lie past Big Rooster's gateway safe room is a question about the route as
  * built, asked at floor load while the queue still stands. Its answer must not
  * change when the plumbing is fixed.
  */
 function verifyPastSafeRoomIgnoresQueue(gameMap: GameMap, label: string): void {
   const roomBounds = gameMap.progressionLayout?.roomBounds ?? [];
   gameMap.setBathroomPlumbing('broken');
-  const whileBroken = pastSafeRoomTest(gameMap, ARENA_BOSS_TYPE);
+  const whileBroken = pastSafeRoomTest(gameMap, BIG_ROOSTER_BOSS_TYPE);
   const brokenAnswers = roomBounds.map((room) => whileBroken?.(room) ?? null);
   gameMap.setBathroomPlumbing('fixed');
-  const whileFixed = pastSafeRoomTest(gameMap, ARENA_BOSS_TYPE);
+  const whileFixed = pastSafeRoomTest(gameMap, BIG_ROOSTER_BOSS_TYPE);
   const changed = roomBounds.filter(
     (room, index) => (whileFixed?.(room) ?? null) !== brokenAnswers[index],
   ).length;
   check(
     changed === 0,
-    `${label}: ${changed} rooms change sides of the arena's safe room when the plumbing is fixed`,
+    `${label}: ${changed} rooms change sides of Big Rooster's gateway safe room when the plumbing is fixed`,
   );
   gameMap.setBathroomPlumbing('broken');
 }

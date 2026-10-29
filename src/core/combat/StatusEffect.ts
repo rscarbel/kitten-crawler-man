@@ -79,6 +79,12 @@ export interface StatusDamageOverTime {
   readonly resistedBy: ResistanceType | null;
   /** What kind of hit each bite is, when a crawler laid the status on. */
   readonly tags: DamageTags;
+  /**
+   * Frames each bite seizes its carrier for, unable to walk or attack, or null
+   * for a bite that only hurts. Derived from the effect's own clock (see
+   * {@link seizureRemainingFraction}), so a snapshot restores a seizure exactly.
+   */
+  readonly seizeTicks: number | null;
 }
 
 /** Stat deltas a boon status grants while it is live. */
@@ -107,6 +113,11 @@ export interface StatusDef {
    * {@link statusIncomingDamageScale}.
    */
   readonly incomingDamageScale: number;
+  /**
+   * Whether the carrier can neither walk, attack, cast nor use an item for as
+   * long as it lasts: read by `Player.canAct` for crawlers and mobs alike.
+   */
+  readonly incapacitates: boolean;
   readonly damageOverTime: StatusDamageOverTime | null;
   /** The proficiency skill that shortens the status on whoever carries it, or null when none does. */
   readonly durationWardedBy: ProficiencySkillId | null;
@@ -125,7 +136,9 @@ const DAMAGE_UNCHANGED = 1;
 const BURN_BITE_INTERVAL_TICKS = 60;
 const POISON_BITE_INTERVAL_TICKS = 120;
 const MAGIC_BURN_BITE_INTERVAL_TICKS = 60;
-const ELECTRIFIED_BITE_INTERVAL_TICKS = 60;
+const ELECTRIFIED_BITE_INTERVAL_TICKS = 180;
+/** One second of seizure per electrified bite. */
+const ELECTRIFIED_SEIZE_FRAMES = 60;
 const SPIT_VENOM_BITE_INTERVAL_TICKS = 40;
 
 /** Every bite of a burn is fire. */
@@ -145,6 +158,7 @@ const PLAIN_STATUS: StatusDef = {
   heldByCaster: false,
   statBoon: null,
   incomingDamageScale: DAMAGE_UNCHANGED,
+  incapacitates: false,
   damageOverTime: null,
   durationWardedBy: null,
   persistence: 'saved',
@@ -160,7 +174,12 @@ const PLAIN_AILMENT: StatusDef = { ...PLAIN_STATUS, cure: 'ailment' };
 export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
   burn: {
     ...PLAIN_AILMENT,
-    damageOverTime: { intervalTicks: BURN_BITE_INTERVAL_TICKS, resistedBy: null, tags: FIRE_BITE },
+    damageOverTime: {
+      intervalTicks: BURN_BITE_INTERVAL_TICKS,
+      resistedBy: null,
+      tags: FIRE_BITE,
+      seizeTicks: null,
+    },
     durationWardedBy: BURN_WARD_SKILL,
   },
   magic_burn: {
@@ -169,6 +188,7 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
       intervalTicks: MAGIC_BURN_BITE_INTERVAL_TICKS,
       resistedBy: null,
       tags: MAGIC_HIT,
+      seizeTicks: null,
     },
   },
   poison: {
@@ -177,6 +197,7 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
       intervalTicks: POISON_BITE_INTERVAL_TICKS,
       resistedBy: 'poison',
       tags: UNTAGGED_HIT,
+      seizeTicks: null,
     },
   },
   spit_venom: {
@@ -185,6 +206,7 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
       intervalTicks: SPIT_VENOM_BITE_INTERVAL_TICKS,
       resistedBy: 'poison',
       tags: UNTAGGED_HIT,
+      seizeTicks: null,
     },
   },
   electrified: {
@@ -193,10 +215,11 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
       intervalTicks: ELECTRIFIED_BITE_INTERVAL_TICKS,
       resistedBy: null,
       tags: MAGIC_HIT,
+      seizeTicks: ELECTRIFIED_SEIZE_FRAMES,
     },
   },
   stuck: PLAIN_AILMENT,
-  stun: PLAIN_AILMENT,
+  stun: { ...PLAIN_AILMENT, incapacitates: true },
   // A real handicap, even when self-inflicted.
   drunk: PLAIN_AILMENT,
   catnip_buzz: PLAIN_AILMENT,
@@ -208,7 +231,7 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
     incomingDamageScale: DOUBLE_DAMAGE_SCALE,
   },
   chilled: PLAIN_AILMENT,
-  frozen: PLAIN_AILMENT,
+  frozen: { ...PLAIN_AILMENT, incapacitates: true },
   shield: { ...PLAIN_STATUS, ward: { drainOrder: DRAINED_SECOND }, heldByCaster: true },
   // Drained before the shield because it decays on its own clock whatever
   // happens, so spending it first wastes the least.
@@ -472,6 +495,49 @@ export function statusIncomingDamageScale(effects: ReadonlyArray<StatusEffect>):
 }
 
 /**
+ * How much of the seizure from `effect`'s latest bite is still to run, from 1
+ * on the frame after the bite down to 0 once the carrier is free again; 0 for
+ * a status whose bites do not seize.
+ *
+ * Read off the effect's own clock rather than kept as a countdown, because a
+ * bite lands on every positive multiple of its interval (`Player`'s status
+ * tick), so the frames since the last bite are already known.
+ */
+export function seizureRemainingFraction(effect: StatusEffect): number {
+  const damageOverTime = STATUS_DEFS[effect.type].damageOverTime;
+  const seizeTicks = damageOverTime?.seizeTicks ?? null;
+  if (damageOverTime === null || seizeTicks === null) return 0;
+  const elapsed = effect.totalTicks - effect.ticksRemaining;
+  if (elapsed < damageOverTime.intervalTicks) return 0;
+  const framesSinceBite = elapsed % damageOverTime.intervalTicks;
+  if (framesSinceBite === 0) return 0;
+  const seizedFramesLeft = seizeTicks - framesSinceBite + 1;
+  return Math.max(0, seizedFramesLeft / seizeTicks);
+}
+
+/**
+ * What a body carries once `applied` lands on top of `existing`, an effect of
+ * the same type.
+ *
+ * A status that bites keeps the existing effect's clock and only gains time:
+ * its bites (and any seizure) are read off how many frames it has already run,
+ * so restarting that clock on every reapply would end a seizure in progress and
+ * let a source that reapplies faster than the bite interval starve the status
+ * of ever biting. Every other status is simply replaced.
+ */
+export function reappliedStatus(existing: StatusEffect, applied: StatusEffect): StatusEffect {
+  if (STATUS_DEFS[applied.type].damageOverTime === null) return applied;
+  const elapsed = Math.max(0, existing.totalTicks - existing.ticksRemaining);
+  const ticksRemaining = Math.max(existing.ticksRemaining, applied.ticksRemaining);
+  return { ...applied, ticksRemaining, totalTicks: elapsed + ticksRemaining };
+}
+
+/** Whether `effect` holds its carrier unable to walk, attack, cast or use an item this frame. */
+export function statusIncapacitates(effect: StatusEffect): boolean {
+  return STATUS_DEFS[effect.type].incapacitates || seizureRemainingFraction(effect) > 0;
+}
+
+/**
  * The statuses that are done *to* a crawler rather than bought by one.
  *
  * Anything that cures or clears status effects must work from this list rather
@@ -543,7 +609,7 @@ export function makeMagicBurn(applier: Player | null = null): StatusEffect {
 /** Ten seconds at 60 fps. */
 const ELECTRIFIED_TICKS = 600;
 
-/** Electrified: 10-second DoT + movement slow from level-15 energy shield shock wave. */
+/** Electrified: ten seconds of bites, each of which seizes the carrier for a moment. */
 export function makeElectrified(applier: Player | null = null): StatusEffect {
   return {
     type: 'electrified',
@@ -589,7 +655,7 @@ export function makeInk(ticks: number): StatusEffect {
   return { type: INK_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }
 
-/** Stun: immobilises the target for the given number of ticks. */
+/** Stun: the target can neither walk nor attack for the given number of ticks. */
 export function makeStun(ticks: number): StatusEffect {
   return { type: 'stun', ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }

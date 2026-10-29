@@ -17,14 +17,7 @@
 
 /** The parts of a creature drawn over the darkness. */
 export type ChromePart =
-  | 'worldFeedback'
-  | 'healthBar'
-  | 'knockedOut'
-  | 'mobHealthBar'
-  | 'aggro'
-  | 'acidSpits'
-  | 'swineGroundTells'
-  | 'swineStoppedWarning';
+  'worldFeedback' | 'healthBar' | 'knockedOut' | 'mobHealthBar' | 'aggro' | 'acidSpits';
 
 /** Something that can draw a named part of itself over the darkness. */
 export interface AboveDarknessDrawer {

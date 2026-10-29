@@ -1,6 +1,7 @@
 /**
  * The live state the gym's tile props are drawn in: how many dumbbells each
- * rack holds, and whether each squat rack still has its plates.
+ * rack holds, whether each squat rack still has its plates, and whether each
+ * kettlebell rack has been heaved bare.
  *
  * The racks are tiles, drawn by the map's Y-sorted decoration pass, which is
  * handed a tile and nothing else. `GymRoomSystem` owns the state and writes
@@ -13,6 +14,7 @@ import { GYM_RACK_SLOTS } from '../../../sprites/art/gymRoomArt';
 
 const rackFill = new Map<string, number>();
 const strippedSquatRacks = new Set<string>();
+const heavedKettlebellRacks = new Set<string>();
 
 const tileKey = (tx: number, ty: number): string => `${tx},${ty}`;
 
@@ -20,6 +22,7 @@ const tileKey = (tx: number, ty: number): string => `${tx},${ty}`;
 export function resetGymPropState(): void {
   rackFill.clear();
   strippedSquatRacks.clear();
+  heavedKettlebellRacks.clear();
 }
 
 export function setGymRackFill(tx: number, ty: number, filled: number): void {
@@ -38,4 +41,13 @@ export function setGymSquatRackLoaded(tx: number, ty: number, loaded: boolean): 
 
 export function gymSquatRackLoaded(tx: number, ty: number): boolean {
   return !strippedSquatRacks.has(tileKey(tx, ty));
+}
+
+export function setGymKettlebellRackStocked(tx: number, ty: number, stocked: boolean): void {
+  if (stocked) heavedKettlebellRacks.delete(tileKey(tx, ty));
+  else heavedKettlebellRacks.add(tileKey(tx, ty));
+}
+
+export function gymKettlebellRackStocked(tx: number, ty: number): boolean {
+  return !heavedKettlebellRacks.has(tileKey(tx, ty));
 }

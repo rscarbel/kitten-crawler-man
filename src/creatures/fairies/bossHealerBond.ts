@@ -3,7 +3,7 @@ import type { Mob } from '../Mob';
 /**
  * Which boss each hard-mode healer was spawned to keep alive.
  *
- * Kept beside the mobs rather than on them so the boss-room and arena systems
+ * Kept beside the mobs rather than on them so every boss fight's owner
  * can ask about a healer without either class knowing about the other. Weak on
  * both sides: a healer disposed by a checkpoint rewind takes its entry with it,
  * and the rewind keeps the same mob objects for everything that survives it, so

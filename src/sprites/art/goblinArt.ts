@@ -537,7 +537,9 @@ export interface GoblinOutfit {
   readonly back?: (ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle) => void;
   /**
    * Over one solved arm, after the bare arm is painted, at that arm's drawn
-   * width; `wristAngle` is the way the fist on its end is turned.
+   * width; `wristAngle` is the way the fist on its end is turned. The whole
+   * skeleton is passed for kit that runs from the body to the hand, such as
+   * a cable from a backpack to whatever the fist holds.
    */
   readonly arm?: (
     ctx: Ctx,
@@ -546,7 +548,15 @@ export interface GoblinOutfit {
     wristAngle: number,
     style: GoblinStyle,
     near: boolean,
+    skeleton: Skeleton,
   ) => void;
+  /**
+   * Footwear painted in place of the bare foot, in figure space. `tilt` is the
+   * angle the rig would turn a bare foot by; footwear longer than the bare
+   * foot decides for itself how much of it to take, since a long sole turned
+   * by the full tilt while planted pushes its toe through the floor.
+   */
+  readonly foot?: (ctx: Ctx, ankle: Pt, tilt: number, style: GoblinStyle, near: boolean) => void;
 }
 
 /**
@@ -958,6 +968,16 @@ const FRONT_TOE_AT = 0.86;
 const BACK_TOE_SHADE = 0.35;
 /** A toe's claw, in toe radii from the toe's centre. */
 const TOE_CLAW = { rootX: 0.55, rootRise: 0.45, tipDrop: 0.35, heelX: 0.6, heelDrop: 0.7 } as const;
+
+/** The style's footwear if it wears any, otherwise the bare foot. */
+function paintFoot(ctx: Ctx, ankle: Pt, angle: number, style: GoblinStyle, near: boolean): void {
+  const footwear = style.outfit?.foot;
+  if (footwear === undefined) {
+    drawFoot(ctx, ankle, angle, style, near);
+    return;
+  }
+  footwear(ctx, ankle, angle, style, near);
+}
 
 /**
  * A big, flat, splayed goblin foot in profile: a long low sole, a bony heel,
@@ -3192,6 +3212,7 @@ function composeGoblin(
       farWristAngle,
       style,
       false,
+      skeleton,
     );
     if (style.gear.bracer) drawBracer(layer, skeleton.farArm, style, farArmScale);
     heldOffHand?.paint(layer, skeleton.farArm.end, farWristAngle);
@@ -3210,7 +3231,7 @@ function composeGoblin(
     drawLimb(layer, skeleton.farLeg, p.legWidth, farPaint);
     if (style.gear.overalls) drawTrouserLeg(layer, skeleton.farLeg, style, false);
     style.outfit?.leg?.(layer, skeleton.farLeg, style, false);
-    drawFoot(layer, skeleton.farLeg.end, footAngle(skeleton.farLeg, pose.farFoot), style, false);
+    paintFoot(layer, skeleton.farLeg.end, footAngle(skeleton.farLeg, pose.farFoot), style, false);
     if (pose.propBehind) paintProp(layer);
     // Behind the torso: it is on the creature's back, and painting it in front
     // would put a leather tube across its chest.
@@ -3230,7 +3251,7 @@ function composeGoblin(
     if (style.gear.overalls) drawTrouserLeg(layer, skeleton.nearLeg, style, true);
     style.outfit?.leg?.(layer, skeleton.nearLeg, style, true);
     if (style.gear.greave) drawGreave(layer, skeleton.nearLeg, style);
-    drawFoot(layer, skeleton.nearLeg.end, footAngle(skeleton.nearLeg, pose.nearFoot), style, true);
+    paintFoot(layer, skeleton.nearLeg.end, footAngle(skeleton.nearLeg, pose.nearFoot), style, true);
     if (pose.nearArmUnderHead === true) paintNearArm(layer);
 
     fillCapsule(
@@ -3256,7 +3277,7 @@ function composeGoblin(
   // ends up swinging something nobody is holding.
   const paintNearArm = (layer: Ctx): void => {
     drawLimb(layer, skeleton.nearArm, p.armWidth, nearPaint);
-    style.outfit?.arm?.(layer, skeleton.nearArm, p.armWidth, nearWristAngle, style, true);
+    style.outfit?.arm?.(layer, skeleton.nearArm, p.armWidth, nearWristAngle, style, true, skeleton);
     if (style.gear.pauldron) drawPauldron(layer, skeleton.nearShoulder, skeleton.lean, style);
     if (!pose.propBehind) paintProp(layer);
     drawHand(

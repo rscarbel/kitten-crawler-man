@@ -29,6 +29,7 @@ import {
   type MusicTrackHandle,
   type MusicTrackRequest,
 } from './music/MusicDirector';
+import { musicTrimIdOf } from './music/stemSets';
 import {
   dbToGain,
   glideParam,
@@ -40,6 +41,8 @@ import {
   type StreamVoice,
   type Voice,
 } from './voiceFades';
+import { ELECTRIC_GOBLIN_CUES } from '../systems/bossSoundCues';
+import { ELECTRIC_GOBLIN_BOSS_TYPE, KRAKEN_BOSS_TYPE } from '../core/mobs/bossTypes';
 
 /** Set by the bundler: true in `npm run serve` / `npm run dev` builds, absent under tsx. */
 declare const __DEV_BUILD__: boolean | undefined;
@@ -623,6 +626,7 @@ export class AudioManager {
     this.resumeAmbience('background');
     glideParam(
       this.masterGain.gain,
+      this.ctx,
       this.ctx.currentTime,
       this.masterBusLevel,
       VOLUME_RAMP_MS / MS_PER_SECOND,
@@ -1040,6 +1044,7 @@ export class AudioManager {
     rampVoice: (voice, volume, rampMs) =>
       glideParam(
         voice.gain.gain,
+        this.ctx,
         this.ctx.currentTime,
         volume * (this.loopTrimGains.get(voice) ?? 1),
         rampMs / MS_PER_SECOND,
@@ -1508,10 +1513,10 @@ export class AudioManager {
     }
     const handle = this.startMusicVoice(request);
     const tracked: MusicTrackHandle = {
-      positionS: () => handle.positionS(),
-      stop: (fadeMs, shape) => {
+      positionS: (atS) => handle.positionS(atS),
+      stop: (fadeMs, shape, fromS) => {
         this.unstoppedMusicTracks.delete(tracked);
-        handle.stop(fadeMs, shape);
+        handle.stop(fadeMs, shape, fromS);
       },
       hold: () => handle.hold(),
       release: () => handle.release(),
@@ -1521,7 +1526,7 @@ export class AudioManager {
   }
 
   private startMusicVoice(request: MusicTrackRequest): MusicTrackHandle {
-    const trimGain = dbToGain(loudnessTrimDb(request.id));
+    const trimGain = dbToGain(loudnessTrimDb(musicTrimIdOf(request.id)));
     if (STREAMING_SOUND_IDS.has(request.id)) {
       return this.startStreamingMusicTrack(request, trimGain);
     }
@@ -1555,10 +1560,10 @@ export class AudioManager {
       started = handle;
     });
     return {
-      positionS: () => started?.positionS() ?? request.offsetS,
-      stop: (fadeMs, shape) => {
+      positionS: (atS) => started?.positionS(atS) ?? request.offsetS,
+      stop: (fadeMs, shape, fromS) => {
         stopped = true;
-        started?.stop(fadeMs, shape);
+        started?.stop(fadeMs, shape, fromS);
       },
       hold: () => {
         heldBeforeStart = true;
@@ -1580,32 +1585,43 @@ export class AudioManager {
     const loopStartS = request.loop === 'loopPoint' ? (musicLoopStartS(request.id) ?? 0) : 0;
     let stopped = false;
     let heldAtS: number | null = null;
-    const startSegment = (offsetS: number): { voice: BufferVoice; startedAtS: number } => {
-      const voice = this.startDecodedMusicSegment(request, buffer, trimGain, offsetS, () => {
+    const startSegment = (
+      offsetS: number,
+      atS: number,
+    ): { voice: BufferVoice; startedAtS: number } => {
+      const voice = this.startDecodedMusicSegment(request, buffer, trimGain, offsetS, atS, () => {
         if (!stopped) request.onEnded();
       });
-      return { voice, startedAtS: this.ctx.currentTime };
+      return { voice, startedAtS: atS };
     };
-    let segment = startSegment(request.offsetS);
-    let segmentOffsetS = request.offsetS;
+    const nowS = this.ctx.currentTime;
+    const firstAtS = Math.max(request.startAtS ?? nowS, nowS);
+    // A track laid for an instant already past starts at the place it would have reached.
+    const lateByS = request.startAtS === undefined ? 0 : firstAtS - request.startAtS;
+    const firstOffsetS = request.offsetS + lateByS;
+    let segmentOffsetS = loops
+      ? loopedPositionS(firstOffsetS, buffer.duration, loopStartS)
+      : firstOffsetS;
+    let segment = startSegment(segmentOffsetS, firstAtS);
     // A gesture starts a waiting track before its resume() settles, and that
     // resume can be refused, so the track counts as sounding only once the
     // context really renders.
     this.onRunning(() => {
       if (!stopped) request.onPlaying();
     });
-    const positionS = (): number => {
+    const positionS = (atS?: number): number => {
       if (heldAtS !== null) return heldAtS;
-      const elapsedS = segmentOffsetS + this.ctx.currentTime - segment.startedAtS;
+      const sinceStartS = Math.max(0, (atS ?? this.ctx.currentTime) - segment.startedAtS);
+      const elapsedS = segmentOffsetS + sinceStartS;
       return loops ? loopedPositionS(elapsedS, buffer.duration, loopStartS) : elapsedS;
     };
     return {
       positionS,
-      stop: (fadeMs, shape) => {
+      stop: (fadeMs, shape, fromS) => {
         if (stopped) return;
         stopped = true;
         if (heldAtS !== null) return;
-        stopVoice(this.ctx, segment.voice, fadeMs, { shape });
+        stopVoice(this.ctx, segment.voice, fadeMs, { shape, fromS });
       },
       hold: () => {
         if (stopped || heldAtS !== null) return;
@@ -1618,26 +1634,28 @@ export class AudioManager {
         heldAtS = null;
         if (stopped) return;
         segmentOffsetS = resumeAtS;
-        segment = startSegment(resumeAtS);
+        segment = startSegment(resumeAtS, this.ctx.currentTime);
       },
     };
   }
 
   /**
-   * One run of a decoded song from `offsetS`, on a gain of its own fading in
-   * to `trimGain`. A held song is restarted as a fresh run, since a buffer
-   * source cannot be paused.
+   * One run of a decoded song from `offsetS`, starting at `atS` on the audio
+   * clock, on a gain of its own fading in to `trimGain` from that instant. A
+   * held song is restarted as a fresh run, since a buffer source cannot be
+   * paused.
    */
   private startDecodedMusicSegment(
     request: MusicTrackRequest,
     buffer: AudioBuffer,
     trimGain: number,
     offsetS: number,
+    atS: number,
     onEnded: () => void,
   ): BufferVoice {
     const gain = this.ctx.createGain();
     gain.gain.value = 0;
-    this.fadeInMusicGain(gain, request.fadeInMs, trimGain);
+    this.fadeInMusicGain(gain, request.fadeInMs, trimGain, atS);
     gain.connect(this.musicGain);
 
     const source = this.ctx.createBufferSource();
@@ -1652,7 +1670,7 @@ export class AudioManager {
       gain.disconnect();
       onEnded();
     };
-    source.start(0, offsetS);
+    source.start(atS, offsetS);
     return { kind: 'buffer', source, gain };
   }
 
@@ -1661,11 +1679,16 @@ export class AudioManager {
    * curve that matches the outgoing track's fade. Never instant: even an
    * unfaded start takes the minimum ramp, since a track can start mid-waveform.
    */
-  private fadeInMusicGain(gain: GainNode, fadeInMs: number, level: number): void {
+  private fadeInMusicGain(
+    gain: GainNode,
+    fadeInMs: number,
+    level: number,
+    fromS: number = this.ctx.currentTime,
+  ): void {
     const rampS = Math.max(MIN_STOP_FADE_MS, fadeInMs) / MS_PER_SECOND;
     gain.gain.cancelScheduledValues(this.ctx.currentTime);
     gain.gain.value = 0;
-    glideParam(gain.gain, this.ctx.currentTime, level, rampS, 'equalPowerIn');
+    glideParam(gain.gain, this.ctx, fromS, level, rampS, 'equalPowerIn');
   }
 
   /**
@@ -1769,7 +1792,14 @@ export class AudioManager {
       // unless it was itself stopped in the meantime.
       slot.awaitingStart = true;
       el.onended = null;
-      glideParam(gain.gain, this.ctx.currentTime, 0, MIN_STOP_FADE_MS / MS_PER_SECOND, 'db');
+      glideParam(
+        gain.gain,
+        this.ctx,
+        this.ctx.currentTime,
+        0,
+        MIN_STOP_FADE_MS / MS_PER_SECOND,
+        'db',
+      );
       window.setTimeout(() => {
         if (!ownsSlot()) return;
         el.pause();
@@ -1851,7 +1881,7 @@ export class AudioManager {
       el.currentTime = 0;
       gain.gain.cancelScheduledValues(this.ctx.currentTime);
       gain.gain.value = 0;
-      glideParam(gain.gain, this.ctx.currentTime, level, rampS, 'db');
+      glideParam(gain.gain, this.ctx, this.ctx.currentTime, level, rampS, 'db');
       this.playStream(el, pooled, (err) => {
         console.warn(`[AudioManager] Failed to play streaming ambient loop "${id}":`, err);
       });
@@ -1862,7 +1892,7 @@ export class AudioManager {
     if (!buffer) return null;
     const gain = this.ctx.createGain();
     gain.gain.value = 0;
-    glideParam(gain.gain, this.ctx.currentTime, level, rampS, 'db');
+    glideParam(gain.gain, this.ctx, this.ctx.currentTime, level, rampS, 'db');
     gain.connect(this.ambienceGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
@@ -1915,6 +1945,7 @@ export class AudioManager {
     gain.gain.value = 0;
     glideParam(
       gain.gain,
+      this.ctx,
       this.ctx.currentTime,
       dbToGain(loudnessTrimDb(KEYBOARD_HERO_SONG)),
       MIN_STOP_FADE_MS / MS_PER_SECOND,
@@ -2091,7 +2122,7 @@ export class AudioManager {
   }
 
   private rampBus(bus: GainNode, target: number, rampMs: number): void {
-    glideParam(bus.gain, this.ctx.currentTime, target, rampMs / MS_PER_SECOND, 'linear');
+    glideParam(bus.gain, this.ctx, this.ctx.currentTime, target, rampMs / MS_PER_SECOND, 'linear');
   }
 
   /** Set and remember the master volume the player chose (0–1 slider position). */
@@ -2193,9 +2224,9 @@ export class AudioManager {
       }
       // A guard tentacle's death sound cannot be a `playMobAudioCues` flag: it
       // is cut down and compacted out of the mob array well before the next
-      // frame's cue drain would see one — see `playKrakarenTentacleCues`.
-      if (e.mob.audioTag === 'krakaren_tentacle') {
-        remains.play('krakaren_tentacle_death');
+      // frame's cue drain would see one — see `playKrakenTentacleCues`.
+      if (e.mob.audioTag === 'kraken_tentacle') {
+        remains.play('kraken_tentacle_death');
         return;
       }
       // A fairy has no meat either. Its kind's own parting effect — the ward
@@ -2323,8 +2354,12 @@ export class AudioManager {
 
     bus.on('bossDefeated', (e) => {
       this.play('boss_defeated');
-      if (e.bossType === 'krakaren_clone') {
+      if (e.bossType === KRAKEN_BOSS_TYPE) {
         this.play('new_unlock');
+      }
+      if (e.bossType === ELECTRIC_GOBLIN_BOSS_TYPE) {
+        this.playRandom(ELECTRIC_GOBLIN_CUES.death);
+        this.playRandom(ELECTRIC_GOBLIN_CUES.labPowerDown);
       }
     });
 

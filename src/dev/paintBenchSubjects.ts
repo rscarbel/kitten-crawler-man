@@ -26,7 +26,6 @@ import {
   LITTLE_ROOSTER_FIGURE,
 } from '../sprites/art/roosterFigure';
 import { DEINONYCHUS_FIGURES } from '../sprites/art/deinonychusFigure';
-import { BALL_OF_SWINE_FIGURE } from '../sprites/art/ballOfSwineFigure';
 import { ratkinCastFigure } from '../sprites/art/ratkinCastFigure';
 import { SHADY_FIGURE } from '../sprites/art/shadyFigure';
 import { MAGNUM_STAGE_FIGURE } from '../sprites/art/magnumFigure';
@@ -53,6 +52,7 @@ import { cowFigure } from '../sprites/art/cowFigure';
 import { BRINDLE_GRUB_FIGURE, COW_TAILED_GRUB_FIGURE } from '../sprites/art/grubFigure';
 import { BRINDLED_VESPA_FIGURE } from '../sprites/art/brindledVespaFigure';
 import { GOBLIN_FIGURES } from '../sprites/art/goblinFigure';
+import { ELECTRIC_GOBLIN_FIGURE } from '../sprites/art/electricGoblinFigure';
 import { TROGLODYTE_FIGURE, TROGLODYTE_TONGUE_FIGURE } from '../sprites/art/troglodyteFigure';
 import { COCKROACH_FIGURE } from '../sprites/art/cockroachFigure';
 import { RAT_FIGURE } from '../sprites/art/ratFigure';
@@ -80,10 +80,10 @@ import { fairyFigureOf, fairyStateName } from '../sprites/art/fairyFigure';
 import { FAIRY_KINDS } from '../sprites/art/fairyTiming';
 import { BUGABOO_FIGURE } from '../sprites/art/bugabooFigure';
 import {
-  KRAKAREN_FIGURE,
-  KRAKAREN_SLAM_FIGURE,
-  KRAKAREN_TENTACLE_FIGURE,
-} from '../sprites/art/krakarenFigure';
+  KRAKEN_FIGURE,
+  KRAKEN_SLAM_FIGURE,
+  KRAKEN_TENTACLE_FIGURE,
+} from '../sprites/art/krakenFigure';
 import {
   ENERGY_SHIELD_FIGURE,
   ENERGY_SHIELD_MINI_FIGURE,
@@ -133,9 +133,11 @@ const FIXED_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: hawkfolkCastFigure('tough_hawkbrown_standard'), state: 'walk' },
   { def: DEINONYCHUS_FIGURES.adult, state: 'walk_side' },
   { def: TRASH_GREMLIN_FIGURE, state: 'idle' },
+  { def: ELECTRIC_GOBLIN_FIGURE, state: 'idle' },
+  // The widest cell he paints: both rods slammed into the floor, sparks and all.
+  { def: ELECTRIC_GOBLIN_FIGURE, state: 'slam' },
   { def: GREMLIN_BILE_ARC_FIGURE, state: 'arc' },
   { def: GREMLIN_ACID_FIGURE, state: 'pool' },
-  { def: BALL_OF_SWINE_FIGURE, state: 'roll' },
   { def: FAT_CLOWN_FIGURE, state: 'idle' },
   { def: TALL_CLOWN_FIGURE, state: 'idle' },
   { def: MASSIVE_CLOWN_FIGURE, state: 'idle' },
@@ -183,9 +185,9 @@ const FIXED_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: ENERGY_SHIELD_FIGURE, state: 'active' },
   { def: ENERGY_SHIELD_MINI_FIGURE, state: 'active' },
   { def: ENERGY_SHIELD_SHOCKWAVE_FIGURE, state: 'expand' },
-  { def: KRAKAREN_FIGURE, state: 'idle' },
-  { def: KRAKAREN_TENTACLE_FIGURE, state: 'idle' },
-  { def: KRAKAREN_SLAM_FIGURE, state: 'loom' },
+  { def: KRAKEN_FIGURE, state: 'idle' },
+  { def: KRAKEN_TENTACLE_FIGURE, state: 'idle' },
+  { def: KRAKEN_SLAM_FIGURE, state: 'loom' },
   { def: MAGIC_MISSILE_PROJECTILE_FIGURE, state: 'tier4' },
   { def: MAGIC_MISSILE_EXPLOSION_FIGURE, state: 'tier4' },
   { def: SKELETON_SOUL_BOLT_FIGURE, state: 'fly' },

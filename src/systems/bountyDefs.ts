@@ -13,9 +13,12 @@ interface BountyEncounter {
   minions: Mob[];
 }
 
+/** Every bounty type Shady can issue, one per entry in {@link BOUNTY_DEFS}. */
+export type BountyTypeId = 'evil_clown' | 'mantid' | 'skeleton_lord' | 'dark_knight' | 'rock_golem';
+
 export interface BountyDef {
   /** Stable registry key, also the key into BountyProgress's per-type name pools. */
-  id: string;
+  id: BountyTypeId;
   /** Shown on the notice board and in dialog, e.g. "the Mantid". */
   typeLabel: string;
   /** 5–10 unique bounty names; copied + shuffled into BountyProgress. */

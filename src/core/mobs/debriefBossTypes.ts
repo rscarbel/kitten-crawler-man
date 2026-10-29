@@ -1,7 +1,7 @@
 /** The bosses Dave debriefs the party after, as plain ids; what he says is `src/systems/daveDebrief.ts`. */
 
-/** In the order the spine meets them; `isSupersededDebrief` (`daveDebrief.ts`) relies on it. */
-const DEBRIEF_BOSS_TYPES = ['trash_gremlin', 'big_rooster', 'krakaren_clone'] as const;
+/** In the order a run meets them; `isSupersededDebrief` (`daveDebrief.ts`) relies on it. */
+const DEBRIEF_BOSS_TYPES = ['trash_gremlin', 'kraken', 'electric_goblin', 'big_rooster'] as const;
 
 export type DebriefBossType = (typeof DEBRIEF_BOSS_TYPES)[number];
 

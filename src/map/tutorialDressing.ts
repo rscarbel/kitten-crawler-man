@@ -305,7 +305,6 @@ export function dressTutorial(layout: TutorialDressingLayout): PrebuiltDressing 
     })),
     corridorKindAt: (x, y) => (isHallTile(x, y) ? 'standard' : undefined),
     zoneOf: () => TUTORIAL_ZONE,
-    arenas: [],
   });
 
   const hallwayRng = mulberry32(TUTORIAL_DRESSING_SEED ^ HALLWAY_STREAM_SALT);

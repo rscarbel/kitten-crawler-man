@@ -26,6 +26,7 @@ import {
   BARE_EARTH,
   BRIDGE,
   BRIDGE_AXIS_EAST_WEST,
+  isDungeonWater,
 } from '../tileTypes';
 import { applyWorldNoise, drawGroundTile, drawGroundMaterialTile } from './groundTiles';
 import { isDungeonWallMap, isWallClosed, wallShapeAt } from '../dungeon/wallShape';
@@ -399,10 +400,19 @@ export function drawTerrainTile(
     // `WaterAnimationSystem`'s, drawn per frame on top, because terrain is
     // chunk-baked and nothing baked can animate.
     //
-    // Until the river existed this was a flat `#2ac6ff` fillRect standing in for
-    // a material no generator ever wrote.
+    // Water standing on a dungeon floor draws that floor through the floor's
+    // own palette, and the ground pass lays the water over it.
     case FloorTypeValue.water: {
-      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(
+        ctx,
+        isDungeonWater(structure[ty]?.[tx]) ? dungeonFloorTheme().ground : OVERWORLD_GROUND,
+        structure,
+        sx,
+        sy,
+        ts,
+        tx,
+        ty,
+      );
       break;
     }
 

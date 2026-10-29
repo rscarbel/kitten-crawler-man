@@ -44,8 +44,21 @@ import {
   type RoosterStrikeBody,
   type RoosterStrikeKind,
 } from './roosterStrikes';
+import { kickExplosive, liveExplosives } from './explosiveAwareness';
+import {
+  DYNAMITE_KICK_CONTACT_TILES,
+  DYNAMITE_KICK_COOLDOWN_FRAMES,
+  DYNAMITE_SEEK_GIVE_UP_FRAMES,
+  RoosterKickMotion,
+  dynamiteKickVelocity,
+  stickNow,
+  stickToKick,
+  type KickableStick,
+  type RoosterFlockView,
+} from './roosterKicks';
+import type { LiveStickId } from '../systems/ExplosiveSource';
 
-const BIG_ROOSTER_HP = 120;
+const BIG_ROOSTER_HP = 360;
 /** His walking speed at level 1, in pixels per frame. */
 export const BIG_ROOSTER_SPEED = 1.0;
 const BIG_ROOSTER_SPEED_ENRAGED = 1.7;
@@ -58,10 +71,10 @@ const THROW_RANGE_MAX = TILE_SIZE * THROW_RANGE_MAX_TILES;
 /** How fast a thrown dumbbell flies, in px per frame. */
 export const THROW_SPEED = 7;
 const THROW_DAMAGE = 3;
-const THROW_COOLDOWN_FRAMES = 90;
+const THROW_COOLDOWN_FRAMES = 65;
 const PROJECTILE_TTL = 240;
 const THROW_BOUNCE_DAMPING = 0.7;
-const ENRAGE_THRESHOLD = 0.4;
+export const ENRAGE_THRESHOLD = 0.4;
 const TAUNT_INTERVAL = 300;
 /**
  * Frames without attacking after which he stops holding off at range and
@@ -204,6 +217,53 @@ const PLATE_KNOCKBACK_FRAMES = 10;
 /** How high above his tile the plate is held while he winds up, in tiles. */
 const PLATE_HELD_LIFT_TILES = 0.9;
 
+/**
+ * Which stretch of his fight he is in. Each only ever gives way to the next,
+ * in {@link BigRooster.advancePhase}:
+ * - `normal`: the fight he opens with.
+ * - `kettlebell_unlocked`: a third of his health gone or a bird of his flock
+ *   down; the kettlebell rain comes round every {@link KETTLEBELL_RAIN_COOLDOWN_FRAMES}.
+ * - `fury`: two thirds gone or the whole flock down; he is untouchable, rains
+ *   kettlebells and kicks every exercise ball loose.
+ * - `post_fury`: every ball rolling; he can be hurt again and has everything.
+ */
+export type RoosterPhase = 'normal' | 'kettlebell_unlocked' | 'fury' | 'post_fury';
+
+/** His health is split into this many equal stretches, each ending in a phase change. */
+const HEALTH_STRETCHES = 3;
+/** His health share at or under which the kettlebell rain unlocks: a third gone. */
+const KETTLEBELL_UNLOCK_HP_SHARE = 2 / HEALTH_STRETCHES;
+/** His health share at or under which he goes into his fury: two thirds gone. */
+export const FURY_HP_SHARE = 1 / HEALTH_STRETCHES;
+/** Frames between one kettlebell heave and the next he may start. */
+const KETTLEBELL_RAIN_COOLDOWN_FRAMES = 1200;
+/** What a kettlebell does to the crawler it lands on. Level-scaled like his other blows. */
+const KETTLEBELL_DAMAGE = 5;
+/** The share of a kettlebell's blow the AI-driven companion takes. */
+export const COMPANION_KETTLEBELL_DAMAGE_SHARE = 0.25;
+/** Recorded on a kettlebell's damage so `DeathCauseSystem` can name it. */
+export const KETTLEBELL_ATTACK_TYPE = 'kettlebell_rain';
+/** What a rolling exercise ball does to the crawler it hits: a heavy blow. */
+const EXERCISE_BALL_DAMAGE = 8;
+/** Recorded on an exercise ball's damage so `DeathCauseSystem` can name it. */
+export const EXERCISE_BALL_ATTACK_TYPE = 'exercise_ball';
+const EXERCISE_BALL_KNOCKBACK_TILES = 2;
+const EXERCISE_BALL_KNOCKBACK_FRAMES = 12;
+/** How near him a crawler may come during his fury before he sweeps the party back, in tiles. */
+const FURY_SHOVE_RADIUS_TILES = 2.2;
+const FURY_SHOVE_KNOCKBACK_TILES = 3;
+const FURY_SHOVE_KNOCKBACK_FRAMES = 16;
+/** Frames after a sweep before he sweeps again. */
+const FURY_SHOVE_COOLDOWN_FRAMES = 40;
+/** Centre to centre, how near an exercise ball he has to stand to kick it, in tiles. */
+const BALL_KICK_REACH_TILES = 1.3;
+/** Each ball leaves his foot this far either side of the line to his target, at most, in radians. */
+const BALL_KICK_SPREAD_RAD = 0.35;
+/** Frames he walks to a rack or a ball he cannot reach before he gives up and does it where he stands. */
+const FURY_SEEK_GIVE_UP_FRAMES = 300;
+/** Centres `Math.random()` on zero so a kick's spread swings both ways. */
+const RANDOM_MIDPOINT = 0.5;
+
 /** A straight lane with at most one bounce, as world-pixel points from his hands to where it stops. */
 export type PlateLane = ReadonlyArray<{ readonly x: number; readonly y: number }>;
 
@@ -232,7 +292,14 @@ export type BigRoosterState =
   | 'club_windup'
   | 'club_recover'
   | 'strike'
-  | 'plate_windup';
+  | 'plate_windup'
+  | 'heave_seek'
+  | 'heave_lift'
+  | 'heave_toss'
+  | 'ball_seek'
+  | 'ball_kick'
+  | 'dynamite_seek'
+  | 'dynamite_kick';
 
 /** States he can be pulled out of to crow, slam or bowl: none of them has committed to a blow. */
 const INTERRUPTIBLE_STATES: ReadonlySet<BigRoosterState> = new Set<BigRoosterState>([
@@ -289,10 +356,25 @@ export function prewarmBigRoosterArrival(): void {
 const CROW_ROWS: readonly RoosterRowBase[] = ['crow', 'sprint', 'pickup', 'slam', 'peck', 'punch'];
 /** His empty-handed blows, warmed the moment the weight leaves his fist. */
 const EMPTY_HANDED_ROWS: readonly RoosterRowBase[] = ['slam', 'peck', 'punch'];
+/** The walk to a kettlebell rack, the bend to it and the heave overhead. */
+const HEAVE_ROWS: readonly RoosterRowBase[] = ['sprint', 'pickup', 'throw'];
 /** The bend to a rack, and what he does with the dumbbell once it is in his fist. */
 const PICKUP_ROWS: readonly RoosterRowBase[] = ['pickup', 'carry_walk', 'club_swing', 'throw'];
 
 const BIG_ROOSTER_EYES: EyePlacement = roosterEyePlacement('big');
+
+/** What a blow on him during his fury says over his head. */
+const IMMUNE_LABEL = 'IMMUNE';
+/** Frames one "IMMUNE" stays up before another is shown, so a flurry does not stack a column. */
+const IMMUNE_LABEL_THROTTLE_FRAMES = 30;
+
+function assertNeverState(state: never): never {
+  throw new Error(`unhandled Big Rooster state ${JSON.stringify(state)}`);
+}
+
+function assertNeverPhase(phase: never): never {
+  throw new Error(`unhandled rooster phase ${JSON.stringify(phase)}`);
+}
 
 /** His taunt, over the top of his art: `artTopY` is the highest pixel he painted. */
 function drawBigRoosterTaunt(
@@ -369,6 +451,43 @@ export class BigRooster extends Mob {
   private enrageCrowPending = false;
 
   heldDumbbell = false;
+
+  private phase: RoosterPhase = 'normal';
+  /** Frames until he may heave another kettlebell rain; zero once one is due. */
+  private kettlebellCooldownTimer = 0;
+  /** Whether his fury's own rain has gone up yet. */
+  private furyRainThrown = false;
+  private furyShoveCooldown = 0;
+  /** Frames spent walking to the rack or ball he is after, so a blocked walk gives up. */
+  private seekFrames = 0;
+  /** The ball he is walking to or kicking, by the gym's index. */
+  private ballTarget: number | null = null;
+  /** The stick he is walking to or kicking. */
+  private stickTarget: LiveStickId | null = null;
+  private dynamiteKickCooldown = 0;
+  private readonly kick = new RoosterKickMotion();
+  /** Frames through a heave's lift or toss. */
+  private heaveTimer = 0;
+  private heaveReleased = false;
+
+  /** Where each kettlebell rack is lifted from, as a mob's top-left; set each frame by the gym. */
+  kettlebellRackStands: ReadonlyArray<{ readonly x: number; readonly y: number }> = [];
+  /** The exercise balls still resting, with their centres; set each frame by the gym. */
+  restingExerciseBalls: ReadonlyArray<{
+    readonly index: number;
+    readonly x: number;
+    readonly y: number;
+  }> = [];
+  /** How many of his flock the gym has seen, and how many of those are down; set each frame by the gym. */
+  flockLosses: { readonly known: number; readonly lost: number } = { known: 0, lost: 0 };
+  /** The gym as every rooster sees it, or null outside the gym; set each frame by the gym. */
+  flockView: RoosterFlockView | null = null;
+  /** Set when a heave lets go: where, for the gym to start the rain from that rack. Cleared by the gym. */
+  heaveRequest: { readonly x: number; readonly y: number } | null = null;
+  /** Set when his boot meets a ball: which, and which way it goes. Cleared by the gym. */
+  ballKickRequest: { readonly index: number; readonly dx: number; readonly dy: number } | null =
+    null;
+
   private readonly animationClock: RoosterAnimationClock;
   /**
    * How far his drawn art stands over his tile, in tiles, read off the row he
@@ -493,6 +612,86 @@ export class BigRooster extends Mob {
     this.plateLane = null;
     this.rollingPlate = null;
     this.plateTakenFrom = null;
+    this.phase = 'normal';
+    this.kettlebellCooldownTimer = 0;
+    this.furyRainThrown = false;
+    this.furyShoveCooldown = 0;
+    this.seekFrames = 0;
+    this.ballTarget = null;
+    this.stickTarget = null;
+    this.dynamiteKickCooldown = 0;
+    this.kick.reset();
+    this.heaveTimer = 0;
+    this.heaveReleased = false;
+    this.heaveRequest = null;
+    this.ballKickRequest = null;
+  }
+
+  /** Which stretch of his fight he is in. */
+  get roosterPhase(): RoosterPhase {
+    return this.phase;
+  }
+
+  /** Untouchable for the whole of his fury, until every exercise ball is rolling. */
+  protected override get isDamageImmune(): boolean {
+    return this.phase === 'fury';
+  }
+
+  protected override onDamageBlocked(): void {
+    this.queueFloatingText(IMMUNE_LABEL, 'immune', {
+      throttleFrames: IMMUNE_LABEL_THROTTLE_FRAMES,
+    });
+  }
+
+  /**
+   * Every phase change in the fight, and the only place one happens: each
+   * stretch gives way to the next as his health falls or his flock goes down,
+   * and a big enough blow can carry him through two at once.
+   */
+  private advancePhase(): void {
+    const hpShare = this.hp / this.maxHp;
+    const { known, lost } = this.flockLosses;
+    for (;;) {
+      const next = this.nextPhase(hpShare, known > 0 && lost >= 1, known > 0 && lost >= known);
+      if (next === this.phase) return;
+      this.enterPhase(next);
+    }
+  }
+
+  private nextPhase(hpShare: number, flockHit: boolean, flockGone: boolean): RoosterPhase {
+    switch (this.phase) {
+      case 'normal':
+        return hpShare <= KETTLEBELL_UNLOCK_HP_SHARE || flockHit ? 'kettlebell_unlocked' : 'normal';
+      case 'kettlebell_unlocked':
+        return hpShare <= FURY_HP_SHARE || flockGone ? 'fury' : 'kettlebell_unlocked';
+      case 'fury':
+        return this.furyRainThrown && this.restingExerciseBalls.length === 0 ? 'post_fury' : 'fury';
+      case 'post_fury':
+        return 'post_fury';
+      default:
+        return assertNeverPhase(this.phase);
+    }
+  }
+
+  private enterPhase(next: RoosterPhase): void {
+    this.phase = next;
+    switch (next) {
+      case 'normal':
+        return;
+      case 'kettlebell_unlocked':
+        this.kettlebellCooldownTimer = 0;
+        return;
+      case 'fury':
+        this.furyRainThrown = false;
+        this.enrageCrowPending = true;
+        this.soundCues.raise('ruffle');
+        return;
+      case 'post_fury':
+        this.kettlebellCooldownTimer = this.scaledCooldownFrames(KETTLEBELL_RAIN_COOLDOWN_FRAMES);
+        return;
+      default:
+        assertNeverPhase(next);
+    }
   }
 
   /**
@@ -648,6 +847,9 @@ export class BigRooster extends Mob {
     if (this.slamCooldownTimer > 0) this.slamCooldownTimer--;
     if (this.clubCooldownTimer > 0) this.clubCooldownTimer--;
     if (this.shockwaveTimer > 0) this.shockwaveTimer--;
+    if (this.kettlebellCooldownTimer > 0) this.kettlebellCooldownTimer--;
+    if (this.furyShoveCooldown > 0) this.furyShoveCooldown--;
+    if (this.dynamiteKickCooldown > 0) this.dynamiteKickCooldown--;
     this.strikes.update(this.strikeBody(), targets);
 
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
@@ -659,6 +861,8 @@ export class BigRooster extends Mob {
       this.soundCues.raise('ruffle');
       this.setBaseSpeed(BIG_ROOSTER_SPEED_ENRAGED);
     }
+    this.advancePhase();
+    this.updateFuryShove(targets);
 
     this.updateProjectile(targets);
     this.updateRollingPlate(targets);
@@ -685,10 +889,20 @@ export class BigRooster extends Mob {
     if (!beganAhead) this.runState(targets, nearest, nearestDist);
   }
 
-  /** Starts a crow, slam or plate roll if one is due this frame; returns whether one began. */
+  /**
+   * Starts a crow, a dynamite kick, a slam, a plate roll or a kettlebell heave
+   * if one is due this frame; returns whether one began. His fury allows only
+   * its crow: the rest of it is a script of its own.
+   */
   private beginAheadOfState(nearest: Player, nearestDist: number): boolean {
     if (this.canStartCrow()) {
       this.beginCrow(nearest);
+      return true;
+    }
+    if (this.phase === 'fury') return false;
+    const stick = this.stickWorthKicking();
+    if (stick !== null) {
+      this.beginDynamiteSeek(stick);
       return true;
     }
     if (this.canStartSlam(nearestDist)) {
@@ -699,10 +913,17 @@ export class BigRooster extends Mob {
       this.beginPlateRoll(nearest);
       return true;
     }
+    if (this.canStartHeave()) {
+      this.beginHeaveSeek();
+      return true;
+    }
     return false;
   }
 
   private runState(targets: Player[], nearest: Player | null, nearestDist: number): void {
+    if (this.phase === 'fury' && INTERRUPTIBLE_STATES.has(this.state)) {
+      this.state = this.nextFuryState(nearest);
+    }
     switch (this.state) {
       case 'idle':
         this.doIdleState(nearest);
@@ -743,7 +964,336 @@ export class BigRooster extends Mob {
       case 'plate_windup':
         this.doPlateWindupState(nearest);
         break;
+      case 'heave_seek':
+        this.doHeaveSeekState();
+        break;
+      case 'heave_lift':
+        this.doHeaveLiftState();
+        break;
+      case 'heave_toss':
+        this.doHeaveTossState(nearest);
+        break;
+      case 'ball_seek':
+        this.doBallSeekState(nearest);
+        break;
+      case 'ball_kick':
+        this.doBallKickState(nearest);
+        break;
+      case 'dynamite_seek':
+        this.doDynamiteSeekState(nearest);
+        break;
+      case 'dynamite_kick':
+        this.doDynamiteKickState(nearest);
+        break;
+      default:
+        assertNeverState(this.state);
     }
+  }
+
+  // ── Fury ──────────────────────────────────────────────────────────────────
+
+  /**
+   * The next step of his fury's script: the crow that announces it, his own
+   * rain, then each resting ball in turn. The crow is a step of the script
+   * because the script never passes through a state a crow may interrupt.
+   */
+  private nextFuryState(nearest: Player | null): BigRoosterState {
+    this.seekFrames = 0;
+    this.ballTarget = null;
+    if (this.enrageCrowPending) {
+      this.beginCrow(nearest);
+      return 'crow';
+    }
+    if (!this.furyRainThrown) return 'heave_seek';
+    if (this.restingExerciseBalls.length > 0) return 'ball_seek';
+    return 'idle';
+  }
+
+  /**
+   * While he is untouchable, any crawler who comes within
+   * {@link FURY_SHOVE_RADIUS_TILES} gets the whole party swept back from him.
+   */
+  private updateFuryShove(targets: Player[]): void {
+    if (this.phase !== 'fury' || this.furyShoveCooldown > 0) return;
+    const half = this.tileSize * CENTER_OFFSET;
+    const cx = this.x + half;
+    const cy = this.y + half;
+    const reach = this.tileSize * FURY_SHOVE_RADIUS_TILES;
+    const crowded = targets.some(
+      (target) => target.isAlive && Math.hypot(target.x + half - cx, target.y + half - cy) <= reach,
+    );
+    if (!crowded) return;
+    for (const target of targets) {
+      if (!target.isAlive) continue;
+      const dx = target.x + half - cx;
+      const dy = target.y + half - cy;
+      const awayX = dx === 0 && dy === 0 ? this.facingX : dx;
+      const awayY = dx === 0 && dy === 0 ? this.facingY : dy;
+      target.applyKnockback(
+        awayX,
+        awayY,
+        this.tileSize * FURY_SHOVE_KNOCKBACK_TILES,
+        FURY_SHOVE_KNOCKBACK_FRAMES,
+      );
+    }
+    this.furyShoveCooldown = FURY_SHOVE_COOLDOWN_FRAMES;
+    this.soundCues.raise('swing');
+  }
+
+  // ── Kettlebell rain ───────────────────────────────────────────────────────
+
+  /** Whether a heave is due: unlocked, off cooldown, and free to walk to a rack. */
+  private canStartHeave(): boolean {
+    if (this.phase !== 'kettlebell_unlocked' && this.phase !== 'post_fury') return false;
+    if (this.kettlebellCooldownTimer > 0) return false;
+    return INTERRUPTIBLE_STATES.has(this.state);
+  }
+
+  private beginHeaveSeek(): void {
+    prewarmBigRoosterRows(HEAVE_ROWS);
+    this.state = 'heave_seek';
+    this.seekFrames = 0;
+  }
+
+  /** The nearest rack stand to him, or null in a gym with none. */
+  private nearestKettlebellStand(): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const stand of this.kettlebellRackStands) {
+      const distance = Math.hypot(stand.x - this.x, stand.y - this.y);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = { x: stand.x, y: stand.y };
+    }
+    return best;
+  }
+
+  private doHeaveSeekState(): void {
+    this.seekFrames++;
+    const stand = this.nearestKettlebellStand();
+    const arrived =
+      stand !== null &&
+      Math.hypot(stand.x - this.x, stand.y - this.y) < this.tileSize * DUMBBELL_PICKUP_RANGE_TILES;
+    if (stand === null || arrived || this.seekFrames > FURY_SEEK_GIVE_UP_FRAMES) {
+      this.state = 'heave_lift';
+      this.heaveTimer = 0;
+      this.isMoving = false;
+      this.clearAStarPath();
+      return;
+    }
+    this.followTargetAStar(
+      stand.x,
+      stand.y,
+      this.sprintSpeed,
+      this.tileSize * DUMBBELL_FOLLOW_STOP_RANGE_RATIO,
+      DUMBBELL_SEEK_PATHFIND_MAX,
+    );
+  }
+
+  /** Bends to the rack on the pickup's row and timing. */
+  private doHeaveLiftState(): void {
+    this.isMoving = false;
+    this.heaveTimer++;
+    if (this.heaveTimer < PICKUP_FRAMES) return;
+    this.state = 'heave_toss';
+    this.heaveTimer = 0;
+    this.heaveReleased = false;
+  }
+
+  /**
+   * Flings the rack's worth overhead on the throw's row; the rain starts on
+   * the throw's release frame, when the drawn arms let go.
+   */
+  private doHeaveTossState(nearest: Player | null): void {
+    this.isMoving = false;
+    this.heaveTimer++;
+    this.throwAnim = bigRoosterThrowProgressAt(this.heaveTimer);
+    if (!this.heaveReleased && this.heaveTimer >= BIG_ROOSTER_THROW_RELEASE_FRAME) {
+      this.heaveReleased = true;
+      this.heaveRequest = { x: this.x, y: this.y };
+      this.soundCues.raise('effort');
+      this.framesSinceLastAttack = 0;
+      this.kettlebellCooldownTimer = this.scaledCooldownFrames(KETTLEBELL_RAIN_COOLDOWN_FRAMES);
+      if (this.phase === 'fury') this.furyRainThrown = true;
+    }
+    if (this.heaveTimer < BIG_ROOSTER_THROW_WINDUP_FRAMES) return;
+    this.throwAnim = 0;
+    this.state = this.stateAfterBlow(nearest);
+  }
+
+  // ── Exercise balls ────────────────────────────────────────────────────────
+
+  private targetBall(): { index: number; x: number; y: number } | null {
+    const current = this.restingExerciseBalls.find((ball) => ball.index === this.ballTarget);
+    if (current !== undefined) return current;
+    const half = this.tileSize * CENTER_OFFSET;
+    let best: { index: number; x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const ball of this.restingExerciseBalls) {
+      const distance = Math.hypot(ball.x - (this.x + half), ball.y - (this.y + half));
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = ball;
+    }
+    this.ballTarget = best?.index ?? null;
+    this.seekFrames = 0;
+    return best;
+  }
+
+  /** Runs to the nearest resting ball and squares up to kick it. */
+  private doBallSeekState(nearest: Player | null): void {
+    const ball = this.targetBall();
+    if (ball === null) {
+      this.state = this.stateAfterBlow(nearest);
+      return;
+    }
+    this.seekFrames++;
+    const half = this.tileSize * CENTER_OFFSET;
+    const distance = Math.hypot(ball.x - (this.x + half), ball.y - (this.y + half));
+    if (
+      distance <= this.tileSize * BALL_KICK_REACH_TILES ||
+      this.seekFrames > FURY_SEEK_GIVE_UP_FRAMES
+    ) {
+      this.isMoving = false;
+      this.clearAStarPath();
+      this.faceToward({ x: ball.x - half, y: ball.y - half });
+      this.state = 'ball_kick';
+      this.kick.begin();
+      this.soundCues.raise('effort');
+      return;
+    }
+    this.followTargetAStar(
+      ball.x - half,
+      ball.y - half,
+      this.sprintSpeed,
+      this.tileSize * BALL_KICK_REACH_TILES * DUMBBELL_FOLLOW_STOP_RANGE_RATIO,
+      DUMBBELL_SEEK_PATHFIND_MAX,
+    );
+  }
+
+  /** Boots the ball on the kick's impact frame: at his target, give or take a little. */
+  private doBallKickState(nearest: Player | null): void {
+    this.isMoving = false;
+    const step = this.kick.tick();
+    if (step === 'impact') {
+      const ball = this.restingExerciseBalls.find((resting) => resting.index === this.ballTarget);
+      if (ball !== undefined) {
+        const aimAt = nearest ?? this;
+        const half = this.tileSize * CENTER_OFFSET;
+        const baseAngle = Math.atan2(aimAt.y + half - ball.y, aimAt.x + half - ball.x);
+        const angle = baseAngle + (Math.random() - RANDOM_MIDPOINT) * 2 * BALL_KICK_SPREAD_RAD;
+        this.ballKickRequest = { index: ball.index, dx: Math.cos(angle), dy: Math.sin(angle) };
+        this.soundCues.raise('swing');
+      }
+      this.ballTarget = null;
+    }
+    if (step === 'done' || step === 'idle') this.state = this.stateAfterBlow(nearest);
+  }
+
+  // ── Dynamite ──────────────────────────────────────────────────────────────
+
+  /** A landed stick near him worth walking to, when he is free to and inside the gym. */
+  private stickWorthKicking(): KickableStick | null {
+    if (this.flockView === null || this.dynamiteKickCooldown > 0) return null;
+    if (!INTERRUPTIBLE_STATES.has(this.state)) return null;
+    const half = this.tileSize * CENTER_OFFSET;
+    return stickToKick(this.x + half, this.y + half, liveExplosives());
+  }
+
+  private beginDynamiteSeek(stick: KickableStick): void {
+    this.state = 'dynamite_seek';
+    this.stickTarget = stick.id;
+    this.seekFrames = 0;
+  }
+
+  private doDynamiteSeekState(nearest: Player | null): void {
+    const id = this.stickTarget;
+    const stick = id === null ? null : stickNow(id, liveExplosives());
+    this.seekFrames++;
+    if (stick === null || this.seekFrames > DYNAMITE_SEEK_GIVE_UP_FRAMES) {
+      this.stickTarget = null;
+      this.dynamiteKickCooldown = DYNAMITE_KICK_COOLDOWN_FRAMES;
+      this.state = this.stateAfterBlow(nearest);
+      return;
+    }
+    const half = this.tileSize * CENTER_OFFSET;
+    const distance = Math.hypot(stick.x - (this.x + half), stick.y - (this.y + half));
+    if (distance <= this.tileSize * DYNAMITE_KICK_CONTACT_TILES) {
+      this.isMoving = false;
+      this.clearAStarPath();
+      this.faceToward({ x: stick.x - half, y: stick.y - half });
+      this.state = 'dynamite_kick';
+      this.kick.begin();
+      return;
+    }
+    this.followTargetAStar(
+      stick.x - half,
+      stick.y - half,
+      this.sprintSpeed,
+      this.tileSize * DYNAMITE_KICK_CONTACT_TILES * DUMBBELL_FOLLOW_STOP_RANGE_RATIO,
+      DUMBBELL_SEEK_PATHFIND_MAX,
+    );
+  }
+
+  private doDynamiteKickState(nearest: Player | null): void {
+    this.isMoving = false;
+    const step = this.kick.tick();
+    if (step === 'impact') {
+      const id = this.stickTarget;
+      const stick = id === null ? null : stickNow(id, liveExplosives());
+      const view = this.flockView;
+      if (stick !== null && view !== null) {
+        kickExplosive(stick.id, dynamiteKickVelocity(stick, view));
+        this.soundCues.raise('kick');
+      }
+      this.stickTarget = null;
+      this.dynamiteKickCooldown = DYNAMITE_KICK_COOLDOWN_FRAMES;
+    }
+    if (step === 'done' || step === 'idle') this.state = this.stateAfterBlow(nearest);
+  }
+
+  // ── Damage the gym resolves on his behalf ─────────────────────────────────
+
+  /**
+   * A kettlebell from his rain landing on `target`, at `share` of its full
+   * weight. Resolved by the gym, which owns the rain; never once he is dead.
+   */
+  landKettlebell(target: Player, share: number): boolean {
+    if (!this.isAlive || !target.isAlive) return false;
+    if (this.shieldTurnsAside(target)) return false;
+    const damage = this.scaledDamage(KETTLEBELL_DAMAGE) * share;
+    const connected = this.dealPreScaledRangedDamage(target, damage, KETTLEBELL_ATTACK_TYPE);
+    if (connected) target.damageFlash = DAMAGE_FLASH_DUMBBELL;
+    return connected;
+  }
+
+  /** A rolling exercise ball running into `target` along (vx, vy). Resolved by the gym. */
+  landExerciseBall(target: Player, vx: number, vy: number): boolean {
+    if (!this.isAlive || !target.isAlive) return false;
+    if (this.shieldTurnsAside(target)) return false;
+    const connected = this.dealRangedDamage(
+      target,
+      EXERCISE_BALL_DAMAGE,
+      EXERCISE_BALL_ATTACK_TYPE,
+    );
+    if (!connected) return false;
+    target.damageFlash = DAMAGE_FLASH_DUMBBELL;
+    target.applyKnockback(
+      vx,
+      vy,
+      this.tileSize * EXERCISE_BALL_KNOCKBACK_TILES,
+      EXERCISE_BALL_KNOCKBACK_FRAMES,
+    );
+    return true;
+  }
+
+  private shieldTurnsAside(target: Player): boolean {
+    const half = this.tileSize * CENTER_OFFSET;
+    if (this.spells?.isPointInsideEnergyShield(target.x + half, target.y + half) !== true) {
+      return false;
+    }
+    this.spells.addBlockXp(BLOCK_XP);
+    return true;
   }
 
   private updateTaunt(nearest: Player | null): void {
@@ -811,7 +1361,7 @@ export class BigRooster extends Mob {
     return !this.hasCrowed || this.enrageCrowPending;
   }
 
-  private beginCrow(target: Player): void {
+  private beginCrow(target: Player | null): void {
     prewarmBigRoosterRows(CROW_ROWS);
     this.state = 'crow';
     this.crowTimer = CROW_FRAMES;
@@ -820,7 +1370,7 @@ export class BigRooster extends Mob {
     this.enrageCrowPending = false;
     this.isMoving = false;
     this.clearAStarPath();
-    this.faceToward(target);
+    if (target !== null) this.faceToward(target);
   }
 
   private doCrowState(nearest: Player | null): void {
@@ -828,7 +1378,7 @@ export class BigRooster extends Mob {
     if (nearest !== null) this.faceToward(nearest);
     this.crowTimer--;
     if (this.crowTimer > 0) return;
-    this.state = this.heldDumbbell ? 'pursuing' : 'seeking_dumbbell';
+    this.state = this.stateAfterBlow(nearest);
   }
 
   /**
@@ -1087,8 +1637,12 @@ export class BigRooster extends Mob {
     this.state = this.stateAfterBlow(nearest);
   }
 
-  /** Where a finished blow hands him back to: the fight with the weight, the walk to a rack, or rest. */
+  /**
+   * Where a finished blow hands him back to: his fury's next step, the fight
+   * with the weight, the walk to a rack, or rest.
+   */
   private stateAfterBlow(nearest: Player | null): BigRoosterState {
+    if (this.phase === 'fury') return this.nextFuryState(nearest);
     if (nearest === null) return 'idle';
     return this.heldDumbbell ? 'pursuing' : 'seeking_dumbbell';
   }
@@ -1683,10 +2237,17 @@ export class BigRooster extends Mob {
     return (CROW_FRAMES - this.crowTimer) / CROW_FRAMES;
   }
 
-  /** How far through bending to the rack he is, or null outside a pickup. */
+  /** How far through bending to a rack he is, or null outside a pickup or a heave's lift. */
   private get pickupProgress(): number | null {
+    if (this.state === 'heave_lift') return this.heaveTimer / PICKUP_FRAMES;
     if (this.state !== 'pickup') return null;
     return (PICKUP_FRAMES - this.pickupTimer) / PICKUP_FRAMES;
+  }
+
+  /** How far through the punch row he is: a peck's or punch's own, or a kick's, which borrows it. */
+  private get punchRowProgress(): number | null {
+    if (this.strikes.current === 'punch') return this.strikes.progress;
+    return this.kick.progress;
   }
 
   protected override drawSelf(
@@ -1715,13 +2276,13 @@ export class BigRooster extends Mob {
         clubProgress: this.clubProgress,
         throwProgress: this.throwAnim > 0 ? this.throwAnim : null,
         peckProgress: this.strikes.current === 'peck' ? this.strikes.progress : null,
-        punchProgress: this.strikes.current === 'punch' ? this.strikes.progress : null,
+        punchProgress: this.punchRowProgress,
         pickupProgress: this.pickupProgress,
         facingX: this.facingX,
         facingY: this.facingY,
         isEnraged: this.isEnraged,
         isDamageFlashing: this.damageFlash > 0,
-        heldDumbbell: this.heldDumbbell,
+        heldDumbbell: this.heldDumbbell && this.state !== 'heave_toss',
         idleSeconds: this.animationClock.idleSeconds,
       });
     });

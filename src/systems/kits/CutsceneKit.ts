@@ -5,6 +5,7 @@
  * the player's own movement, so a script owns the party the same way in both.
  */
 
+import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -13,6 +14,8 @@ import type { GameMap } from '../../map/GameMap';
 import type { Player } from '../../Player';
 import { applyMovement, type SouthCollisionAnchor } from '../GameLoopPhases';
 import { CutsceneDirector, type CutsceneDirectorDeps } from '../cutscene/CutsceneDirector';
+import type { CutscenePoint } from '../cutscene/cutsceneCamera';
+import type { CutsceneSoundCue, CutsceneWorldAction } from '../cutscene/cutsceneSteps';
 
 /** The surface id, unique per scene. */
 export const CUTSCENE_SURFACE_ID = 'cutscene';
@@ -26,15 +29,28 @@ export interface CutscenePauseButton {
   readonly press: () => void;
 }
 
-export interface CutsceneKitDeps extends CutsceneDirectorDeps {
+/** A scene's `playSound` dependency, played through its audio when it has any. */
+export function cutsceneSoundPlayer(
+  audio: AudioManager | null,
+): (cue: CutsceneSoundCue, at: CutscenePoint | null) => void {
+  return (cue, at) => {
+    if (at === null) audio?.playRandom(cue.takes);
+    else audio?.playRandomAt(cue.takes, at.x, at.y);
+  };
+}
+
+export interface CutsceneKitDeps<
+  Action extends CutsceneWorldAction = never,
+> extends CutsceneDirectorDeps<Action> {
   /** The one HUD control left live while a cutscene plays; null while it is not drawn. */
   readonly pauseButton: () => CutscenePauseButton | null;
 }
 
-export class CutsceneKit {
-  readonly director: CutsceneDirector;
+/** `Action` is the scene's own world-action union, run by `run` steps; `never` for a scene with none. */
+export class CutsceneKit<Action extends CutsceneWorldAction = never> {
+  readonly director: CutsceneDirector<Action>;
 
-  constructor(private readonly deps: CutsceneKitDeps) {
+  constructor(private readonly deps: CutsceneKitDeps<Action>) {
     this.director = new CutsceneDirector(deps);
   }
 
@@ -44,12 +60,14 @@ export class CutsceneKit {
 
   /**
    * The movement phase while a cutscene plays: walks the active crawler along
-   * the script's path, or holds them still.
+   * the script's path, or holds them still. Called on every world tick, since
+   * it also advances the cutscene camera and a shake that outlives its script.
    *
    * @returns whether the cutscene owned this tick's movement, in which case
    *   the scene applies none of its own.
    */
   tickWorld(active: Player, map: GameMap, southAnchor: SouthCollisionAnchor): boolean {
+    this.director.tickEffects();
     if (!this.director.isActive) return false;
     const move = this.director.tickWorld(active, map);
     if (move === null) active.isMoving = false;
@@ -94,6 +112,10 @@ export class CutsceneKit {
         });
       },
     };
+  }
+
+  resetForCheckpoint(): void {
+    this.director.resetForCheckpoint();
   }
 
   dispose(): void {

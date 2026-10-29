@@ -8,7 +8,7 @@ const NO_DOOR_HERE = -1;
 import type { GameSystem, SystemContext } from './GameSystem';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { buildingDisplayName } from '../map/buildingIds';
 
 /**
@@ -195,9 +195,9 @@ export class BuildingSystem implements GameSystem {
       const CULLING_HEIGHT_TILES = 3;
       if (
         sx < -ts ||
-        sx > viewportWidth() + ts ||
+        sx > worldViewWidth() + ts ||
         sy < -ts * CULLING_HEIGHT_TILES ||
-        sy > viewportHeight() + ts
+        sy > worldViewHeight() + ts
       )
         continue;
 

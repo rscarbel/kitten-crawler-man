@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
@@ -1106,8 +1106,8 @@ function restoreKeySet(live: Set<string>, snapshot: ReadonlySet<string>): void {
 function viewportBounds(camX: number, camY: number): (x: number, y: number) => boolean {
   const left = camX - EFFECT_CULL_MARGIN_PX;
   const top = camY - EFFECT_CULL_MARGIN_PX;
-  const right = camX + viewportWidth() + EFFECT_CULL_MARGIN_PX;
-  const bottom = camY + viewportHeight() + EFFECT_CULL_MARGIN_PX;
+  const right = camX + worldViewWidth() + EFFECT_CULL_MARGIN_PX;
+  const bottom = camY + worldViewHeight() + EFFECT_CULL_MARGIN_PX;
   return (x, y) => x >= left && x <= right && y >= top && y <= bottom;
 }
 

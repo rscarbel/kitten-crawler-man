@@ -91,9 +91,28 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
   player's own movement while it returns true, and fold `isActive` into
   anything that asks "does a script own the party". A script is a list of
   `CutsceneStep`s (walk-up, talk, Caroline's message, the guide teleporting
-  out, a wait) given to `director.play(script, onComplete?)`; never hand-roll
-  another party lock. Its deps are the scene's one `Conversation`,
-  `teleportDaveOut` and the HUD's `pauseButton`.
+  out, a wait, `panCamera`/`holdCamera`/`returnCamera`, `shake` with a
+  `ShakeProfileId` from `SHAKE_PROFILES`, `sound` with a cue's `takes`, and
+  `run` with a world action) given to `director.play(script, onComplete?)`;
+  never hand-roll another party lock, camera pan or cutscene shake. Its deps
+  are the scene's one `Conversation`, `teleportDaveOut`, `playSound`
+  (`cutsceneSoundPlayer(audio)`), `runWorldAction` and the HUD's `pauseButton`.
+  - The camera and the shake: the scene asks `director.cameraFocus(leader)` in
+    its camera chain and adds `director.cameraShake` after clamping;
+    `tickWorld` advances both on every world tick, cutscene or not. A script
+    that ends with the camera away from the leader hands it straight back.
+  - World actions are owned by the scene: `CutsceneKit<Action>` takes the
+    scene's union, and a scene with none leaves it `never` and passes
+    `noWorldActions`. The dungeon's is `DungeonWorldAction`
+    (`src/scenes/dungeonWorldActions.ts`, e.g. `gatherParty`): a new kind is
+    one entry in `DungeonWorldActionPayloads` plus its handler in the host
+    object `DungeonScene` passes to `runDungeonWorldAction`.
+  - A death a script shows (`ScriptedDeathKind`, `SCRIPTED_DEATHS` in
+    `src/systems/scriptedDeath/`) is played with
+    `DungeonScene.scriptedDeaths.play(kind, victim, at)`: it holds the party
+    through a cutscene, hides the victim, paints the animation and decal, and
+    kills through `Player.dieScripted`, past 9 Lives. A new one is a kind, a
+    def (painter, decal, delay, `DeathCause`, cue) and its death lines.
   - A walk-up is `walkUpTo(map, speakerTile, crawlerTile)`
     (`src/systems/cutscene/walkUp.ts`); the companion follows by its own drive.
     A walk that cannot finish gives up after `WALK_UP_TIMEOUT_FRAMES` and the

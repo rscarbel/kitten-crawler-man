@@ -48,7 +48,7 @@ import type { TrackerEntry } from '../questTracker';
 import type { ProcessingStationKind } from './processingStations';
 import { RatkinCastPrewarm } from './ratkinCastPrewarm';
 import { VillageAmbience } from './VillageAmbience';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import {
   MAX_TOOL_TIER,
   TOOL_TIER_BASIC,
@@ -805,7 +805,7 @@ export class BriarHollowKit {
    * front of it.
    */
   renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.ambience.renderAbove(ctx, camX, camY, viewportWidth(), viewportHeight());
+    this.ambience.renderAbove(ctx, camX, camY, worldViewWidth(), worldViewHeight());
     this.villagers?.renderBarks(ctx, camX, camY);
     this.livestock?.renderAbove(ctx, camX, camY);
     this.defences?.renderAbove(ctx, camX, camY);

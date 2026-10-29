@@ -6,7 +6,7 @@
  *   npm run render:boss-rooms -- --room=trashGremlin --state=sealed --door=east --scale=2
  *
  * Flags:
- *   --room=trashGremlin|gym|krakaren|spider|swine|all   (default all)
+ *   --room=trashGremlin|gym|powerLab|floodedPumpRoom|spider|all   (default all)
  *   --seed=N    world seed the floor is generated from (default 1); with
  *               `--door`, the search for a matching floor starts here
  *   --state=pre|sealed|enraged|phase2|phase3|defeated|all   (default all
@@ -16,6 +16,10 @@
  *               whose room has its doorway on that side
  *   --lit       draws the dungeon lighting pass at the sharp preset over the
  *               props, mood lights included, and writes `<name>-lit.png`
+ *   --art=floodedPumpRoom   instead of a room, renders the flooded pump room's
+ *               props, sharks and submerged Kraken over a patch of its floor
+ *               (`npm run render:flooded-pump-room`); `--frame=N` picks the
+ *               world tick its animations are drawn at
  *
  * Writes `preview/boss-rooms/<room>-<state>-<door>.png`. What it draws is the
  * baked floor, the room's dressing layers and its Y-sorted props — no boss and
@@ -24,22 +28,7 @@
 
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import type { DoorSide } from '../src/systems/bossRooms/bossRoomLayout.js';
-import {
-  BOSS_ROOM_STATES,
-  buildEnvironment,
-  findFloorWithRoom,
-  generateFloor,
-  isBossRoomId,
-  isBossRoomState,
-  isDoorSide,
-  magentaPixelCount,
-  renderRoom,
-  roomRenderPath,
-  type BossRoomHarness,
-  type BossRoomState,
-  type FoundRoom,
-} from './bossRooms/harness.js';
-import { BOSS_ROOM_HARNESSES } from './bossRooms/rooms.js';
+import type { BossRoomHarness, BossRoomState, FoundRoom } from './bossRooms/harness.js';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { writePreviewPng } from './previewOut.js';
 
@@ -62,6 +51,35 @@ function intArg(name: string, fallback: number): number {
   if (!Number.isFinite(value)) throw new Error(`--${name} must be an integer`);
   return value;
 }
+
+const ART_REVIEWS = ['floodedPumpRoom'] as const;
+const artArg = stringArg('art', '');
+if (artArg !== '') {
+  if (!ART_REVIEWS.some((review) => review === artArg)) {
+    throw new Error(`--art must be one of ${ART_REVIEWS.join(', ')}`);
+  }
+  // Loaded only here, and the rooms only below, so an art review never waits
+  // on the fight systems every room harness pulls in.
+  const { renderFloodedPumpRoomArt } = await import('./bossRooms/floodedPumpRoomArt.js');
+  await loadGameSpritesInNode(FLOOR_ART_SEEDS[0]);
+  const artScale = intArg('scale', DEFAULT_SCALE);
+  for (const path of renderFloodedPumpRoomArt(artScale, intArg('frame', 0))) console.log(path);
+  process.exit(0);
+}
+
+const {
+  BOSS_ROOM_STATES,
+  buildEnvironment,
+  findFloorWithRoom,
+  generateFloor,
+  isBossRoomId,
+  isBossRoomState,
+  isDoorSide,
+  magentaPixelCount,
+  renderRoom,
+  roomRenderPath,
+} = await import('./bossRooms/harness.js');
+const { BOSS_ROOM_HARNESSES } = await import('./bossRooms/rooms.js');
 
 const roomArg = stringArg('room', ALL);
 if (roomArg !== ALL && !isBossRoomId(roomArg)) {

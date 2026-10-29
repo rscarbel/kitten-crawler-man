@@ -1,7 +1,5 @@
 import type { GameMapCheckpoint } from '../../map/GameMap';
 import type { AttackCowStateCheckpoint } from '../state/AttackCowState';
-import type { ArenaCheckpoint } from '../../systems/ArenaSystem';
-import type { ArenaRoomCheckpoint } from '../../systems/ArenaRoomSystem';
 import type { BarrierCheckpoint } from '../../systems/BarrierSystem';
 import type { BopcaCheckpoint } from '../../systems/BopcaSystem';
 import type { BossRoomCheckpoint } from '../../systems/BossRoomSystem';
@@ -53,8 +51,6 @@ export interface WorldCheckpoint {
   gameStats: GameStatsSnapshot;
 
   bossRoom: BossRoomCheckpoint;
-  arena: ArenaCheckpoint;
-  arenaRoom: ArenaRoomCheckpoint;
   /** The props, slow ground and room hazards each boss room changes during its fight. */
   bossRoomDressing: BossRoomDressingCheckpoint;
   barriers: BarrierCheckpoint;
@@ -107,11 +103,11 @@ export interface WorldCheckpoint {
 
   /**
    * One-time kill latches the scene owns directly rather than through a system.
-   * `krakarenKilled` and `bigRoosterKilled` record each boss's defeat, which
-   * the music library reads; Big Rooster's also gates the Pecking Order
-   * achievement.
+   * `krakenKilled` (a floor-1 boss) and `bigRoosterKilled` (a floor-2 boss)
+   * record each boss's defeat on its own floor, which the music library reads;
+   * Big Rooster's also gates the Pecking Order achievement.
    */
-  krakarenKilled: boolean;
+  krakenKilled: boolean;
   bigRoosterKilled: boolean;
   bigRoosterBossRoomIdx: number;
 }

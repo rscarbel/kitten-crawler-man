@@ -131,7 +131,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   demolition_apron: gearTorso('demolition_apron'),
   foremans_hardhat: gearHead('foremans_hardhat'),
   silkspinner_gloves: gearLimb('silkspinner_gloves'),
-  hamhock_boots: gearLimb('hamhock_boots'),
+  lineman_boots: gearLimb('lineman_boots'),
   rebar_shiv: heldVisual('rebar_shiv'),
   pipe_wrench: heldVisual('pipe_wrench'),
   rattlestick_sling: heldVisual('rattlestick_sling'),

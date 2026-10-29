@@ -82,6 +82,7 @@ import {
   TOWN_WALL,
   FENCE,
   RUINED_WALL,
+  isDungeonWater,
 } from './tileTypes';
 import {
   isLobBlockingTileType,
@@ -112,6 +113,12 @@ import {
   type StealthGateState,
 } from './stealthGateLayout';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
+import { drainDungeonTile, dungeonWaterDepth, floodDungeonTile } from './dungeonWater';
+import {
+  DUNGEON_WATER_COLUMN_REACH_TILES,
+  invalidateDungeonWaterColumn,
+} from './tiles/dungeonWaterColumn';
+import { DUNGEON_SHORE_REPAINT_REACH_TILES } from './tiles/dungeonWaterShore';
 import { MinHeap, HEAP_EMPTY } from '../core/util/MinHeap';
 import { drawWorldSeed, withWorldSeed } from '../core/world/WorldRandom';
 import { TILE_SIZE } from '../core/constants';
@@ -122,18 +129,13 @@ import {
   CLUB_DIVIDER_WALLS,
 } from '../core/club/clubLayout';
 import { CLUB_FURNITURE_TILES } from '../core/club/clubProps';
-import { ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
-import {
-  COLOSSEUM_RIM_PAINT_REACH_TILES,
-  colosseumRimCoversTile,
-} from './tiles/bossRooms/colosseumGeometry';
+import type { FloodedApproachData } from './floodedApproach';
 import {
   generateDungeon,
   STAIRWELL_FOOTPRINT_SPAN,
   type DungeonLevelOptions,
   type GenerateDungeonOptions,
   type SafeRoomData,
-  type ArenaExterior,
   type ProgressionLayoutData,
   type QuestRoomData,
   type TreasureRoomData,
@@ -206,8 +208,6 @@ import {
 // ── Default map construction options ──────────────────────────────────────────
 const DEFAULT_MAP_SIZE = 100;
 const DEFAULT_TILE_HEIGHT = 10;
-/** Boss rooms carved when a caller supplies no dungeon settings at all. */
-const DEFAULT_BOSS_ROOM_COUNT = 1;
 /** An entity's pixel position is its top-left corner; this offset reaches its centre. */
 const ENTITY_TILE_CENTER_OFFSET = 0.5;
 
@@ -516,8 +516,6 @@ function isOversizedDecoration(extents: Readonly<MapSpriteExtentsPx>, tileSize: 
 const BLOCK_EXTRA = 1;
 /** Tile was blocked permanently at runtime (placed prop, quest scenery). */
 const BLOCK_PERMANENT = 2;
-/** Tile is part of an arena door gap — blocking only while `arenaDoorLocked`. */
-const BLOCK_ARENA_DOOR = 4;
 /** Tile is part of a stairwell's 2×2 footprint. */
 const BLOCK_STAIRWELL = 8;
 /**
@@ -1013,12 +1011,14 @@ export class GameMap {
 
   /** Spider lab room, if generated (spider quest boss encounter). */
   spiderLabRoom: SpiderLabRoomData | null = null;
+  /**
+   * Every gauntlet's flooded corridor into its boss room, as generated: its
+   * cross-sections, water, barrel seat and trigger line. Empty on a floor with
+   * none. Read by the systems that stage the approach.
+   */
+  floodedApproaches: ReadonlyArray<FloodedApproachData> = [];
   /** Treasure rooms generated in the dungeon (chest encounters). */
   treasureRooms: TreasureRoomData[] = [];
-  /** Arena circles generated in the dungeon (one per dungeon map). */
-  arenaExteriors: ArenaExterior[] = [];
-  /** When true, the arena door gap tiles are treated as unwalkable. */
-  arenaDoorLocked = false;
   /**
    * What the defense quest's onward doorway is doing. See `QuestExitDoorState`.
    */
@@ -1034,8 +1034,15 @@ export class GameMap {
    * entries survive a structure replacement (building interiors regenerate the
    * grid). `blockedMask` is rebuilt from these whenever the grid changes.
    */
-  private readonly arenaDoorTileSet = new Set<number>();
   private readonly permanentBlockedTiles = new Set<number>();
+  /**
+   * Every tile of this structure that has ever stood under dungeon water, by
+   * `tileCoordKey`, so a checkpoint can put back water that has since drained.
+   * Found by one scan of the structure the first time it is asked for, then
+   * kept up by {@link floodWater}; rebuilt when the structure is replaced.
+   */
+  private dungeonWaterTiles: { structure: TileContent[][]; keys: Set<number> } | null = null;
+  private readonly waterDrains: WaterDrain[] = [];
   private readonly stairwellBlockedSet = new Set<number>();
   private readonly structureBlockedSet = new Set<number>();
   /**
@@ -1132,7 +1139,7 @@ export class GameMap {
       mapSize = DEFAULT_MAP_SIZE,
       tileHeight = DEFAULT_TILE_HEIGHT,
       mapType,
-      dungeon = { numBossRooms: DEFAULT_BOSS_ROOM_COUNT },
+      dungeon = { bossTypes: [] },
       prebuiltStructure,
       prebuiltDressing,
       artSeed = drawFloorArtSeed(),
@@ -1254,34 +1261,13 @@ export class GameMap {
     }
     this.treasureRooms = data.treasureRooms;
     this.spiderLabRoom = data.spiderLabRoom;
+    this.floodedApproaches = data.floodedApproaches;
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints.map((point) => ({
       ...point,
       terrain: NO_SPAWN_TERRAIN,
     }));
     this.setStairwellTiles(data.stairwellTiles);
-    this.arenaExteriors = data.arenaExteriors;
-    for (const arena of data.arenaExteriors) {
-      this.blockColosseumRimOverhang(data.grid, arena);
-      const { x: doorX, y: doorY } = arena.doorTile;
-      for (const dy of [0, -1]) {
-        for (const dx of [-1, 0]) {
-          this.addArenaDoorTile(doorX + dx, doorY + dy);
-        }
-      }
-      // Also cover the south exit tiles carved in front of the door — unless the
-      // door opens straight into a safe room, as it does on a progression floor,
-      // where those tiles are the antechamber's own floor and sealing them would
-      // block movement inside a safe room for the length of the fight.
-      const insideSafeRoom = (x: number, y: number): boolean =>
-        this.safeRooms.some(
-          ({ bounds }) =>
-            x >= bounds.x && x < bounds.x + bounds.w && y >= bounds.y && y < bounds.y + bounds.h,
-        );
-      for (const dx of [-1, 0]) {
-        if (!insideSafeRoom(doorX + dx, doorY + 1)) this.addArenaDoorTile(doorX + dx, doorY + 1);
-      }
-    }
     return data.grid;
   }
 
@@ -1324,28 +1310,6 @@ export class GameMap {
     return this.stealthGateBlockedSet.has(tileCoordKey(tileX, tileY));
   }
 
-  /** Locks the arena door so players cannot exit while the fight is active. */
-  lockArenaDoor(): void {
-    this.arenaDoorLocked = true;
-  }
-
-  /** Unlocks the arena door after the fight ends. */
-  unlockArenaDoor(): void {
-    this.arenaDoorLocked = false;
-  }
-
-  /** Adds the arena stairwell to the active stairwell list (call when Ball of Swine is defeated). */
-  unlockArenaStairwell(): void {
-    for (const arena of this.arenaExteriors) {
-      const already = this.stairwellTiles.some(
-        (s) => s.x === arena.stairwellTile.x && s.y === arena.stairwellTile.y,
-      );
-      if (!already) {
-        this.setStairwellTiles([...this.stairwellTiles, arena.stairwellTile]);
-      }
-    }
-  }
-
   /**
    * Sets the defense quest's onward doorway, swapping its art with it.
    *
@@ -1368,125 +1332,6 @@ export class GameMap {
       tile.type = doorType;
       this.markTileDirty(tileX, tileY);
     }
-  }
-
-  private addArenaDoorTile(tileX: number, tileY: number): void {
-    this.arenaDoorTileSet.add(tileCoordKey(tileX, tileY));
-    this.addBlockFlag(tileX, tileY, BLOCK_ARENA_DOOR);
-  }
-
-  /**
-   * How far past the rim's own paint reach the connectivity check's local graph
-   * extends — far enough to cover the whole concourse ring and a slice of the
-   * antechamber, so a route around a blocked tile via the ring's other lane, or
-   * down into the antechamber and back out its other link, is always visible to
-   * the flood fill below.
-   */
-  private static readonly RIM_GRAPH_MARGIN_TILES = 4;
-
-  /**
-   * Blocks every concourse tile the colosseum's painted rim reaches into,
-   * without ever cutting the concourse ring off from its own door.
-   *
-   * The rim is drawn against a true circle, so its iron and shadow land partway
-   * across the first ring of concourse tiles outside the carved wall — the
-   * generator only walls tiles up to `ARENA_RADIUS`, by tile centre, which is
-   * short of where the continuous circle's paint actually stops. Left alone, a
-   * crawler standing on the concourse can reach in and stand with their feet on
-   * painted iron.
-   *
-   * A tile the paint reaches is not always safe to block, though: on a
-   * progression floor the door row is sealed but for two single-tile flank
-   * links down into the antechamber (`linkConcourseToAntechamber` in
-   * `DungeonGenerator.ts`), and the tiles the ring needs to get from a link back
-   * out into its own two-tile-wide band sit well within the rim's reach too.
-   * Rather than hand-deriving every such pinch point from the carve constants,
-   * this floods the local graph once before touching anything, floods it again
-   * with every rim-covered tile provisionally blocked, and for any tile that
-   * lost its way to the door as a result, walks the (guaranteed-connected)
-   * baseline path back and reinstates whichever blocked tiles sit on it. What
-   * is left blocked afterward can never disconnect anything the door could
-   * already reach. Permanent because the geometry never changes once an arena
-   * is placed.
-   */
-  private blockColosseumRimOverhang(grid: TileContent[][], arena: ArenaExterior): void {
-    const centre = arena.centre;
-    const reachRadius = Math.ceil(COLOSSEUM_RIM_PAINT_REACH_TILES);
-    const graphRadius = ARENA_CONCOURSE_REACH + GameMap.RIM_GRAPH_MARGIN_TILES;
-    const gridHeight = grid.length;
-    const gridWidth = grid[0]?.length ?? 0;
-
-    const isOpenGraphTile = (x: number, y: number): boolean =>
-      x >= 0 &&
-      x < gridWidth &&
-      y >= 0 &&
-      y < gridHeight &&
-      Math.hypot(x - centre.x, y - centre.y) <= graphRadius &&
-      isWalkableTileType(grid[y][x]);
-
-    const candidates = new Set<number>();
-    for (let dy = -reachRadius; dy <= reachRadius; dy++) {
-      for (let dx = -reachRadius; dx <= reachRadius; dx++) {
-        if (Math.hypot(dx, dy) <= ARENA_RADIUS) continue;
-        if (!colosseumRimCoversTile(dx, dy)) continue;
-        const x = centre.x + dx;
-        const y = centre.y + dy;
-        if (isOpenGraphTile(x, y)) candidates.add(tileCoordKey(x, y));
-      }
-    }
-    if (candidates.size === 0) return;
-
-    const neighborsOf = (x: number, y: number): Array<[number, number]> => [
-      [x + 1, y],
-      [x - 1, y],
-      [x, y + 1],
-      [x, y - 1],
-    ];
-
-    const floodFill = (
-      root: { x: number; y: number },
-      blocked: ReadonlySet<number>,
-      parents?: Map<number, number>,
-    ): Set<number> => {
-      const rootKey = tileCoordKey(root.x, root.y);
-      const seen = new Set<number>([rootKey]);
-      const stack: Array<{ x: number; y: number }> = [root];
-      while (stack.length > 0) {
-        const cur = stack.pop();
-        if (cur === undefined) break;
-        const curKey = tileCoordKey(cur.x, cur.y);
-        for (const [nx, ny] of neighborsOf(cur.x, cur.y)) {
-          const key = tileCoordKey(nx, ny);
-          if (seen.has(key) || blocked.has(key)) continue;
-          if (!isOpenGraphTile(nx, ny)) continue;
-          seen.add(key);
-          parents?.set(key, curKey);
-          stack.push({ x: nx, y: ny });
-        }
-      }
-      return seen;
-    };
-
-    const parents = new Map<number, number>();
-    const baseline = floodFill(arena.doorTile, new Set(), parents);
-
-    const blocked = new Set(candidates);
-    const reachableAfter = floodFill(arena.doorTile, blocked);
-
-    for (const key of baseline) {
-      if (candidates.has(key) || reachableAfter.has(key)) continue;
-      // This tile is required (not itself up for blocking) and the provisional
-      // block cut it off. Walk its baseline path back to the door — a path that
-      // only ever crosses tiles the flood above already proved open — freeing
-      // every candidate on it.
-      let walk: number | undefined = key;
-      while (walk !== undefined) {
-        blocked.delete(walk);
-        walk = parents.get(walk);
-      }
-    }
-
-    for (const key of blocked) this.permanentBlockedTiles.add(key);
   }
 
   /**
@@ -2121,7 +1966,6 @@ export class GameMap {
     }
 
     this.applyBlockKeySet(this.permanentBlockedTiles, BLOCK_PERMANENT);
-    this.applyBlockKeySet(this.arenaDoorTileSet, BLOCK_ARENA_DOOR);
     this.applyBlockKeySet(this.questExitDoorTiles.keys(), BLOCK_QUEST_EXIT);
     this.applyBlockKeySet(this.stairwellBlockedSet, BLOCK_STAIRWELL);
     this.applyBlockKeySet(this.structureBlockedSet, BLOCK_STRUCTURE);
@@ -2280,18 +2124,17 @@ export class GameMap {
    */
   captureCheckpoint(): GameMapCheckpoint {
     return {
-      arenaDoorLocked: this.arenaDoorLocked,
       questExitDoorState: this.questExitDoorState,
       bathroomPlumbing: this.bathroomPlumbing,
       stealthGate: this.stealthGate,
       permanentBlockedTiles: [...this.permanentBlockedTiles],
       stairwellTiles: this._stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })),
       structureBlockedTiles: [...this.structureBlockedSet],
+      dungeonWaterDepths: this.captureWaterDepths(),
     };
   }
 
   restoreCheckpoint(snapshot: GameMapCheckpoint): void {
-    this.arenaDoorLocked = snapshot.arenaDoorLocked;
     // A resolved encounter is banked: the doorway her wave smashed open must
     // not come back boarded behind a player who respawns at a checkpoint taken
     // before it.
@@ -2313,9 +2156,7 @@ export class GameMap {
       this.addBlockFlag(tileKeyX(key), tileKeyY(key), BLOCK_PERMANENT);
     }
 
-    // Through the setter, which owns the BLOCK_STAIRWELL bits as well as the
-    // list. This is what re-hides the arena stairwell that `unlockArenaStairwell`
-    // revealed — that method appends and has no inverse of its own.
+    // Through the setter, which owns the BLOCK_STAIRWELL bits as well as the list.
     this.setStairwellTiles(snapshot.stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })));
 
     for (const key of [...this.structureBlockedSet]) {
@@ -2324,6 +2165,7 @@ export class GameMap {
     for (const key of snapshot.structureBlockedTiles) {
       this.blockStructureTile(tileKeyX(key), tileKeyY(key));
     }
+    this.restoreWaterDepths(snapshot.dungeonWaterDepths);
   }
 
   /**
@@ -2526,6 +2368,159 @@ export class GameMap {
     this._dirtyDecorations.push({ x: tileX, y: tileY });
   }
 
+  private dungeonWaterKeys(): Set<number> {
+    const known = this.dungeonWaterTiles;
+    if (known?.structure === this.structure) return known.keys;
+    const keys = new Set<number>();
+    for (const [y, row] of this.structure.entries()) {
+      for (const [x, cell] of row.entries()) {
+        if (isDungeonWater(cell)) keys.add(tileCoordKey(x, y));
+      }
+    }
+    this.dungeonWaterTiles = { structure: this.structure, keys };
+    return keys;
+  }
+
+  /** The depth of standing dungeon water on a tile, 0 when it is dry or off the map. */
+  dungeonWaterDepthAt(tileX: number, tileY: number): number {
+    if (!this.isInsideGrid(tileX, tileY)) return 0;
+    return dungeonWaterDepth(this.structure[tileY][tileX]);
+  }
+
+  /**
+   * Repaints water whose depth changed: the tiles themselves and every tile the
+   * water column's smoothing or a shoreline reaches from them, since a
+   * neighbour's depth is blended into each tile's own.
+   */
+  private markWaterChanged(tiles: ReadonlyArray<{ x: number; y: number }>): void {
+    if (tiles.length === 0) return;
+    invalidateDungeonWaterColumn(this.structure);
+    const repainted = new Set<number>();
+    const reach = Math.max(DUNGEON_WATER_COLUMN_REACH_TILES, DUNGEON_SHORE_REPAINT_REACH_TILES);
+    for (const tile of tiles) {
+      for (let dy = -reach; dy <= reach; dy++) {
+        for (let dx = -reach; dx <= reach; dx++) {
+          const x = tile.x + dx;
+          const y = tile.y + dy;
+          if (!this.isInsideGrid(x, y)) continue;
+          const key = tileCoordKey(x, y);
+          if (repainted.has(key)) continue;
+          repainted.add(key);
+          this.markTileDirty(x, y);
+        }
+      }
+    }
+  }
+
+  /**
+   * Marks dry floor tiles standing in dungeon water under a float whose art
+   * covers them, so the water's art runs under them instead of drawing a
+   * shoreline around them. See `TileContent.underFloat`.
+   */
+  setUnderFloats(tiles: ReadonlyArray<{ x: number; y: number }>): void {
+    const marked: Array<{ x: number; y: number }> = [];
+    for (const tile of tiles) {
+      if (!this.isInsideGrid(tile.x, tile.y)) continue;
+      const cell = this.structure[tile.y][tile.x];
+      if (cell.underFloat === true) continue;
+      cell.underFloat = true;
+      marked.push(tile);
+    }
+    this.markWaterChanged(marked);
+  }
+
+  /**
+   * Floods dry walkable floor tiles to `depth` (1..`MAX_WATER_DEPTH`) at run
+   * time, or sets the depth of water already standing there. Water a room puts
+   * down after generation goes through here, so a checkpoint knows about it.
+   */
+  floodWater(tiles: ReadonlyArray<{ x: number; y: number }>, depth: number): void {
+    const keys = this.dungeonWaterKeys();
+    const changed: Array<{ x: number; y: number }> = [];
+    for (const tile of tiles) {
+      if (!this.isInsideGrid(tile.x, tile.y)) continue;
+      floodDungeonTile(this.structure[tile.y][tile.x], depth);
+      keys.add(tileCoordKey(tile.x, tile.y));
+      changed.push(tile);
+    }
+    this.markWaterChanged(changed);
+  }
+
+  /**
+   * Starts lowering the dungeon water on these tiles to dry floor over
+   * `ticks` world ticks, each tile at the same rate from its own depth, so a
+   * region falls level by level and every tile is dry on the last tick.
+   * Advanced by {@link advanceWaterDrains}; dry tiles are skipped.
+   */
+  drainWater(tiles: ReadonlyArray<{ x: number; y: number }>, ticks: number): void {
+    const draining: WaterDrainTile[] = [];
+    for (const tile of tiles) {
+      const depth = this.dungeonWaterDepthAt(tile.x, tile.y);
+      if (depth > 0) draining.push({ x: tile.x, y: tile.y, startDepth: depth });
+    }
+    if (draining.length === 0) return;
+    this.waterDrains.push({ tiles: draining, totalTicks: Math.max(1, ticks), elapsedTicks: 0 });
+  }
+
+  /**
+   * Advances every drain by one world tick. Call once per world tick, so a
+   * drain holds while the game is paused or a menu halts the world.
+   */
+  advanceWaterDrains(): void {
+    if (this.waterDrains.length === 0) return;
+    const changed: Array<{ x: number; y: number }> = [];
+    for (const drain of this.waterDrains) {
+      drain.elapsedTicks++;
+      const remaining = 1 - drain.elapsedTicks / drain.totalTicks;
+      for (const tile of drain.tiles) {
+        if (!this.isInsideGrid(tile.x, tile.y)) continue;
+        const cell = this.structure[tile.y][tile.x];
+        const target = Math.ceil(tile.startDepth * remaining);
+        const current = dungeonWaterDepth(cell);
+        if (target >= current) continue;
+        if (target <= 0) drainDungeonTile(cell);
+        else cell.waterDepth = target;
+        changed.push(tile);
+      }
+    }
+    for (let index = this.waterDrains.length - 1; index >= 0; index--) {
+      const drain = this.waterDrains[index];
+      if (drain.elapsedTicks >= drain.totalTicks) this.waterDrains.splice(index, 1);
+    }
+    this.markWaterChanged(changed);
+  }
+
+  private captureWaterDepths(): Array<{ key: number; depth: number }> {
+    return [...this.dungeonWaterKeys()].map((key) => ({
+      key,
+      depth: this.dungeonWaterDepthAt(tileKeyX(key), tileKeyY(key)),
+    }));
+  }
+
+  private restoreWaterDepths(depths: ReadonlyArray<{ key: number; depth: number }>): void {
+    this.waterDrains.length = 0;
+    const keys = this.dungeonWaterKeys();
+    const restored = new Map(depths.map(({ key, depth }) => [key, depth]));
+    // A capture lists every tile that had ever stood under water by then, so a
+    // tile it leaves out was dry: water a room put down after it drains away.
+    for (const key of keys) {
+      if (!restored.has(key)) restored.set(key, 0);
+    }
+    const changed: Array<{ x: number; y: number }> = [];
+    for (const [key, depth] of restored) {
+      const x = tileKeyX(key);
+      const y = tileKeyY(key);
+      if (!this.isInsideGrid(x, y)) continue;
+      const cell = this.structure[y][x];
+      if (dungeonWaterDepth(cell) === depth) continue;
+      if (depth <= 0) drainDungeonTile(cell);
+      else floodDungeonTile(cell, depth);
+      keys.add(key);
+      changed.push({ x, y });
+    }
+    this.markWaterChanged(changed);
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     return this.passableUnderFlags(
@@ -2538,7 +2533,6 @@ export class GameMap {
   /** {@link isWalkable} for an in-grid tile, given the block flags to judge it by. */
   private passableUnderFlags(tileX: number, tileY: number, flags: number): boolean {
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
-    if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     if (this.stealthGate !== 'open' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
     if ((flags & BLOCK_BODY) !== 0) return false;
@@ -2566,7 +2560,6 @@ export class GameMap {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
-    if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
   }
@@ -2587,9 +2580,10 @@ export class GameMap {
   }
 
   /**
-   * Whether (tileX, tileY) is river water — walkable, but waded rather than
-   * walked. The one definition of "this is the river", shared by the movement
-   * penalty, the submerged rendering and the splash effects.
+   * Whether (tileX, tileY) is water — the town's river or a dungeon's standing
+   * water — walkable, but waded rather than walked. The one definition of
+   * "this is water", shared by the movement penalty, the submerged rendering
+   * and the splash effects.
    */
   isWadeable(tileX: number, tileY: number): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
@@ -2599,7 +2593,7 @@ export class GameMap {
   }
 
   /**
-   * Walkability ignoring only the *permanent* block flag. Locked arena doors,
+   * Walkability ignoring only the *permanent* block flag. Barred doorways,
    * building/sprite footprints (`BLOCK_EXTRA`), and tile type are all still
    * honored — this differs from `isWalkable` only in that a tile the game blocked
    * permanently still reads as walkable.
@@ -2614,7 +2608,6 @@ export class GameMap {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_EXTRA) !== 0) return false;
-    if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     if (this.bathroomPlumbing === 'broken' && (flags & BLOCK_BATHROOM) !== 0) return false;
     if (this.stealthGate === 'locked' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
@@ -3133,7 +3126,6 @@ export class GameMap {
  * either fixed at generation or derived, so it needs no snapshot.
  */
 export interface GameMapCheckpoint {
-  arenaDoorLocked: boolean;
   questExitDoorState: QuestExitDoorState;
   bathroomPlumbing: BathroomPlumbing;
   stealthGate: StealthGateState;
@@ -3142,4 +3134,29 @@ export interface GameMapCheckpoint {
   stairwellTiles: ReadonlyArray<{ x: number; y: number }>;
   /** `tileCoordKey` values of structure footprints. */
   structureBlockedTiles: number[];
+  /**
+   * The depth of every tile that has stood under dungeon water, 0 where it has
+   * drained, keyed by `tileCoordKey`. Drains under way are not kept: a restore
+   * leaves each tile at the depth it had, and drains any tile flooded since.
+   *
+   * Map water is not part of `PersistedWorldState`. A page reload regenerates
+   * the floor with only its generated water, so a room dressing that floods or
+   * drains tiles must put its own water back from its own persisted state on
+   * load.
+   */
+  dungeonWaterDepths: ReadonlyArray<{ key: number; depth: number }>;
+}
+
+/** One tile of a {@link WaterDrain}, and the depth it started lowering from. */
+interface WaterDrainTile {
+  readonly x: number;
+  readonly y: number;
+  readonly startDepth: number;
+}
+
+/** A region of dungeon water lowering to dry floor over a fixed number of world ticks. */
+interface WaterDrain {
+  readonly tiles: ReadonlyArray<WaterDrainTile>;
+  readonly totalTicks: number;
+  elapsedTicks: number;
 }

@@ -1,5 +1,4 @@
 import type { TileContent } from '../tileTypes';
-import { drawColosseumRim, drawColosseumTile } from './bossRooms/colosseumTiles';
 import {
   BUILDING_WALL,
   ROOF_THATCH,
@@ -7,7 +6,6 @@ import {
   ROOF_RED,
   ROOF_GREEN,
   METAL_WALL,
-  ARENA_CAGE,
   RUINED_WALL,
   TOWN_WALL,
   FloorTypeValue,
@@ -283,13 +281,7 @@ const GREEN_RIDGE_VALLEY_OFFSET = 2;
 
 // Metal wall
 
-/**
- * One riveted steel panel of the arena's wall.
- *
- * Its own function because the cage tile draws a panel and then cuts an alcove into
- * it: a cage has to agree with the run of wall it sits in, and the only way to
- * guarantee that is for both to paint the same panel.
- */
+/** One riveted steel panel. */
 function drawMetalWallPanel(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -345,104 +337,6 @@ function drawMetalWallPanel(
   ctx.fillRect(sx, sy, 2, ts);
 }
 
-/**
- * A barred alcove in the arena wall, with what is left of a spectator in it.
- *
- * The one piece of story in the whole structure: the Ball of Swine wears scraps
- * of tuxedos and red sequin dresses, and the cages say where a rolling pig found
- * them. Half of them hold a black tie, half a red gown, and the occupant is
- * slumped and long past caring.
- */
-const CAGE_ALCOVE_INSET = 0.2;
-const CAGE_BAR_COUNT = 4;
-/** Sparkles on a gown. Its own count: it has nothing to do with how many bars there are. */
-const CAGE_SEQUIN_COUNT = 4;
-/**
- * Where the sparkles start and end across the gown, as fractions of the alcove's
- * width, with the spacing *derived* between them — so raising the count crowds them
- * rather than walking the last one off the edge of the cloth.
- */
-const CAGE_SEQUIN_FIRST = 0.3;
-const CAGE_SEQUIN_LAST = 0.72;
-const CAGE_VOID = '#0b0d10';
-const CAGE_BACK = '#15181d';
-const CAGE_BAR = '#39424b';
-const CAGE_BAR_GLINT = '#5c6772';
-const CAGE_BAR_WIDTH = 2;
-const CAGE_LINTEL = '#2b333a';
-const CAGE_TUX = '#171b24';
-const CAGE_TUX_LINEN = '#cfcbc2';
-const CAGE_GOWN = '#8e1020';
-const CAGE_GOWN_SPARK = '#d84a58';
-const CAGE_FLESH = '#6d5f57';
-const CAGE_HEAD_RADIUS_FRACTION = 0.11;
-const CAGE_BODY_TOP_FRACTION = 0.44;
-
-function drawArenaCage(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  ts: number,
-  tx: number,
-  ty: number,
-): void {
-  drawMetalWallPanel(ctx, sx, sy, ts, ty);
-
-  const inset = ts * CAGE_ALCOVE_INSET;
-  const w = ts - inset * 2;
-  const h = ts - inset * 2;
-  const ax = sx + inset;
-  const ay = sy + inset;
-
-  ctx.fillStyle = CAGE_VOID;
-  ctx.fillRect(ax, ay, w, h);
-  ctx.fillStyle = CAGE_BACK;
-  ctx.fillRect(ax + 1, ay + 1, w - 2, h - 2);
-
-  // Half the cages hold a dinner jacket and half a sequin gown, split on the tile
-  // coordinate so a run of wall alternates rather than repeating.
-  const wearsGown = (tx + ty) % 2 === 0;
-  const bodyTop = ay + h * CAGE_BODY_TOP_FRACTION;
-  ctx.fillStyle = wearsGown ? CAGE_GOWN : CAGE_TUX;
-  ctx.fillRect(ax + w * 0.22, bodyTop, w * 0.56, ay + h - bodyTop);
-  if (wearsGown) {
-    ctx.fillStyle = CAGE_GOWN_SPARK;
-    const sequinSpan = CAGE_SEQUIN_LAST - CAGE_SEQUIN_FIRST;
-    for (let i = 0; i < CAGE_SEQUIN_COUNT; i++) {
-      const across = CAGE_SEQUIN_FIRST + (sequinSpan * i) / Math.max(1, CAGE_SEQUIN_COUNT - 1);
-      ctx.fillRect(ax + w * across, bodyTop + h * 0.18, 1, 1);
-    }
-  } else {
-    ctx.fillStyle = CAGE_TUX_LINEN;
-    ctx.fillRect(ax + w * 0.44, bodyTop, w * 0.12, h * 0.3);
-  }
-
-  // The head, tipped forward onto the chest.
-  ctx.fillStyle = CAGE_FLESH;
-  ctx.beginPath();
-  ctx.arc(
-    ax + w * 0.5,
-    bodyTop - ts * CAGE_HEAD_RADIUS_FRACTION * 0.6,
-    ts * CAGE_HEAD_RADIUS_FRACTION,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-
-  // The bars go over everything, which is what makes it read as a cage rather than
-  // as a picture of somebody in a hole.
-  for (let bar = 1; bar <= CAGE_BAR_COUNT; bar++) {
-    const bx = Math.round(ax + (w * bar) / (CAGE_BAR_COUNT + 1));
-    ctx.fillStyle = CAGE_BAR;
-    ctx.fillRect(bx, ay, CAGE_BAR_WIDTH, h);
-    ctx.fillStyle = CAGE_BAR_GLINT;
-    ctx.fillRect(bx, ay, 1, h);
-  }
-  ctx.fillStyle = CAGE_LINTEL;
-  ctx.fillRect(ax, ay, w, CAGE_BAR_WIDTH);
-  ctx.fillRect(ax, ay + h - CAGE_BAR_WIDTH, w, CAGE_BAR_WIDTH);
-}
-
 export function drawBuildingTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -470,7 +364,6 @@ export function drawBuildingTile(
         drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
         return true;
       case METAL_WALL:
-      case ARENA_CAGE:
         ctx.fillStyle = '#1a1e22';
         ctx.fillRect(sx, sy, ts, ts);
         return true;
@@ -1269,23 +1162,8 @@ export function drawBuildingTile(
       break;
     }
 
-    // Metal wall — dark riveted steel panels for the arena exterior
     case METAL_WALL: {
-      if (drawColosseumTile(ctx, structure, type, sx, sy, ts, tx, ty)) break;
       drawMetalWallPanel(ctx, sx, sy, ts, ty);
-      // A straight wall the ring's curve still reaches into: the door row's seal.
-      drawColosseumRim(ctx, structure, sx, sy, ts, tx, ty);
-      break;
-    }
-
-    // Arena cage — a barred alcove in the arena wall with a spectator still in it.
-    //
-    // Drawn as a `METAL_WALL` first and then cut into, so a cage always agrees with
-    // the run of wall it sits in: the plate, the weld seams and the lit top edge are
-    // the same, and only the middle of the panel is different.
-    case ARENA_CAGE: {
-      if (drawColosseumTile(ctx, structure, type, sx, sy, ts, tx, ty)) break;
-      drawArenaCage(ctx, sx, sy, ts, tx, ty);
       break;
     }
 

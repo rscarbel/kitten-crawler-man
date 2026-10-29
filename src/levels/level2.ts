@@ -1,4 +1,4 @@
-import type { EscortSpawnRule, FairyRoomRate, LevelDef } from './types';
+import type { EscortSpawnRule, ExtraSpawnOrigin, FairyRoomRate, LevelDef } from './types';
 import { FLOOR_TWO_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
 
 const FRAMES_PER_SECOND = 60;
@@ -7,16 +7,16 @@ const LEVEL2_COLLAPSE_TIME_LIMIT_MINUTES = 60;
 export const LEVEL2_COLLAPSE_TIME_LIMIT_FRAMES =
   LEVEL2_COLLAPSE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
 
-/** Branch count leaving the start room toward the Krakaren Clone's gateway. */
-const KRAKAREN_BRANCH_MIN = 2;
-const KRAKAREN_BRANCH_MAX = 3;
+/** Branch count leaving the start room toward the Current Goblin's gateway. */
+const ELECTRIC_GOBLIN_BRANCH_MIN = 2;
+const ELECTRIC_GOBLIN_BRANCH_MAX = 3;
 
-/** Rooms along each pre-Krakaren branch. */
-const KRAKAREN_BRANCH_ROOMS_MIN = 3;
-const KRAKAREN_BRANCH_ROOMS_MAX = 9;
+/** Rooms along each branch toward the Current Goblin. */
+const ELECTRIC_GOBLIN_BRANCH_ROOMS_MIN = 3;
+const ELECTRIC_GOBLIN_BRANCH_ROOMS_MAX = 9;
 
 /**
- * The clogged bathroom seated halfway along each pre-Krakaren branch. The
+ * The clogged bathroom seated halfway along each branch toward the Current Goblin. The
  * largest chain room, so it seats at the same pitch as any other room on the
  * branch.
  */
@@ -32,7 +32,7 @@ const STEALTH_GATE_ROOM_W = 14;
 const STEALTH_GATE_ROOM_H = 12;
 
 /**
- * Rooms walked between the Krakaren Clone's lair and the arena's antechamber.
+ * Rooms walked between the Current Goblin's exit and Big Rooster's gateway.
  *
  * The two are only a few dozen tiles apart on a compact floor, so this is a
  * contract about the *walk*: the chain winds to earn its length rather than
@@ -41,6 +41,12 @@ const STEALTH_GATE_ROOM_H = 12;
 const SPINE_ROOMS_MIN = 12;
 const SPINE_ROOMS_MAX = 16;
 
+/**
+ * Rooms past Big Rooster's gym: a short stretch to find the floor's two
+ * stairwells in, not a second floor's worth of rooms after its last boss.
+ */
+const FREE_REGION_ROOMS = 18;
+
 /** Places on the chain that fork into a second lane and reconverge. */
 const SPINE_SPLITS_MIN = 1;
 const SPINE_SPLITS_MAX = 2;
@@ -48,11 +54,13 @@ const SPINE_SPLITS_MAX = 2;
 /**
  * Extra mobs per room. Floor 2 is already past the point where a crawler is
  * learning the rules, so even its opening rooms carry a bonus — and the forced
- * chain past the Krakaren carries the floor's heaviest, which is what keeps a
- * one-way journey of a dozen rooms from thinning out as it goes.
+ * chain past the Current Goblin and the rooms past Big Rooster carry the
+ * floor's heaviest, which is what keeps a one-way journey of a dozen rooms from
+ * thinning out as it goes.
  */
-const PRE_KRAKAREN_SPAWN_BONUS = 1;
-const POST_KRAKAREN_SPAWN_BONUS = 2;
+const PRE_ELECTRIC_GOBLIN_SPAWN_BONUS = 1;
+const POST_ELECTRIC_GOBLIN_SPAWN_BONUS = 2;
+const POST_BIG_ROOSTER_SPAWN_BONUS = 2;
 
 /**
  * Where floor 2's XP starts drying up, set well above floor 1's curve so a
@@ -123,56 +131,76 @@ const BOMBER_ESCORTS: EscortSpawnRule[] = [
 ];
 
 /**
- * The goblin mother's bugaboo wave on this floor. A choke on the post-Krakaren
- * spine is crossed by a party well past the level floor 1's nursery is fought
+ * The goblin mother's bugaboo wave on this floor. A choke on the spine past the
+ * Current Goblin is crossed by a party well past the level floor 1's nursery is fought
  * at, so the same base-stat body would be a formality here.
  */
 const BUGABOO_MIN_LEVEL = 4;
 const BUGABOO_MAX_LEVEL = 7;
 
 /**
- * Boss level bands. The Krakaren Clone gates the floor's only forced gauntlet
- * and is levelled to stay tougher than the troglodytes in the rooms leading
- * to it.
+ * Boss level bands. The Current Goblin gates the floor's first gauntlet and is
+ * levelled to stay tougher than the troglodytes in the rooms leading to it.
+ * Big Rooster closes the floor, so his band is the top of its curve.
  */
-const KRAKAREN_MIN_LEVEL = 6;
-const KRAKAREN_MAX_LEVEL = 10;
+const ELECTRIC_GOBLIN_MIN_LEVEL = 6;
+const ELECTRIC_GOBLIN_MAX_LEVEL = 10;
+const BIG_ROOSTER_MIN_LEVEL = 12;
+const BIG_ROOSTER_MAX_LEVEL = 15;
+
 /**
- * The Ball of Swine is a borough boss pitched around level 15, and borough bosses
- * are meant to be tougher than anything else on their floor. It is also entirely
- * optional, so it is the one fight on floor 2 that can afford to sit above the
- * party's own level rather than tracking it.
+ * Little Rooster and Slightly Bent Rooster, guarding Big Rooster's gym, levelled
+ * a step under him so the gauntlet boss isn't guarded by creatures stronger
+ * than himself, and above the spine leading up to it.
  */
-const BALL_OF_SWINE_MIN_LEVEL = 14;
-const BALL_OF_SWINE_MAX_LEVEL = 16;
+const ROOSTER_FLOCK_LEVELS_UNDER_BOSS = 2;
+const ROOSTER_FLOCK_MIN_LEVEL = BIG_ROOSTER_MIN_LEVEL - ROOSTER_FLOCK_LEVELS_UNDER_BOSS;
+const ROOSTER_FLOCK_MAX_LEVEL = BIG_ROOSTER_MAX_LEVEL - ROOSTER_FLOCK_LEVELS_UNDER_BOSS;
+
+/** Little Rooster's post, west-northwest of the gym's centre. */
+const LITTLE_ROOSTER_OFFSET_X = -3;
+const LITTLE_ROOSTER_OFFSET_Y = -2;
+
+/** Slightly Bent Rooster's post, east-northwest of the gym's centre. */
+const BENT_ROOSTER_OFFSET_X = 3;
+const BENT_ROOSTER_OFFSET_Y = -2;
+
+const BIG_ROOSTER_BOSS_ROOM_ORIGIN = {
+  kind: 'bossRoom',
+  bossType: 'big_rooster',
+} as const satisfies ExtraSpawnOrigin;
 
 /** Fairy count bounds on floor 2, excluding any healer. */
 const LEVEL2_FAIRY_MIN = 1;
 const LEVEL2_FAIRY_MAX = 2;
 const LEVEL2_HARD_FAIRY_MAX = 3;
 /**
- * Once the Ball of Swine is dead, a hard room past the Krakaren holds at least
- * two fairies: a lone one there is no longer possible.
+ * Once Big Rooster is dead, a hard room past his gym holds at least two
+ * fairies: a lone one there is no longer possible.
  */
-const POST_SWINE_HARD_FAIRY_MIN = 2;
+const POST_BIG_ROOSTER_HARD_FAIRY_MIN = 2;
 
-const PRE_KRAKAREN_FAIRY_RATE: FairyRoomRate = {
+const PRE_ELECTRIC_GOBLIN_FAIRY_RATE: FairyRoomRate = {
   chance: { easy: 0.45, normal: 0.55, hard: 0.75 },
   minCount: { easy: LEVEL2_FAIRY_MIN, normal: LEVEL2_FAIRY_MIN, hard: LEVEL2_FAIRY_MIN },
   maxCount: { easy: LEVEL2_FAIRY_MAX, normal: LEVEL2_FAIRY_MAX, hard: LEVEL2_FAIRY_MAX },
 };
-const POST_KRAKAREN_FAIRY_RATE: FairyRoomRate = {
+const POST_ELECTRIC_GOBLIN_FAIRY_RATE: FairyRoomRate = {
   chance: { easy: 0.55, normal: 0.65, hard: 0.9 },
   minCount: { easy: LEVEL2_FAIRY_MIN, normal: LEVEL2_FAIRY_MIN, hard: LEVEL2_FAIRY_MIN },
   maxCount: { easy: LEVEL2_FAIRY_MAX, normal: LEVEL2_FAIRY_MAX, hard: LEVEL2_HARD_FAIRY_MAX },
 };
-const POST_SWINE_FAIRY_RATE: FairyRoomRate = {
+const POST_BIG_ROOSTER_FAIRY_RATE: FairyRoomRate = {
   chance: { easy: 0.65, normal: 0.85, hard: 1 },
-  minCount: { easy: LEVEL2_FAIRY_MIN, normal: LEVEL2_FAIRY_MIN, hard: POST_SWINE_HARD_FAIRY_MIN },
+  minCount: {
+    easy: LEVEL2_FAIRY_MIN,
+    normal: LEVEL2_FAIRY_MIN,
+    hard: POST_BIG_ROOSTER_HARD_FAIRY_MIN,
+  },
   maxCount: { easy: LEVEL2_FAIRY_MAX, normal: LEVEL2_FAIRY_MAX, hard: LEVEL2_HARD_FAIRY_MAX },
 };
-/** Region index 1 is everything past the Krakaren Clone. */
-const POST_KRAKAREN_REGION = 1;
+/** Region index 2 is the free region past Big Rooster's gym, where the stairwells are. */
+const POST_BIG_ROOSTER_REGION = 2;
 /** Flat on every difficulty and in every region, rolled apart from the room's other fairies. */
 const LEVEL2_ROOM_HEALER_CHANCE = 0.2;
 
@@ -180,9 +208,10 @@ const LEVEL2_ROOM_HEALER_CHANCE = 0.2;
  * Level 2 — "The Dungeon, Level 2".
  * Runs against the same collapse countdown as floor 1 and guards its treasure
  * rooms, and is fully populated besides: troglodytes, llamas and goblins roam
- * it, the Krakaren Clone guards the forced gauntlet, and past it a single
+ * it, the Current Goblin guards the first gauntlet, and past him a single
  * winding chain of rooms — the goblin mother's nursery among them, and the
- * spider lab hanging off it — runs to the arena where the Ball of Swine waits.
+ * spider lab hanging off it — runs to Big Rooster's gym, past which lie the
+ * stairwells.
  */
 export const level2: LevelDef = {
   id: 'level2',
@@ -191,8 +220,8 @@ export const level2: LevelDef = {
   arrivalLoadingScreen: {
     tips: [
       'The collapse countdown is running again. Keep an eye on the clock.',
-      'The Krakaren Clone guards the only way deeper into this floor.',
-      'Past the Krakaren, the Ball of Swine waits in its arena.',
+      'A goblin wired to a generator holds the power lab. Stay out of the puddles.',
+      'Past the power lab, a long chain of rooms leads to Big Rooster and his gym.',
       'A spider lab hangs off the chain of rooms. Something large has made it home.',
       'Fairies heal the monsters around them. Bring the healer down first.',
       'A safe room saves your run, and a death returns you to your last save.',
@@ -200,7 +229,7 @@ export const level2: LevelDef = {
   },
   music: 'bg_level_2',
   groundTheme: 'service_level',
-  mapSize: 260,
+  mapSize: 300,
   overLevelReinforcement: {
     levelsPerBody: OVER_LEVEL_LEVELS_PER_BODY,
     maxBodies: OVER_LEVEL_MAX_BODIES,
@@ -209,9 +238,9 @@ export const level2: LevelDef = {
     'core',
     'dungeon_common',
     'floor2_tileset',
-    'boss_krakaren',
+    'boss_power_lab',
     'boss_grotesque_spider',
-    'boss_colosseum',
+    'boss_big_rooster',
   ],
   // The prison under this floor paints its own ground (`PrisonGround`) from
   // this floor's tileset.
@@ -267,38 +296,61 @@ export const level2: LevelDef = {
     { type: 'rat', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
   ],
   bossRooms: [
-    { type: 'krakaren_clone', minLevel: KRAKAREN_MIN_LEVEL, maxLevel: KRAKAREN_MAX_LEVEL },
+    {
+      type: 'electric_goblin',
+      minLevel: ELECTRIC_GOBLIN_MIN_LEVEL,
+      maxLevel: ELECTRIC_GOBLIN_MAX_LEVEL,
+    },
+    { type: 'big_rooster', minLevel: BIG_ROOSTER_MIN_LEVEL, maxLevel: BIG_ROOSTER_MAX_LEVEL },
   ],
   progression: {
     gauntlets: [
       {
-        bossType: 'krakaren_clone',
-        branchCount: { min: KRAKAREN_BRANCH_MIN, max: KRAKAREN_BRANCH_MAX },
-        branchRooms: { min: KRAKAREN_BRANCH_ROOMS_MIN, max: KRAKAREN_BRANCH_ROOMS_MAX },
-        bathroomChoke: { w: BATHROOM_ROOM_W, h: BATHROOM_ROOM_H },
+        bossType: 'electric_goblin',
+        route: {
+          kind: 'branches',
+          branchCount: { min: ELECTRIC_GOBLIN_BRANCH_MIN, max: ELECTRIC_GOBLIN_BRANCH_MAX },
+          branchRooms: {
+            min: ELECTRIC_GOBLIN_BRANCH_ROOMS_MIN,
+            max: ELECTRIC_GOBLIN_BRANCH_ROOMS_MAX,
+          },
+          bathroomChoke: { w: BATHROOM_ROOM_W, h: BATHROOM_ROOM_H },
+        },
+      },
+      {
+        bossType: 'big_rooster',
+        route: {
+          kind: 'spine',
+          rooms: { min: SPINE_ROOMS_MIN, max: SPINE_ROOMS_MAX },
+          splits: { min: SPINE_SPLITS_MIN, max: SPINE_SPLITS_MAX },
+          stealthGate: { w: STEALTH_GATE_ROOM_W, h: STEALTH_GATE_ROOM_H },
+        },
       },
     ],
-    spine: {
-      rooms: { min: SPINE_ROOMS_MIN, max: SPINE_ROOMS_MAX },
-      splits: { min: SPINE_SPLITS_MIN, max: SPINE_SPLITS_MAX },
-      stealthGate: { w: STEALTH_GATE_ROOM_W, h: STEALTH_GATE_ROOM_H },
-    },
     // No scatterSafeRooms: the spine's safe-access pockets come entirely from
     // its own mandatory pocket count, not a configured minimum.
-    regionSpawnBonus: [PRE_KRAKAREN_SPAWN_BONUS, POST_KRAKAREN_SPAWN_BONUS],
+    freeRegionRooms: FREE_REGION_ROOMS,
+    regionSpawnBonus: [
+      PRE_ELECTRIC_GOBLIN_SPAWN_BONUS,
+      POST_ELECTRIC_GOBLIN_SPAWN_BONUS,
+      POST_BIG_ROOSTER_SPAWN_BONUS,
+    ],
   },
-  hasArena: true,
   hasSpiderLab: true,
   defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
   defendQuestIntensity: FLOOR_TWO_DEFEND_QUEST_INTENSITY,
   fairies: {
-    roomRatesByRegion: [PRE_KRAKAREN_FAIRY_RATE, POST_KRAKAREN_FAIRY_RATE],
+    roomRatesByRegion: [
+      PRE_ELECTRIC_GOBLIN_FAIRY_RATE,
+      POST_ELECTRIC_GOBLIN_FAIRY_RATE,
+      POST_ELECTRIC_GOBLIN_FAIRY_RATE,
+    ],
     roomHealerChance: LEVEL2_ROOM_HEALER_CHANCE,
     upgrades: [
       {
-        bossType: 'ball_of_swine',
-        region: POST_KRAKAREN_REGION,
-        rate: POST_SWINE_FAIRY_RATE,
+        bossType: 'big_rooster',
+        region: POST_BIG_ROOSTER_REGION,
+        rate: POST_BIG_ROOSTER_FAIRY_RATE,
         onlyPastItsSafeRoom: true,
       },
     ],
@@ -316,12 +368,18 @@ export const level2: LevelDef = {
   ],
   extraSpawns: [
     {
-      type: 'ball_of_swine',
-      origin: 'arena:0',
-      minLevel: BALL_OF_SWINE_MIN_LEVEL,
-      maxLevel: BALL_OF_SWINE_MAX_LEVEL,
-      offsets: [[0, 0]],
-      setup: 'setupBallOfSwine',
+      type: 'little_rooster',
+      origin: BIG_ROOSTER_BOSS_ROOM_ORIGIN,
+      minLevel: ROOSTER_FLOCK_MIN_LEVEL,
+      maxLevel: ROOSTER_FLOCK_MAX_LEVEL,
+      offsets: [[LITTLE_ROOSTER_OFFSET_X, LITTLE_ROOSTER_OFFSET_Y]],
+    },
+    {
+      type: 'slightly_bent_rooster',
+      origin: BIG_ROOSTER_BOSS_ROOM_ORIGIN,
+      minLevel: ROOSTER_FLOCK_MIN_LEVEL,
+      maxLevel: ROOSTER_FLOCK_MAX_LEVEL,
+      offsets: [[BENT_ROOSTER_OFFSET_X, BENT_ROOSTER_OFFSET_Y]],
     },
   ],
   onMobKilledSpawns: [

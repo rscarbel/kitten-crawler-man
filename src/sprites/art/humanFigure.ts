@@ -169,6 +169,9 @@ import {
   REPAIR_FRAMES,
   REPAIR_TICKS_PER_FRAME,
   repairMend,
+  TURN_VALVE_FRAMES,
+  TURN_VALVE_TICKS_PER_FRAME,
+  turnValve,
 } from './human/actionsBuild';
 import {
   CHOP_FRAMES,
@@ -473,6 +476,9 @@ export const HUMAN_ROW_NAMES = [
   'repair',
   'repair_side',
   'repair_away',
+  'turn_valve',
+  'turn_valve_side',
+  'turn_valve_away',
   'chop',
   'chop_side',
   'chop_away',
@@ -2056,6 +2062,40 @@ export const HUMAN_ROW_TABLE = {
     ticksPerFrame: REPAIR_TICKS_PER_FRAME,
     pose: (f) => repairMend(f, 'back'),
   },
+  // Hauling a valve wheel round a quarter turn, once a press.
+  turn_valve: {
+    frameCount: TURN_VALVE_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: TURN_VALVE_TICKS_PER_FRAME,
+    pose: (f) => turnValve(f, 'front'),
+  },
+  turn_valve_side: {
+    frameCount: TURN_VALVE_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: TURN_VALVE_TICKS_PER_FRAME,
+    pose: (f) => turnValve(f, 'side'),
+  },
+  turn_valve_away: {
+    frameCount: TURN_VALVE_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: TURN_VALVE_TICKS_PER_FRAME,
+    pose: (f) => turnValve(f, 'back'),
+  },
   // Working a resource node: every tier of axe or pick shares these cells, the
   // tool drawn between their two layers.
   chop: gatherRow('front', CHOP_FRAMES, CHOP_TICKS_PER_FRAME, CHOP_EVENTS, chop),
@@ -2094,6 +2134,11 @@ export const BUILD_RISE_ROWS: ViewRows = {
 };
 export const PLACE_ROWS: ViewRows = { front: 'place', side: 'place_side', back: 'place_away' };
 export const REPAIR_ROWS: ViewRows = { front: 'repair', side: 'repair_side', back: 'repair_away' };
+export const TURN_VALVE_ROWS: ViewRows = {
+  front: 'turn_valve',
+  side: 'turn_valve_side',
+  back: 'turn_valve_away',
+};
 export const CHOP_ROWS: ViewRows = { front: 'chop', side: 'chop_side', back: 'chop_away' };
 export const MINE_ROWS: ViewRows = { front: 'mine', side: 'mine_side', back: 'mine_away' };
 

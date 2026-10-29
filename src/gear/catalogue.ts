@@ -318,22 +318,23 @@ export const GEAR_CATALOGUE = defineItemDefs({
       'Pale gloves that trail fine threads from every fingertip. The threads are still ' +
       'sticky, and still, faintly, being spun.',
   },
-  hamhock_boots: {
-    id: 'hamhock_boots',
+  lineman_boots: {
+    id: 'lineman_boots',
     category: 'armor',
-    name: 'Hamhock Boots',
+    name: "Lineman's Boots",
     stackable: false,
     canHotlist: false,
     type: 'armor',
     rarity: 'Rare',
     wearer: 'human',
-    look: { kind: 'garment', garment: 'human_hamhock_boots' },
+    look: { kind: 'garment', garment: 'human_lineman_boots' },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
     statBonus: { health: 2 },
     cancelsMomentum: true,
     description:
-      'Pig-leather boots with trotter toe caps. They squeak when wet, which they always are.',
+      'Insulated boots off a lineman who stood on the wrong wire. Whatever charges into you ' +
+      'stops dead at the soles.',
   },
 
   // Human weapons.

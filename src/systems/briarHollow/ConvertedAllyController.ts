@@ -121,7 +121,7 @@ export class ConvertedAllyController {
     let nearestDistance = reach;
     for (const other of this.roster.grid.queryCircle(mob.x, mob.y, reach)) {
       // Filtered explicitly: the roster holds the party's allies too.
-      if (other === mob || !other.isAlive || !other.isHostile) continue;
+      if (other === mob || !other.isHostileTarget) continue;
       if (other.isDefendTarget === true || other.offLimitsToAllies) continue;
       const distance = Math.hypot(other.x - mob.x, other.y - mob.y);
       if (distance < nearestDistance) {

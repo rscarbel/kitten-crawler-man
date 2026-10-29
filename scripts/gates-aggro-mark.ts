@@ -26,7 +26,6 @@ const { beginFigureFrame, figureRowInkPending } =
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
   await import('../src/core/party/mercenaryTemplates.js');
-const { BallOfSwine } = await import('../src/creatures/BallOfSwine.js');
 const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
 const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
 const { Lemur } = await import('../src/creatures/Lemur.js');
@@ -43,8 +42,8 @@ const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
 const { DireBear } = await import('../src/creatures/DireBear.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
-const { KrakarenClone } = await import('../src/creatures/KrakarenClone.js');
-const { KrakarenTentacle } = await import('../src/creatures/KrakarenTentacle.js');
+const { Kraken } = await import('../src/creatures/Kraken.js');
+const { KrakenTentacle } = await import('../src/creatures/KrakenTentacle.js');
 const { Krasue } = await import('../src/creatures/Krasue.js');
 const { Llama } = await import('../src/creatures/Llama.js');
 const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
@@ -74,7 +73,7 @@ const { Tuskling } = await import('../src/creatures/Tuskling.js');
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 
-/** Room for the Krakaren's triple-scale mantle and a bar over it. */
+/** Room for the Kraken's triple-scale mantle and a bar over it. */
 const CELL_WIDTH_TILES = 8;
 const CELL_HEIGHT_TILES = 9;
 const SUBJECT_TILE_COL = 3.5;
@@ -139,9 +138,15 @@ function grubAt(stage: InstanceType<typeof BrindleGrub>['stage'], label: string)
 }
 
 /** A tentacle is built underground, where it draws only the floor breaking. */
-function surfaced(tentacle: InstanceType<typeof KrakarenTentacle>): Mob {
+function surfaced(tentacle: InstanceType<typeof KrakenTentacle>): Mob {
   Reflect.set(tentacle, 'state', 'idle');
   return tentacle;
+}
+
+/** Under her room's flood she shows no health bar; drained, she fights and shows one. */
+function drained(kraken: InstanceType<typeof Kraken>): Mob {
+  kraken.setRoomDrained(true);
+  return kraken;
 }
 
 const DEINONYCHUS_STAGE_LEVELS = [1, 5, 10] as const;
@@ -201,9 +206,8 @@ function subjects(): Subject[] {
     unmarked(new MissQuill(...at, () => undefined), 'Miss Quill'),
     unmarked(new Necromancer(...at, Math.random), 'necromancer'),
     unmarked(new BigRooster(...at), 'Big Rooster'),
-    unmarked(new BallOfSwine(...at), 'Ball of Swine'),
-    unmarked(new KrakarenClone(...at), 'Krakaren'),
-    unmarked(surfaced(new KrakarenTentacle(...at)), 'Krakaren tentacle'),
+    unmarked(drained(new Kraken(...at)), 'Kraken'),
+    unmarked(surfaced(new KrakenTentacle(...at)), 'Kraken tentacle'),
     unmarked(new Cow(...at, 'holstein', 'adult', () => 0), 'cow'),
     ...deinonychusStages,
     ...mercenaries,

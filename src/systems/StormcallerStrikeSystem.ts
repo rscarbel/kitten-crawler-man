@@ -104,15 +104,6 @@ function centreOf(entity: WorldPoint): WorldPoint {
   return { x: entity.x + HALF_TILE, y: entity.y + HALF_TILE };
 }
 
-/**
- * How far a mob's body reaches from its centre. Its collision radius is the
- * centre-to-centre distance it keeps a one-tile crawler at, so the crawler's
- * own half tile is not part of it.
- */
-function bodyRadiusOf(mob: Mob): number {
-  return Math.max(HALF_TILE, mob.collisionRadiusPx - HALF_TILE);
-}
-
 export class StormcallerStrikeSystem implements WeaponProc {
   private waves: Wave[] = [];
   private swungThisTick = false;
@@ -228,7 +219,7 @@ export class StormcallerStrikeSystem implements WeaponProc {
       const dy = centre.y - wave.originY;
       const along = dx * wave.dirX + dy * wave.dirY;
       const across = Math.abs(dx * wave.dirY - dy * wave.dirX);
-      const bodyRadius = bodyRadiusOf(mob);
+      const bodyRadius = mob.bodyRadiusPx;
       const nearEdgeAlong = along - bodyRadius;
       const isAhead = along > 0;
       const withinReach = nearEdgeAlong <= WAVE_REACH_PX;
@@ -280,10 +271,10 @@ export class StormcallerStrikeSystem implements WeaponProc {
     // Read from the whole mob list rather than the grid, so a body wider than a
     // query's margin is still found by its near side.
     for (const mob of ctx.mobs) {
-      if (mob === from || !this.canStrike(mob, struck)) continue;
+      if (mob === from || !mob.isHostileTarget || !this.canStrike(mob, struck)) continue;
       const centre = centreOf(mob);
       const centreDist = Math.hypot(centre.x - source.x, centre.y - source.y);
-      const bodyBeyondOneTile = bodyRadiusOf(mob) - HALF_TILE;
+      const bodyBeyondOneTile = mob.bodyRadiusPx - HALF_TILE;
       const dist = centreDist - bodyBeyondOneTile;
       if (dist > radiusPx) continue;
       if (!gameMap.hasLineOfSight(source.x, source.y, centre.x, centre.y)) continue;

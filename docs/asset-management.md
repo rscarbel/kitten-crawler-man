@@ -239,7 +239,7 @@ Music tracks and ambience beds stream through `MediaElementAudioSourceNode` and 
 decoded into `buffers`. Everything else is a sound effect, preloaded per context from
 `SFX_GROUPS` (`src/audio/sfxGroups.ts`): the core group at boot, a floor's groups from
 `DungeonScene`'s constructor, an interior's from `BuildingInteriorScene`'s. Ids repeat
-across groups on purpose — several bounty cues are stand-ins borrowed from a floor boss's
+across groups on purpose — several bounty cues are stand-ins borrowed from a boss's
 sample, so both owners preload them, and `preload` de-dupes against `buffers`.
 Scenes preload through their `AudioScope` (`scope.preload(ids)`), which declares the ids;
 when a scope is disposed, decoded buffers that no live scope declared are released, except
@@ -546,11 +546,11 @@ its layout is.
 
 ## Boss rooms are painted and baked
 
-The five boss rooms on floors 1 and 2 ship no images. Each room's floor, props,
+The boss rooms on floors 1 and 2 ship no images. Each room's floor, props,
 toppled and flooded states and effect frames are a sheet family in
 `src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its asset group
-(`boss_trash_gremlin`, `boss_big_rooster`, `boss_krakaren`, `boss_grotesque_spider`,
-`boss_colosseum`) in `bossRoomSheets.ts`. `requestEnvironmentSheetsForGroups`
+(`boss_trash_gremlin`, `boss_big_rooster`, `boss_power_lab`, `boss_flooded_pump_room`, `boss_grotesque_spider`)
+in `bossRoomSheets.ts`. `requestEnvironmentSheetsForGroups`
 paints them at floor load under `BOSS_ROOM_SALT`, so a room's art variation is
 repainted with its floor, while its collidable layout comes from doorway-relative
 templates that no seed reaches. Seal time warms only the boss figure.

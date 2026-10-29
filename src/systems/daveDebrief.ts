@@ -43,7 +43,8 @@ export function isSupersededDebrief(
 export const BOSS_DISPLAY_NAMES = {
   trash_gremlin: 'The Trash Gremlin',
   big_rooster: 'Big Rooster',
-  krakaren_clone: 'Krakaren Clone',
+  kraken: 'The Kraken',
+  electric_goblin: 'The Current Goblin',
 } as const satisfies Record<DebriefBossType, string>;
 
 const CRAWLER_ORDER: ReadonlyArray<CrawlerKind> = ['human', 'cat'];

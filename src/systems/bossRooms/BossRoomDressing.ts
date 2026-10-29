@@ -15,7 +15,7 @@ export type DressingRenderable = TownPropRenderable;
  * What a room's dressing hears about the fight in it.
  *
  * Kept apart from {@link BossRoomDressing} because the fight owners —
- * `BossRoomSystem`, `SpiderQuestSystem`, `ArenaSystem` — only ever announce, and
+ * `BossRoomSystem`, `SpiderQuestSystem` — only ever announce, and
  * a narrower type is all they should be able to reach.
  *
  * A death is never announced here. The scene rewinds every dressing itself:
@@ -45,13 +45,29 @@ export interface BossFightHooks {
 }
 
 /**
+ * Who decides when a boss room locks.
+ *
+ * - `on_entry`: the fight owner seals it the moment a crawler walks in with
+ *   the boss alive, and lets late arrivals in for a short window.
+ * - `held_by_room`: the room's own story decides (a cutscene that gathers the
+ *   party first). The fight owner locks it exactly while `sealed` is true and
+ *   never on entry, so the room and the lock can never disagree.
+ */
+export type BossRoomSealRule =
+  { readonly kind: 'on_entry' } | { readonly kind: 'held_by_room'; readonly sealed: boolean };
+
+export const SEAL_ON_ENTRY: BossRoomSealRule = { kind: 'on_entry' };
+
+/**
  * What a gauntlet boss room's fight tells its dressing, by room index — the
- * shape `BossRoomSystem` speaks, since it tracks rooms by index and not by boss.
+ * shape `BossRoomSystem` speaks, since it tracks rooms by index and not by boss
+ * — and the one thing it asks back: who decides when the room locks.
  */
 export interface BossRoomFightListener {
   onSeal(roomIndex: number): void;
   onBossDefeated(roomIndex: number): void;
   onFightAborted(roomIndex: number): void;
+  sealRule(roomIndex: number): BossRoomSealRule;
 }
 
 /**
@@ -64,7 +80,9 @@ export interface BossRoomFightListener {
 export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFightHooks {
   update(ctx: SystemContext): void;
   /**
-   * Floor paint over the chunk bake and under every entity: stains, telegraphs, belts.
+   * The room's floor over the chunk bake, under every floor hazard and every
+   * entity: rafts, belts, drains, a beached carcass. Never a warning: those
+   * go in {@link renderGroundWarnings}, or a scorch or a pool would cover them.
    *
    * @param promptFor The crawler the room may float interaction prompts for,
    *   or undefined while a press from them would not reach the room.
@@ -75,6 +93,12 @@ export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFi
     camY: number,
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void;
+  /**
+   * The room's ground warnings (fall lines, slam footprints and lanes, landing
+   * shadows, charged puddles), over every floor decal, prop and scorch and
+   * under every entity, so nothing painted on the floor ever hides one.
+   */
+  renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
   /**
    * Live objects to merge into the Y-sorted pass this frame. Return a list the
    * dressing owns and reuses; the pipeline reads it and never keeps it.
@@ -91,6 +115,8 @@ export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFi
   tryInteract(player: HumanPlayer | CatPlayer): boolean;
   /** Whether {@link tryInteract} would claim a press right now, without acting. */
   wouldInteract(player: HumanPlayer | CatPlayer): boolean;
+  /** Who decides when the room locks; see {@link BossRoomSealRule}. */
+  readonly sealRule: BossRoomSealRule;
 }
 
 /** A dressing whose state rewinds with a death. */

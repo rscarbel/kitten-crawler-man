@@ -3,6 +3,8 @@ import { VIAL_ATTACK_TYPE } from '../creatures/EvilClown';
 import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
 import {
   CLUB_ATTACK_TYPE,
+  EXERCISE_BALL_ATTACK_TYPE,
+  KETTLEBELL_ATTACK_TYPE,
   PLATE_ROLL_ATTACK_TYPE,
   SLAM_ATTACK_TYPE,
 } from '../creatures/BigRooster';
@@ -14,7 +16,6 @@ import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
 import { ROCK_THROW_ATTACK_TYPE, ROLL_ATTACK_TYPE } from '../creatures/rockGolemAttackTypes';
-import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from '../creatures/ballOfSwineAttackTypes';
 import { ICE_BOLT_ATTACK_TYPE } from '../creatures/fairies/IceFairy';
 import {
   FIREBALL_ATTACK_TYPE,
@@ -24,6 +25,14 @@ import {
 } from './FairyFireballSystem';
 import { NECRO_PULSE_ATTACK_TYPE } from '../creatures/Necromancer';
 import { BLACK_POWDER_ATTACK_TYPE, GOBLIN_DYNAMITE_ATTACK_TYPE } from './goblinBombConstants';
+import { SCRIPTED_DEATHS } from './scriptedDeath/scriptedDeaths';
+import {
+  CHARGED_PUDDLE_ATTACK_TYPE,
+  ElectricGoblin,
+  ROD_SWIPE_ATTACK_TYPE,
+  SHOCK_GRENADE_ATTACK_TYPE,
+  SLAM_WAVE_ATTACK_TYPE,
+} from '../creatures/ElectricGoblin';
 
 /**
  * Maps a mob's class name (and optional attackType) to a DeathCause key.
@@ -37,7 +46,6 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   BigRooster: 'bigRooster',
   LittleRooster: 'roosterPeck',
   SlightlyBentRooster: 'roosterPunch',
-  BallOfSwine: 'ballOfSwine',
   Tuskling: 'tuskling',
   Troglodyte: 'troglodyte',
   SmallSpider: 'smallSpider',
@@ -87,6 +95,7 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
   if (source.kind === 'doomsday') return 'doomsdayExplosion';
   if (source.kind === 'siege') return 'siegeFriendlyFire';
+  if (source.kind === 'scripted') return SCRIPTED_DEATHS[source.death].cause;
   // A wheel penalty stops at 1 HP, so it is never the blow that killed.
   if (source.kind === 'wheelPenalty') return 'unknown';
   // Standing hazards. Without this the contact damage — which is what actually
@@ -100,8 +109,6 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (source.hazard === 'lichFirewall') return 'lichFirewall';
     if (source.hazard === 'lichOrb') return 'lichOrb';
     if (source.hazard === 'trashAvalanche') return 'trashAvalanche';
-    if (source.hazard === 'krakarenLiveWire') return 'krakarenLiveWire';
-    if (source.hazard === 'krakarenTankBurst') return 'krakarenTankBurst';
     return 'burningTree';
   }
 
@@ -109,7 +116,13 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     const { effectType } = source;
     if (effectType === 'burn' || effectType === 'magic_burn') return 'burnedStatus';
     if (effectType === 'poison') return 'poisonStatus';
-    if (effectType === 'electrified') return 'electrifiedStatus';
+    if (effectType === 'electrified') {
+      // His grenades are the one source of the status in his room, and the
+      // lesson is the ring they land in, not the status in general.
+      return source.applier instanceof ElectricGoblin
+        ? 'electricGoblinElectrified'
+        : 'electrifiedStatus';
+    }
     if (effectType === 'spit_venom') return 'spitVenomStatus';
     return 'unknown';
   }
@@ -152,6 +165,10 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (mobType === 'BigRooster' && attackType === CLUB_ATTACK_TYPE) return 'bigRoosterClub';
   if (mobType === 'BigRooster' && attackType === PLATE_ROLL_ATTACK_TYPE)
     return 'bigRoosterPlateRoll';
+  if (mobType === 'BigRooster' && attackType === KETTLEBELL_ATTACK_TYPE)
+    return 'bigRoosterKettlebell';
+  if (mobType === 'BigRooster' && attackType === EXERCISE_BALL_ATTACK_TYPE)
+    return 'bigRoosterExerciseBall';
   // Every rooster pecks and punches through the same strikes, so the blow names the death.
   if (attackType === ROOSTER_PECK_ATTACK_TYPE) return 'roosterPeck';
   if (attackType === ROOSTER_PUNCH_ATTACK_TYPE) return 'roosterPunch';
@@ -164,14 +181,6 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // Same distinction for the Lich: the cone was drawn on the floor and the bolt
   // was not, and one death is a lesson while the other is a fight.
   if (mobType === 'TheLich' && attackType === 'grasping_hands') return 'theLichHands';
-
-  // Being run over and being gassed teach opposite lessons — one is "you were in its
-  // line", the other "you were standing where it was about to hit" — and the trample
-  // lines would tell a player at the far wall that they had been flattened.
-  if (mobType === 'BallOfSwine') {
-    if (attackType === STENCH_ATTACK_TYPE) return 'ballOfSwineStench';
-    if (attackType === TRAMPLE_ATTACK_TYPE) return 'ballOfSwine';
-  }
 
   // Rolling and standing are two different fights against the same golem, and
   // the roll is the one with a counterplay worth naming.
@@ -201,11 +210,21 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (attackType === GOBLIN_DYNAMITE_ATTACK_TYPE) return 'goblinDynamite';
   if (attackType === BLACK_POWDER_ATTACK_TYPE) return 'goblinBlackPowder';
 
-  if (mobType === 'KrakarenTentacle') return 'krakarenTentacleStrike';
+  // Four telegraphs, four lessons: a ring to step out of, a puddle to leave,
+  // a lane to step aside from, and a man not to stand next to.
+  if (mobType === 'ElectricGoblin') {
+    if (attackType === SHOCK_GRENADE_ATTACK_TYPE) return 'electricGoblinGrenade';
+    if (attackType === CHARGED_PUDDLE_ATTACK_TYPE) return 'electricGoblinPuddle';
+    if (attackType === ROD_SWIPE_ATTACK_TYPE) return 'electricGoblinSwipe';
+    if (attackType === SLAM_WAVE_ATTACK_TYPE) return 'electricGoblinWave';
+    return 'unknown';
+  }
 
-  if (mobType === 'KrakarenClone') {
-    if (attackType === 'slam') return 'krakarenCloneSlam';
-    return 'krakarenCloneRegularMelee';
+  if (mobType === 'KrakenTentacle') return 'krakenTentacleStrike';
+
+  if (mobType === 'Kraken') {
+    if (attackType === 'slam') return 'krakenSlam';
+    return 'krakenRegularMelee';
   }
 
   return MOB_TYPE_TO_CAUSE[mobType] ?? 'unknown';

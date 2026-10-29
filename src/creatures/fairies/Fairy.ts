@@ -131,9 +131,8 @@ interface MutableActiveCast extends FairyCastIntent {
 }
 
 /**
- * A region a fairy may be confined to — a boss room's rectangle, or the
- * colosseum's circle (memory note: a boss arena is not a rectangle) — tested
- * in world pixels.
+ * A region a fairy may be confined to — a boss room's rectangle, or any other
+ * fight's ground, which need not be a rectangle — tested in world pixels.
  */
 export interface FairyConfinement {
   containsPoint(x: number, y: number): boolean;
@@ -300,7 +299,7 @@ export abstract class Fairy extends Mob {
   private refugeRetryFrames = 0;
 
   /**
-   * Set by a boss room or the arena while this fairy stands inside it: every
+   * Set by a boss fight's owner while this fairy stands inside its ground: every
    * hover goal must fall inside it and no refuge outside it is ever sought,
    * so a healer that belongs to the room never picks a target that would walk
    * or fly it out — the room's own owner clears this the moment the fairy is
@@ -381,7 +380,7 @@ export abstract class Fairy extends Mob {
 
   /**
    * Whether this fairy honours a confinement set on it at all — read by
-   * {@link confineTo} and by whichever room or arena would otherwise clamp
+   * {@link confineTo} and by whichever fight owner would otherwise clamp
    * this fairy's position, so overriding it false disables confinement
    * completely rather than only the half of it {@link confineTo} owns. A seam
    * for a fixture that must prove confinement is doing the work, by breaking
@@ -395,7 +394,7 @@ export abstract class Fairy extends Mob {
   /**
    * Confines this fairy to `region`: every hover goal it picks must fall
    * inside it, and it never starts a run for a refuge outside it. Called every
-   * frame by whichever boss room or arena the fairy currently stands in;
+   * frame by whichever boss fight's ground the fairy currently stands in;
    * calling it again with a new region simply replaces the old one. A no-op
    * against {@link respectsConfinement} overridden false.
    */

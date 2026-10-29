@@ -57,7 +57,7 @@ import { Bugaboo } from '../../src/creatures/Bugaboo';
 import { SmallSpider } from '../../src/creatures/SmallSpider';
 import { Cockroach } from '../../src/creatures/Cockroach';
 import { Tuskling } from '../../src/creatures/Tuskling';
-import { KrakarenTentacle } from '../../src/creatures/KrakarenTentacle';
+import { KrakenTentacle } from '../../src/creatures/KrakenTentacle';
 
 /** The pass/fail reporting `verify-tactics.ts` owns, so its failure count covers these too. */
 export interface TacticsHarness {
@@ -152,9 +152,9 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: [],
   },
   {
-    name: 'krakaren tentacle',
-    build: () => new KrakarenTentacle(PROBE_TILE, PROBE_TILE, TILE_SIZE),
-    isExpectedClass: (mob) => mob instanceof KrakarenTentacle,
+    name: 'kraken tentacle',
+    build: () => new KrakenTentacle(PROBE_TILE, PROBE_TILE, TILE_SIZE),
+    isExpectedClass: (mob) => mob instanceof KrakenTentacle,
     expected: [],
   },
   {

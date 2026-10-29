@@ -95,9 +95,13 @@ export interface StatusVisual {
   /**
    * Coats of paint applied through the character's own shape, in order. A list
    * rather than one coat because a single blend mode cannot both carry a colour
-   * and add light, and fire needs both — see {@link flameBodyLayers}.
+   * and add light, and fire needs both — see {@link flameBodyLayers}. Handed
+   * the effect for coats that follow its own clock, such as a seizing bite.
    */
-  readonly bodyLayers?: (frame: StatusVisualFrame) => readonly SilhouetteLayer[];
+  readonly bodyLayers?: (
+    frame: StatusVisualFrame,
+    effect: StatusEffect,
+  ) => readonly SilhouetteLayer[];
   /**
    * World-space art drawn on top of the character. Handed the effect itself
    * for art that plays through the effect's own life — rising when it is laid
@@ -194,7 +198,7 @@ const STATUS_VISUALS: Readonly<Record<StatusId, StatusVisual | null>> = {
     color: '#38bdf8',
     harmful: true,
     showsHudPill: true,
-    bodyLayers: (f) => [electrifiedBodyLayer(f)],
+    bodyLayers: (f, effect) => [electrifiedBodyLayer(f, effect)],
     overlay: drawElectrified,
   },
   [SPEED_FIZZ_STATUS]: {
@@ -387,7 +391,7 @@ export function statusBodyLayers(
   for (const effect of effects) {
     const bodyLayers = STATUS_VISUALS[effect.type]?.bodyLayers;
     if (bodyLayers === undefined) continue;
-    layers.push(...bodyLayers(frameFor(effect)));
+    layers.push(...bodyLayers(frameFor(effect), effect));
   }
   return layers;
 }

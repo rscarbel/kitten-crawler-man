@@ -24,7 +24,7 @@ import {
   spend,
   type ResourceCost,
 } from '../../../core/items/gathering/partyResources';
-import { viewportHeight, viewportWidth } from '../../../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../../../core/rendering/Viewport';
 import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import {
   BLUEPRINTS_STATION_IDS,
@@ -628,9 +628,9 @@ export class StationUpgrades {
     const panelBottom = panelTop + panelHeight;
     const offScreen =
       centreX < -CAPTION_CULL_MARGIN_PX ||
-      centreX > viewportWidth() + CAPTION_CULL_MARGIN_PX ||
+      centreX > worldViewWidth() + CAPTION_CULL_MARGIN_PX ||
       panelBottom < 0 ||
-      panelTop > viewportHeight();
+      panelTop > worldViewHeight();
     if (offScreen) return;
 
     worldPlate(

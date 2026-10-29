@@ -152,7 +152,7 @@ export function findNearbyWalkableTile(
   tileX: number,
   tileY: number,
   maxRadiusTiles: number,
-  isAcceptable?: (x: number, y: number) => boolean,
+  isAcceptable?: TileFilter,
 ): { x: number; y: number } | null {
   const isPermitted = (x: number, y: number): boolean =>
     map.isMobSpawnTile(x, y) && (isAcceptable === undefined || isAcceptable(x, y));
@@ -206,6 +206,12 @@ export interface PartyArrivalTiles {
   readonly follower: { x: number; y: number };
 }
 
+/** A further test a tile search applies to every candidate, for a caller that owns a region. */
+export type TileFilter = (x: number, y: number) => boolean;
+
+/** The {@link TileFilter} of a caller that owns no region. */
+export const ANY_TILE: TileFilter = () => true;
+
 /**
  * Where an arriving party is set down — walking into a room through its door
  * or off a stair, walking out of a building, or arriving on a floor: the
@@ -226,16 +232,20 @@ export interface PartyArrivalTiles {
  * party straight back in. The follower must also be able to walk to the
  * leader, or the nearest open tile could be the far side of a counter or a
  * wall.
+ *
+ * `isAcceptable` narrows both searches to a region the caller owns, such as
+ * the landing a script gathers the party onto.
  */
 export function findPartyArrivalTiles(
   map: GameMap,
   landing: { readonly x: number; readonly y: number },
+  isAcceptable: TileFilter = ANY_TILE,
 ): PartyArrivalTiles {
   const doorKeys = new Set(
     map.buildingEntries.map((entry) => tileKeyIn(map, entry.doorTile.x, entry.doorTile.y)),
   );
   const isArrivalGround = (x: number, y: number): boolean =>
-    !map.isStairwellTile(x, y) && !doorKeys.has(tileKeyIn(map, x, y));
+    !map.isStairwellTile(x, y) && !doorKeys.has(tileKeyIn(map, x, y)) && isAcceptable(x, y);
   const leader =
     findNearbyWalkableTile(
       map,

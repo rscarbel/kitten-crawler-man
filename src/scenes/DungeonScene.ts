@@ -31,11 +31,13 @@ import type { TopBandEntry } from '../ui/hud/topBand';
 import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
 import { interiorRoomOwnedByStory } from '../systems/interiorStoryOwnership';
 import { GameMap } from '../map/GameMap';
+import type { GauntletBossType } from '../map/bossRoomSizes';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
 import { WORLD_GENERATOR_VERSION } from '../core/save/SavedWorld';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { prepareGroundTone } from '../map/tiles/groundTiles';
+import { warmDungeonWater } from '../map/tiles/dungeonWaterShore';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { releaseEnvironmentArt } from '../map/environmentArtCache';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
@@ -183,6 +185,8 @@ import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { GoblinBombSystem } from '../systems/GoblinBombSystem';
 import { ExplosionShake } from '../systems/ExplosionShake';
 import { BOMBER_GOBLIN_CUES, FuseSizzleLoops } from '../systems/bomberGoblinSoundCues';
+import { KettlebellWind } from '../systems/bossRooms/gymKettlebellWind';
+import { silenceGeneratorRigHum, updateGeneratorRigHum } from '../systems/generatorRigHum';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { ClownGasSystem } from '../systems/ClownGasSystem';
 import { FairySystem } from '../systems/FairySystem';
@@ -213,7 +217,14 @@ import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeR
 import { ALL_BREAKABLE_PROPS, NO_BREAKABLE_PROPS } from '../systems/DestructiblePropSystem';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit, type ChatCommand } from '../systems/kits/ChatKit';
-import { CutsceneKit } from '../systems/kits/CutsceneKit';
+import { CutsceneKit, cutsceneSoundPlayer } from '../systems/kits/CutsceneKit';
+import { ScriptedDeathSystem } from '../systems/scriptedDeath/ScriptedDeathSystem';
+import { runDungeonWorldAction, type DungeonWorldAction } from './dungeonWorldActions';
+import {
+  FLOODED_PUMP_ROOM_CUES,
+  type FloodedPumpRoomLoop,
+} from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
+import { PARTY_TRAIL_SPACING_TILES } from '../systems/partyTrail';
 import { walkUpTo } from '../systems/cutscene/walkUp';
 import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
 import {
@@ -225,7 +236,7 @@ import {
 } from '../systems/kits/hotbarActions';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { markMobsAtCheckpoint, rewindMobsToCheckpoint } from '../systems/mobCheckpoint';
-import { deadFairyUpgradeBosses, replayFairyRateUpgrades } from '../systems/fairyUpgradeBosses';
+import { replayFairyRateUpgrades } from '../systems/fairyUpgradeBosses';
 import {
   CompanionSystem,
   createCompanionStanceState,
@@ -307,13 +318,10 @@ import {
 import type { GymRoomSystem } from '../systems/GymRoomSystem';
 import {
   BossRoomDressings,
-  buildColosseumDressing,
   buildGauntletRoomDressings,
   registerBossRoomMoodLights,
 } from '../systems/bossRooms/BossRoomDressings';
-import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
-import { ArenaSystem } from '../systems/ArenaSystem';
 import { type TreasureChest, TreasureChestSystem } from '../systems/TreasureChestSystem';
 import { HumanTalkDriver } from '../creatures/humanGestures';
 import { type Pt } from '../sprites/art/bipedArt';
@@ -332,7 +340,6 @@ import { hackFailedPromptSurface } from '../ui/screens/dialogs/hackFailedPrompt'
 import { RewardFlySystem } from '../systems/RewardFlySystem';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
-import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Goblin } from '../creatures/Goblin';
 import { GoblinArcher } from '../creatures/GoblinArcher';
 
@@ -354,12 +361,10 @@ import {
   type SavePoint,
 } from '../core/save/SavePoint';
 import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
-import { type TilePoint } from '../map/town/townPlan';
+import { type TilePoint, type TileRect } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/save/WorldCheckpoint';
 import { type PersistedWorldState } from '../core/save/PersistedWorldState';
 import {
-  toPersistedArenaCheckpoint,
-  fromPersistedArenaCheckpoint,
   toPersistedTreasureChestCheckpoint,
   fromPersistedTreasureChestCheckpoint,
   toPersistedDefendQuestCheckpoint,
@@ -404,6 +409,7 @@ import {
   checkDeath,
   revealMinimap,
   triggerPlayerAttack,
+  playCrawlerSeizureJolts,
 } from '../systems/GameLoopPhases';
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
@@ -445,16 +451,19 @@ import { createMidgeEscortCarry, type MidgeEscortCarry } from '../core/quests/mi
 import { BountySystem, BOUNTY_TRACKER_ID } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
 import {
+  ANY_TILE,
   findNearbyWalkableTile,
   findPartyArrivalTiles,
   findWarpLandingTile,
   hasRoomToMove,
+  type TileFilter,
 } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
-import { pickDeathExplanation } from '../ui/DeathExplanations';
+import { pickDeathMessage } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { DeinonychusSystem, deinonychusXpFraction } from '../systems/DeinonychusSystem';
 import {
+  carryCompanions,
   NO_INTERIOR_COMPANIONS,
   type InteriorCompanionArrival,
   type InteriorCompanionDeparture,
@@ -612,6 +621,7 @@ import {
   nextAdviceObjective,
   type AdviceObjective,
   type AdviceSlot,
+  type GatewayAdviceId,
 } from '../systems/daveAdvice';
 import { type AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import {
@@ -663,6 +673,11 @@ import { PetNameBook, petWords, unnamedPetWords } from '../core/party/petNames';
 import { playerIdentity } from '../characters/playerIdentity';
 import { MissingPetNames, attackCowPortrait, namePetThen } from '../systems/petNaming';
 import { musicUnlocksFromProgress } from '../core/music/musicBackfill';
+import {
+  BIG_ROOSTER_BOSS_TYPE,
+  KRAKEN_BOSS_TYPE,
+  TRASH_GREMLIN_BOSS_TYPE,
+} from '../core/mobs/bossTypes';
 import { restoreMusicPlayback } from '../audio/music/playerPreference';
 import { difficultyStats } from '../core/difficulty/DifficultyStats';
 import { settings } from '../core/input/Settings';
@@ -674,6 +689,7 @@ import {
 } from '../audio/AudioManager';
 import { KEYBOARD_HERO_SONG, type AudioScope } from '../audio/AudioScope';
 import { bossTrack, wireBossMusic } from '../audio/music/bossTracks';
+import { KrakenFightMusic } from '../systems/bossRooms/floodedPumpRoom/krakenFightMusic';
 import type { MusicSelection } from '../audio/music/MusicDirector';
 import {
   MACHINERY_LOOP,
@@ -688,10 +704,20 @@ import { sfxGroupsForLevelId, compressedSfxForLevelId } from '../audio/sfxGroups
 import { DUNGEON_CUES, playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
 import {
   downedCompanionArrowCandidate,
+  finishRevival,
   knockedOutBandEntry,
   updateKnockoutState,
 } from '../systems/KnockoutRevive';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import {
+  getWorldZoom,
+  setWorldZoom,
+  viewportHeight,
+  viewportWidth,
+  worldViewHeight,
+  worldViewWidth,
+} from '../core/rendering/Viewport';
+import { CameraZoom, drawUnzoomed, toWorldViewRect } from '../core/rendering/cameraZoom';
+import type { FloodedPumpRoomSystem } from '../systems/bossRooms/FloodedPumpRoomSystem';
 import { renderQuality } from '../core/perf/RenderQuality';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import { ArrivalLoader, type WarpLoadRequest } from './ArrivalLoader';
@@ -907,7 +933,7 @@ export interface DungeonSceneOptions {
    * marked won before the first frame — a playtest preset dropping the party
    * past a gauntlet gate it never fought.
    */
-  preDefeatedBossTypes?: readonly MobKind[];
+  preDefeatedBossTypes?: readonly GauntletBossType[];
   /**
    * Dev bootstrap only: picks the spawn tile from this floor's freshly generated
    * map — a gateway safe room, the spider lab's station. A callback rather than a
@@ -1397,6 +1423,7 @@ export class DungeonScene extends GameplayScene {
   private readonly goblinBombs: GoblinBombSystem;
   private readonly explosionShake: ExplosionShake;
   private readonly fuseSizzle = new FuseSizzleLoops();
+  private readonly kettlebellWind = new KettlebellWind();
   private skeletonSummons: SkeletonSummonSystem;
   private clownGas: ClownGasSystem;
   private readonly fairies: FairySystem;
@@ -1405,7 +1432,7 @@ export class DungeonScene extends GameplayScene {
   private companion: CompanionSystem;
   private trees: TreeSystem | null;
   /** Null on every map but the overworld, which is the only one with rivers. */
-  private water: WaterAnimationSystem | null;
+  private readonly water: WaterAnimationSystem;
   private stairwell: StairwellSystem;
   /** The Wayfinder's Anchor: channel and cooldown. */
   private readonly recall: RecallSystem;
@@ -1452,13 +1479,16 @@ export class DungeonScene extends GameplayScene {
   private fortuneTeller: FortuneTable | null = null;
   private gymRoom: GymRoomSystem;
   private bossRoomDressings: BossRoomDressings;
-  private arenaRoom: ArenaRoomSystem;
+  /** Whether the flooded pump room has put the companion and hire on the leader's trail. */
+  private partyOnFloodedRoomTrail = false;
+  /** The Kraken's fight music, on a floor with her flooded pump room. */
+  private readonly krakenFightMusic: KrakenFightMusic | null;
   private barriers: BarrierSystem;
   private defendQuest: DefendQuestSystem;
   /** Floor 2's clogged bathrooms, their queue, their plumber and the floor's one pipe board; inert on every other floor. */
   readonly cloggedBathroom: CloggedBathroomSystem;
   private readonly isCrawlerHidden = (crawler: HumanPlayer | CatPlayer): boolean =>
-    this.cloggedBathroom.isCrawlerHidden(crawler);
+    this.cloggedBathroom.isCrawlerHidden(crawler) || this.scriptedDeaths.hides(crawler);
   /** Floor 2's stealth gate, its guard and the prison key quest; inert on every other floor. */
   readonly stealthKeySnatch: StealthKeySnatchSystem;
   /** Light and dark on floors 1 and 2; null on every other map. */
@@ -1577,6 +1607,8 @@ export class DungeonScene extends GameplayScene {
   private readonly mercenarySystem: MercenarySystem;
   private readonly attackCowSystem: AttackCowSystem;
   private renderPipeline = new RenderPipeline();
+  /** How far the camera is zoomed out to keep something in view; see {@link updateCameraZoom}. */
+  private readonly cameraZoom = new CameraZoom();
   private bus = new EventBus();
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
@@ -1603,7 +1635,6 @@ export class DungeonScene extends GameplayScene {
 
   private readonly abilityManager: AbilityManager;
 
-  private arena: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
   private readonly chestKit: ChestKit;
   /** Coins/items flying to the HUD from wherever they were earned. Screen-space; ticks and draws every frame regardless of what else is on screen. */
@@ -1721,7 +1752,7 @@ export class DungeonScene extends GameplayScene {
   private readonly inputHandler = new GameplayInputHandler();
 
   private readonly touch = new TouchMoveState();
-  private krakarenKilled = false;
+  private krakenKilled = false;
   /**
    * The run's damage-taken total when the current boss fight began, or null
    * outside one: a boss that dies with the total unchanged was beaten unhurt.
@@ -1791,7 +1822,9 @@ export class DungeonScene extends GameplayScene {
    */
   private readonly conversation: Conversation;
   /** Scripted moments that own the party: the tutorial's talks with Dave. */
-  private readonly cutscenes: CutsceneKit;
+  private readonly cutscenes: CutsceneKit<DungeonWorldAction>;
+  /** Deaths a script shows rather than a blow deals, such as a shark taking the crawler. */
+  readonly scriptedDeaths: ScriptedDeathSystem;
   private readonly tutorial: TutorialController | null = null;
   private readonly questSwitchConfirm: ConfirmDialog;
   /**
@@ -1834,14 +1867,22 @@ export class DungeonScene extends GameplayScene {
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
     });
     this.conversation = new Conversation(this.audio);
-    this.cutscenes = new CutsceneKit({
+    this.cutscenes = new CutsceneKit<DungeonWorldAction>({
       conversation: this.conversation,
       teleportDaveOut: () => this.dave.teleportOut(),
+      playSound: cutsceneSoundPlayer(this.audio),
+      runWorldAction: (action) =>
+        runDungeonWorldAction(action, {
+          gatherParty: ({ target }) => this.gatherParty(target),
+          floodedPumpRoom: ({ beat }) =>
+            this.bossRoomDressings.parts.floodedPumpRoom?.runIntroBeat(beat),
+        }),
       pauseButton: () => {
         const rect = this.hud.frame?.dock.get('pause');
         return rect === undefined ? null : { rect, press: () => this.openPauseFromButton() };
       },
     });
+    this.scriptedDeaths = new ScriptedDeathSystem(this.cutscenes.director);
     this.questSwitchConfirm = new ConfirmDialog(this.audio);
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
@@ -2260,15 +2301,22 @@ export class DungeonScene extends GameplayScene {
       bossRoom: this.bossRoom,
       crawlerBarks: this.crawlerBarks,
     };
-    const gauntletRoomDressings = buildGauntletRoomDressings(this.gameMap, bossTypes);
+    const gauntletRoomDressings = buildGauntletRoomDressings(this.gameMap, bossTypes, {
+      playCutscene: (script, onComplete) => this.cutscenes.director.play(script, onComplete),
+      playSharkAttack: (victim, at) => this.scriptedDeaths.play('shark_attack', victim, at),
+      setLoopVolume: (loop, volume) => this.setFloodedRoomLoopVolume(loop, volume),
+      gatherParty: (target) => this.gatherParty(target),
+      savePumpProgress: (respawn) => this.saveFloodedRoomProgress(respawn),
+    });
+    // A room floods as it is built, after the floor's ground was prepared.
+    warmDungeonWater(this.gameMap.structure);
     this.gymRoom = gauntletRoomDressings.gym;
     // Anchored to the room he spawns into rather than to where his corpse ends
     // up: a knockback onto a doorway or boundary tile can land his death
     // position outside every tracked boss room, which would otherwise pin
     // this at -1 and make the Pecking Order gauntlet permanently unclearable.
     this.bigRoosterBossRoomIdx =
-      levelDef.bossRooms?.findIndex((b) => b.type === 'big_rooster') ?? -1;
-    this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
+      levelDef.bossRooms?.findIndex((b) => b.type === BIG_ROOSTER_BOSS_TYPE) ?? -1;
     this.barriers = new BarrierSystem(this.gameMap);
     this.defendQuest = new DefendQuestSystem(
       this.gameMap,
@@ -2398,24 +2446,18 @@ export class DungeonScene extends GameplayScene {
         sound: (id) => this.audio?.play(id),
       },
     );
-    this.arena = new ArenaSystem(
-      this.gameMap,
-      this.bus,
-      () => this.world.roster.mobs,
-      (mob) => this.world.roster.add(mob),
-      this.bossRoom,
-    );
-    const colosseumDressing = buildColosseumDressing(this.gameMap);
-    this.arena.dressing = colosseumDressing;
     this.bossRoomDressings = new BossRoomDressings(
       {
         ...gauntletRoomDressings,
         spiderLab: this.spiderQuest.labDressing,
-        colosseum: colosseumDressing,
       },
       bossTypes,
     );
     this.bossRoom.fightListener = this.bossRoomDressings;
+    this.krakenFightMusic =
+      this.bossRoomDressings.parts.floodedPumpRoom !== null && this.audioScope !== null
+        ? new KrakenFightMusic(this.audioScope)
+        : null;
     // After the listener exists: a preset's pre-defeated bosses were marked
     // before there was any room to tell.
     this.replayBossRoomDefeats();
@@ -2424,12 +2466,9 @@ export class DungeonScene extends GameplayScene {
     this.trees = levelDef.isOverworld
       ? new TreeSystem(this.gameMap, (tileX, tileY) => this.miniMap.markTileChanged(tileX, tileY))
       : null;
-    // Overworld-only, mirroring `TreeSystem` above: no other map is ever
-    // generated with a water tile on it, so elsewhere this would scan the
-    // viewport every frame to find nothing.
-    this.water = levelDef.isOverworld
-      ? new WaterAnimationSystem(this.gameMap, () => renderQuality.fullDetail)
-      : null;
+    // On every floor: a dungeon floor can be flooded by its own rooms after it
+    // is generated, and the per-frame scan is one viewport of tile compares.
+    this.water = new WaterAnimationSystem(this.gameMap, () => renderQuality.fullDetail);
     this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
     this.hirelingShots = new HirelingShotSystem(this.gameMap, (point) =>
@@ -2488,6 +2527,7 @@ export class DungeonScene extends GameplayScene {
     // Burning oil is floor anyone can step out of, so both sides steer clear of it.
     this.companion.registerHazardSource(this.destruction.destructibles);
     this.combat.mobLoop.registerHazardSource(this.destruction.destructibles);
+    this.combat.mobLoop.registerExplosiveSource(this.destruction.dynamite);
     this.destruction.destructibles.setFlameSources([
       this.destruction.dynamite,
       this.fairyFireballs,
@@ -3188,7 +3228,7 @@ export class DungeonScene extends GameplayScene {
         floorArrivalLoadTasks({
           gameMap: this.gameMap,
           camera: () => this.camera(),
-          viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
+          viewport: () => ({ width: worldViewWidth(), height: worldViewHeight() }),
           spriteGroupsReady,
         }),
     };
@@ -3499,13 +3539,9 @@ export class DungeonScene extends GameplayScene {
         mob.droppedLoot = null;
       }
 
-      // The Ball of Swine is the one boss that does not carry the `isBoss` flag:
-      // the arena owns it, not `BossRoomSystem`, and that flag is what commits a
-      // mob to a room lock and a clamp it has no room for. Its death is a boss
-      // defeat all the same, and the arena's second wave waits on this event.
-      if (mob.isBoss || mob instanceof BallOfSwine) {
+      if (mob.isBoss) {
         // Every listener that cares which boss died (the difficulty stats, the
-        // arena, the music) matches snake_case spawn keys, so the
+        // fairies, the music) matches snake_case spawn keys, so the
         // event carries the mob's `spawnTypeKey`.
         bus.emit('bossDefeated', {
           bossType: mob.spawnTypeKey ?? (mob.constructor.name || 'unknown'),
@@ -3596,9 +3632,9 @@ export class DungeonScene extends GameplayScene {
       this.humanAchievements.logRecentEvent(bossLabel);
       this.catAchievements.logRecentEvent(bossLabel);
 
-      if (e.bossType === 'krakaren_clone') this.krakarenKilled = true;
+      if (e.bossType === KRAKEN_BOSS_TYPE) this.krakenKilled = true;
 
-      if (e.bossType === 'big_rooster' && !this.bigRoosterKilled) {
+      if (e.bossType === BIG_ROOSTER_BOSS_TYPE && !this.bigRoosterKilled) {
         this.bigRoosterKilled = true;
         this.tryUnlockPeckingOrder();
       }
@@ -3839,15 +3875,38 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * The overworld's gated groups: each held near its place (the village, the
-   * circus grounds; a bounty has none) or while `groupsActiveAnywhere` says
-   * something under way can play it. Off the overworld there are none, so every
-   * held group is let go.
+   * The floor's gated groups. On the overworld each is held near its place
+   * (the village, the circus grounds; a bounty has none) or while
+   * `groupsActiveAnywhere` says something under way can play it. Below it a
+   * boss's decoded fight music is held near its room. Every other held group is let go.
    */
   private buildSfxGates(levelDef: LevelDef): FloorSfxGates | null {
     const audio = this.audio;
     if (audio === null) return null;
-    if (!levelDef.isOverworld) return new FloorSfxGates(audio, []);
+    if (!levelDef.isOverworld) {
+      const gates: FloorSfxGate[] = [];
+      const floodedRoom = this.bossRoomDressings.parts.floodedPumpRoom;
+      if (floodedRoom !== null) {
+        gates.push({
+          group: 'floodedPumpRoomMusic',
+          activeAnywhere: () => false,
+          places: [floodedRoom.bounds],
+        });
+      }
+      const trashGremlinRoomIndex =
+        levelDef.bossRooms?.findIndex((room) => room.type === TRASH_GREMLIN_BOSS_TYPE) ?? -1;
+      const trashGremlinRoom = this.gameMap.bossRooms.find(
+        (_room, index) => index === trashGremlinRoomIndex,
+      );
+      if (trashGremlinRoom !== undefined) {
+        gates.push({
+          group: 'trashGremlinMusic',
+          activeAnywhere: () => false,
+          places: [trashGremlinRoom.bounds],
+        });
+      }
+      return new FloorSfxGates(audio, gates);
+    }
     const activeAnywhere = (group: GatedSfxGroup) => (): boolean =>
       groupsActiveAnywhere(this.overworldActivity())[group];
     const gates: FloorSfxGate[] = [
@@ -3933,6 +3992,8 @@ export class DungeonScene extends GameplayScene {
     returnUnreadMusicNotices(this.menus, this.musicLibrary);
     this.menus.dispose();
     this.cutscenes.dispose();
+    this.cameraZoom.reset();
+    setWorldZoom(this.cameraZoom.zoom);
     this.inputHandler.unbind();
     this.removeHarvestKeyHook?.();
     this.removeHarvestKeyHook = null;
@@ -3954,6 +4015,8 @@ export class DungeonScene extends GameplayScene {
     this.goblinBombs.dispose();
     this.explosionShake.dispose();
     this.fuseSizzle.stopAll(this.audioScope);
+    silenceGeneratorRigHum(this.audioScope);
+    this.kettlebellWind.silence(this.audioScope);
     this.dungeonLighting?.dispose();
     // Drops any standing order along with the hazard sources that were meant to
     // steer around it. Both name systems this scene is taking with it.
@@ -4091,6 +4154,16 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('error');
       return;
     }
+    const floodedRoomRefusal =
+      this.bossRoomDressings.parts.floodedPumpRoom?.swapRefusal(this.active()) ?? null;
+    if (floodedRoomRefusal !== null) {
+      this.audio?.play('error');
+      this.menus.toasts.post(floodedRoomRefusal, {
+        tone: 'danger',
+        durationTicks: COMPANION_ERROR_DISPLAY_FRAMES,
+      });
+      return;
+    }
     this.audio?.play('menu_change_follower');
     this.dave.closeDialog();
     // Capture who is currently active before the switch
@@ -4132,7 +4205,7 @@ export class DungeonScene extends GameplayScene {
           camY,
           STAIRWELL_ARROW_COLOR,
           {
-            avoidRect: this.hudFramesRect(),
+            avoidRect: this.worldViewFramesRect(),
           },
         ),
     };
@@ -4301,9 +4374,9 @@ export class DungeonScene extends GameplayScene {
       const y = tileY * TILE_SIZE;
       return (
         x >= camX - reach &&
-        x <= camX + viewportWidth() + reach &&
+        x <= camX + worldViewWidth() + reach &&
         y >= camY - reach &&
-        y <= camY + viewportHeight() + reach
+        y <= camY + worldViewHeight() + reach
       );
     };
     return this.objectiveBeamTargets().some((target) => inView(target.x, target.y));
@@ -4453,7 +4526,7 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const shape = this.questRoute.trailShape(crawlerGroundPoint(active));
     this.questRouteTrail.paint(ctx, shape, camX, camY, performance.now(), {
-      view: { width: viewportWidth(), height: viewportHeight() },
+      view: { width: worldViewWidth(), height: worldViewHeight() },
       body: crawlerSpriteBox(active),
     });
   }
@@ -4482,8 +4555,8 @@ export class DungeonScene extends GameplayScene {
         centre.y,
         camX,
         camY,
-        viewportWidth(),
-        viewportHeight(),
+        worldViewWidth(),
+        worldViewHeight(),
       );
     }
     const distanceTiles =
@@ -4563,7 +4636,7 @@ export class DungeonScene extends GameplayScene {
           camY,
           PINNED_ARROW_COLOR,
           {
-            avoidRect: this.hudFramesRect(),
+            avoidRect: this.worldViewFramesRect(),
           },
         ),
     };
@@ -4924,18 +4997,111 @@ export class DungeonScene extends GameplayScene {
    * Sets both crawlers down on a landing tile: the human on it, the companion on
    * the nearest tile beside it that will hold them.
    *
-   * Shared by the bounty cheat, the recall stone and the checkpoint respawn, so
-   * none of them can drift apart on where a party ends up.
+   * Shared by the bounty cheat, the recall stone, the checkpoint respawn and a
+   * script's gather, so none of them can drift apart on where a party ends up.
+   * `isAcceptable` keeps both crawlers inside a region the caller owns.
    */
-  private placePartyAtTile(landing: { x: number; y: number }): void {
+  private placePartyAtTile(
+    landing: { x: number; y: number },
+    isAcceptable: TileFilter = ANY_TILE,
+  ): void {
     // With nowhere beside the human the search stacks the companion on the
     // human rather than leaving it behind: the companion is dragged along by
     // every shipped warp, and CompanionSystem gives up past its path budget.
-    const { leader, follower } = findPartyArrivalTiles(this.gameMap, landing);
+    const { leader, follower } = findPartyArrivalTiles(this.gameMap, landing, isAcceptable);
     this.human.x = leader.x * TILE_SIZE;
     this.human.y = leader.y * TILE_SIZE;
     this.cat.x = follower.x * TILE_SIZE;
     this.cat.y = follower.y * TILE_SIZE;
+  }
+
+  /** Plays the flooded pump room's one-shots where they happen. */
+  private drainFloodedRoomCues(): void {
+    const room = this.bossRoomDressings.parts.floodedPumpRoom;
+    if (room === null) return;
+    for (const cue of room.drainSoundCues()) {
+      if (cue.at === null) this.audio?.playRandom(cue.takes);
+      else this.audio?.playRandomAt(cue.takes, cue.at.x, cue.at.y);
+    }
+  }
+
+  /** One of the flooded pump room's loops at `volume`, started or stopped as it crosses zero. */
+  private setFloodedRoomLoopVolume(loop: FloodedPumpRoomLoop, volume: number): void {
+    const scope = this.audioScope;
+    if (scope === null) return;
+    const id = FLOODED_PUMP_ROOM_CUES[loop][0];
+    const running = scope.isAmbientLoopRunning(id);
+    if (volume <= 0) {
+      if (running) scope.stopAmbientLoop(id);
+      return;
+    }
+    if (running) scope.setAmbientLoopVolume(id, volume);
+    else scope.startAmbientLoop(id, volume);
+  }
+
+  /**
+   * While the flooded pump room is full, the companion and any hire walk the
+   * leader's own trail: the shark takes only the active crawler, and a
+   * companion left to find its own way would wander into water it was never
+   * meant to cross.
+   */
+  private followFloodedRoomTrail(): void {
+    const wanted = this.bossRoomDressings.parts.floodedPumpRoom?.partyWalksTrail === true;
+    if (wanted === this.partyOnFloodedRoomTrail) return;
+    this.partyOnFloodedRoomTrail = wanted;
+    const spacing = wanted ? PARTY_TRAIL_SPACING_TILES * TILE_SIZE : null;
+    this.companion.setTrailFollow(spacing);
+    this.mercenarySystem.setTrailFollow(spacing);
+  }
+
+  /**
+   * The flooded pump room's save as each pump shuts off, the one save taken
+   * while a boss room is sealed. It can be, because the room checkpoints the
+   * whole fight it holds (the pumps, the rafts' tentacles, the water) as it
+   * stood at the shut-off, and re-seals around a party set down on its
+   * landing; the Kraken has not been reachable to harm before the drain. The
+   * room asks only while the active crawler is out of the water, unhunted and
+   * able to act, and drops a save it could not take before the room moved
+   * past flooded. Refused here while a revive is pending, since a save stands
+   * a downed crawler back up.
+   */
+  private saveFloodedRoomProgress(respawn: TilePoint): boolean {
+    if (this.isRevivePending) return false;
+    this.captureSavePoint(respawn);
+    return true;
+  }
+
+  /**
+   * A script's `gatherParty`, and the flooded pump room's restore: both
+   * crawlers, Deinonychus, the hire and the attack cow set down inside
+   * `target` (tiles), anyone down stood back up, with no sound and no
+   * animation, since it happens where the camera is not.
+   */
+  private gatherParty(target: TileRect): void {
+    const inTarget: TileFilter = (x, y) =>
+      x >= target.x && x < target.x + target.w && y >= target.y && y < target.y + target.h;
+    const centre = {
+      x: target.x + Math.floor(target.w / 2),
+      y: target.y + Math.floor(target.h / 2),
+    };
+    this.mercenarySystem.reviveDownedQuietly();
+    for (const crawler of [this.human, this.cat]) {
+      if (crawler.isKnockedOut) finishRevival(crawler, crawler === this.human, null, this.bus);
+      crawler.clearKnockback();
+      crawler.isMoving = false;
+    }
+    this.placePartyAtTile(centre, inTarget);
+    carryCompanions(
+      [
+        this.deinonychusSystem.asCarriedCompanion(this.cat),
+        this.mercenarySystem.asCarriedCompanion(),
+        this.attackCowSystem.asCarriedCompanion(),
+      ],
+      this.world.roster,
+      this.world.roster,
+      this.gameMap,
+      inTarget,
+    );
   }
 
   private triggerBuildAction(): boolean {
@@ -4961,8 +5127,8 @@ export class DungeonScene extends GameplayScene {
   /**
    * Whether either crawler stands in a boss room whose fight is unfinished.
    *
-   * Three owners, because the Ball of Swine arena and the spider lab are run by
-   * their own systems rather than `BossRoomSystem`. Either crawler counts:
+   * Two owners, because the spider lab is run by its own system rather than
+   * `BossRoomSystem`. Either crawler counts:
    * either one walking in is what starts and holds a boss fight.
    */
   private isPartyInUnresolvedBossRoom(ctx: SystemContext): boolean {
@@ -4970,7 +5136,6 @@ export class DungeonScene extends GameplayScene {
     return [ctx.human, ctx.cat].some(
       (crawler) =>
         this.bossRoom.isEntityInUnresolvedBossRoom(crawler, mobs) ||
-        this.arena.isEntityInUnresolvedArena(crawler, mobs) ||
         this.spiderQuest.isEntityInUnresolvedLab(crawler, mobs),
     );
   }
@@ -5600,6 +5765,10 @@ export class DungeonScene extends GameplayScene {
     this.combat.resetForCheckpoint();
     this.destruction.resetForCheckpoint();
     this.explosionShake.reset();
+    this.cameraZoom.reset();
+    setWorldZoom(this.cameraZoom.zoom);
+    this.scriptedDeaths.reset();
+    this.cutscenes.resetForCheckpoint();
     this.lavaBalls.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
     this.hirelingShots.resetForCheckpoint();
@@ -5611,7 +5780,6 @@ export class DungeonScene extends GameplayScene {
     this.knightMissiles.resetForCheckpoint();
     this.skeletonSummons.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
-    this.arena.resetForCheckpoint();
     this.bossRoomDressings.resetForCheckpoint();
 
     // Last, so the snapshot has the final word. The two resets above clear the
@@ -5632,6 +5800,8 @@ export class DungeonScene extends GameplayScene {
     // nothing else lets go of the boss's track or the hack's song.
     this.audioScope?.releaseMusic('boss');
     this.releaseKeyboardHeroMusic();
+    const floodedRoom = this.bossRoomDressings.parts.floodedPumpRoom;
+    if (floodedRoom !== null) this.krakenFightMusic?.restart(floodedRoom);
 
     // A town save can predate a quest fight that was still being fought when
     // the party fell. Rewound to before it, the quest no longer holds its
@@ -5667,10 +5837,7 @@ export class DungeonScene extends GameplayScene {
     this.levelTimerFrames = levelTimerFrames;
     this.restoreFloorCheckpoint(world);
     if (runProgress === 'rewind') this.restoreRunProgress(world);
-    this.fairies.resetForCheckpoint(
-      this.world.roster.mobs,
-      deadFairyUpgradeBosses(this.bossRoom, this.arena),
-    );
+    this.fairies.resetForCheckpoint(this.world.roster.mobs, this.bossRoom.defeatedBossTypes);
     this.forgetDebriefsOfLivingBosses();
   }
 
@@ -5687,8 +5854,6 @@ export class DungeonScene extends GameplayScene {
       gameStats: this.gameStats.snapshot(),
 
       bossRoom: this.bossRoom.captureCheckpoint(),
-      arena: this.arena.captureCheckpoint(),
-      arenaRoom: this.arenaRoom.captureCheckpoint(),
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
       barriers: this.barriers.captureCheckpoint(),
       miniMap: this.miniMap.captureCheckpoint(),
@@ -5724,7 +5889,7 @@ export class DungeonScene extends GameplayScene {
       attackCowState: captureAttackCowState(this.attackCowState),
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
-      krakarenKilled: this.krakarenKilled,
+      krakenKilled: this.krakenKilled,
       bigRoosterKilled: this.bigRoosterKilled,
       bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
     };
@@ -5745,8 +5910,6 @@ export class DungeonScene extends GameplayScene {
     this.gameMap.restoreCheckpoint(world.gameMap);
 
     this.bossRoom.restoreCheckpoint(world.bossRoom);
-    this.arena.restoreCheckpoint(world.arena);
-    this.arenaRoom.restoreCheckpoint(world.arenaRoom);
     this.bossRoomDressings.restoreCheckpoint(world.bossRoomDressing);
     this.barriers.restoreCheckpoint(world.barriers);
     this.miniMap.restoreCheckpoint(world.miniMap);
@@ -5786,9 +5949,11 @@ export class DungeonScene extends GameplayScene {
       this.bounty.restoreCheckpoint(world.bounty);
     }
 
-    this.krakarenKilled = world.krakarenKilled;
+    this.krakenKilled = world.krakenKilled;
     this.bigRoosterKilled = world.bigRoosterKilled;
     this.bigRoosterBossRoomIdx = world.bigRoosterBossRoomIdx;
+    // A rewind can flood a room again, and its water must not be painted on the render path.
+    warmDungeonWater(this.gameMap.structure);
   }
 
   /**
@@ -5830,7 +5995,6 @@ export class DungeonScene extends GameplayScene {
   private capturePersistedWorldState(): PersistedWorldState {
     return {
       bossRoom: this.bossRoom.captureCheckpoint(),
-      arena: toPersistedArenaCheckpoint(this.arena.captureCheckpoint()),
       treasureChests: toPersistedTreasureChestCheckpoint(this.treasureChests.captureCheckpoint()),
       defendQuest: toPersistedDefendQuestCheckpoint(this.defendQuest.captureCheckpoint()),
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
@@ -5859,7 +6023,7 @@ export class DungeonScene extends GameplayScene {
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
-      krakarenKilled: this.krakarenKilled,
+      krakenKilled: this.krakenKilled,
       bigRoosterKilled: this.bigRoosterKilled,
       bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
     };
@@ -5870,7 +6034,6 @@ export class DungeonScene extends GameplayScene {
     this.bossRoomDressings.replayDefeats({
       gauntletBossTypes: this.bossRoom.defeatedBossTypes,
       spiderLab: this.spiderQuest.isComplete,
-      colosseum: this.arena.phase2Active,
     });
   }
 
@@ -5886,7 +6049,6 @@ export class DungeonScene extends GameplayScene {
     // that a field added to the save but never read here fails the typecheck.
     const {
       bossRoom,
-      arena,
       treasureChests,
       defendQuest,
       cloggedBathroom,
@@ -5909,7 +6071,7 @@ export class DungeonScene extends GameplayScene {
       doomsday,
       bossRoomDressing,
       briarHollow,
-      krakarenKilled,
+      krakenKilled,
       bigRoosterKilled,
       bigRoosterBossRoomIdx,
       ...unappliedFields
@@ -5919,15 +6081,11 @@ export class DungeonScene extends GameplayScene {
     const { mobs, grid } = this.world.roster;
 
     this.bossRoom.restoreCheckpoint(bossRoom);
-    this.arena.restoreCheckpoint(fromPersistedArenaCheckpoint(arena));
     // The roster was regenerated from the seed, so it holds every boss the
     // player already killed, alive again.
     const beatenBosses = this.bossRoom.bossesInDefeatedRooms(mobs);
-    if (this.arena.phase2Active) {
-      beatenBosses.push(...mobs.filter((mob) => mob instanceof BallOfSwine));
-    }
     for (const boss of beatenBosses) despawnMob(boss, mobs, grid);
-    replayFairyRateUpgrades(this.fairies, deadFairyUpgradeBosses(this.bossRoom, this.arena));
+    replayFairyRateUpgrades(this.fairies, this.bossRoom.defeatedBossTypes);
 
     this.treasureChests.restoreCheckpoint(
       fromPersistedTreasureChestCheckpoint(treasureChests, this.treasureChests.allChests),
@@ -5972,7 +6130,7 @@ export class DungeonScene extends GameplayScene {
     for (const trait of tacticsNoticesSeen) this.tacticsNoticesSeen.add(trait);
     restoreDoomsdayProgress(this.doomsdayQuestProgress, doomsday, Date.now());
 
-    this.krakarenKilled = krakarenKilled;
+    this.krakenKilled = krakenKilled;
     this.bigRoosterKilled = bigRoosterKilled;
     this.bigRoosterBossRoomIdx = bigRoosterBossRoomIdx;
   }
@@ -6592,12 +6750,15 @@ export class DungeonScene extends GameplayScene {
   /**
    * A save is never written mid-fight. The save cannot hold the creatures in
    * the fight, so a reload would either hand out the fight for free or rebuild
-   * it around a party standing in a safe room outside the locked door.
+   * it around a party standing in a safe room outside the locked door. The one
+   * exception is {@link saveFloodedRoomProgress}, whose room holds its whole
+   * fight in its own checkpoint, taken at a pump's shut-off and written only
+   * while the room is still flooded (or at the last pump's own press) and the
+   * active crawler is out of the water, unhunted and not stunned.
    */
   private get isBossFightInProgress(): boolean {
     return (
       this.bossRoom.anyLocked ||
-      this.arena.isBossFightInProgress ||
       this.spiderQuest.isBossFightInProgress ||
       this.briarHollowKit?.assault?.inSiege === true
     );
@@ -7313,6 +7474,8 @@ export class DungeonScene extends GameplayScene {
   private silenceFrozenWorldLoops(): void {
     this.silenceMovementLoops();
     this.fuseSizzle.stopAll(this.audioScope);
+    silenceGeneratorRigHum(this.audioScope);
+    this.kettlebellWind.silence(this.audioScope);
   }
 
   /**
@@ -7752,8 +7915,7 @@ export class DungeonScene extends GameplayScene {
   private pinnedGatewayAdvice(guardsBossType: string | undefined): AdviceObjective | null {
     const id = gatewayAdviceId(guardsBossType);
     if (id === null) return null;
-    const objective =
-      id === 'ball_of_swine' ? this.ballOfSwineObjective('ball_of_swine') : this.bossObjective(id);
+    const objective = this.bossObjective(id);
     return objective.complete ? null : objective;
   }
 
@@ -7801,22 +7963,20 @@ export class DungeonScene extends GameplayScene {
       //
       // `asOptional` is for work a party who is not interested never finishes,
       // and which would therefore stand in front of everything listed behind it
-      // for the rest of the floor: the spider lab is a dead end, and the Ball of
-      // Swine only *guarantees* a way down, which is why Dave's own speech
-      // about it says to find another if you would rather keep your bones.
+      // for the rest of the floor: the spider lab is a dead end.
       case DUNGEON_FLOOR_ONE:
         return [
           this.bossObjective('trash_gremlin'),
           this.defendQuestObjective(),
-          this.bossObjective('big_rooster'),
+          this.bossObjective('kraken'),
         ];
       case DUNGEON_FLOOR_TWO:
         return [
-          this.bossObjective('krakaren_clone'),
+          this.bossObjective('electric_goblin'),
           this.defendQuestObjective(),
           this.stealthGateObjective(),
           asOptional(this.spiderLabObjective()),
-          asOptional(this.ballOfSwineObjective('ball_of_swine_distant')),
+          this.bossObjective('big_rooster'),
         ];
       case OVERWORLD_FLOOR_THREE:
         // The Anchor's offer leads the list: accepting it is what makes every
@@ -7868,9 +8028,7 @@ export class DungeonScene extends GameplayScene {
    * from `levelDef.bossRooms`, in the same order, so the two lists are index
    * aligned and this is the same mapping the system itself uses.
    */
-  private bossObjective(
-    bossType: 'trash_gremlin' | 'big_rooster' | 'krakaren_clone',
-  ): AdviceObjective {
+  private bossObjective(bossType: GatewayAdviceId): AdviceObjective {
     const index = this.levelDef.bossRooms?.findIndex((room) => room.type === bossType) ?? -1;
     const room = index < 0 ? undefined : this.gameMap.bossRooms[index];
     return adviceObjective(
@@ -7893,7 +8051,7 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
-  /** The stealth gate: mandatory, on the only way to the arena, and spent once it is open. */
+  /** The stealth gate: mandatory, on the only way to Big Rooster, and spent once it is open. */
   private stealthGateObjective(): AdviceObjective {
     return adviceObjective(
       'stealth_gate',
@@ -7912,23 +8070,6 @@ export class DungeonScene extends GameplayScene {
       return adviceObjective('spider_lab', false, lab?.hallwayPostTile ?? null);
     }
     return adviceObjective('spider_lab_started', this.spiderQuest.isComplete, lab?.centre ?? null);
-  }
-
-  /**
-   * The Ball of Swine, done once the arena has moved on to its second phase —
-   * which is what killing it starts, and the only state that survives the event
-   * that announced it.
-   *
-   * Shared between the pinned antechamber speech and the distant floor-wide
-   * objective: both watch the same arena state and target, and differ only in
-   * which prose id they carry.
-   */
-  private ballOfSwineObjective(id: 'ball_of_swine' | 'ball_of_swine_distant'): AdviceObjective {
-    return adviceObjective(
-      id,
-      this.arena.phase2Active,
-      this.gameMap.arenaExteriors[0]?.centre ?? null,
-    );
   }
 
   /** Points at Madame Voss; complete once the party has taken up the errand. */
@@ -8100,10 +8241,6 @@ export class DungeonScene extends GameplayScene {
       return true;
     }
     if (this.destruction.groundPickups.tryPickupNear(active)) {
-      return true;
-    }
-    if (this.arenaRoom.tryPickupNear(active)) {
-      this.audio?.play('picking_up_ground_object');
       return true;
     }
     if (this.market?.tryInteract(active) === true) {
@@ -8388,7 +8525,6 @@ export class DungeonScene extends GameplayScene {
     const entries: (TopBandEntry | null)[] = [
       this.achievementUI.rewardsBanner(this.human.isProtected || this.cat.isProtected),
       this.bossRoom.topBandEntry(this.world.roster.mobs, this.human, this.cat),
-      ...this.arena.topBandEntries(this.active()),
       this.defendQuest.topBandEntry(),
       this.murderQuest.topBandEntry(),
       this.doomsdayEscape.topBandEntry(),
@@ -8426,8 +8562,10 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * Every pointer gesture that landed on no surface: walking and tapping on a
-   * phone, and clicking loot and chests with a mouse. Coordinates are canvas
-   * CSS pixels, the space the camera works in.
+   * phone, and clicking loot and chests with a mouse. Coordinates arrive in
+   * canvas CSS pixels; the walking finger stays in them, and anything that
+   * finds a thing in the world under the press is handed them divided by the
+   * camera's zoom, the world view's units the camera works in.
    */
   private handleWorldPointer(gesture: WorldGesture): void {
     if (gesture.button !== PRIMARY_BUTTON) return;
@@ -8443,14 +8581,14 @@ export class DungeonScene extends GameplayScene {
         return;
       case 'up':
         if (gesture.source === 'mouse') {
-          if (gesture.tap) this.collectWorldPickupAt(x, y);
+          if (gesture.tap) this.collectWorldPickupAt(x / getWorldZoom(), y / getWorldZoom());
           return;
         }
         if (gesture.pointerId === this.touch.moveTouchId) {
           this.endWorldTouch(x, y, gesture.timeStamp);
         } else {
           const pressedAt = this.touch.endExtraFinger(gesture.pointerId, x, y);
-          if (pressedAt !== null) this.tapWorld(x, y, pressedAt);
+          if (pressedAt !== null) this.tapWorld(x / getWorldZoom(), y / getWorldZoom(), pressedAt);
         }
         return;
       case 'cancel':
@@ -8478,15 +8616,18 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.touch.startMove(pointerId, x, y, pressedAt);
-    this.structureHold.begin(this.fingerOnWorkableStructure(x, y), x, y);
+    const onStructure = this.fingerOnWorkableStructure(x / getWorldZoom(), y / getWorldZoom());
+    this.structureHold.begin(onStructure, x, y);
     const starter = this.active();
     this.holdStartActivePos = { x: starter.x, y: starter.y };
   }
 
   private endWorldTouch(x: number, y: number, timeStamp: number | undefined): void {
     if (this.touch.tapStart !== null) {
+      const zoom = getWorldZoom();
       if (this.touch.isTap(x, y)) {
-        this.tapWorld(x, y, this.touch.tapStartEventMs ?? timeStamp ?? performance.now());
+        const pressedAt = this.touch.tapStartEventMs ?? timeStamp ?? performance.now();
+        this.tapWorld(x / zoom, y / zoom, pressedAt);
       } else if (this.touch.heldInPlace(x, y) && !this.crawlerWalkedDuringHold()) {
         // Held roughly in place past tap duration, rather than dragged — and
         // without the hold having walked the crawler, which is just the end of
@@ -8495,7 +8636,8 @@ export class DungeonScene extends GameplayScene {
         // boarded grate in reach, for a crawler who can spike it.
         const cam = this.camera();
         const villageTook =
-          this.briarHollowKit?.handleLongPress(x, y, cam.x, cam.y, this.active()) === true;
+          this.briarHollowKit?.handleLongPress(x / zoom, y / zoom, cam.x, cam.y, this.active()) ===
+          true;
         if (!villageTook) this.grateSpikes.tryOpen();
       }
     }
@@ -8572,8 +8714,7 @@ export class DungeonScene extends GameplayScene {
     const worldY = y + camY;
     const gymPieceTaken =
       this.barriers.tryPickupAt(worldX, worldY, active) ||
-      this.bossRoomDressings.parts.gym?.tryPickupBenchAt(worldX, worldY, active) === true ||
-      this.arenaRoom.tryPickupAt(worldX, worldY, active);
+      this.bossRoomDressings.parts.gym?.tryPickupBenchAt(worldX, worldY, active) === true;
     if (gymPieceTaken) this.audio?.play('picking_up_ground_object');
     return gymPieceTaken;
   }
@@ -8840,8 +8981,8 @@ export class DungeonScene extends GameplayScene {
     lifeFrame.others = this.world.roster.mobs;
     lifeFrame.camX = camera.x;
     lifeFrame.camY = camera.y;
-    lifeFrame.viewW = viewportWidth();
-    lifeFrame.viewH = viewportHeight();
+    lifeFrame.viewW = worldViewWidth();
+    lifeFrame.viewH = worldViewHeight();
     life.update(lifeFrame);
     const ambienceFrame = this._ambienceFrame;
     ambienceFrame.listenerX = active.x + TILE_SIZE * TILE_CENTRE_FRACTION;
@@ -8935,8 +9076,8 @@ export class DungeonScene extends GameplayScene {
     const lighting = this.dungeonLighting;
     if (lighting === null) return;
     const { camX, camY } = rc;
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
     this.renderPipeline.renderFlyingGore(ctx, rc);
     lighting.render(ctx, camX, camY, viewW, viewH);
     const warnings = this.renderPipeline.hasGroundWarnings(rc);
@@ -8946,7 +9087,7 @@ export class DungeonScene extends GameplayScene {
       painter.rc = rc;
       painter.beacons = beacons;
       painter.warnings = warnings;
-      lighting.renderOverDarkness(ctx, this.sceneManager.renderScale, painter);
+      lighting.renderOverDarkness(ctx, this.sceneManager.renderScale * getWorldZoom(), painter);
     }
     lighting.renderEyeShine(ctx, camX, camY, viewW, viewH, this.world.roster.mobs);
     flushAboveDarkness(ctx);
@@ -8973,6 +9114,12 @@ export class DungeonScene extends GameplayScene {
     // the citizen they are already talking to is the loudest of these.
     setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver);
     const { x: camX, y: camY } = this.camera();
+    // The world, and every world-anchored marker and prompt over it, is drawn
+    // in the world view's units under the camera's zoom; only the menus and
+    // the HUD above them keep the screen's own.
+    const zoom = getWorldZoom();
+    ctx.save();
+    ctx.scale(zoom, zoom);
     this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks, this.isCrawlerHidden);
     const frontBeams = this.frontObjectiveBeams();
 
@@ -9002,7 +9149,6 @@ export class DungeonScene extends GameplayScene {
       dave: this.dave,
       bossRoom: this.bossRoom,
       bossRoomDressings: this.bossRoomDressings,
-      arenaRoom: this.arenaRoom,
       stairwell: this.stairwell,
       building: this.building,
       barriers: this.barriers,
@@ -9041,6 +9187,7 @@ export class DungeonScene extends GameplayScene {
       goreUnderDarkness: this.dungeonLighting !== null,
       lightShining: this.lightShining,
       isCrawlerHidden: this.isCrawlerHidden,
+      scriptedDeaths: this.scriptedDeaths,
       sortedFixtures: [
         ...this.cloggedBathroom.sortedFixtures(),
         ...(this.tutorial?.gateRenderables() ?? []),
@@ -9049,7 +9196,7 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
-    this.dungeonLife?.renderGround(ctx, camX, camY, viewportWidth(), viewportHeight());
+    this.dungeonLife?.renderGround(ctx, camX, camY, worldViewWidth(), worldViewHeight());
     // Straight after the floor, ahead of every quest system's own props, so a
     // clue scene or a grate stands in front of the light marking it.
     this.renderObjectiveBeacons(ctx, camX, camY);
@@ -9086,8 +9233,8 @@ export class DungeonScene extends GameplayScene {
     }
     this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
-    this.dungeonLife?.renderAir(ctx, camX, camY, viewportWidth(), viewportHeight());
-    this.labHallway?.render(ctx, camX, camY, viewportWidth(), viewportHeight());
+    this.dungeonLife?.renderAir(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+    this.labHallway?.render(ctx, camX, camY, worldViewWidth(), worldViewHeight());
     // Over every body and under every warning, health bar and label.
     this.renderDungeonDarkness(ctx, rc);
     // Over every body in the lab and under every warning: the dark her roars
@@ -9121,7 +9268,7 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderVisibilityFog(ctx, rc);
 
-    renderHealthVignette(ctx, this.active(), this.gameOver);
+    drawUnzoomed(ctx, zoom, () => renderHealthVignette(ctx, this.active(), this.gameOver));
 
     // After the fog, which fills everything past its outer radius with solid
     // black: a marker clamped to the screen edge is by definition out at that
@@ -9131,12 +9278,14 @@ export class DungeonScene extends GameplayScene {
     // exists to answer. The HUD and every menu draw after it and cover it where
     // they meet.
     if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
-      this.deinonychusSystem.renderOffscreenMarker(
-        ctx,
-        camX,
-        camY,
-        this.active(),
-        VISIBILITY_RADIUS_PX,
+      drawUnzoomed(ctx, zoom, () =>
+        this.deinonychusSystem.renderOffscreenMarker(
+          ctx,
+          camX,
+          camY,
+          this.active(),
+          VISIBILITY_RADIUS_PX,
+        ),
       );
     }
 
@@ -9153,11 +9302,13 @@ export class DungeonScene extends GameplayScene {
     // offer the Journal from whether this is null.
     this.syncJournalContext();
 
-    const framesRect = this.hudFramesRect();
-    this.briarHollowKit?.renderHud(ctx, {
-      keepouts: this.hudKeepoutsCss(),
-      buildButton: this.hud.cssDockRect('build'),
-    });
+    const framesRect = this.worldViewFramesRect();
+    drawUnzoomed(ctx, zoom, () =>
+      this.briarHollowKit?.renderHud(ctx, {
+        keepouts: this.hudKeepoutsCss(),
+        buildButton: this.hud.cssDockRect('build'),
+      }),
+    );
 
     if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       this.recall.render(ctx, camX, camY);
@@ -9218,7 +9369,7 @@ export class DungeonScene extends GameplayScene {
         current: this.recall.cooldownRemainingFrames,
         max: RECALL_COOLDOWN_FRAMES,
       });
-      this.barriers.renderConstructUI(ctx);
+      this.barriers.renderConstructUI(ctx, camX, camY);
     }
 
     const anyMenuOpen =
@@ -9227,7 +9378,7 @@ export class DungeonScene extends GameplayScene {
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
       const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
-      this.safeRoom.renderUI(ctx, this.active());
+      drawUnzoomed(ctx, zoom, () => this.safeRoom.renderUI(ctx, this.active()));
       this.dave.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
       this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
       // Once no overlay owns the press, `claimPress` takes it at the striker
@@ -9251,6 +9402,8 @@ export class DungeonScene extends GameplayScene {
         this.renderMercenaryPrompt(ctx, camX, camY);
       }
     }
+
+    ctx.restore();
 
     // Every menu and dialog, bottom to top in stack order; the hit regions
     // they register here are what the next press is tested against.
@@ -9559,6 +9712,8 @@ export class DungeonScene extends GameplayScene {
     // After every constraint that can still move a crawler this frame, so the
     // splash and the ripples are keyed off where they actually ended up. Run
     // before the tutorial gate and a gate shove would shed ripples on dry land.
+    // The drain steps first so the waders read the depth this tick leaves.
+    if (this.combat.worldStepTaken) this.gameMap.advanceWaterDrains();
     this.updateWaders();
 
     // Wading *replaces* the footstep loop rather than layering over it: boots on
@@ -9640,7 +9795,6 @@ export class DungeonScene extends GameplayScene {
     this.systemNotices.update(ctx);
     this.bossRoom.update(ctx);
     this.spiderQuest.applyRoomLock(this.human, this.cat);
-    this.arena.update(ctx);
 
     if (this.bossRoom.fightAbortedPending) {
       this.bossRoom.fightAbortedPending = false;
@@ -9660,10 +9814,7 @@ export class DungeonScene extends GameplayScene {
     if (this.bossRoom.newlyLockedBossType !== null) {
       const bt = this.bossRoom.newlyLockedBossType;
       this.bossRoom.newlyLockedBossType = null;
-      const meta = BOSS_META[bt] ?? {
-        displayName: 'THE BOSS',
-        color: worldPalette.ink.danger,
-      };
+      const meta = BOSS_META[bt];
       this.bossIntro.trigger(bt, meta.displayName, meta.color);
       this.bus.emit('bossFightInitiated', { bossType: bt });
     }
@@ -9735,16 +9886,15 @@ export class DungeonScene extends GameplayScene {
     this.updateVillageAmbience(ctx.active);
     this.ambientSound?.update(ctx);
     if (this.combat.worldStepTaken) this.bossRoomDressings.update(ctx);
-    const colosseumCue = this.bossRoomDressings.parts.colosseum?.takeSoundCue() ?? null;
-    if (colosseumCue !== null) this.audio?.play(colosseumCue);
     for (const takes of this.gymRoom.drainSoundCues()) this.audio?.playRandom(takes);
-    for (const cue of this.bossRoomDressings.parts.krakaren?.drainSoundCues() ?? []) {
-      this.audio?.play(cue.id, { volume: cue.volume });
-    }
+    this.drainFloodedRoomCues();
+    this.followFloodedRoomTrail();
+    const floodedRoom = this.bossRoomDressings.parts.floodedPumpRoom;
+    if (floodedRoom !== null) this.krakenFightMusic?.update(floodedRoom);
+    this.updateCameraZoom(floodedRoom);
     for (const burst of this.bossRoomDressings.parts.trashGremlin?.drainRoachBursts() ?? []) {
       this.audio?.playRandomAt(TRASH_PILE_ROACH_BURST, burst.x, burst.y);
     }
-    this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
     if (this.tutorial !== null) {
       this.tutorial.update(this.human, this.cat);
@@ -9763,12 +9913,16 @@ export class DungeonScene extends GameplayScene {
       if (this.tutorial.needsCameraPanStart) {
         this.tutorial.needsCameraPanStart = false;
         const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
-        const halfW = viewportWidth() / 2;
-        const halfH = viewportHeight() / 2;
-        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - viewportWidth());
-        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPxH - viewportHeight());
-        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - viewportWidth());
-        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - viewportHeight());
+        const halfW = worldViewWidth() / 2;
+        const halfH = worldViewHeight() / 2;
+        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - worldViewWidth());
+        const humanCamY = clamp(
+          this.human.y + TILE_SIZE / 2 - halfH,
+          0,
+          mapPxH - worldViewHeight(),
+        );
+        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - worldViewWidth());
+        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - worldViewHeight());
         this.tutorial.startCameraPan(humanCamX, humanCamY, catCamX, catCamY);
       }
 
@@ -9894,6 +10048,7 @@ export class DungeonScene extends GameplayScene {
       this.cat.effectDamageSoundPending = false;
       this.audio?.playRandom(['cat_effect_damage_1', 'cat_effect_damage_2', 'cat_effect_damage_3']);
     }
+    playCrawlerSeizureJolts([this.human, this.cat], this.audio);
 
     if (this.tutorial?.suppressCatRegen === true) {
       this.combat.playerTick.tickRegenHumanOnly(this.human);
@@ -9927,6 +10082,7 @@ export class DungeonScene extends GameplayScene {
     this.trees?.update(ctx);
     this.destruction.update(ctx);
     this.explosionShake.update();
+    this.scriptedDeaths.update();
     // After every system that can smash a lamp or a sconce this frame, so a
     // light broken now goes dark on the frame it breaks rather than the next.
     this.dungeonLighting?.update();
@@ -9978,10 +10134,13 @@ export class DungeonScene extends GameplayScene {
     for (const raised of this.goblinBombs.takeCues()) {
       this.audio?.playRandomAt(BOMBER_GOBLIN_CUES[raised.cue], raised.x, raised.y);
     }
-    this.fuseSizzle.update(this.audioScope, this.goblinBombs.liveSticks, {
+    const listener = {
       x: ctx.active.x + TILE_SIZE * TILE_CENTRE_FRACTION,
       y: ctx.active.y + TILE_SIZE * TILE_CENTRE_FRACTION,
-    });
+    };
+    this.fuseSizzle.update(this.audioScope, this.goblinBombs.liveSticks, listener);
+    updateGeneratorRigHum(this.audioScope, this.world.roster.mobs, listener);
+    this.kettlebellWind.update(this.audioScope, this.gymRoom.fallingKettlebells.length);
 
     // Likewise the rise: the mob that made it happen is the lord, but the sound
     // belongs to the skeletons coming out of the ground.
@@ -10064,7 +10223,7 @@ export class DungeonScene extends GameplayScene {
       );
       this.bus.emit('playerDied', { fallen: this.fallenCrawler(), cause: deathCause });
       this.combat.deathScreen.activate(
-        pickDeathExplanation(deathCause),
+        pickDeathMessage(deathCause),
         respawnModeFor(respawnRouteFor(this.lastSave)),
       );
     }
@@ -10517,6 +10676,23 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  /**
+   * Keeps the flooded pump room's shark loop on screen while the room is
+   * flooded, zooming out only as far as the screen, less the HUD, needs.
+   * Published at once, so this tick's camera and everything measured against
+   * the world view agree.
+   */
+  private updateCameraZoom(floodedRoom: FloodedPumpRoomSystem | null): void {
+    this.cameraZoom.request('floodedPumpRoom', floodedRoom?.cameraWatchRect(this.active()) ?? null);
+    this.cameraZoom.tick(viewportWidth(), viewportHeight(), this.hudFramingKeepoutsCss());
+    setWorldZoom(this.cameraZoom.zoom);
+  }
+
+  /** The unit frames in the world view's units, for world chrome drawn under the camera's zoom. */
+  private worldViewFramesRect(): Rect {
+    return toWorldViewRect(this.hudFramesRect(), getWorldZoom());
+  }
+
   private camera(): { x: number; y: number } {
     const tutorialCam = this.tutorial?.cameraOverride;
     if (tutorialCam !== null && tutorialCam !== undefined) return tutorialCam;
@@ -10524,38 +10700,52 @@ export class DungeonScene extends GameplayScene {
     const player = this.active();
     const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
 
-    const targetOverride = this.spiderQuest.cameraTargetOverride ?? aiCameraSpotlight.focus();
+    const targetOverride =
+      this.spiderQuest.cameraTargetOverride ??
+      this.cutscenes.director.cameraFocus(player) ??
+      aiCameraSpotlight.focus();
     const targetX = targetOverride !== null ? targetOverride.x : player.x;
     const targetY = targetOverride !== null ? targetOverride.y : player.y;
 
-    const camX = targetX + TILE_SIZE / 2 - viewportWidth() / 2;
-    const camY = targetY + TILE_SIZE / 2 - viewportHeight() / 2;
+    const viewW = worldViewWidth();
+    const viewH = worldViewHeight();
+    const focusX = targetX + TILE_SIZE / 2;
+    const focusY = targetY + TILE_SIZE / 2;
+    const framed = this.cameraZoom.keepInView(
+      { x: focusX - viewW / 2, y: focusY - viewH / 2 },
+      { x: focusX, y: focusY },
+      viewW,
+      viewH,
+    );
 
     const shakeOffset = this.spiderQuest.cameraOffset;
     const seismicStompShake = this.combat.seismicStompFx.cameraOffset;
     const gymShake = this.gymRoom.cameraOffset;
     const villageShake = this.briarHollowKit?.cameraOffset ?? { x: 0, y: 0 };
     const blastShake = this.explosionShake.cameraOffset;
+    const cutsceneShake = this.cutscenes.director.cameraShake;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = intoxicationCameraOffset(player, frameTime);
     return {
       x:
-        clamp(camX, 0, mapPxW - viewportWidth()) +
+        clamp(framed.x, 0, mapPxW - viewW) +
         shakeOffset.x +
         sway.x +
         seismicStompShake.x +
         gymShake.x +
         villageShake.x +
-        blastShake.x,
+        blastShake.x +
+        cutsceneShake.x,
       y:
-        clamp(camY, 0, mapPxH - viewportHeight()) +
+        clamp(framed.y, 0, mapPxH - viewH) +
         shakeOffset.y +
         sway.y +
         seismicStompShake.y +
         gymShake.y +
         villageShake.y +
-        blastShake.y,
+        blastShake.y +
+        cutsceneShake.y,
     };
   }
 
@@ -10669,7 +10859,6 @@ export class DungeonScene extends GameplayScene {
    */
   private updateWaders(): void {
     const water = this.water;
-    if (water === null) return;
     water.beginFrame();
     const centre = TILE_SIZE * WADER_CENTRE_FRACTION;
 
@@ -10731,11 +10920,11 @@ export class DungeonScene extends GameplayScene {
   private updateRiverAmbience(listener: Player): void {
     const emitter = this.riverAmbientEmitter;
     if (emitter === null) return;
-    const nearest = this.water?.nearestVisibleWaterTile(
+    const nearest = this.water.nearestVisibleWaterTile(
       listener.x + TILE_SIZE * WADER_CENTRE_FRACTION,
       listener.y + TILE_SIZE * WADER_CENTRE_FRACTION,
     );
-    if (nearest === undefined || nearest === null) {
+    if (nearest === null) {
       // `constant` is cleared here as well as set below. It overrides distance
       // entirely, so a frame that silenced the emitter by radius alone while the
       // flag was still set from wading would play the river at full volume with

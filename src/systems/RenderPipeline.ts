@@ -24,7 +24,6 @@ import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { DaveGuideSystem } from './DaveGuideSystem';
 import type { BossRoomSystem } from './BossRoomSystem';
 import type { BossRoomDressings } from './bossRooms/BossRoomDressings';
-import type { ArenaRoomSystem } from './ArenaRoomSystem';
 import type { StairwellSystem } from './StairwellSystem';
 import type { BuildingSystem } from './BuildingSystem';
 import type { BarrierSystem } from './BarrierSystem';
@@ -59,7 +58,7 @@ import type { PlayerManager } from '../core/party/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { isStandingInWater } from './GameLoopPhases';
 import {
   DEFAULT_DUNGEON_FLOOR_THEME,
@@ -73,6 +72,7 @@ import {
   type WallFixture,
 } from '../map/dungeon/wallFixtures';
 import { drawWallFixture } from '../sprites/art/wallFixtureArt';
+import type { ScriptedDeathSystem } from './scriptedDeath/ScriptedDeathSystem';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -216,7 +216,6 @@ export interface RenderContext {
   bossRoom: BossRoomSystem;
   /** Every boss room's props, slow ground and room hazards on the floor. */
   bossRoomDressings: BossRoomDressings;
-  arenaRoom: ArenaRoomSystem;
   stairwell: StairwellSystem;
   building: BuildingSystem | null;
   barriers: BarrierSystem;
@@ -291,6 +290,8 @@ export interface RenderContext {
   isCrawlerHidden?: (crawler: HumanPlayer | CatPlayer) => boolean;
   /** Fixtures a floor system owns that sort with the bodies, such as the bathroom sinks' running water. */
   sortedFixtures?: Iterable<TownPropRenderable>;
+  /** Absent in scenes no script kills a crawler in. */
+  scriptedDeaths?: Pick<ScriptedDeathSystem, 'renderGround' | 'renderAbove'>;
 }
 
 export class RenderPipeline {
@@ -367,8 +368,8 @@ export class RenderPipeline {
       prop.cullMarginTiles === undefined ? PROP_CULL_MARGIN : TILE_SIZE * prop.cullMarginTiles;
     const minX = camX - margin;
     const minY = camY - margin;
-    const maxX = camX + viewportWidth() + margin;
-    const maxY = camY + viewportHeight() + margin;
+    const maxX = camX + worldViewWidth() + margin;
+    const maxY = camY + worldViewHeight() + margin;
     if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) return;
     const e = this._getEntry();
     e.sortY = prop.sortY ?? prop.y + ENTITY_SORT_Y_OFFSET;
@@ -390,15 +391,14 @@ export class RenderPipeline {
       safeRoom,
       bossRoom,
       bossRoomDressings,
-      arenaRoom,
       stairwell,
       building,
     } = rc;
 
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
+    ctx.fillRect(0, 0, worldViewWidth(), worldViewHeight());
 
-    gameMap.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
+    gameMap.renderCanvas(ctx, camX, camY, worldViewWidth(), worldViewHeight());
     // The Starlight Tent's door light is additive, so it goes straight onto the lot:
     // drawn any later it would also brighten the gore and wash out every
     // telegraph on the forecourt.
@@ -411,6 +411,10 @@ export class RenderPipeline {
     // belong over the chunk-baked ground and under the Y-sorted pass, so the
     // player wades in front of the highlights rather than beneath them.
     rc.water?.renderGround(ctx, camX, camY);
+    // A boss room's ground props (rafts, a beached carcass, drains) are floor the
+    // party stands on, so every danger painted on the floor after this line
+    // shows on top of them.
+    bossRoomDressings.renderGround(ctx, camX, camY, rc.gymPromptTargets.bossRoom);
     // Under the Y-sorted pass with the trees and the river: a fire patch is
     // burning floor, and drawn above the entities it would cover the very
     // player it is burning.
@@ -430,8 +434,11 @@ export class RenderPipeline {
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
-    bossRoomDressings.renderGround(ctx, camX, camY, rc.gymPromptTargets.bossRoom);
-    arenaRoom.render(ctx, camX, camY, rc.interactionPromptsAllowed ? active : undefined);
+    // After the room's own ground, which may be the water a death's decal floats on.
+    rc.scriptedDeaths?.renderGround(ctx, camX, camY);
+    // Last of the floor: a boss room's warnings stay readable over every pool,
+    // scorch, slam shadow and decal painted above.
+    bossRoomDressings.renderGroundWarnings(ctx, camX, camY);
     stairwell.renderStairwells(ctx, camX, camY);
     building?.renderDoorHints(ctx, camX, camY);
   }
@@ -444,8 +451,8 @@ export class RenderPipeline {
       rc.fairies?.hasGroundArtIn(
         rc.camX,
         rc.camY,
-        rc.camX + viewportWidth(),
-        rc.camY + viewportHeight(),
+        rc.camX + worldViewWidth(),
+        rc.camY + worldViewHeight(),
       ) === true ||
       rc.fairyFireballs?.hasGroundArt === true ||
       rc.goblinBombs?.hasGroundWarnings === true ||
@@ -509,8 +516,8 @@ export class RenderPipeline {
     const visibleMobs = mobGrid.queryRect(
       camX - MOB_QUERY_MARGIN,
       camY - MOB_QUERY_MARGIN,
-      viewportWidth() + MOB_QUERY_MARGIN * 2,
-      viewportHeight() + MOB_QUERY_MARGIN * 2,
+      worldViewWidth() + MOB_QUERY_MARGIN * 2,
+      worldViewHeight() + MOB_QUERY_MARGIN * 2,
     );
 
     // Reset pool cursor (reuses existing objects)
@@ -523,8 +530,8 @@ export class RenderPipeline {
       gameMap.wallFixtures,
       camX,
       camY,
-      viewportWidth(),
-      viewportHeight(),
+      worldViewWidth(),
+      worldViewHeight(),
       this._visibleFixtures,
     )) {
       const e = this._getEntry();
@@ -538,8 +545,8 @@ export class RenderPipeline {
     for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
       camX,
       camY,
-      viewportWidth(),
-      viewportHeight(),
+      worldViewWidth(),
+      worldViewHeight(),
     )) {
       const e = this._getEntry();
       // Sort by the sprite's visual foot position, derived from manifest
@@ -557,8 +564,8 @@ export class RenderPipeline {
     // (added later) sorts in front of the chest — stable sort preserves insertion order.
     const viewMinX = camX - TILE_SIZE;
     const viewMinY = camY - TILE_SIZE;
-    const viewMaxX = camX + viewportWidth() + TILE_SIZE;
-    const viewMaxY = camY + viewportHeight() + TILE_SIZE;
+    const viewMaxX = camX + worldViewWidth() + TILE_SIZE;
+    const viewMaxY = camY + worldViewHeight() + TILE_SIZE;
 
     for (const chest of treasureChests.allChests) {
       const chestX = chest.tileX * TILE_SIZE;
@@ -576,9 +583,9 @@ export class RenderPipeline {
       const margin = TILE_SIZE * mob.cullMarginTiles;
       if (
         mob.x < camX - margin ||
-        mob.x > camX + viewportWidth() + margin ||
+        mob.x > camX + worldViewWidth() + margin ||
         mob.y < camY - margin ||
-        mob.y > camY + viewportHeight() + margin
+        mob.y > camY + worldViewHeight() + margin
       ) {
         continue;
       }
@@ -683,13 +690,13 @@ export class RenderPipeline {
       ctx.save();
       try {
         ctx.beginPath();
-        ctx.rect(0, 0, viewportWidth(), waterlineScreenY);
+        ctx.rect(0, 0, worldViewWidth(), waterlineScreenY);
         ctx.clip();
         item.entity?.render(ctx, camX, camY, TILE_SIZE);
       } finally {
         ctx.restore();
       }
-      rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY);
+      rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY, camX, camY);
     } else {
       item.entity?.render(ctx, camX, camY, TILE_SIZE);
     }
@@ -757,6 +764,7 @@ export class RenderPipeline {
     // Falling junk, sparks and spray belong to the room, and cross in front of
     // whoever they are landing on.
     rc.bossRoomDressings.renderAbove(ctx, camX, camY);
+    rc.scriptedDeaths?.renderAbove(ctx, camX, camY);
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.
     rc.seismicStompFx.render(ctx, camX, camY);
@@ -782,7 +790,7 @@ export class RenderPipeline {
     const outerR = VISIBILITY_RADIUS_PX;
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
-    const halfDiag = Math.hypot(viewportWidth() / 2, viewportHeight() / 2);
+    const halfDiag = Math.hypot(worldViewWidth() / 2, worldViewHeight() / 2);
     if (halfDiag <= innerR) return;
 
     const cx = active.x + TILE_SIZE / 2 - camX;
@@ -798,12 +806,12 @@ export class RenderPipeline {
     ctx.fillStyle = FOG_SOLID_COLOR;
     const discRight = discLeft + disc.width;
     const discBottom = discTop + disc.height;
-    ctx.fillRect(0, 0, viewportWidth(), Math.max(0, discTop));
-    ctx.fillRect(0, discBottom, viewportWidth(), Math.max(0, viewportHeight() - discBottom));
+    ctx.fillRect(0, 0, worldViewWidth(), Math.max(0, discTop));
+    ctx.fillRect(0, discBottom, worldViewWidth(), Math.max(0, worldViewHeight() - discBottom));
     const bandTop = Math.max(0, discTop);
-    const bandHeight = Math.max(0, Math.min(viewportHeight(), discBottom) - bandTop);
+    const bandHeight = Math.max(0, Math.min(worldViewHeight(), discBottom) - bandTop);
     ctx.fillRect(0, bandTop, Math.max(0, discLeft), bandHeight);
-    ctx.fillRect(discRight, bandTop, Math.max(0, viewportWidth() - discRight), bandHeight);
+    ctx.fillRect(discRight, bandTop, Math.max(0, worldViewWidth() - discRight), bandHeight);
   }
 
   /** Lazily bakes (and caches) the fog's radial falloff disc. */

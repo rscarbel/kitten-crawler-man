@@ -169,5 +169,52 @@
         "frameCount": 1
       }
     }
+  },
+  "gym_kettlebell_rack": {
+    "frameWidth": 64,
+    "frameHeight": 80,
+    "tileX": 0,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "stocked": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "heaved": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "gym_kettlebell": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "fall": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "gym_exercise_ball": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "red": {
+        "row": 0,
+        "frameCount": 6
+      },
+      "blue": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
   }
 }

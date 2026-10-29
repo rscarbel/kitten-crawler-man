@@ -65,11 +65,12 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 const LIGHT = '#fff4dc';
-const SHADOW = '#140c06';
+/** The room's brown dark: what every shadow in the lair is cast in. */
+export const LAIR_SHADOW = '#140c06';
 
 /** A colour lit toward warm lamplight, or dropped toward the room's brown dark. */
 export function lit(hex: string, amount: number): string {
-  return amount >= 0 ? mix(hex, LIGHT, amount) : mix(hex, SHADOW, -amount);
+  return amount >= 0 ? mix(hex, LIGHT, amount) : mix(hex, LAIR_SHADOW, -amount);
 }
 
 // ── Items ────────────────────────────────────────────────────────────────────
@@ -155,9 +156,9 @@ export function contactShadow(
   ctx.translate(cx, cy);
   ctx.scale(rx, ry);
   const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-  shade.addColorStop(0, withAlpha(SHADOW, alpha));
-  shade.addColorStop(CONTACT_SHADOW_CORE, withAlpha(SHADOW, alpha * CONTACT_SHADOW_CORE));
-  shade.addColorStop(1, withAlpha(SHADOW, 0));
+  shade.addColorStop(0, withAlpha(LAIR_SHADOW, alpha));
+  shade.addColorStop(CONTACT_SHADOW_CORE, withAlpha(LAIR_SHADOW, alpha * CONTACT_SHADOW_CORE));
+  shade.addColorStop(1, withAlpha(LAIR_SHADOW, 0));
   ctx.fillStyle = shade;
   ctx.beginPath();
   ctx.arc(0, 0, 1, 0, TWO_PI);
@@ -244,7 +245,7 @@ export function box(spec: BoxSpec): JunkItem {
         );
       }
       // A crush in the front face, lit on its lower lip.
-      ctx.strokeStyle = withAlpha(SHADOW, DENT_ALPHA);
+      ctx.strokeStyle = withAlpha(LAIR_SHADOW, DENT_ALPHA);
       ctx.beginPath();
       ctx.moveTo(dentX, frontTop + 1);
       ctx.lineTo(dentX + DENT_RUN_PX, frontTop + h * HALF);
@@ -445,7 +446,7 @@ export function bundle(spec: BundleSpec): JunkItem {
     paint: (ctx) => {
       ctx.fillStyle = lit(paper, FRONT_SHADE * 2);
       ctx.fillRect(x, frontTop, w, h);
-      ctx.fillStyle = withAlpha(SHADOW, PAGE_EDGE_ALPHA);
+      ctx.fillStyle = withAlpha(LAIR_SHADOW, PAGE_EDGE_ALPHA);
       for (let y = frontTop + 1; y < baseY; y += PAGE_EDGE_SPACING_PX) {
         ctx.fillRect(x, y, w, 1);
       }
@@ -591,7 +592,7 @@ export function bag(spec: BagSpec): JunkItem {
       );
       ctx.stroke();
       // Creases where the plastic folds as it sags.
-      ctx.strokeStyle = withAlpha(SHADOW, BAG_CREASE_ALPHA);
+      ctx.strokeStyle = withAlpha(LAIR_SHADOW, BAG_CREASE_ALPHA);
       for (let i = 0; i < BAG_CREASES; i++) {
         const startX = cx + (rng() - HALF) * rx * BAG_CREASE_SPREAD;
         const startY = cy + (rng() - HALF) * ry;
@@ -817,7 +818,7 @@ export function lampshade(
       ctx.fill();
       ctx.save();
       ctx.clip();
-      ctx.strokeStyle = withAlpha(SHADOW, LAMPSHADE_PLEAT_ALPHA);
+      ctx.strokeStyle = withAlpha(LAIR_SHADOW, LAMPSHADE_PLEAT_ALPHA);
       ctx.lineWidth = 1;
       for (let dx = -bottomW * HALF; dx < bottomW * HALF; dx += LAMPSHADE_PLEAT_SPACING_PX) {
         ctx.beginPath();
@@ -934,7 +935,7 @@ export function tyre(cx: number, cy: number, rx: number, ry: number): JunkItem {
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx * TYRE_TREAD_SHARE, ry * TYRE_TREAD_SHARE, 0, Math.PI, TWO_PI);
       ctx.stroke();
-      ctx.fillStyle = SHADOW;
+      ctx.fillStyle = LAIR_SHADOW;
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx * TYRE_HOLE_SHARE, ry * TYRE_HOLE_SHARE, 0, 0, TWO_PI);
       ctx.fill();
@@ -1206,7 +1207,7 @@ export function mound(spec: MoundSpec): JunkItem {
       for (const scrap of scraps) {
         ctx.fillStyle = scrap.colour;
         ctx.fillRect(scrap.x, scrap.y, scrap.w, scrap.h);
-        ctx.fillStyle = withAlpha(SHADOW, MOUND_SCRAP_SHADOW_ALPHA);
+        ctx.fillStyle = withAlpha(LAIR_SHADOW, MOUND_SCRAP_SHADOW_ALPHA);
         ctx.fillRect(scrap.x, scrap.y + scrap.h, scrap.w, 1);
       }
       ctx.restore();

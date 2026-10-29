@@ -97,7 +97,7 @@ export const GEAR_SOURCES: Readonly<Record<GearId, ReadonlyArray<GearSource>>> =
     { kind: 'boss', boss: 'grotesque_spider', first: true },
     { kind: 'pool', floors: FLOOR_THREE },
   ],
-  hamhock_boots: [{ kind: 'boss', boss: 'ball_of_swine', first: true }],
+  lineman_boots: [{ kind: 'boss', boss: 'electric_goblin', first: true }],
 
   // Human weapons.
   rebar_shiv: [{ kind: 'pool', floors: FLOOR_ONE }],
@@ -136,7 +136,7 @@ export const GEAR_SOURCES: Readonly<Record<GearId, ReadonlyArray<GearSource>>> =
   venom_claws: [{ kind: 'pool', floors: FLOOR_TWO }],
   frostbite_claws: [{ kind: 'quest', quest: 'grotesque_spider' }],
   prowler_claws: [{ kind: 'pool', floors: FLOOR_THREE }],
-  ink_dipped_claws: [{ kind: 'boss', boss: 'krakaren_clone', first: true }],
+  ink_dipped_claws: [{ kind: 'boss', boss: 'kraken', first: true }],
   sunsteel_talons: [
     { kind: 'achievement', id: 'dungeon_kills_500' },
     { kind: 'pool', floors: FLOOR_THREE },
