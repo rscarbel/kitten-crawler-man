@@ -44,6 +44,12 @@ export const MUSIC_TRACK_IDS = [
   'the_kraken_flooded',
   'the_kraken_battle',
   'king_of_the_heap',
+  'tower_split_full',
+  'warden_ritual_battle',
+  'rooftop_chase',
+  'storm_drain',
+  'old_friends',
+  'taloncrest_cats_home',
 ] as const;
 
 export type MusicTrackId = (typeof MUSIC_TRACK_IDS)[number];
@@ -59,6 +65,12 @@ export const JINGLE_IDS = [
   'slots_free_spins_loop_3',
   'the_kraken_flooded_2pumps',
   'the_kraken_flooded_1pump',
+  'tower_split_descent',
+  'tower_split_ascent',
+  'warden_ritual_battle_bound',
+  'rooftop_chase_stakeout',
+  'capture_at_dusk',
+  'reunion_jingle',
 ] as const;
 
 export type JingleId = (typeof JINGLE_IDS)[number];
@@ -1093,9 +1105,21 @@ export const ALL_SOUND_IDS: ReadonlyArray<SoundId> = SOUND_IDS_TUPLE;
 
 /** Maps every SoundId to its asset path relative to the document root. */
 export const SOUND_MANIFEST: Record<SoundId, string> = {
+  taloncrest_cats_home: './src/audio/music/taloncrest_cats_home.mp3',
+  old_friends: './src/audio/music/old_friends.mp3',
+  storm_drain: './src/audio/music/storm_drain.mp3',
+  rooftop_chase: './src/audio/music/rooftop_chase.ogg',
+  warden_ritual_battle: './src/audio/music/warden_ritual_battle.ogg',
+  tower_split_full: './src/audio/music/tower_split_full.ogg',
   king_of_the_heap: './src/audio/music/king_of_the_heap.ogg',
   the_kraken_flooded_2pumps: './src/audio/jingles/the_kraken_flooded_2pumps.ogg',
   the_kraken_flooded_1pump: './src/audio/jingles/the_kraken_flooded_1pump.ogg',
+  tower_split_descent: './src/audio/jingles/tower_split_descent.ogg',
+  tower_split_ascent: './src/audio/jingles/tower_split_ascent.ogg',
+  warden_ritual_battle_bound: './src/audio/jingles/warden_ritual_battle_bound.ogg',
+  rooftop_chase_stakeout: './src/audio/jingles/rooftop_chase_stakeout.ogg',
+  capture_at_dusk: './src/audio/jingles/capture_at_dusk.mp3',
+  reunion_jingle: './src/audio/jingles/reunion_jingle.mp3',
   the_kraken_battle: './src/audio/music/the_kraken_battle.ogg',
   the_kraken_flooded: './src/audio/music/the_kraken_flooded.ogg',
   ability_level_up: './src/audio/characters/ability_level_up.mp3',
@@ -2278,6 +2302,9 @@ export const TEMPLE_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['temple_music']
  */
 export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   // music/ and jingles/
+  'taloncrest_cats_home',
+  'old_friends',
+  'storm_drain',
   'bg_level_1',
   'bg_level_2',
   'big_tower_1',
@@ -2387,6 +2414,15 @@ export const UNWIRED_SOUND_IDS = [
   'door_creak_3',
   'door_creak_4',
   'trapdoor_creak_open',
+  'tower_split_full',
+  'tower_split_descent',
+  'tower_split_ascent',
+  'warden_ritual_battle',
+  'warden_ritual_battle_bound',
+  'rooftop_chase',
+  'rooftop_chase_stakeout',
+  'capture_at_dusk',
+  'reunion_jingle',
 ] as const satisfies ReadonlyArray<SoundId>;
 
 /**

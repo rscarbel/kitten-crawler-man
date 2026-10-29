@@ -13,6 +13,12 @@ import type { MusicBusId } from '../sounds';
 export const MUSIC_STEM_SETS = {
   /** The Kraken's flooded pump room, losing a layer for each pump shut off. */
   kraken_flooded: ['the_kraken_flooded', 'the_kraken_flooded_2pumps', 'the_kraken_flooded_1pump'],
+  /** The tower split in two: the descent's light half, the ascent's low half, and both together. */
+  tower_split: ['tower_split_full', 'tower_split_descent', 'tower_split_ascent'],
+  /** The Warden's ritual, without the cat theme while the cats are still bound. */
+  warden_ritual: ['warden_ritual_battle', 'warden_ritual_battle_bound'],
+  /** The dusk stakeout, which becomes the rooftop chase when the thief swoops. */
+  rooftop_chase: ['rooftop_chase', 'rooftop_chase_stakeout'],
 } as const satisfies Record<string, readonly [MusicBusId, ...MusicBusId[]]>;
 
 export type MusicStemSetId = keyof typeof MUSIC_STEM_SETS;

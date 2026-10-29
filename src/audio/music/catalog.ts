@@ -12,6 +12,7 @@ export const MUSIC_AREA_IDS = [
   'interiors',
   'battles',
   'activities',
+  'under_taloncrest',
 ] as const;
 
 export type MusicAreaId = (typeof MUSIC_AREA_IDS)[number];
@@ -27,6 +28,7 @@ export const MUSIC_AREA_LABELS = {
   interiors: 'Interiors',
   battles: 'Battles',
   activities: 'Activities',
+  under_taloncrest: 'Under Taloncrest',
 } as const satisfies Record<MusicAreaId, string>;
 
 /** Who made a recording: a real name, an uploader's username, or both. */
@@ -403,6 +405,36 @@ export const MUSIC_CATALOG = {
     title: 'King of the Heap',
     area: 'battles',
     attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'King of the Heap' },
+  },
+  tower_split_full: {
+    title: 'The Tower',
+    area: 'interiors',
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'The Tower' },
+  },
+  warden_ritual_battle: {
+    title: "The Warden's Ritual",
+    area: 'battles',
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: "The Warden's Ritual" },
+  },
+  rooftop_chase: {
+    title: 'Rooftops',
+    area: 'taloncrest',
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Rooftops' },
+  },
+  storm_drain: {
+    title: 'Storm Drain',
+    area: 'under_taloncrest',
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Storm Drain' },
+  },
+  old_friends: {
+    title: 'Old Friends',
+    area: 'taloncrest',
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Old Friends' },
+  },
+  taloncrest_cats_home: {
+    title: 'Taloncrest, Cats Home',
+    area: 'taloncrest',
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Taloncrest, Cats Home' },
   },
 } as const satisfies Record<MusicTrackId, MusicTrackDef>;
 
