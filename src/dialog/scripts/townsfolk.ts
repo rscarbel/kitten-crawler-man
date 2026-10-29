@@ -149,9 +149,9 @@ const AMBIENT_LINES_HAWKFOLK = {
     'Brend’s guild corner’s sat empty three nights running. Bad sign or a slow season — hard to say.',
   ],
   priest: [
-    'The high watch sees more than it says. Aviel’s own words, not mine.',
+    'The High Roost sits on our dome every seventh night. Aviel sweeps up the feathers after.',
     'Donations are down since the magistrate stopped coming. Draw your own conclusions.',
-    'A watcher observes and doesn’t intervene. Comforting some weeks, less so others.',
+    'First carry’s free, the book says. It’s the second one that keeps the poor box full.',
     'Sit on the temple steps a while. Nobody up there minds the company.',
   ],
   child: [
@@ -164,13 +164,13 @@ const AMBIENT_LINES_HAWKFOLK = {
     'Grounded tonight, in every sense of the word.',
     'Ossie waters mine down. I know it and I still order another.',
     'Lost a molt-year’s wages at that table. I’d do it again.',
-    'The high watch doesn’t drink. Somebody ought to, on its behalf.',
+    'The High Roost won’t take a drink with the likes of me. So I take theirs for them.',
   ],
   noble: [
     'Golden barring isn’t bought, whatever the tailors downstairs will tell you.',
     'Featherfall used to receive callers. These days nobody receives anyone.',
     'I slum it at the Stump once a season. Keeps the perspective honest.',
-    'The high watch owes me a courtesy call it hasn’t paid.',
+    'I have a seat on the High Roost in everything but the invitation.',
   ],
   beggar: [
     'Clipped, if you’re wondering. Lost the roost before I lost the trade.',
@@ -188,7 +188,7 @@ const AMBIENT_LINES_HAWKFOLK = {
     'Groundfolk ask a lot of questions for people who can’t see the whole square at once.',
     'Market’s better stocked wing-side of the fountain. Everyone knows it, nobody says it out loud.',
     'Molt-year’s been kind to me so far. Ask again in a month.',
-    'The high watch hasn’t said a word in six weeks. That’s its own kind of news.',
+    'My gran flew three crossings over the fray in one night. She still won’t let a groundfolk carry her shopping.',
     'You walk like someone who’s never had to look up to cross a street.',
   ],
 } as const satisfies Record<TownRole, NonEmpty<string>>;
@@ -242,7 +242,7 @@ const DANGER_LINES_HAWKFOLK = {
   farmer: 'To the roofs, all of you, NOW!',
   smith: 'Off the ground, everyone who can manage it!',
   innkeeper: 'Upstairs and bar the shutters, MOVE!',
-  priest: 'The high watch sees this too. Get to shelter, NOW!',
+  priest: 'Carry who you can! Everyone else, into the temple, NOW!',
   child: 'I can’t fly fast enough, help!',
   drunk: 'Grounded and terrified. Wonderful combination!',
   noble: 'Someone fetch the watch. I did NOT pay taxes for this!',

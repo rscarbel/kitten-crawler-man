@@ -28,7 +28,7 @@ export const SKILL_MAX_LEVEL = 5;
 
 /** The skills that train on a short geometric curve to {@link SKILL_MAX_LEVEL}. */
 export type StandardSkillId =
-  'nine_lives' | 'cat_reflexes' | 'pugilism' | 'iron_stomach' | 'powerful_strike';
+  'nine_lives' | 'warp_speed' | 'pugilism' | 'iron_stomach' | 'powerful_strike';
 
 export type SkillId = StandardSkillId | ProficiencySkillId;
 
@@ -104,8 +104,8 @@ export const NINE_LIVES_MIN_RECHARGE_MS = 120_000;
 /** Invulnerability after a 9 Lives save, so the next frame's hit can't finish the job. */
 export const NINE_LIVES_IFRAME_FRAMES = 90;
 
-/** Flat dodge chance Cat-like Reflexes adds per level, on top of the evasiveness curve. */
-export const CAT_REFLEXES_DODGE_BONUS_PER_LEVEL = 0.02;
+/** Flat dodge chance Warp Speed adds per level, on top of the evasiveness curve. */
+export const WARP_SPEED_DODGE_BONUS_PER_LEVEL = 0.02;
 
 /** Melee damage Pugilism adds per level. */
 export const PUGILISM_DAMAGE_PER_LEVEL = 1;
@@ -142,12 +142,12 @@ const SKILL_DEFS: SkillDefTable = {
     ...STANDARD,
     eligibleFor: 'cat',
   },
-  cat_reflexes: {
-    id: 'cat_reflexes',
-    name: 'Cat-like Reflexes',
-    flavor: 'Caroline filed this under "redundant" and approved it anyway.',
+  warp_speed: {
+    id: 'warp_speed',
+    name: 'Warp Speed',
+    flavor: 'Caroline logged the movement as a rendering error and let it stand.',
     describeEffect: (level) =>
-      `+${Math.round(CAT_REFLEXES_DODGE_BONUS_PER_LEVEL * level * PERCENT)}% dodge chance.`,
+      `+${Math.round(WARP_SPEED_DODGE_BONUS_PER_LEVEL * level * PERCENT)}% dodge chance.`,
     ...STANDARD,
     eligibleFor: 'cat',
   },

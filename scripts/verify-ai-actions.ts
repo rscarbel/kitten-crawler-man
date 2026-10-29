@@ -168,8 +168,8 @@ const DAVE_CALL_CHANCE = 0.2;
 const RANDOM_TEXT_MAX_EXTRA = 3;
 /** Frames ticked after each call, so timed effects get to expire mid-run. */
 const FRAMES_PER_STEP = 120;
-const COLLAPSE_LIMIT_FRAMES = 36_000;
-/** A collapse clock already under the cut floor, and how far a top-up moves it. */
+const TIME_LIMIT_FRAMES = 36_000;
+/** A time limit already under the cut floor, and how far a top-up moves it. */
 const TIMER_LOW_START_SECONDS = 30;
 const TIMER_TOP_UP_SECONDS = 10;
 /** Longer than adjust_level_timer's cooldown, so each call is judged on the clock alone. */
@@ -486,7 +486,7 @@ function buildWorld(): FakeWorld {
     stage,
     achievements: { human: humanAchievements, cat: catAchievements },
     flags: { paused: false, boss: false, safeRoom: false, combat: false },
-    timerFrames: COLLAPSE_LIMIT_FRAMES,
+    timerFrames: TIME_LIMIT_FRAMES,
     scene: {
       getHuman: () => human,
       getCat: () => cat,
@@ -508,7 +508,7 @@ function buildWorld(): FakeWorld {
       }),
       getLevelTimer: (): AILevelTimer => ({
         remainingFrames: world.timerFrames,
-        limitFrames: COLLAPSE_LIMIT_FRAMES,
+        limitFrames: TIME_LIMIT_FRAMES,
         setRemainingFrames: (frames) => {
           world.timerFrames = frames;
         },
@@ -1712,7 +1712,7 @@ section('a sale never pays: not at the same counter, not at another shop, not af
 }
 endSection();
 
-section('the collapse timer: cuts stop at the floor, top-ups move by their delta');
+section('the time limit: cuts stop at the floor, top-ups move by their delta');
 {
   let clockMs = 0;
   const governor = new ActionGovernor(() => clockMs);
@@ -1749,11 +1749,11 @@ section('the collapse timer: cuts stop at the floor, top-ups move by their delta
     `a cut that would cross ${TIMER_FLOOR_SECONDS}s is refused and leaves the clock alone`,
   );
 
-  const nearFull = COLLAPSE_LIMIT_FRAMES - secondsToFrames(TIMER_NEAR_FULL_GAP_SECONDS);
+  const nearFull = TIME_LIMIT_FRAMES - secondsToFrames(TIMER_NEAR_FULL_GAP_SECONDS);
   world.timerFrames = nearFull;
   const capped = adjust(TIMER_TOP_UP_SECONDS);
   check(
-    capped.ok && world.timerFrames === COLLAPSE_LIMIT_FRAMES,
+    capped.ok && world.timerFrames === TIME_LIMIT_FRAMES,
     'a top-up never carries the clock past its limit',
   );
 }

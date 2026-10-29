@@ -52,7 +52,7 @@ npm run add:music -- <file.mp3|file.ogg> --title "Shown Title" --area <area> \
   [--decoded]                                  # decoded, not streamed: a gapless loop or a stem
 ```
 
-The file may already sit in `src/audio/music/` (an uncommitted drop) or anywhere else (it is copied in). The script adds the id to `MUSIC_TRACK_IDS`, `SOUND_MANIFEST` and `STREAMING_SOUND_IDS`, writes the `MUSIC_CATALOG` entry (plus `MUSIC_AREA_IDS` / `MUSIC_AREA_LABELS` with `--area-label`) and `MUSIC_LOOP_START_S`, warns if the export is not 44.1 kHz stereo, then runs `measure:audio`, prettier on the two files and `check:audio`. An unknown `--area` without `--area-label` fails and prints the known areas. When the user wrote the song, attribution is `--author-name "Ryan Scarbel"` with no `--pixabay`; ask only for what the request leaves out (title, area). Afterwards run `npm run typecheck` — no other gate is needed for registration alone.
+The file may already sit in `src/audio/music/` (an uncommitted drop) or anywhere else (it is copied in). The script adds the id to `MUSIC_TRACK_IDS`, `SOUND_MANIFEST` and `STREAMING_SOUND_IDS`, writes the `MUSIC_CATALOG` entry (plus `MUSIC_AREA_IDS` / `MUSIC_AREA_LABELS` with `--area-label`) and `MUSIC_LOOP_START_S`, warns if the export is not 44.1 kHz stereo, then runs `measure:audio`, prettier on the two files and `check:audio`. An unknown `--area` without `--area-label` fails and prints the known areas. When the user wrote the song, attribution is `--author-name "Nine Lives Orchestra"` with no `--pixabay`; ask only for what the request leaves out (title, area). Afterwards run `npm run typecheck` — no other gate is needed for registration alone.
 
 What remains by hand is step 5. Background for reading the script's output:
 

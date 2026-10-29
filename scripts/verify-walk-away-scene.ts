@@ -11,9 +11,9 @@
  *     there, so the check cannot pass on a hireling that was out of reach.
  *   - Taps on the citizen's box page through it and close it, without the
  *     same tap reopening it.
- *   - With the Bopca's box open, a finger on the floor becomes a move touch —
+ *   - With the doctor's box open, a finger on the floor becomes a move touch —
  *     tap-to-move is the only way a phone player can walk away — and a tap on
- *     Dave, from beside him and still inside the Bopca's walk-away range,
+ *     Dave, from beside him and still inside the doctor's walk-away range,
  *     hands the press on and opens him.
  *   - While a cutscene owns the party, a held direction key and the interact
  *     press do nothing: the walk-up ends on its own tile, facing its way, and
@@ -50,13 +50,13 @@ const { EventBus } = await import('../src/core/EventBus.js');
 const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
 const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
-const { BopcaSystem, BOPCA_TALK_DISTANCE_TILES } = await import('../src/systems/BopcaSystem.js');
+const { DoctorSystem, DOCTOR_TALK_DISTANCE_TILES } = await import('../src/systems/DoctorSystem.js');
 const { SafeRoomSystem } = await import('../src/systems/SafeRoomSystem.js');
 const { DaveGuideSystem, DaveWhereabouts } = await import('../src/systems/DaveGuideSystem.js');
 const { safeRoomIdIn } = await import('../src/map/safeRoomId.js');
 const { TouchMoveState } = await import('../src/core/input/TouchMoveState.js');
 const { safeRoomSpeakerFor } = await import('../src/systems/safeRoomSpeaker.js');
-const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');
+const { stampSafeRoomClinics } = await import('../src/map/safeRoomClinicLayout.js');
 const { CITIZEN_TALK_RADIUS_TILES } = await import('../src/creatures/townInteraction.js');
 const { CutsceneKit } = await import('../src/systems/kits/CutsceneKit.js');
 const { MenusKit } = await import('../src/systems/kits/MenusKit.js');
@@ -361,17 +361,17 @@ async function verifyCitizenWithHireling(): Promise<void> {
   check(hirelingTalks > talksBefore, 'with no box up, the same press talks to the hireling');
 }
 
-// ── The Bopca's box on a phone ───────────────────────────────────────────
+// ── The doctor's box on a phone ───────────────────────────────────────────
 
 interface SafeRoomSetup {
   readonly seed: number;
   readonly map: InstanceType<typeof GameMap>;
   /**
-   * Where the player orders from: in reach of the Bopca, on the customer's
-   * side of her counter, so a walk-up to Dave can start from there.
+   * Where the player talks to the doctor from: in reach of them, so a walk-up
+   * to Dave can start from there.
    */
-  readonly orderFrom: Point;
-  /** Beside Dave, where a press is his, still inside the Bopca's walk-away range. */
+  readonly talkFrom: Point;
+  /** Beside Dave, where a press is his, still inside the doctor's walk-away range. */
   readonly besideDave: Point;
   readonly daveHome: Point;
 }
@@ -391,23 +391,16 @@ function floorOneMap(seed: number): InstanceType<typeof GameMap> {
 }
 
 /**
- * A safe room where the tile beside Dave is still inside the Bopca's
- * walk-away range, so her box is legitimately up when the player gets there
+ * A safe room where the tile beside Dave is still inside the doctor's
+ * walk-away range, so their box is legitimately up when the player gets there
  * and the tap has to hand the press on to reach him.
  */
 function findSafeRoomSetup(): SafeRoomSetup | null {
   for (const seed of SAFE_ROOM_SEEDS) {
     const probe = floorOneMap(seed);
-    const layouts = stampSafeRoomCounters(probe);
-    const bopca = new BopcaSystem(
-      probe,
-      layouts,
-      new EventBus(),
-      new Conversation(null),
-      null,
-      false,
-    );
+    const layouts = stampSafeRoomClinics(probe);
     const scope = { kind: 'floor', level: level1.id } as const;
+    const doctor = new DoctorSystem(layouts, scope, new EventBus(), new Conversation(null), false);
     const safeRooms = new SafeRoomSystem(probe, scope);
     for (const layout of layouts) {
       const bounds = layout.roomBounds;
@@ -430,33 +423,33 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
           if (probe.isWalkable(x, y)) tiles.push({ x, y });
         }
       }
-      const bopcaHome = pixels(layout.bopcaHomeTile);
+      const doctorHome = pixels(layout.doctorTile);
       const daveTalkSpot = walkUpTo(probe, daveHome, daveHome).tile;
       const reachesDave = (tile: Point): boolean =>
         probe.findPath(tile.x, tile.y, daveTalkSpot.x, daveTalkSpot.y, WALK_UP_MAX_PATH_TILES)
           .length > 0;
-      const orderFrom = tiles
+      const talkFrom = tiles
         .filter(reachesDave)
         .map(pixels)
-        .filter((at) => safeRoomSpeakerFor(bopca, null, at) === 'bopca')
-        .sort((a, b) => tilesApart(a, bopcaHome) - tilesApart(b, bopcaHome))[0];
+        .filter((at) => safeRoomSpeakerFor(doctor, null, at) === 'doctor')
+        .sort((a, b) => tilesApart(a, doctorHome) - tilesApart(b, doctorHome))[0];
       const besideDave = tiles
         .filter((tile) => Math.hypot(tile.x - daveHome.x, tile.y - daveHome.y) === 1)
         .map(pixels)
-        .filter((at) => safeRoomSpeakerFor(bopca, dave, at) === 'dave')
-        .find((at) => tilesApart(at, bopcaHome) < walkAwayRangeTiles(BOPCA_TALK_DISTANCE_TILES));
-      if (orderFrom !== undefined && besideDave !== undefined) {
-        return { seed, map: floorOneMap(seed), orderFrom, besideDave, daveHome };
+        .filter((at) => safeRoomSpeakerFor(doctor, dave, at) === 'dave')
+        .find((at) => tilesApart(at, doctorHome) < walkAwayRangeTiles(DOCTOR_TALK_DISTANCE_TILES));
+      if (talkFrom !== undefined && besideDave !== undefined) {
+        return { seed, map: floorOneMap(seed), talkFrom, besideDave, daveHome };
       }
     }
   }
   return null;
 }
 
-async function verifyBopcaOnAPhone(): Promise<void> {
-  console.log("\nthe Bopca's box on a phone");
+async function verifyDoctorOnAPhone(): Promise<void> {
+  console.log("\nthe doctor's box on a phone");
   const setup = findSafeRoomSetup();
-  check(setup !== null, 'a safe room puts Dave inside the Bopca walk-away range');
+  check(setup !== null, 'a safe room puts Dave inside the doctor walk-away range');
   if (setup === null) return;
 
   const scene = new DungeonScene(level1, new InputManager(), sceneManager, {
@@ -464,14 +457,14 @@ async function verifyBopcaOnAPhone(): Promise<void> {
     worldSeed: setup.seed,
     // Inside the room, so Dave is standing in it from the first frame as on a
     // reload there, rather than teleporting in partway through the checks.
-    spawnAt: { x: pixelToTile(setup.orderFrom.x), y: pixelToTile(setup.orderFrom.y) },
+    spawnAt: { x: pixelToTile(setup.talkFrom.x), y: pixelToTile(setup.talkFrom.y) },
     skipIntro: true,
   });
   sceneManager.replace(scene);
   check(await settleArrival(sceneManager, scene), "floor 1's arrival screen finishes");
   scene.update();
 
-  const bopca = sceneField(scene, 'bopca', BopcaSystem);
+  const doctor = sceneField(scene, 'doctor', DoctorSystem);
   const dave = sceneField(scene, 'dave', DaveGuideSystem);
   const touch = sceneField(scene, 'touch', TouchMoveState);
   const events = canvasEvents(sceneManager);
@@ -484,20 +477,26 @@ async function verifyBopcaOnAPhone(): Promise<void> {
     inactive.y = at.y;
   };
 
-  standAt(setup.orderFrom);
-  check(bopca.tryInteract(active) && bopca.isDialogOpen, "the Bopca's box opens at the counter");
+  standAt(setup.talkFrom);
+  check(
+    doctor.tryInteract(active) && doctor.isDialogOpen,
+    "the doctor's box opens beside the doctor",
+  );
 
   const floorFinger = touchDown(events, FLOOR_TAP);
   check(
     touch.moveTouchId === floorFinger && touch.moveTarget !== null,
-    'with her box open, a finger on the floor becomes a move touch',
+    "with the doctor's box open, a finger on the floor becomes a move touch",
   );
   touchUp(events, floorFinger, FLOOR_TAP);
-  check(bopca.isDialogOpen, 'a tap on the floor at the counter leaves her box up');
+  check(doctor.isDialogOpen, "a tap on the floor beside the doctor leaves the doctor's box up");
 
   standAt(setup.besideDave);
   scene.update();
-  check(bopca.isDialogOpen, 'her box is still up beside Dave, inside her walk-away range');
+  check(
+    doctor.isDialogOpen,
+    "the doctor's box is still up beside Dave, inside the doctor's walk-away range",
+  );
   const camera = sceneCamera(scene);
   const onDave = {
     x: setup.daveHome.x * TILE_SIZE + TILE_SIZE / 2 - camera.x,
@@ -507,7 +506,7 @@ async function verifyBopcaOnAPhone(): Promise<void> {
   drawFrame(sceneManager, scene);
   check(!conversation.hitsSurface(onDave.x, onDave.y), 'Dave is not drawn under the box');
   tap(events, onDave);
-  check(dave.dialogOpen && !bopca.isDialogOpen, 'a tap on Dave hands the press on and opens him');
+  check(dave.dialogOpen && !doctor.isDialogOpen, 'a tap on Dave hands the press on and opens him');
 }
 
 // ── A cutscene owns the party ────────────────────────────────────────────
@@ -543,7 +542,7 @@ async function verifyCutsceneOwnsTheParty(): Promise<void> {
     worldSeed: setup.seed,
     // Inside the room, so Dave is standing in it from the first frame as on a
     // reload there, rather than teleporting in partway through the checks.
-    spawnAt: { x: pixelToTile(setup.orderFrom.x), y: pixelToTile(setup.orderFrom.y) },
+    spawnAt: { x: pixelToTile(setup.talkFrom.x), y: pixelToTile(setup.talkFrom.y) },
     skipIntro: true,
   });
   sceneManager.replace(scene);
@@ -553,13 +552,13 @@ async function verifyCutsceneOwnsTheParty(): Promise<void> {
   const cutscenes = sceneField(scene, 'cutscenes', CutsceneKit);
   const conversation = sceneField(scene, 'conversation', Conversation);
   const dave = sceneField(scene, 'dave', DaveGuideSystem);
-  const bopca = sceneField(scene, 'bopca', BopcaSystem);
+  const doctor = sceneField(scene, 'doctor', DoctorSystem);
   const pause = sceneField(scene, 'menus', MenusKit).pauseScreen;
   const active = scene.pm.active();
-  active.x = setup.orderFrom.x;
-  active.y = setup.orderFrom.y;
-  scene.pm.inactive().x = setup.orderFrom.x;
-  scene.pm.inactive().y = setup.orderFrom.y;
+  active.x = setup.talkFrom.x;
+  active.y = setup.talkFrom.y;
+  scene.pm.inactive().x = setup.talkFrom.x;
+  scene.pm.inactive().y = setup.talkFrom.y;
 
   const walk = walkUpTo(setup.map, setup.daveHome, {
     x: pixelToTile(active.x),
@@ -579,7 +578,11 @@ async function verifyCutsceneOwnsTheParty(): Promise<void> {
           questRelated: false,
         },
       },
-      { kind: 'carolineMessage', message: carolineLines.message('That is all.') },
+      {
+        kind: 'carolineMessage',
+        message: carolineLines.message('That is all.'),
+        world: 'runs',
+      },
       { kind: 'daveTeleportOut' },
       { kind: 'wait', frames: CLOSING_WAIT_FRAMES },
     ],
@@ -594,7 +597,7 @@ async function verifyCutsceneOwnsTheParty(): Promise<void> {
   pressSpace();
   scene.update();
   check(
-    !conversation.isOpen && !bopca.isDialogOpen && !dave.dialogOpen,
+    !conversation.isOpen && !doctor.isDialogOpen && !dave.dialogOpen,
     'mid-walk, the interact press reaches no one',
   );
 
@@ -664,7 +667,7 @@ async function verifyCutsceneOwnsTheParty(): Promise<void> {
 }
 
 await verifyCitizenWithHireling();
-await verifyBopcaOnAPhone();
+await verifyDoctorOnAPhone();
 await verifyCutsceneOwnsTheParty();
 
 console.log(

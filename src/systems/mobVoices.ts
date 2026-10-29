@@ -2,6 +2,7 @@ import type { CueSlot } from '../audio/cueSlot';
 import type { CreatureAudioTag } from '../audio/creatureAudioTags';
 import type { Mob } from '../creatures/Mob';
 import { Deinonychus } from '../creatures/Deinonychus';
+import { GiantWasp } from '../creatures/GiantWasp';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
@@ -25,6 +26,9 @@ const SILENT_VOICE: MobVoice = { attack: NONE, projectile: NONE, damage: NONE, s
 
 const SLASH_STRIKES: MobCueSlot = { takes: ['slash_strike_1', 'slash_strike_2', 'slash_strike_3'] };
 const BITES: MobCueSlot = { takes: ['bite_1', 'bite_2', 'bite_3'] };
+const WASP_STINGS: MobCueSlot = {
+  takes: ['giant_wasp_sting_1', 'giant_wasp_sting_2', 'giant_wasp_sting_3', 'giant_wasp_sting_4'],
+};
 const ARROW_LOOSED: MobCueSlot = { takes: ['shooting_an_arrow'] };
 const SOUL_BOLT_LAUNCH: MobCueSlot = { takes: ['magic_ball_launch'] };
 
@@ -42,6 +46,11 @@ function undeadCasterSpecial(mob: Mob): MobCueSlot {
  */
 const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   silent: SILENT_VOICE,
+  // The splash where the glob lands is the glob's own, played by its landing.
+  acid_llama: {
+    ...SILENT_VOICE,
+    projectile: { takes: ['acid_glob_spit_1', 'acid_glob_spit_2', 'acid_glob_spit_3'] },
+  },
   bear: {
     attack: { takes: ['bear_big_attack'] },
     projectile: NONE,
@@ -73,6 +82,16 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
     special: { takes: ['clown_laughing_1', 'clown_laughing_2'] },
   },
   fairy: SILENT_VOICE,
+  // A spit reaching its target raises the same attack flag as the sting, and
+  // has no recording of its own; the spit is heard as it leaves.
+  giant_wasp: {
+    attack: (mob) => (mob instanceof GiantWasp && mob.lastBlow === 'spit' ? NONE : WASP_STINGS),
+    projectile: {
+      takes: ['giant_wasp_venom_spit_1', 'giant_wasp_venom_spit_2', 'giant_wasp_venom_spit_3'],
+    },
+    damage: NONE,
+    special: NONE,
+  },
   // Only the archer among the goblins ever raises the projectile flag; the
   // melee archetypes have nothing to throw.
   goblin: {
@@ -84,6 +103,27 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   goblin_bombardier: SILENT_VOICE,
   goblin_dynamiter: SILENT_VOICE,
   grave_bull: SILENT_VOICE,
+  // Its special flag is the pupa tearing open as the adult hatches.
+  gravedigger_beetle: {
+    attack: {
+      takes: [
+        'gravedigger_mandible_snap_1',
+        'gravedigger_mandible_snap_2',
+        'gravedigger_mandible_snap_3',
+        'gravedigger_mandible_snap_4',
+      ],
+    },
+    projectile: { takes: ['fireball_launch'] },
+    damage: NONE,
+    special: {
+      takes: [
+        'beetle_pupa_hatch_1',
+        'beetle_pupa_hatch_2',
+        'beetle_pupa_hatch_3',
+        'beetle_pupa_hatch_4',
+      ],
+    },
+  },
   grotesque_spider: SILENT_VOICE,
   hawkfolk: { ...SILENT_VOICE, attack: { takes: ['hawkfolk_1', 'hawkfolk_2'] } },
   kraken: {
@@ -119,7 +159,6 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
     damage: { takes: ['lion_hurt_1', 'lion_hurt_2', 'lion_hurt_3', 'lion_hurt_4'] },
     special: { takes: ['lion_aggro_roar'] },
   },
-  llama: { ...SILENT_VOICE, projectile: { takes: ['llama_fireball'] } },
   mantid: {
     attack: SLASH_STRIKES,
     projectile: NONE,
@@ -197,11 +236,16 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
     special: undeadCasterSpecial,
   },
   trash_gremlin: { ...SILENT_VOICE, special: { takes: ['trash_gremlin_vomit'] } },
-  troglodyte: { ...SILENT_VOICE, attack: { takes: ['troglodyte_tongue'] } },
-  tuskling: {
+  // Its special flag is the venom numbing a crawler, which only Nightmare's tongue does.
+  lizardman: {
+    ...SILENT_VOICE,
+    attack: { takes: ['lizardman_tongue_lash'] },
+    special: { takes: ['lizardman_venom_numb'] },
+  },
+  wereboar: {
     ...SILENT_VOICE,
     attack: {
-      takes: ['tuskling_grunt_1', 'tuskling_grunt_2', 'tuskling_grunt_3', 'tuskling_grunt_4'],
+      takes: ['wereboar_grunt_1', 'wereboar_grunt_2', 'wereboar_grunt_3', 'wereboar_grunt_4'],
     },
   },
 };

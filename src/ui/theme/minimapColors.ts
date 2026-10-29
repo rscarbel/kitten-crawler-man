@@ -51,6 +51,7 @@ import {
   SAFE_ROOM_HERB_RACK,
   SAFE_ROOM_LANTERN,
   SAFE_ROOM_LARDER,
+  SAFE_ROOM_MEDICINE_CABINET,
   SAFE_ROOM_MENU_BOARD,
   SAFE_ROOM_RUG,
   SAFE_ROOM_STOOL,
@@ -122,8 +123,9 @@ export function minimapTileColor(type: number): string {
       return '#8a7040';
     case SAFE_ROOM_THRESHOLD:
       return '#7a6a4c'; // the worn band inside a safe room's doorways
-    // The eight solid furnishings share one furniture tone rather than each
-    // becoming a stray grey pixel from the default case.
+    // The doctor's cabinet and the eight solid furnishings share one furniture
+    // tone rather than each becoming a stray grey pixel from the default case.
+    case SAFE_ROOM_MEDICINE_CABINET:
     case SAFE_ROOM_MENU_BOARD:
     case SAFE_ROOM_HERB_RACK:
     case SAFE_ROOM_BANNER:
@@ -133,7 +135,7 @@ export function minimapTileColor(type: number): string {
     case SAFE_ROOM_STOOL:
     case SAFE_ROOM_LARDER:
       return '#5c4a2c';
-    // The spider lab's field station: steel, cooler than a Bopca station's tile,
+    // The spider lab's field station: steel, cooler than a safe room's tile,
     // so the two kinds of safe room never read as the same place on the map.
     case LAB_STATION_FLOOR:
       return '#7a868c';

@@ -39,7 +39,7 @@ export const SURFACE_OWNERS = [
   'props',
   'starlightTentProps',
   'townInteriorProps',
-  'spellFog',
+  'smokeClouds',
   'circus',
   'casino',
   'construction',

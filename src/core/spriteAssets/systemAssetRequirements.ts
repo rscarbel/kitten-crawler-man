@@ -120,7 +120,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   {
     id: 'quest:quill',
     levelIds: LEVEL3,
-    mobTypes: ['miss_quill', 'remex', 'city_elf_cultist'],
+    mobTypes: ['miss_quill', 'remex', 'elf'],
     requiredGroups: [],
   },
 

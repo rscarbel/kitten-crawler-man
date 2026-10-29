@@ -54,6 +54,7 @@ import {
 import { NO_REGION } from '../map/regionMap';
 import { labHallwayDecayAt } from '../map/labApproach';
 import { isFieldStation } from '../map/safeRoomFixtures';
+import { planSafeRoomClinics } from '../map/safeRoomClinicLayout';
 import { lightSourceTileType } from '../map/dungeon/roomDressing';
 import { WALL_FIXTURE_SPECS, isFixturePowered } from '../map/dungeon/wallFixtures';
 import type { AmbientLevel, LightColour, LightingProfile } from '../map/dungeon/roomCharacters';
@@ -247,8 +248,8 @@ export const STATIC_LIGHT_FIXTURES: ReadonlyMap<number, LightKind> = new Map<num
   [VENDING_MACHINE, 'vending_glow'],
   [BOILER, 'boiler_window'],
   // A safe room's own lamps: its standing lanterns and the stove's firebox,
-  // which warm it on top of the hearth glow that fills the whole room, and the
-  // lab station's camp lantern, a warm pool under its cool emergency lamp.
+  // which warm the corners its doctor's lamp leaves to the room's lit ambient,
+  // and the lab station's camp lantern, a warm pool under its cool emergency lamp.
   [SAFE_ROOM_LANTERN, 'standing_torch'],
   [SAFE_ROOM_STOVE, 'boiler_window'],
   [LAB_STATION_LANTERN, 'camp_lantern'],
@@ -409,6 +410,17 @@ export interface LightingFrameStats {
 }
 
 // ── The system ──────────────────────────────────────────────────────────────
+
+interface TileRect {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+function sameTileRect(a: TileRect, b: TileRect): boolean {
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+}
 
 export class DungeonLightingSystem implements GameSystem {
   private readonly mapWidth: number;
@@ -1221,7 +1233,7 @@ export class DungeonLightingSystem implements GameSystem {
     return current;
   }
 
-  /** Lights every fixture on the map, and the hearth (or a field station's lamp) of every safe room. */
+  /** Lights every fixture on the map, and the doctor's lamp (or a field station's lamp) of every safe room. */
   private registerMapFixtures(): void {
     const { structure, regionMap } = this.deps.gameMap;
     for (let y = 0; y < structure.length; y++) {
@@ -1236,22 +1248,21 @@ export class DungeonLightingSystem implements GameSystem {
       }
     }
     const stations = this.deps.gameMap.safeRooms.filter(isFieldStation);
+    const clinics = planSafeRoomClinics(this.deps.gameMap);
     for (const room of regionMap.rooms) {
       if (room.role !== 'safe') continue;
       const centreX = room.bounds.x + Math.floor(room.bounds.w / 2);
       const centreY = room.bounds.y + Math.floor(room.bounds.h / 2);
-      const isStation = stations.some(
-        ({ bounds }) =>
-          bounds.x === room.bounds.x &&
-          bounds.y === room.bounds.y &&
-          bounds.w === room.bounds.w &&
-          bounds.h === room.bounds.h,
-      );
-      this.registerStaticLight({
-        tileX: centreX,
-        tileY: centreY,
-        kind: isStation ? 'station_lamp' : 'hearth',
-      });
+      const isStation = stations.some(({ bounds }) => sameTileRect(bounds, room.bounds));
+      if (isStation) {
+        this.registerStaticLight({ tileX: centreX, tileY: centreY, kind: 'station_lamp' });
+        continue;
+      }
+      // The lamp stands on the cabinet's east half. A room too small to have
+      // been given a corner keeps its light in the middle.
+      const clinic = clinics.find((layout) => sameTileRect(layout.roomBounds, room.bounds));
+      const lampTile = clinic?.cabinetTiles[1] ?? { x: centreX, y: centreY };
+      this.registerStaticLight({ tileX: lampTile.x, tileY: lampTile.y, kind: 'clinic_lamp' });
     }
     const { wallFixtures } = this.deps.gameMap;
     for (const fixture of wallFixtures) {

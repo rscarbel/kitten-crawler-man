@@ -6,7 +6,7 @@ import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageOptions, DamageSource } from '../Player';
 import type { StatusEffect } from '../core/combat/StatusEffect';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
-import { verticalCollisionOffset } from '../map/collisionAnchors';
+import { tileUnderFeet, verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { CreatureAudioTag } from '../audio/creatureAudioTags';
 import { randomInt } from '../utils';
@@ -28,7 +28,9 @@ import { measureOverheadTop, reportOverheadTop } from '../ui/world/overheadStack
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Rng } from '../sprites/person/rng';
 import type { BombThrower } from '../systems/goblinBombConstants';
+import type { GlobShooter } from '../systems/globShot';
 import { knockbackStepPx } from '../core/combat/knockbackEase';
+import type { GroundHazard } from '../core/combat/groundHazard';
 import { MobTactics } from './tactics/MobTactics';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatTowardHelper } from './tactics/retreat';
@@ -40,7 +42,9 @@ import type { SilhouetteLayer } from '../core/spriteAssets/silhouetteComposite';
 import type { SiegeCapable, SiegeDirective, SiegeLobber } from './siege/siegeTypes';
 import { deflectAroundAirspaceBodies, isInsideAirspaceBody } from './airspace';
 import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
+import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
 import type { PetKind } from '../core/party/petNames';
+import { rollTacticalConsumable } from '../loot/tacticalConsumables';
 import {
   GUARD_KNOCKBACK_FRAMES,
   GUARD_KNOCKBACK_TILES,
@@ -72,6 +76,19 @@ function isPartySide(body: Player): boolean {
 
 /** The share of a dynamite blast any boss takes; see `Mob.blastDamageScale`. */
 export const BOSS_BLAST_DAMAGE_SCALE = 0.25;
+
+/** A {@link Mob.playerDamageScale} answer for a weapon the creature has no defence against. */
+export const FULL_DAMAGE_SCALE = 1;
+
+/**
+ * A {@link Mob.playerDamageScale} answer for a weapon the creature cannot be
+ * hurt by at all: the blow is refused outright, labelled, and a blast does not
+ * shove it either.
+ */
+export const IMMUNE_DAMAGE_SCALE = 0;
+
+/** The floating label shown over a creature that shrugged off a blow it is immune to. */
+export const DAMAGE_IMMUNE_LABEL = 'Immune';
 
 /**
  * How one of this mob's blows reached its victim.
@@ -234,7 +251,7 @@ const STUCK_FLIP_FRAMES = 50;
  * raw direction's sign back and forth every frame with nothing behind it but
  * a flickering sprite. Other bosses already work around the same underlying
  * instability by locking a copy of `facingX` before a committed swing
- * (`Troglodyte.lockedFacingX`, `TheLich.lockedFacingX`); this keeps the
+ * (`Lizardman.lockedFacingX`, `TheLich.lockedFacingX`); this keeps the
  * source itself from chattering in the first place.
  */
 export const FACING_FLIP_DEADZONE_TILE_RATIO = 0.12;
@@ -320,8 +337,8 @@ const WANDER_PULLBACK_SPEED_FRACTION = 0.4;
 
 /** Default health potion drop chance. */
 const DEFAULT_POTION_DROP_CHANCE = 0.25;
-/** Default scroll of confusing fog drop chance. */
-const DEFAULT_FOG_SCROLL_DROP_CHANCE = 0.05;
+/** Chance a mob drops one of the tactical consumables. */
+const TACTICAL_CONSUMABLE_DROP_CHANCE = 0.05;
 /** Speed Fizz drop chance from mobs (very rare — primary source is chests). */
 const SPEED_FIZZ_DROP_CHANCE = 0.005;
 /** Jugg Juice drop chance from mobs (very rare — primary source is chests). */
@@ -741,11 +758,11 @@ export abstract class Mob extends Player {
   get lowProfile(): boolean {
     return false;
   }
-  /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
+  /** Set each frame by `SmokeCloudSystem` while this mob stands inside a smoke bomb's cloud. */
   isConfused = false;
 
   /**
-   * Opt-out from the Scroll of Confusing Fog. Read by SpellSystem so `isConfused`
+   * Opt-out from the Smoke Bomb's cloud. Read by `SmokeCloudSystem` so `isConfused`
    * is never set in the first place — flagging and then ignoring would lie to
    * every other reader of that flag.
    */
@@ -1015,8 +1032,8 @@ export abstract class Mob extends Player {
 
   /**
    * Whether this creature attacks other hostile mobs on sight, on its own,
-   * rather than only the party and its allies — the Brindled Vespa, which
-   * spits at whatever is nearest. Anything that hunts the other monsters is
+   * rather than only the party and its allies — the adult Gravedigger Beetle,
+   * which bites and spits fire at whatever is nearest. Anything that hunts the other monsters is
    * fair game for them too: a goblin's bomb treats it as a real enemy and
    * deals it full damage, where an ordinary hostile caught in the same blast
    * loses a single point. False for everything else; a creature that starts
@@ -1033,11 +1050,18 @@ export abstract class Mob extends Player {
    * standoff), which a push would knock off the line its attack is timed on.
    * A boss is read off {@link blastDamageScale} as well as {@link isBoss},
    * because the bosses whose own systems leave `isBoss` false on purpose (the
-   * Lich, the spider-lab spider) still resist blasts.
+   * Lich, the spider-lab spider) still resist blasts. A creature immune to
+   * blasts is not shoved by one either: a blast that cannot hurt it has
+   * nothing to throw it with.
    */
   get resistsBlastKnockback(): boolean {
     const isAnyBoss = this.isBoss || this.blastDamageScale < 1;
-    return isAnyBoss || this.ownsSiegeMovement || this.moveSpeed <= 0;
+    return (
+      isAnyBoss ||
+      this.isImmuneTo(EXPLOSION_DAMAGE_TYPE) ||
+      this.ownsSiegeMovement ||
+      this.moveSpeed <= 0
+    );
   }
 
   /**
@@ -1046,6 +1070,24 @@ export abstract class Mob extends Player {
    */
   get bombThrower(): BombThrower | null {
     return null;
+  }
+
+  /**
+   * The glob outbox this creature offers `GlobProjectileSystem`, or null for
+   * everything that throws none. A thrower returns itself.
+   */
+  get globShooter(): GlobShooter | null {
+    return null;
+  }
+
+  /**
+   * Adds whatever light this creature's own attacks throw into the dark — a
+   * spit in flight it still owns. Called for every mob each frame; nothing by
+   * default. A glob handed to `GlobProjectileSystem` is lit by that system,
+   * not by its thrower.
+   */
+  collectLights(_sink: DynamicLightSink): void {
+    // Nothing of its own lit by default.
   }
 
   private structureStrikeFramesLeft = 0;
@@ -1147,6 +1189,17 @@ export abstract class Mob extends Player {
 
   /** True for airborne mobs that pass over ground mobs without physical collision. */
   isFlying = false;
+
+  /**
+   * Whether a Seismic Stomp passes under this creature: the shock runs through
+   * the ground, so a body that hovers clear of it takes nothing and is shown
+   * {@link DAMAGE_IMMUNE_LABEL}. Opt-in rather than read off {@link isFlying},
+   * because not every flyer is meant to escape it: the Krasue flies and is
+   * still caught by the stomp.
+   */
+  get evadesSeismicStomp(): boolean {
+    return false;
+  }
 
   /**
    * True while a mob should be excluded from the ground separation pass, both
@@ -1415,7 +1468,7 @@ export abstract class Mob extends Player {
 
   /**
    * When set to a live Mob, this mob will chase and attack it as a priority target.
-   * Used so that Brindled Vespa acid hits cause enemy mobs to retaliate.
+   * Used so that a mob the adult Gravedigger Beetle attacks turns on it.
    * DungeonScene injects this mob into the mob's target list each frame.
    */
   retaliateMob: Mob | null = null;
@@ -1997,7 +2050,7 @@ export abstract class Mob extends Player {
    * max HP was levelled on.
    *
    * Kept because a good many creatures write those two fields again later in
-   * their lives — a grub that evolves, a boss that enrages, a Hawkfolk that
+   * their lives — a beetle that grows a stage, a boss that enrages, a Hawkfolk that
    * breaks into a chase, anything reset by `resetToSpawn` — and every one of
    * those writes is a flat authored constant. A plain reassignment silently
    * throws the level away and leaves a boss with levelled HP moving at level-1
@@ -2186,6 +2239,20 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Level-scaled damage the floor under the victim deals — current running
+   * along it, a pool it stands in — which gear guarding the feet against
+   * `hazard` thins as it lands. Otherwise identical to {@link dealRangedDamage}.
+   */
+  protected dealGroundDamage(
+    target: Player,
+    baseDamage: number,
+    hazard: GroundHazard,
+    attackType?: string,
+  ): boolean {
+    return this.deliverBlow(target, this.scaledDamage(baseDamage), attackType, 'ranged', hazard);
+  }
+
+  /**
    * Level-scaled damage from a spell: a ranged blow that magic-resistant gear
    * turns aside a share of.
    */
@@ -2202,6 +2269,7 @@ export abstract class Mob extends Player {
     damage: number,
     attackType: string | undefined,
     delivery: MobBlowDelivery,
+    groundHazard?: GroundHazard,
   ): boolean {
     // The swing still lands audibly and visibly; only the harm is withheld.
     if (this.harmless) {
@@ -2217,6 +2285,7 @@ export abstract class Mob extends Player {
         y: this.y + this.tileSize * MOB_TILE_CENTER,
       },
       magic: delivery === 'spell',
+      groundHazard,
     });
     // A plain `mob` source names no attacker, so an ally's swing at a warded
     // charge is stopped here, where the attacker is still known.
@@ -2787,11 +2856,8 @@ export abstract class Mob extends Player {
   /** Whether this mob is standing in river water. */
   isWading(): boolean {
     if (!this.map) return false;
-    const ts = this.tileSize;
-    return this.map.isWadeable(
-      Math.floor((this.x + ts / 2) / ts),
-      Math.floor((this.y + ts / 2) / ts),
-    );
+    const feet = tileUnderFeet(this, this.tileSize);
+    return this.map.isWadeable(feet.x, feet.y);
   }
 
   /**
@@ -2918,10 +2984,10 @@ export abstract class Mob extends Player {
       dx *= WADE_SPEED_FACTOR;
       dy *= WADE_SPEED_FACTOR;
     }
-    // A chill slows a mob's own steps the way it slows a crawler's, and for the
-    // same reason as the wade it is applied here. A shove is not the mob's own
-    // step, so a knockback carries its full distance. Only the party is ever
-    // chilled, so hostile movement never passes through this factor.
+    // A slowing status (a chill, a turned lizardman's numbing lash) slows a
+    // mob's own steps the way it slows a crawler's, and for the same reason as
+    // the wade it is applied here. A shove is not the mob's own step, so a
+    // knockback carries its full distance.
     if (!this.knockbackStepInProgress) {
       const statusFactor = this.statusMoveFactor;
       dx *= statusFactor;
@@ -3053,6 +3119,27 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Share of a blow struck with `damageType` this creature takes, applied by
+   * {@link takeDamageFrom} before its health changes. `null` is a blow nobody
+   * aimed a weapon for — an ally's strike, a scripted kill — and a creature
+   * that resists mundane weapons resists it too. {@link IMMUNE_DAMAGE_SCALE}
+   * refuses the blow outright and labels it. Status ticks do not come through
+   * here: they are not blows, so a creature's weapon resistances never thin them.
+   */
+  protected playerDamageScale(_damageType: PlayerDamageType | null): number {
+    return FULL_DAMAGE_SCALE;
+  }
+
+  /**
+   * Whether a crawler's blow struck with `damageType` is refused outright
+   * ({@link IMMUNE_DAMAGE_SCALE}). An attack site asks before crediting the
+   * blow to the crawler's skills, since a hit that cannot land trains nothing.
+   */
+  isImmuneTo(damageType: PlayerDamageType): boolean {
+    return this.playerDamageScale(damageType) === IMMUNE_DAMAGE_SCALE;
+  }
+
+  /**
    * Only scales a genuine hit. Zero/negative amounts pass through untouched so
    * the "amount <= 0" guards further down the pipeline (dodge rolls, no-op
    * ticks) still see the caller's original value instead of a floor-forced 1.
@@ -3161,10 +3248,18 @@ export abstract class Mob extends Player {
     const isCrawlerAttack = attacker !== null && !(attacker instanceof Mob);
     if (isCrawlerAttack && !this.takesPlayerDamage(damageType)) return;
     if (this.wardRefuses(attacker)) return;
-    if (attacker !== null && striker !== null) {
-      if (this.tryGuardBlow(amount, attacker, striker, damageType)) return;
+    const weaponScale = this.playerDamageScale(damageType);
+    if (weaponScale === IMMUNE_DAMAGE_SCALE && amount > 0) {
+      this.healthBarTimer = HEALTH_BAR_VISIBLE_FRAMES;
+      this.queueFloatingText(DAMAGE_IMMUNE_LABEL, 'immune');
+      if (attacker !== null) this.noteAttackedBy(attacker);
+      return;
     }
-    const scaled = this.scaleIncomingDamage(amount);
+    const weaponScaledAmount = amount * weaponScale;
+    if (attacker !== null && striker !== null) {
+      if (this.tryGuardBlow(weaponScaledAmount, attacker, striker, damageType)) return;
+    }
+    const scaled = this.scaleIncomingDamage(weaponScaledAmount);
     const wasHeldInvulnerable = this.isHeldInvulnerable;
     // Wards on either side soak a struck blow: a hireling's Shield on Deinonychus, or
     // overheal on a hostile — and a shield fairy's ward stops it outright.
@@ -3201,7 +3296,7 @@ export abstract class Mob extends Player {
 
   /**
    * Ends this mob's life outright, for an effect that is a verdict rather than
-   * a blow — a shield fairy's crushing ward closing on a vespa. Skips every
+   * a blow — a shield fairy's crushing ward closing on a gravedigger beetle. Skips every
    * door a blow goes through (`scaleIncomingDamage`, wards, `refusesDamage`):
    * those all exist to answer "how much of this damage gets through", and this
    * carries no damage number to scale down or absorb in the first place. Still
@@ -3277,7 +3372,7 @@ export abstract class Mob extends Player {
    * The traits this mob rolled that its current body still acts on.
    *
    * Traits are rolled once and kept for life, but a creature whose body changes
-   * mid-life — a grub that becomes a hornet — can outgrow what it learned. Its
+   * mid-life can outgrow what it learned. Its
    * eligibility then narrows and the rest go dormant rather than being
    * stripped. The rank mark, the first-meeting notices and the trait-fight
    * telemetry all promise the player a behaviour, so they read this list, not
@@ -3553,8 +3648,8 @@ export abstract class Mob extends Player {
     const items: LootDrop['items'] = [];
     if (Math.random() < DEFAULT_POTION_DROP_CHANCE)
       items.push({ id: 'health_potion', quantity: 1 });
-    if (Math.random() < DEFAULT_FOG_SCROLL_DROP_CHANCE)
-      items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+    if (Math.random() < TACTICAL_CONSUMABLE_DROP_CHANCE)
+      items.push({ id: rollTacticalConsumable(), quantity: 1 });
     if (Math.random() < SPEED_FIZZ_DROP_CHANCE) items.push({ id: 'speed_fizz', quantity: 1 });
     if (Math.random() < JUGG_JUICE_DROP_CHANCE) items.push({ id: 'jugg_juice', quantity: 1 });
     if (Math.random() < COOLDOWN_CRISP_DROP_CHANCE)
@@ -3610,7 +3705,7 @@ export abstract class Mob extends Player {
    * `RuinsGhoul`'s safe-zone break-off and it was a different thing entirely: a
    * player standing a tile outside the leash became **invisible** to every
    * resident. They would not aggro, would not retaliate when hit, and a
-   * troglodyte already mid-strike dealt no damage if its target stepped over the
+   * lizardman already mid-strike dealt no damage if its target stepped over the
    * line — the whole camp could be cleared at range with nothing fighting back.
    * The precedent does not transfer because a town safe zone is somewhere the
    * player has no reason to fight from, whereas a circle round a camp is exactly

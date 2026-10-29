@@ -38,9 +38,8 @@ import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import { choiceRow, perCrawler, type Choice } from './parts';
 import { activeGearLines } from '../../itemEffectLines';
 import type { PauseContext, PauseSection, SectionLayout } from './section';
-import { petWords, type PetNames } from '../../../core/party/petNames';
 
-type CharacterTab = 'attributes' | 'skills' | 'run';
+type CharacterTab = 'attributes' | 'skills' | 'stats';
 
 const SPEND_SOUND = 'menu_skillpoint_spent';
 
@@ -331,14 +330,43 @@ function renderSkills(layout: SectionLayout, ctx: PauseContext): void {
   });
 }
 
-// ── Run statistics ──────────────────────────────────────────────────────────
+// ── Statistics ──────────────────────────────────────────────────────────────
 
-function statRows(
-  stats: GameStats,
-  petNames: PetNames,
-): ReadonlyArray<{ label: string; value: string; role: TextRole }> {
+/** The first floor on which the Stats tab splits time played into the run's and the floor's. */
+const FIRST_FLOOR_WITH_FLOOR_TIME = 2;
+
+interface StatRow {
+  readonly label: string;
+  readonly value: string;
+  readonly role: TextRole;
+}
+
+/**
+ * Time played: one clock on the first floor, where the floor's time is the
+ * run's, and the run's and the floor's side by side from the second on.
+ */
+function timeRows(stats: GameStats, floorNumber: number): StatRow[] {
+  if (floorNumber < FIRST_FLOOR_WITH_FLOOR_TIME) {
+    return [{ label: 'Time Played', value: formatPlayTime(stats.framesPlayed), role: 'value' }];
+  }
   return [
-    { label: 'Time Played', value: formatPlayTime(stats.framesPlayed), role: 'value' },
+    { label: 'Total Time', value: formatPlayTime(stats.framesPlayed), role: 'value' },
+    { label: 'Floor Time', value: formatPlayTime(stats.floorFramesPlayed), role: 'value' },
+  ];
+}
+
+/** Kept off the tab until a mercenary is hired, since a run without one would show only zeros. */
+function mercenaryRows(stats: GameStats): StatRow[] {
+  if (stats.mercenariesHired === 0) return [];
+  return [
+    { label: 'Mercenaries Hired', value: `${stats.mercenariesHired}`, role: 'value' },
+    { label: 'Mercenaries Lost', value: `${stats.mercenariesLost}`, role: 'muted' },
+  ];
+}
+
+function statRows(stats: GameStats, floorNumber: number): StatRow[] {
+  return [
+    ...timeRows(stats, floorNumber),
     { label: 'Total Kills', value: `${stats.totalKills}`, role: 'accent' },
     { label: 'Bosses Slain', value: `${stats.bossesDefeated}`, role: 'accent' },
     { label: 'Deaths', value: `${stats.deaths}`, role: 'danger' },
@@ -346,15 +374,7 @@ function statRows(
     { label: 'Damage Taken', value: `${stats.damageTaken}`, role: 'danger' },
     { label: 'Potions Used', value: `${stats.potionsUsed}`, role: 'success' },
     { label: 'Gold Earned', value: `${stats.goldEarned}`, role: 'accent' },
-    { label: 'Hirelings Hired', value: `${stats.hirelingsHired}`, role: 'value' },
-    { label: 'Hirelings Lost', value: `${stats.hirelingsLost}`, role: 'muted' },
-    {
-      label: `${petWords(petNames, 'deinonychus').opening} Petted`,
-      value: `${stats.deinonychusPets}`,
-      role: 'success',
-    },
-    { label: 'Cows Petted', value: `${stats.cowPets}`, role: 'success' },
-    { label: 'Midge Petted', value: `${stats.midgePets}`, role: 'success' },
+    ...mercenaryRows(stats),
   ];
 }
 
@@ -362,20 +382,41 @@ function valueRow(layout: SectionLayout, label: string, value: string, role: Tex
   const { ui } = layout;
   const rect = layout.row(ui.theme.size.row, 0);
   listRow(ui, rect, {
-    id: `run/${label}`,
+    id: `stats/${label}`,
     title: label,
     trailing: value,
     trailingColor: skinsFor(ui.theme).text[role].color,
   });
 }
 
-function renderRun(layout: SectionLayout, ctx: PauseContext): void {
+/** The pets given are left for the run-complete screen, where they land as a surprise. */
+function renderStats(layout: SectionLayout, ctx: PauseContext): void {
   const stats = ctx.gameStats;
-  for (const row of statRows(stats, ctx.petNames)) valueRow(layout, row.label, row.value, row.role);
+  for (const row of statRows(stats, ctx.floorNumber)) {
+    valueRow(layout, row.label, row.value, row.role);
+  }
   layout.heading('Enemies killed');
   const kills = [...stats.killsByType.entries()].sort((a, b) => b[1] - a[1]);
   if (kills.length === 0) layout.paragraph('No kills yet', 'muted');
   for (const [name, count] of kills) valueRow(layout, name, `${count}`, 'accent');
+}
+
+function renderTab(tab: CharacterTab, layout: SectionLayout, ctx: PauseContext): void {
+  switch (tab) {
+    case 'attributes':
+      renderAttributes(layout, ctx);
+      return;
+    case 'skills':
+      renderSkills(layout, ctx);
+      return;
+    case 'stats':
+      renderStats(layout, ctx);
+      return;
+    default: {
+      const unhandled: never = tab;
+      return unhandled;
+    }
+  }
 }
 
 // ── Section ─────────────────────────────────────────────────────────────────
@@ -400,7 +441,7 @@ export function characterSection(): PauseSection {
       const choices: readonly Choice<CharacterTab>[] = [
         { value: 'attributes', label: points > 0 ? `Attributes · ${points}` : 'Attributes' },
         { value: 'skills', label: 'Skills' },
-        { value: 'run', label: 'Run' },
+        { value: 'stats', label: 'Stats' },
       ];
       choiceRow(layout, {
         id: 'character-tab',
@@ -411,9 +452,7 @@ export function characterSection(): PauseSection {
         },
       });
       layout.space(ui.theme.space.xs);
-      if (tab === 'attributes') renderAttributes(layout, ctx);
-      else if (tab === 'skills') renderSkills(layout, ctx);
-      else renderRun(layout, ctx);
+      renderTab(tab, layout, ctx);
     },
     reset: () => {
       tab = 'attributes';

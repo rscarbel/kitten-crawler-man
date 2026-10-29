@@ -1,7 +1,7 @@
 /**
  * The Structure menu over a boarded grate in the defense quest: a crawler who
  * has reached Construction 5 can nail spikes onto the boards. The spikes take
- * a bugaboo's blows before the boards do and hand each blow back to it.
+ * a Fuzzy Nightmare's blows before the boards do and hand each blow back to it.
  *
  * Without Construction 5 on the active crawler, the Structure menu key and the
  * long-press fall through to their usual handlers.

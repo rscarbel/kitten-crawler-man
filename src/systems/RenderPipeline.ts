@@ -22,18 +22,20 @@ import type { GoreSystem } from './GoreSystem';
 import type { BodyPartGoreSystem } from './BodyPartGoreSystem';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { DaveGuideSystem } from './DaveGuideSystem';
+import type { DoctorSystem } from './DoctorSystem';
 import type { BossRoomSystem } from './BossRoomSystem';
 import type { BossRoomDressings } from './bossRooms/BossRoomDressings';
 import type { StairwellSystem } from './StairwellSystem';
 import type { BuildingSystem } from './BuildingSystem';
 import type { BarrierSystem } from './BarrierSystem';
 import type { SpellSystem } from './SpellSystem';
+import type { SmokeCloudSystem } from './SmokeCloudSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
 import type { StormcallerStrikeSystem } from './StormcallerStrikeSystem';
 import type { SeismicStompEffectSystem } from './SeismicStompEffectSystem';
-import type { LavaBallSystem } from './LavaBallSystem';
+import type { GlobProjectileSystem } from './GlobProjectileSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
 import type { HirelingShotSystem } from './HirelingShotSystem';
 import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
@@ -92,8 +94,8 @@ const DRAW_KIND_TOWNSPERSON = 4;
 /** Draw kind for interactive town props (notice board, etc.), rendered via their own render(). */
 const DRAW_KIND_TOWN_PROP = 5;
 
-/** Draw kind for Dave, rendered via his own render(). */
-const DRAW_KIND_DAVE = 6;
+/** Draw kind for Dave and the doctors, each rendered via its own render(). */
+const DRAW_KIND_SAFE_ROOM_FIGURE = 6;
 
 /** Draw kind for a fixture hung on a wall face; its entry's `tx` holds the fixture's id. */
 const DRAW_KIND_WALL_FIXTURE = 7;
@@ -213,6 +215,8 @@ export interface RenderContext {
   bodyPartGore: BodyPartGoreSystem;
   safeRoom: SafeRoomSystem;
   dave: DaveGuideSystem;
+  /** The safe rooms' doctors and their bags, sorted with the crawlers. */
+  doctor: Pick<DoctorSystem, 'sortedFigures'>;
   bossRoom: BossRoomSystem;
   /** Every boss room's props, slow ground and room hazards on the floor. */
   bossRoomDressings: BossRoomDressings;
@@ -220,6 +224,7 @@ export interface RenderContext {
   building: BuildingSystem | null;
   barriers: BarrierSystem;
   spells: SpellSystem;
+  smokeClouds: SmokeCloudSystem;
   dynamite: DynamiteSystem;
   seismicStompFx: SeismicStompEffectSystem;
   meleeFx: MeleeImpactEffectSystem;
@@ -228,7 +233,7 @@ export interface RenderContext {
   /** Worn gear's relics, trails, arcs and marks. */
   gearFx: Pick<GearSystem, 'render'>;
   missileFx: MagicMissileImpactEffectSystem;
-  lavaBalls: LavaBallSystem;
+  globs: GlobProjectileSystem;
   rockThrows: RockThrowSystem;
   /** Absent in scenes a hireling never fights in. */
   hirelingShots?: HirelingShotSystem;
@@ -418,7 +423,7 @@ export class RenderPipeline {
     // Under the Y-sorted pass with the trees and the river: a fire patch is
     // burning floor, and drawn above the entities it would cover the very
     // player it is burning.
-    rc.lavaBalls.renderGround(ctx, camX, camY);
+    rc.globs.renderGround(ctx, camX, camY);
     rc.clownGas.renderGround(ctx, camX, camY);
     // Rings, reticles, charges and flames are all ground the party walks on.
     rc.fairies?.renderGround(ctx, camX, camY);
@@ -446,7 +451,7 @@ export class RenderPipeline {
   /** Whether {@link renderGroundWarnings} has anything to draw in this frame's view. */
   hasGroundWarnings(rc: RenderContext): boolean {
     return (
-      rc.lavaBalls.hasGroundArt ||
+      rc.globs.hasGroundArt ||
       rc.clownGas.hasGroundArt ||
       rc.fairies?.hasGroundArtIn(
         rc.camX,
@@ -481,7 +486,7 @@ export class RenderPipeline {
    */
   renderGroundWarnings(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const { camX, camY } = rc;
-    rc.lavaBalls.renderGround(ctx, camX, camY);
+    rc.globs.renderGround(ctx, camX, camY);
     rc.clownGas.renderGround(ctx, camX, camY);
     rc.fairies?.renderGround(ctx, camX, camY);
     rc.fairyFireballs?.renderGround(ctx, camX, camY);
@@ -505,6 +510,7 @@ export class RenderPipeline {
       townsfolk,
       townProps,
       dave,
+      doctor,
       speechBubblePulse,
     } = rc;
 
@@ -616,13 +622,21 @@ export class RenderPipeline {
       e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
     }
 
-    // Dave sorts with the crawlers rather than with the room he stands in:
-    // the Bopca's counter is repainted after the world pass, so anything drawn
-    // there ends up behind it.
+    // Dave sorts with the crawlers rather than with the room he stands in, so
+    // he walks in front of and behind the room's furniture as they do.
     for (const figure of dave.sortedRenderables(active, speechBubblePulse)) {
       const e = this._getEntry();
       e.sortY = figure.y + ENTITY_SORT_Y_OFFSET;
-      e.kind = DRAW_KIND_DAVE;
+      e.kind = DRAW_KIND_SAFE_ROOM_FIGURE;
+      e.entity = figure;
+      e.chestRef = null;
+    }
+    // The doctors stand in front of their cabinets, which are sorted
+    // decorations, so they have to sort too or the cabinet paints over them.
+    for (const figure of doctor.sortedFigures(camX, camY)) {
+      const e = this._getEntry();
+      e.sortY = figure.y + ENTITY_SORT_Y_OFFSET;
+      e.kind = DRAW_KIND_SAFE_ROOM_FIGURE;
       e.entity = figure;
       e.chestRef = null;
     }
@@ -741,13 +755,14 @@ export class RenderPipeline {
     rc.stormcallerFx.render(ctx, camX, camY);
     rc.gearFx.render(ctx, camX, camY);
     spells.renderShockwaveRipples(ctx, camX, camY);
-    spells.renderFogs(ctx, camX, camY);
+    spells.renderEntanglements(ctx, camX, camY);
+    rc.smokeClouds.render(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);
     dynamite.renderThrowPath(ctx, camX, camY);
     // Over the entities: a ball crossing the room must never disappear behind
     // the mob it is about to fly past, or the shot reads as having fizzled.
-    rc.lavaBalls.render(ctx, camX, camY);
+    rc.globs.render(ctx, camX, camY);
     // Same slot and the same reason for the golem's thrown boulders.
     rc.rockThrows.render(ctx, camX, camY);
     rc.hirelingShots?.render(ctx, camX, camY);

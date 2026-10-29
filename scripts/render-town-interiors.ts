@@ -59,7 +59,7 @@ const { TILE_SIZE } = await import('../src/core/constants.js');
 const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap, TOWER_FLOOR_COUNT } = await import('../src/map/GameMap.js');
 const { createTownPlan } = await import('../src/map/town/townPlan.js');
-const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');
+const { stampSafeRoomClinics } = await import('../src/map/safeRoomClinicLayout.js');
 const { stampSafeRoomDecor } = await import('../src/map/safeRoomDecorLayout.js');
 const { InteriorOccupantSystem, scanInteriorFurniture } =
   await import('../src/systems/InteriorOccupantSystem.js');
@@ -136,7 +136,7 @@ for (const { building, floor, floorCount } of storeys) {
   const hasSafeRoom = 'hasSafeRoom' in building && building.hasSafeRoom === true;
   map.generateInterior(building.kind, floor, building.id, hasSafeRoom, 'default');
   if (hasSafeRoom) {
-    stampSafeRoomCounters(map);
+    stampSafeRoomClinics(map);
     stampSafeRoomDecor(map);
   }
   map.releaseTileArt();

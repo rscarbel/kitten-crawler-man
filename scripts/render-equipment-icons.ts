@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Review sheet for every gear icon, slot by slot, and the tool, explosive, drink and Scroll of
- * Confusing Fog icons,
+ * Entanglement icons,
  * drawn through the real `drawItemIcon` dispatcher onto a slot-coloured cell.
  *
  * Each row is one item at the sizes a player actually meets it — the hotbar's
@@ -54,8 +54,8 @@ const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
     'stonebreaker',
     'worldscar_pick',
   ],
-  scroll: ['scroll_of_confusing_fog'],
-  explosives: ['goblin_dynamite', 'black_powder_bomb'],
+  scroll: ['scroll_of_entanglement'],
+  explosives: ['dynamite', 'black_powder_bomb', 'smoke_bomb'],
   drinks: ['catnip_tuna_water', 'health_potion', 'speed_fizz', 'jugg_juice', 'cooldown_crisp'],
 };
 

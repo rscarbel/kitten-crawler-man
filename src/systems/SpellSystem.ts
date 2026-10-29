@@ -1,15 +1,8 @@
 import { TILE_SIZE } from '../core/constants';
 import { outgoingHitDamageOn } from '../core/combat/outgoingHit';
 import { MAGIC_HIT } from '../core/combat/damageTags';
-import {
-  allocCanvas,
-  freshSurfaceContext,
-  releaseSurface,
-  type CanvasSurface,
-} from '../core/rendering/canvasSurface';
-import { platform } from '../core/input/Platform';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
-import type { Mob } from '../creatures/Mob';
+import { DAMAGE_IMMUNE_LABEL, type Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -41,6 +34,10 @@ import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { standByForShieldCast } from '../creatures/humanGestures';
 import { energyShieldMagicScale } from '../core/party/crawlerFormulas';
 import type { DynamicLightSink } from './lighting/dynamicLights';
+import {
+  drawEntanglementRoots,
+  ENTANGLE_ROOTS_CRUMBLE_FRAMES,
+} from '../sprites/art/entanglementRootsArt';
 
 interface ActiveEnergyShield {
   x: number;
@@ -81,55 +78,32 @@ interface ShockwaveRipple {
   totalFrames: number;
 }
 
-interface ActiveFog {
-  owner: HumanPlayer | CatPlayer;
-  x: number;
-  y: number;
-  framesLeft: number;
-  totalFrames: number;
-  radiusPx: number;
-  /** Pre-rendered fog cloud texture (drawn once at cast time). */
-  cachedCanvas: CanvasSurface;
-  cachedSize: number;
+/**
+ * One mob held by a Scroll of Entanglement's roots. The hold itself is the
+ * root's source, so a later, longer root from anything else is seen as the
+ * end of this one.
+ */
+interface EntanglementHold {
+  readonly mob: Mob;
+  /** Stable for the hold, so its roots grow their own way and keep it. */
+  readonly seed: number;
+  heldFrames: number;
+  /** Frames since the roots let go; null while they still hold. */
+  crumbleFrames: number | null;
 }
 
-const CLOUD_BLOBS = [
-  { dx: 0.0, dy: 0.0, sr: 0.44 },
-  { dx: 0.38, dy: -0.28, sr: 0.37 },
-  { dx: -0.38, dy: -0.22, sr: 0.35 },
-  { dx: 0.52, dy: 0.22, sr: 0.31 },
-  { dx: -0.5, dy: 0.28, sr: 0.32 },
-  { dx: 0.18, dy: 0.48, sr: 0.3 },
-  { dx: -0.22, dy: 0.44, sr: 0.28 },
-  { dx: 0.42, dy: -0.46, sr: 0.27 },
-  { dx: -0.42, dy: -0.42, sr: 0.25 },
-];
-
-const MOBILE_FOG_BLOB_COUNT = 5;
-// On mobile, use fewer blobs to reduce the offscreen-canvas render cost
-const FOG_BLOBS = platform.isMobile ? CLOUD_BLOBS.slice(0, MOBILE_FOG_BLOB_COUNT) : CLOUD_BLOBS;
-
-// Magic number constants for SpellSystem
 const TILE_CENTER_OFFSET = 0.5;
-const FOG_MARGIN = 4;
-const FOG_COLOR_STOP_1 = 0.55;
+const GAME_FRAMES_PER_SECOND = 60;
 const SHIELD_COOLDOWN_FRAMES = 7200;
 const CHAIN_LIGHTNING_FRAMES = 20;
 const INITIAL_SHOCKWAVE_FRAMES = 40;
-/**
- * Fog radius and duration both approach a hard cap asymptotically rather than
- * scaling linearly with magic, so a heavily-invested late-game caster
- * (easily reached by floor 3) gets a noticeably bigger cloud than a fresh one
- * without ever reaching a cloud big enough, or long enough, to blanket a whole
- * fight indefinitely: `base + (cap - base) * (1 - exp(-k * magic))`.
- */
-const FOG_RADIUS_BASE_TILES = 3;
-const FOG_RADIUS_CAP_TILES = 9;
-const FOG_RADIUS_GROWTH_RATE = 0.12;
-const FOG_DURATION_BASE_SECONDS = 4;
-const FOG_DURATION_CAP_SECONDS = 12;
-const FOG_DURATION_GROWTH_RATE = 0.12;
-const FOG_DURATION_FRAME_MULTIPLIER = 60;
+/** How far from the reader a Scroll of Entanglement's roots burst up, in tiles. */
+const ENTANGLE_RADIUS_TILES = 4;
+const ENTANGLE_RADIUS_PX = ENTANGLE_RADIUS_TILES * TILE_SIZE;
+/** How long the roots hold each mob they catch: five seconds. */
+const ENTANGLE_ROOT_FRAMES = 300;
+/** Spreads consecutive holds' seeds so no two mobs' roots grow alike. */
+const ENTANGLE_SEED_STRIDE = 7919;
 const MINI_SHIELD_FRAMES = 180;
 const MINI_SHIELD_TILES = 1.5;
 const CONTINUOUS_DAMAGE_THROTTLE_FRAMES = 60;
@@ -167,52 +141,18 @@ const CHAIN_LIGHTNING_CORE_ALPHA = 0.5;
 const CHAIN_LIGHTNING_CORE_WIDTH = 1;
 const CHAIN_LIGHTNING_WIDTH = 2;
 const SHOCKWAVE_ALPHA_MULT = 0.7;
-const FOG_CACHE_SIZE_FACTOR = 2;
-const FOG_FADE_IN_FRAMES = 40;
-const FOG_FADE_OUT_FRAMES = 60;
-const FOG_PULSE_BASE = 0.92;
-const FOG_PULSE_RANGE = 0.08;
-const FOG_PULSE_FREQ = 0.04;
-const FOG_TIMER_ALPHA_MULT = 0.8;
+const TIMER_ALPHA_MULT = 0.8;
 const TIMER_TEXT_SIZE = 10;
 const TIMER_Y_OFFSET = 14;
 const SHIELD_RENDER_EXTENT = 25;
 const FULL_POWER_LEVEL = 15;
 
-/** Pre-render the fog cloud texture to an offscreen canvas (called once per fog). */
-function bakeFogCloud(radiusPx: number): { canvas: CanvasSurface; size: number } {
-  const size = Math.ceil(radiusPx * FOG_CACHE_SIZE_FACTOR + FOG_MARGIN * FOG_CACHE_SIZE_FACTOR);
-  const canvas = allocCanvas('spellFog', size, size);
-  const ctx = freshSurfaceContext(canvas);
-  const center = size * TILE_CENTER_OFFSET;
-
-  for (const blob of FOG_BLOBS) {
-    const bx = center + blob.dx * radiusPx;
-    const by = center + blob.dy * radiusPx;
-    const br = blob.sr * radiusPx;
-    const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-    grad.addColorStop(0, 'rgba(215, 215, 225, 0.72)');
-    grad.addColorStop(FOG_COLOR_STOP_1, 'rgba(200, 200, 215, 0.45)');
-    grad.addColorStop(1, 'rgba(185, 185, 205, 0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(bx, by, br, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  return { canvas, size };
-}
-
-/** `base + (cap - base) * (1 - exp(-k * n))`: rises fast off `base`, flattens toward `cap`, never reaches it. */
-function asymptoticApproach(n: number, base: number, cap: number, growthRate: number): number {
-  return base + (cap - base) * (1 - Math.exp(-growthRate * n));
-}
-
 export class SpellSystem implements GameSystem {
   private activeEnergyShield: ActiveEnergyShield | null = null;
   private _energyShieldCooldown = 0;
   private _energyShieldCooldownMax = SHIELD_COOLDOWN_FRAMES;
-  private activeFogs: ActiveFog[] = [];
+  private entanglements: EntanglementHold[] = [];
+  private entanglementsCast = 0;
   private shieldOwner: HumanPlayer | null = null;
   private catMiniShield: MiniShield | null = null;
   private chainLightningBolts: ChainLightningBolt[] = [];
@@ -244,14 +184,10 @@ export class SpellSystem implements GameSystem {
 
   /** Reusable Set to avoid allocating per queryCircle call each frame. */
   private readonly _querySet = new Set<Mob>();
-  /** Mobs confused by a fog last frame — only these need their flag cleared. */
-  private readonly confusedLastFrame: Mob[] = [];
-  /** Display names of fog-immune mobs standing in a fog, awaiting a toast. */
-  private readonly fogResistedNames: string[] = [];
 
   /**
    * Drops every active spell effect and pending cross-frame event. Used on a
-   * checkpoint respawn so a shield, fog, or in-flight bolt from the encounter
+   * checkpoint respawn so a shield, roots, or an in-flight bolt from the encounter
    * that killed the player doesn't carry into the new frame.
    */
   resetForCheckpoint(): void {
@@ -270,8 +206,10 @@ export class SpellSystem implements GameSystem {
    */
   dropWorldEffects(): void {
     this.activeEnergyShield = null;
-    for (const fog of this.activeFogs) releaseSurface(fog.cachedCanvas);
-    this.activeFogs = [];
+    // A rewound or abandoned mob must not stay held by roots that are no
+    // longer drawn.
+    for (const hold of this.entanglements) hold.mob.releaseRoot(hold);
+    this.entanglements = [];
     this.shieldOwner = null;
     this.catMiniShield = null;
     this.chainLightningBolts = [];
@@ -280,25 +218,6 @@ export class SpellSystem implements GameSystem {
     this._pendingBlockXp = 0;
     this._pendingShockwave = null;
     this._pendingChainLightningOrigins = [];
-    // Dropping the fog clears the fog itself, but a mob's own isConfused flag
-    // lives on the mob — without this, a mob confused at the moment of death
-    // stays confused forever, since the un-confuse guard below only unwinds it
-    // through this same list.
-    for (const mob of this.confusedLastFrame) mob.isConfused = false;
-    this.confusedLastFrame.length = 0;
-    this.fogResistedNames.length = 0;
-  }
-
-  /**
-   * Drains the names of mobs that shrugged off a fog this frame, so the scene
-   * can toast them. Queued per frame while the mob stands in the fog; the
-   * hotbar toast dedupes identical text, so the repetition is harmless.
-   */
-  takeFogResistedNames(): string[] {
-    if (this.fogResistedNames.length === 0) return [];
-    const drained = this.fogResistedNames.slice();
-    this.fogResistedNames.length = 0;
-    return drained;
   }
 
   get energyShieldCooldown(): number {
@@ -467,37 +386,77 @@ export class SpellSystem implements GameSystem {
     return true;
   }
 
-  castConfusingFog(caster: HumanPlayer | CatPlayer): void {
+  /**
+   * Reads a Scroll of Entanglement: roots burst up round `caster` and hold
+   * every enemy in reach for {@link ENTANGLE_ROOT_FRAMES}. A boss is too strong
+   * to hold and is passed over without a word, the way the brambles pass it
+   * over; a flier is out of the roots' reach and says so.
+   */
+  castEntanglement(caster: HumanPlayer | CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     if (!caster.canAct) return;
-    if (!caster.inventory.removeOne('scroll_of_confusing_fog')) return;
-    const radiusTiles = asymptoticApproach(
-      caster.magic,
-      FOG_RADIUS_BASE_TILES,
-      FOG_RADIUS_CAP_TILES,
-      FOG_RADIUS_GROWTH_RATE,
-    );
-    const radiusPx = radiusTiles * TILE_SIZE;
-    const durationSeconds = asymptoticApproach(
-      caster.magic,
-      FOG_DURATION_BASE_SECONDS,
-      FOG_DURATION_CAP_SECONDS,
-      FOG_DURATION_GROWTH_RATE,
-    );
-    const totalFrames = Math.round(durationSeconds * FOG_DURATION_FRAME_MULTIPLIER);
-    const { canvas, size } = bakeFogCloud(radiusPx);
-    this.activeFogs.push({
-      owner: caster,
-      x: caster.x + TILE_SIZE * TILE_CENTER_OFFSET,
-      y: caster.y + TILE_SIZE * TILE_CENTER_OFFSET,
-      framesLeft: totalFrames,
-      totalFrames,
-      radiusPx,
-      cachedCanvas: canvas,
-      cachedSize: size,
-    });
+    if (!caster.inventory.removeOne('scroll_of_entanglement')) return;
+    const cx = caster.x + TILE_SIZE * TILE_CENTER_OFFSET;
+    const cy = caster.y + TILE_SIZE * TILE_CENTER_OFFSET;
+    this._querySet.clear();
+    // The extra tile is the grid's: it keys mobs by their top-left corner
+    // while the reach below is measured centre to centre.
+    const nearby = mobGrid.queryCircle(cx, cy, ENTANGLE_RADIUS_PX + TILE_SIZE, this._querySet);
+    for (const mob of nearby) {
+      if (!mob.isHostileTarget || mob.isBoss || mob.wardedFromParty) continue;
+      const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - cx;
+      const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - cy;
+      if (Math.hypot(dx, dy) > ENTANGLE_RADIUS_PX) continue;
+      if (mob.isFlying) {
+        mob.queueFloatingText(DAMAGE_IMMUNE_LABEL, 'immune');
+        continue;
+      }
+      this.entanglementsCast++;
+      const hold: EntanglementHold = {
+        mob,
+        seed: this.entanglementsCast * ENTANGLE_SEED_STRIDE,
+        heldFrames: 0,
+        crumbleFrames: null,
+      };
+      mob.root(ENTANGLE_ROOT_FRAMES, hold);
+      this.entanglements.push(hold);
+    }
   }
 
-  /** Called every gameplay frame. Ticks cooldowns, pushes shield mobs, marks confused mobs. */
+  /**
+   * Ages every hold. A hold whose mob is no longer held by it — the time ran
+   * out, the mob died, or something rooted it for longer — starts to crumble,
+   * and is forgotten once the roots have fallen apart.
+   */
+  private updateEntanglements(): void {
+    for (const hold of this.entanglements) {
+      hold.heldFrames++;
+      if (hold.crumbleFrames !== null) {
+        hold.crumbleFrames++;
+        continue;
+      }
+      const stillHeld = hold.mob.isAlive && hold.mob.rootedBy === hold;
+      if (!stillHeld) hold.crumbleFrames = 0;
+    }
+    this.entanglements = this.entanglements.filter(
+      (hold) => hold.crumbleFrames === null || hold.crumbleFrames < ENTANGLE_ROOTS_CRUMBLE_FRAMES,
+    );
+  }
+
+  /** The roots round every held mob, and those still breaking apart, drawn over the mobs. */
+  renderEntanglements(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const hold of this.entanglements) {
+      drawEntanglementRoots(ctx, {
+        x: hold.mob.x + TILE_SIZE * TILE_CENTER_OFFSET - camX,
+        y: hold.mob.y + TILE_SIZE * TILE_CENTER_OFFSET - camY,
+        tileSize: TILE_SIZE,
+        heldFrames: hold.heldFrames,
+        crumbleFrames: hold.crumbleFrames,
+        seed: hold.seed,
+      });
+    }
+  }
+
+  /** Called every gameplay frame. Ticks cooldowns, pushes shield mobs, ages the roots. */
   update(ctx: SystemContext): void {
     const { cat, human } = ctx;
     const mobGrid = ctx.roster.grid;
@@ -641,42 +600,7 @@ export class SpellSystem implements GameSystem {
       return ripple.framesLeft > 0;
     });
 
-    // Reset confusion, then re-mark mobs inside active fogs
-    for (const mob of this.confusedLastFrame) mob.isConfused = false;
-    this.confusedLastFrame.length = 0;
-    // Cleared here rather than only by the drain: a scene that never drains it
-    // (a building interior runs its own SpellSystem) would otherwise grow the
-    // buffer by one string per immune mob per frame, forever.
-    this.fogResistedNames.length = 0;
-    this.activeFogs = this.activeFogs.filter((fog) => {
-      fog.framesLeft--;
-      if (fog.framesLeft <= 0) {
-        releaseSurface(fog.cachedCanvas);
-        return false;
-      }
-      this._querySet.clear();
-      const inFog = mobGrid.queryCircle(fog.x, fog.y, fog.radiusPx + TILE_SIZE, this._querySet);
-      const rSq = fog.radiusPx * fog.radiusPx;
-      for (const mob of inFog) {
-        if (!mob.isAlive) continue;
-        const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - fog.x;
-        const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - fog.y;
-        if (dx * dx + dy * dy > rSq) continue;
-        if (mob.wardedFromParty) continue;
-        if (mob.immuneToConfusion) {
-          // Only enemies are worth a "sees you through the fog" notice. The
-          // cat's own pet is immune too, and toasting the player that their
-          // summon resisted their spell reads as the pet turning on them.
-          if (mob.isHostile) this.fogResistedNames.push(mob.displayName);
-          continue;
-        }
-        if (!mob.isConfused) {
-          mob.isConfused = true;
-          this.confusedLastFrame.push(mob);
-        }
-      }
-      return true;
-    });
+    this.updateEntanglements();
   }
 
   private pushMobsFromEnergyShield(mobGrid: SpatialGrid<Mob>, stats: EnergyShieldStats): void {
@@ -755,7 +679,7 @@ export class SpellSystem implements GameSystem {
     )
       return;
 
-    const elapsed = (totalFrames - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
+    const elapsed = (totalFrames - framesRemaining) / GAME_FRAMES_PER_SECOND;
     const fadeIn = Math.min(1, (totalFrames - framesRemaining) / SHOCKWAVE_FADE_IN_FRAMES);
     const fadeOut = Math.min(1, framesRemaining / SHIELD_FADE_OUT_FRAMES);
     const alpha = Math.min(fadeIn, fadeOut);
@@ -786,7 +710,7 @@ export class SpellSystem implements GameSystem {
     const tileSize = shieldTileSizeFor(ENERGY_SHIELD_FIGURE, radiusPx);
     drawFigureCached(ctx, ENERGY_SHIELD_FIGURE, state, frame, sx, sy, tileSize, { alpha });
 
-    const secs = Math.ceil(framesRemaining / FOG_DURATION_FRAME_MULTIPLIER);
+    const secs = Math.ceil(framesRemaining / GAME_FRAMES_PER_SECOND);
     const timerColor = isFullPower
       ? worldPalette.spell.energyShieldTimerFull
       : worldPalette.spell.energyShieldTimer;
@@ -796,7 +720,7 @@ export class SpellSystem implements GameSystem {
       size: TIMER_TEXT_SIZE,
       bold: true,
       color: timerColor,
-      alpha: alpha * FOG_TIMER_ALPHA_MULT,
+      alpha: alpha * TIMER_ALPHA_MULT,
       align: 'center',
     });
   }
@@ -812,7 +736,7 @@ export class SpellSystem implements GameSystem {
     const sx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET - camX;
     const sy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET - camY;
 
-    const elapsed = (MINI_SHIELD_FRAMES - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
+    const elapsed = (MINI_SHIELD_FRAMES - framesRemaining) / GAME_FRAMES_PER_SECOND;
     const fadeOut = Math.min(1, framesRemaining / MINI_SHIELD_FADE_OUT_FRAMES);
     const alpha = fadeOut * MINI_SHIELD_ALPHA_MULT;
     const cycleFrames = figureFrameCount(ENERGY_SHIELD_MINI_FIGURE, MINI_SHIELD_STATE);
@@ -885,45 +809,6 @@ export class SpellSystem implements GameSystem {
         tileSize,
         { alpha },
       );
-    }
-  }
-
-  renderFogs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const cw = worldViewWidth();
-    const ch = worldViewHeight();
-    for (const fog of this.activeFogs) {
-      const cx = fog.x - camX;
-      const cy = fog.y - camY;
-      const half = fog.cachedSize * TILE_CENTER_OFFSET;
-
-      // Offscreen culling
-      if (cx + half < 0 || cy + half < 0 || cx - half > cw || cy - half > ch) continue;
-
-      const fadeIn = Math.min(1, (fog.totalFrames - fog.framesLeft) / FOG_FADE_IN_FRAMES);
-      const fadeOut = Math.min(1, fog.framesLeft / FOG_FADE_OUT_FRAMES);
-      const alpha = Math.min(fadeIn, fadeOut);
-      const pulse = FOG_PULSE_BASE + FOG_PULSE_RANGE * Math.sin(fog.framesLeft * FOG_PULSE_FREQ);
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(
-        fog.cachedCanvas,
-        cx - half * pulse,
-        cy - half * pulse,
-        fog.cachedSize * pulse,
-        fog.cachedSize * pulse,
-      );
-      ctx.restore();
-
-      worldText(ctx, `${Math.ceil(fog.framesLeft / FOG_DURATION_FRAME_MULTIPLIER)}s`, {
-        x: cx,
-        y: cy - fog.radiusPx - TIMER_Y_OFFSET,
-        size: TIMER_TEXT_SIZE,
-        bold: true,
-        color: worldPalette.spell.fogTimer,
-        alpha: alpha * FOG_TIMER_ALPHA_MULT,
-        align: 'center',
-      });
     }
   }
 }

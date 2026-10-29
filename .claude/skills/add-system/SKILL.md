@@ -109,10 +109,14 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
     object `DungeonScene` passes to `runDungeonWorldAction`.
   - A death a script shows (`ScriptedDeathKind`, `SCRIPTED_DEATHS` in
     `src/systems/scriptedDeath/`) is played with
-    `DungeonScene.scriptedDeaths.play(kind, victim, at)`: it holds the party
-    through a cutscene, hides the victim, paints the animation and decal, and
-    kills through `Player.dieScripted`, past 9 Lives. A new one is a kind, a
-    def (painter, decal, delay, `DeathCause`, cue) and its death lines.
+    `DungeonScene.scriptedDeaths.play(kind, victim, at)`, or on several
+    crawlers at once after a lead-in cutscene with `playTogether`: it holds
+    the party through a cutscene, hides the victim, paints the animation and
+    decal, throws the def's gore, and kills through `Player.dieScripted`, past
+    9 Lives. A new one is a kind, a def (painter, decal, gore, delay,
+    `DeathCause`, cue and the frame it plays on) and its death lines.
+  - A `carolineMessage` step says whether the world `runs` or `halts` under
+    it. Her story messages run; her time-limit verdict halts everything.
   - A walk-up is `walkUpTo(map, speakerTile, crawlerTile)`
     (`src/systems/cutscene/walkUp.ts`); the companion follows by its own drive.
     A walk that cannot finish gives up after `WALK_UP_TIMEOUT_FRAMES` and the

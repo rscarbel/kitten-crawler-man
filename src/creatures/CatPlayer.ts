@@ -60,7 +60,7 @@ import {
   CAT_SWIPE_FRAMES,
   missileDamage,
 } from '../core/party/crawlerFormulas';
-import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/skills/SkillManager';
+import { WARP_SPEED_DODGE_BONUS_PER_LEVEL } from '../core/skills/SkillManager';
 import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
 import {
   pauseOverheadMeasure,
@@ -239,15 +239,15 @@ export class CatPlayer extends Player {
     return true;
   }
 
-  /** Cat-like Reflexes rides on top of the evasiveness curve, under the same cap. */
+  /** Warp Speed rides on top of the evasiveness curve, under the same cap. */
   protected override get dodgeFlatBonus(): number {
-    return CAT_REFLEXES_DODGE_BONUS_PER_LEVEL * this.skills.getLevel('cat_reflexes');
+    return WARP_SPEED_DODGE_BONUS_PER_LEVEL * this.skills.getLevel('warp_speed');
   }
 
   /** Every clean miss is a rep. The skill trains itself out of surviving. */
   protected override onDodged(foreseen = false): void {
     super.onDodged(foreseen);
-    this.skills.recordUse('cat_reflexes');
+    this.skills.recordUse('warp_speed');
   }
 
   protected override onLevelGained(): void {

@@ -26,10 +26,10 @@ import {
   scaledCooldownFramesForLevel,
 } from '../src/creatures/mobLevelScaling';
 import {
-  TROGLODYTE_AIM_LOCK_FRAMES,
-  TROGLODYTE_WINDUP_FLOOR_FRAMES,
-  troglodyteWindupFrames,
-} from '../src/creatures/Troglodyte';
+  LIZARDMAN_AIM_LOCK_FRAMES,
+  LIZARDMAN_WINDUP_FLOOR_FRAMES,
+  lizardmanWindupFrames,
+} from '../src/creatures/Lizardman';
 import {
   BIG_ROOSTER_CLUB_SWING_WINDUP_FRAMES,
   BIG_ROOSTER_SLAM_WINDUP_FRAMES,
@@ -43,7 +43,7 @@ import {
   ELECTRIC_GOBLIN_BOSS_TYPE,
   KRAKEN_BOSS_TYPE,
 } from '../src/core/mobs/bossTypes';
-import { BOLT_SPEED_CAP, lavaBoltSpeedForLevel } from '../src/systems/LavaBallSystem';
+import { BOLT_SPEED_CAP, globSpeedForLevel } from '../src/systems/GlobProjectileSystem';
 import { GOBLIN_BOW_SHOTS, goblinArrowReleaseFrame } from '../src/sprites/goblinSprite';
 import {
   crawlerRegenHpPerSecond,
@@ -372,22 +372,22 @@ section('cadence curve');
 section('telegraphs');
 {
   check(
-    isAtLeast(TROGLODYTE_AIM_LOCK_FRAMES, LOCKED_TELEGRAPH_MIN_FRAMES),
-    `the troglodyte's aim stays locked for at least ${LOCKED_TELEGRAPH_MIN_FRAMES} frames`,
+    isAtLeast(LIZARDMAN_AIM_LOCK_FRAMES, LOCKED_TELEGRAPH_MIN_FRAMES),
+    `the lizardman's aim stays locked for at least ${LOCKED_TELEGRAPH_MIN_FRAMES} frames`,
   );
 
   let windupRespectsFloor = true;
   let trackingSurvives = true;
   let windupNeverGrows = true;
   for (let level = 1; level <= PROBE_LEVEL_LIMIT; level++) {
-    const windup = troglodyteWindupFrames(level);
-    if (windup < TROGLODYTE_WINDUP_FLOOR_FRAMES) windupRespectsFloor = false;
+    const windup = lizardmanWindupFrames(level);
+    if (windup < LIZARDMAN_WINDUP_FLOOR_FRAMES) windupRespectsFloor = false;
     // Tracking is what compresses; the locked stretch is what must not. A windup
     // shortened to the lock length is an attack that commits before it aims.
-    if (windup <= TROGLODYTE_AIM_LOCK_FRAMES) trackingSurvives = false;
-    if (level > 1 && windup > troglodyteWindupFrames(level - 1)) windupNeverGrows = false;
+    if (windup <= LIZARDMAN_AIM_LOCK_FRAMES) trackingSurvives = false;
+    if (level > 1 && windup > lizardmanWindupFrames(level - 1)) windupNeverGrows = false;
   }
-  check(windupRespectsFloor, "the troglodyte's windup never goes below its floor");
+  check(windupRespectsFloor, "the lizardman's windup never goes below its floor");
   check(trackingSurvives, 'the windup always leaves some aim-tracking ahead of the lock');
   check(windupNeverGrows, 'the windup only ever shortens with level');
 
@@ -903,17 +903,17 @@ function archerHonoursItsLock(): boolean {
 
 section('projectiles');
 {
-  check(BOLT_SPEED_CAP < PLAYER_SPEED, 'a lava bolt at its cap is still outrunnable');
+  check(BOLT_SPEED_CAP < PLAYER_SPEED, 'a thrown glob at its cap is still outrunnable');
 
   let respectsCap = true;
   let neverSlows = true;
   for (let level = 1; level <= PROBE_LEVEL_LIMIT; level++) {
-    const speed = lavaBoltSpeedForLevel(level);
+    const speed = globSpeedForLevel(level);
     if (speed > BOLT_SPEED_CAP + EPSILON) respectsCap = false;
-    if (level > 1 && speed < lavaBoltSpeedForLevel(level - 1)) neverSlows = false;
+    if (level > 1 && speed < globSpeedForLevel(level - 1)) neverSlows = false;
   }
-  check(respectsCap, 'no levelled bolt exceeds the cap');
-  check(neverSlows, 'bolt speed only ever rises with level');
+  check(respectsCap, 'no levelled glob exceeds the cap');
+  check(neverSlows, 'glob speed only ever rises with level');
 }
 
 // ── The regen curve ──────────────────────────────────────────────────────────
@@ -1788,9 +1788,6 @@ section("floor 3's terrain rules spawn on their own ground");
       worldSeed: seed,
       tileHeight: TILE_SIZE,
     });
-    const terrainAt = new Map(
-      map.hallwaySpawnPoints.map((point) => [`${point.x},${point.y}`, point.terrain]),
-    );
     for (const def of [level3, boosted]) {
       const mobs = spawnForLevel(
         def,
@@ -1806,8 +1803,9 @@ section("floor 3's terrain rules spawn on their own ground");
         if (kind === null || wanted === undefined) continue;
         const tileX = Math.floor(mob.x / TILE_SIZE);
         const tileY = Math.floor(mob.y / TILE_SIZE);
-        const ground = terrainAt.get(`${tileX},${tileY}`);
-        if (ground?.has(wanted) === true) {
+        // Escorts stand beside their leader's spawn point rather than on one,
+        // so the tile itself is classified, by the test the points were.
+        if (map.isSpawnTerrainTile(tileX, tileY, wanted)) {
           spawnedOnGround.set(kind, (spawnedOnGround.get(kind) ?? 0) + 1);
         } else {
           misplaced.push(`${kind} at (${tileX}, ${tileY}) on map seed ${seed}`);
@@ -2863,7 +2861,7 @@ function blastAgainstLevelledMob(
   const cat = new CatPlayer(start.x, start.y, TILE_SIZE);
   human.level = throwerLevel;
   human.setBaseStat('explosivesHandling', handlingLevel);
-  human.inventory.addItem('goblin_dynamite', sticks);
+  human.inventory.addItem('dynamite', sticks);
   const roster = new MobRoster(explosiveMap, new SpellSystem());
   const mob = makeTarget(start.x + EXPLOSIVE_TARGET_OFFSET_TILES, start.y);
   mob.applyMobLevel(mobLevel);
@@ -2879,7 +2877,7 @@ function blastAgainstLevelledMob(
     gameMap: explosiveMap,
   };
   for (let stick = 0; stick < sticks; stick++) {
-    dynamite.beginCharge(0, human, 'goblin_dynamite');
+    dynamite.beginCharge(0, human, 'dynamite');
     dynamite.release();
   }
   for (let frame = 0; frame < DYNAMITE_SETTLE_FRAMES; frame++) dynamite.update(context);
@@ -2950,7 +2948,7 @@ function crawlerThrow(
   thrower.isActive = true;
   thrower.setBaseStat('explosivesHandling', throwerHandling);
   other.setBaseStat('explosivesHandling', otherHandling);
-  thrower.inventory.addItem('goblin_dynamite', 1);
+  thrower.inventory.addItem('dynamite', 1);
   const roster = new MobRoster(explosiveMap, new SpellSystem());
   // Behind the thrower, so a throw east flies clear of it.
   const mob = makeGhoul(start.x - EXPLOSIVE_TARGET_OFFSET_TILES, start.y);
@@ -2977,7 +2975,7 @@ function crawlerThrow(
     roster,
     gameMap: explosiveMap,
   };
-  dynamite.beginCharge(0, thrower, 'goblin_dynamite');
+  dynamite.beginCharge(0, thrower, 'dynamite');
   if (switchMidCharge) {
     thrower.isActive = false;
     other.isActive = true;
@@ -2996,7 +2994,7 @@ function crawlerThrow(
     mobHpLost: mob.maxHp - mob.hp,
     humanHpLost: humanHp - human.hp,
     catHpLost: catHp - cat.hp,
-    sticksLeft: thrower.inventory.countOf('goblin_dynamite'),
+    sticksLeft: thrower.inventory.countOf('dynamite'),
   };
 }
 

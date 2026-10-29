@@ -935,7 +935,7 @@ export class BountySystem implements GameSystem {
 
   /**
    * Builds an encounter through its def and inserts it. Everything the bounty
-   * rules demand of a mob — its level, its name, its immunity to fog, its
+   * rules demand of a mob — its level, its name, its immunity to smoke, its
    * willingness to chase into town — is applied here rather than in the defs, so
    * a new bounty creature cannot forget any of it.
    */

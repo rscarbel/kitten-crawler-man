@@ -193,10 +193,10 @@ const TRASH_GREMLIN: PlaytestPreset = {
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 13 },
-      { id: 'goblin_dynamite', quantity: 2 },
+      { id: 'dynamite', quantity: 2 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
     ],
-    bag: [{ id: 'scroll_of_confusing_fog', quantity: 1 }],
+    bag: [{ id: 'smoke_bomb', quantity: 1 }],
   },
   cat: {
     level: 4,
@@ -207,9 +207,9 @@ const TRASH_GREMLIN: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 14 },
-      { id: 'scroll_of_confusing_fog', quantity: 1 },
+      { id: 'scroll_of_entanglement', quantity: 1 },
     ],
-    bag: [{ id: 'goblin_dynamite', quantity: 1 }],
+    bag: [{ id: 'dynamite', quantity: 1 }],
   },
 };
 
@@ -230,11 +230,11 @@ const KRAKEN: PlaytestPreset = {
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 17 },
-      { id: 'goblin_dynamite', quantity: 6 },
+      { id: 'dynamite', quantity: 6 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
     ],
     bag: [
-      { id: 'scroll_of_confusing_fog', quantity: 3 },
+      { id: 'smoke_bomb', quantity: 3 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
     ],
   },
@@ -247,9 +247,9 @@ const KRAKEN: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 16 },
-      { id: 'scroll_of_confusing_fog', quantity: 2 },
+      { id: 'scroll_of_entanglement', quantity: 2 },
     ],
-    bag: [{ id: 'goblin_dynamite', quantity: 2 }],
+    bag: [{ id: 'dynamite', quantity: 2 }],
   },
 };
 
@@ -269,12 +269,12 @@ const LEVEL2: PlaytestPreset = {
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 22 },
-      { id: 'goblin_dynamite', quantity: 10 },
+      { id: 'dynamite', quantity: 10 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
-      { id: 'scroll_of_confusing_fog', quantity: 4 },
+      { id: 'smoke_bomb', quantity: 4 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
@@ -292,10 +292,10 @@ const LEVEL2: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
-      { id: 'scroll_of_confusing_fog', quantity: 7 },
+      { id: 'scroll_of_entanglement', quantity: 7 },
     ],
     bag: [
-      { id: 'goblin_dynamite', quantity: 7 },
+      { id: 'dynamite', quantity: 7 },
       { id: 'ink_dipped_claws', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
@@ -328,12 +328,12 @@ const BIG_ROOSTER: PlaytestPreset = {
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 31 },
-      { id: 'goblin_dynamite', quantity: 24 },
+      { id: 'dynamite', quantity: 24 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
-      { id: 'scroll_of_confusing_fog', quantity: 5 },
+      { id: 'smoke_bomb', quantity: 5 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
@@ -352,10 +352,10 @@ const BIG_ROOSTER: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
-      { id: 'scroll_of_confusing_fog', quantity: 7 },
+      { id: 'scroll_of_entanglement', quantity: 7 },
     ],
     bag: [
-      { id: 'goblin_dynamite', quantity: 7 },
+      { id: 'dynamite', quantity: 7 },
       { id: 'ink_dipped_claws', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
@@ -385,13 +385,13 @@ const SPIDER: PlaytestPreset = {
     skillLevels: { pugilism: 4 },
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
-      { id: 'goblin_dynamite', quantity: 14 },
+      { id: 'dynamite', quantity: 14 },
       { id: 'health_potion', quantity: 34 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
-      { id: 'scroll_of_confusing_fog', quantity: 5 },
+      { id: 'smoke_bomb', quantity: 5 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
@@ -410,10 +410,10 @@ const SPIDER: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
-      { id: 'scroll_of_confusing_fog', quantity: 7 },
+      { id: 'scroll_of_entanglement', quantity: 7 },
     ],
     bag: [
-      { id: 'goblin_dynamite', quantity: 7 },
+      { id: 'dynamite', quantity: 7 },
       { id: 'ink_dipped_claws', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
@@ -436,7 +436,7 @@ const LEVEL3: PlaytestPreset = {
     skillLevels: { pugilism: 5 },
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
-      { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'dynamite', quantity: 18 },
       { id: 'health_potion', quantity: 38 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
@@ -444,7 +444,7 @@ const LEVEL3: PlaytestPreset = {
       { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
-      { id: 'scroll_of_confusing_fog', quantity: 5 },
+      { id: 'smoke_bomb', quantity: 5 },
       { id: 'scrapmail_vest', quantity: 1, equipped: true },
       { id: 'patched_duster', quantity: 1, equipped: true },
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
@@ -462,10 +462,10 @@ const LEVEL3: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
-      { id: 'scroll_of_confusing_fog', quantity: 8 },
+      { id: 'scroll_of_entanglement', quantity: 8 },
     ],
     bag: [
-      { id: 'goblin_dynamite', quantity: 7 },
+      { id: 'dynamite', quantity: 7 },
       { id: 'cockscomb_crest', quantity: 1, equipped: true },
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
       { id: 'plumed_coat', quantity: 1, equipped: true },
@@ -496,7 +496,7 @@ const GEAR: PlaytestPreset = {
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
-      { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'dynamite', quantity: 18 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
     ],
@@ -505,7 +505,7 @@ const GEAR: PlaytestPreset = {
       { id: 'riot_kneeguards', quantity: 1, equipped: true },
       { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'scrapmail_vest', quantity: 1 },
-      { id: 'scroll_of_confusing_fog', quantity: 5 },
+      { id: 'smoke_bomb', quantity: 5 },
     ],
   },
   cat: {
@@ -517,14 +517,14 @@ const GEAR: PlaytestPreset = {
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
-      { id: 'scroll_of_confusing_fog', quantity: 8 },
+      { id: 'scroll_of_entanglement', quantity: 8 },
     ],
     bag: [
       { id: 'moonmoth_pendant', quantity: 1, equipped: true },
       { id: 'plumed_coat', quantity: 1, equipped: true },
       { id: 'nimble_bangle', quantity: 1, equipped: true },
       { id: 'cockscomb_crest', quantity: 1 },
-      { id: 'goblin_dynamite', quantity: 7 },
+      { id: 'dynamite', quantity: 7 },
     ],
   },
 };
@@ -572,7 +572,7 @@ const ANCHOR_STONE: PlaytestPreset = {
     hotbar: [
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
-      { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'dynamite', quantity: 18 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
@@ -838,7 +838,7 @@ const BRIAR_HOLLOW_ASSAULT: PlaytestPreset = {
     ...BRIAR_HOLLOW_VILLAGE.human,
     constructionLevel: ASSAULT_PRESET_CONSTRUCTION,
     hotbar: withQuantities(BRIAR_HOLLOW_VILLAGE.human.hotbar, {
-      goblin_dynamite: ASSAULT_PRESET_DYNAMITE,
+      dynamite: ASSAULT_PRESET_DYNAMITE,
     }),
     bag: withQuantities(BRIAR_HOLLOW_VILLAGE.human.bag, {
       wood: ASSAULT_PRESET_WOOD,

@@ -11,7 +11,7 @@ const CAROLINE_OFFLINE_REMARKS = [
   carolineLines.message('Threat level is calibrated to your capability. It will increase.'),
   carolineLines.message('Safe rooms admit no hostiles. Every other room does.'),
   carolineLines.message(
-    'Every floor has a collapse timer. At zero, the floor and everyone on it are lost.',
+    'On Nightmare, the dungeon floors have a time limit. At zero, I end you and you start over.',
   ),
   carolineLines.message(
     'I want you to succeed. I will not remove the risk that makes success possible.',

@@ -27,6 +27,7 @@ export const SCRIPTED_PROP_VISUAL_IDS = [
   'prop_wrench',
   'prop_dynamite',
   'prop_black_powder_bomb',
+  'prop_smoke_bomb',
   'prop_zippo',
   'prop_bottle',
   'prop_longbow',
@@ -97,5 +98,6 @@ export type ScriptedPropVisualId = (typeof SCRIPTED_PROP_VISUAL_IDS)[number];
 export const THROWN_PROP_VISUAL_IDS = [
   'prop_dynamite',
   'prop_black_powder_bomb',
+  'prop_smoke_bomb',
 ] as const satisfies readonly ScriptedPropVisualId[];
 export type ThrownPropVisualId = (typeof THROWN_PROP_VISUAL_IDS)[number];

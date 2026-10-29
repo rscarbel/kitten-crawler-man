@@ -156,24 +156,12 @@ export const FENCE = 62;
  */
 export const GARDEN_PLANTING = 63;
 
-// A safe room's service counter, in three tile types: the front bar the player
-// orders across, the back bench the Bopca cooks at, and the walkable strip
-// between them. The two counter types are solid, so the strip is a sealed galley
-// the player, the companion and mobs can all see into and none can enter.
-
-/** Tile type for the front bar of a safe-room counter — not walkable. */
-export const SAFE_ROOM_COUNTER = 64;
-/** Tile type for the back bench / stove line behind a safe-room counter — not walkable. */
-export const SAFE_ROOM_COUNTER_BACK = 65;
 /**
- * Tile type for the scrubbed flagstone strip the Bopca stands on, walkable.
- *
- * Walkable so the Bopca's idle shuffle stays on legal tiles, and so nothing in
- * the game has to special-case a creature standing on a solid tile. It is
- * unreachable by geometry rather than by walkability: `stampSafeRoomCounters`
- * always closes both ends of the strip with counter tiles.
+ * Tile type for the medicine cabinet in a safe room's doctor's corner — two
+ * tiles wide against the north wall, not walkable. `stampSafeRoomClinics` lays
+ * it; the renderer tells the two halves apart by their west neighbour.
  */
-export const SAFE_ROOM_GALLEY_FLOOR = 66;
+export const SAFE_ROOM_MEDICINE_CABINET = 64;
 
 /**
  * Tile type for the scuffed traffic band inside a safe room's doorways, walkable.
@@ -194,13 +182,13 @@ export const SAFE_ROOM_THRESHOLD = 67;
 // The three wall-hung types go on the room's north row and nowhere else. The
 // game's oblique projection has a fixed viewpoint to the south, so a hanging on
 // the south wall would be seen from behind — the same constraint that pins the
-// Bopca's counter to the north wall.
+// doctor's medicine cabinet to the north wall.
 
 /** Tile type for a chalk slate listing the day's stew — north wall, not walkable. */
 export const SAFE_ROOM_MENU_BOARD = 68;
 /** Tile type for a drying rack of herb bundles and cured strips — north wall, not walkable. */
 export const SAFE_ROOM_HERB_RACK = 69;
-/** Tile type for a long dyed pennant in Bopca green — north wall, not walkable. */
+/** Tile type for a long dyed green pennant — north wall, not walkable. */
 export const SAFE_ROOM_BANNER = 70;
 /** Tile type for a standing brass lantern on a pole — the room's light source, not walkable. */
 export const SAFE_ROOM_LANTERN = 71;
@@ -236,7 +224,7 @@ export const SAFE_ROOM_RUG = 76;
 // The Cloak & Dagger and the Starlight Tent keep their own floor types (`CLUB_FLOOR`,
 // `SAWDUST_FLOOR`) — but their *walls* change with everything else, because
 // `generateInterior` rings every interior in one wall type. That is the right
-// answer for both: a town safe room is a Bopca station built inside a building,
+// answer for both: a town safe room is the dungeon's station built inside a building,
 // so it should have the building's plaster, where a dungeon station is cut out
 // of rock and keeps the floor's masonry. The station's own floor is identical in
 // both, which is the part that has to match.
@@ -330,7 +318,7 @@ export const CAMPFIRE = 90;
 /** A goblin camp's hide tent. */
 export const GOBLIN_TENT = 91;
 
-/** The gnawed hollow at the centre of a troglodyte den. Walkable ground decal. */
+/** The gnawed hollow at the centre of a lizardman den. Walkable ground decal. */
 export const DEN_HOLLOW = 92;
 
 // ── Town interiors, second set ────────────────────────────────────────────────
@@ -784,7 +772,7 @@ export const BARE_EARTH = 178;
 // ── The spider lab's field station ───────────────────────────────────────────
 //
 // The safe room halfway down the lab's approach is a research team's emergency
-// station, not a Bopca's mess hall: steel decking, a cot, a barricade and the
+// station, not a safe room's mess hall: steel decking, a cot, a barricade and the
 // team's kit. Its own floor and furnishings rather than the safe room's, so it
 // reads as held ground the team fell back to. `labStationLayout` places the
 // furnishings; `src/sprites/labStationDecor.ts` draws them. The two wall-hung

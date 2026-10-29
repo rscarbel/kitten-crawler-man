@@ -671,7 +671,7 @@ export class LichBattleSystem implements GroundHazardSource {
     this.waves = surviving;
     if (this.waveIgnitionSoundPending) {
       this.waveIgnitionSoundPending = false;
-      this.audio?.play('llama_fireball', { volume: WAVE_IGNITION_VOLUME });
+      this.audio?.play('fireball_launch', { volume: WAVE_IGNITION_VOLUME });
     }
   }
 

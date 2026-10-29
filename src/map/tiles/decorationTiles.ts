@@ -62,6 +62,7 @@ import {
   POWER_LAB_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
+  SAFE_ROOM_MEDICINE_CABINET,
   HOLLOW_WALL,
   HOLLOW_PROP_LOW,
   HOLLOW_PROP_TALL,
@@ -2399,6 +2400,7 @@ export function drawDecorationTile(
       case POWER_LAB_CONSOLE:
       case LAB_BENCH:
       case LAB_SHELF:
+      case SAFE_ROOM_MEDICINE_CABINET:
       case ROCK_DEPOSIT:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
@@ -2661,7 +2663,7 @@ export function drawDecorationTile(
       return true;
     }
 
-    // The gnawed hollow at the centre of a troglodyte den: walkable ground, a
+    // The gnawed hollow at the centre of a lizardman den: walkable ground, a
     // dark scrape in the scree rather than anything standing on it.
     case DEN_HOLLOW: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);

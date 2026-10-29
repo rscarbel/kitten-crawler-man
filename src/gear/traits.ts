@@ -17,6 +17,13 @@ import type { AbilityId } from '../core/skills/AbilityManager';
 import { TILE_SIZE } from '../core/constants';
 import { WEAPON_FAMILY_LABELS, type MeleeWeaponFamily } from '../core/items/equipment/weapons';
 import { applyChillOnly } from '../core/combat/frostStatus';
+import {
+  combineGroundHazardShares,
+  FULL_GROUND_HAZARD_SHARES,
+  groundHazardSharesWith,
+  type GroundHazard,
+  type GroundHazardShares,
+} from '../core/combat/groundHazard';
 import { QUEST_SLOT_IDX, type ItemId } from '../core/items/defs/ItemDefs';
 import {
   makeBurn,
@@ -137,7 +144,16 @@ export type BaseGearTrait =
    * swinging — a shot loosed from within `arcDegrees` of where the wearer
    * faces is stopped this often.
    */
-  | { readonly kind: 'frontalBlock'; readonly chance: number; readonly arcDegrees: number };
+  | { readonly kind: 'frontalBlock'; readonly chance: number; readonly arcDegrees: number }
+  /**
+   * The wearer takes only `damageShare` of what `hazard` underfoot deals; a
+   * share of 0 makes the wearer immune to it.
+   */
+  | {
+      readonly kind: 'groundHazardWard';
+      readonly hazard: GroundHazard;
+      readonly damageShare: number;
+    };
 
 /** After enough kills while worn, the piece gains `awakensTo` on top of its own traits. */
 export interface AwakeningTrait {
@@ -178,6 +194,8 @@ export interface GearModifiers {
   readonly maxHpPenaltyShare: number;
   /** Whether fairies leave the wearer be until she strikes one. */
   readonly fairyTruce: boolean;
+  /** The share of each ground hazard's damage that reaches the wearer. */
+  readonly groundHazardShares: GroundHazardShares;
 }
 
 export const NO_GEAR_MODIFIERS: GearModifiers = {
@@ -193,6 +211,7 @@ export const NO_GEAR_MODIFIERS: GearModifiers = {
   ricochetBounces: 0,
   maxHpPenaltyShare: 0,
   fairyTruce: false,
+  groundHazardShares: FULL_GROUND_HAZARD_SHARES,
 };
 
 const sum = (a: number, b: number): number => a + b;
@@ -216,6 +235,7 @@ const MODIFIER_COMBINERS: {
   ricochetBounces: (a, b) => Math.max(a, b),
   maxHpPenaltyShare: sum,
   fairyTruce: (a, b) => a || b,
+  groundHazardShares: combineGroundHazardShares,
 };
 
 function combineModifier<K extends keyof GearModifiers>(
@@ -242,6 +262,7 @@ export function addModifiers(total: GearModifiers, part: Partial<GearModifiers>)
     ricochetBounces: combineModifier('ricochetBounces', total, part),
     maxHpPenaltyShare: combineModifier('maxHpPenaltyShare', total, part),
     fairyTruce: combineModifier('fairyTruce', total, part),
+    groundHazardShares: combineModifier('groundHazardShares', total, part),
   };
 }
 
@@ -366,6 +387,12 @@ const STATUS_LABELS: Readonly<Record<OnHitStatusKind, string>> = {
   stun: 'stun',
   web: 'web',
   ink: 'ink',
+};
+
+/** Each ground hazard as the detail pane names it. */
+const GROUND_HAZARD_LABELS: Readonly<Record<GroundHazard, string>> = {
+  electricity: 'electrified ground',
+  acid: 'acid on the ground',
 };
 
 const RELIC_LABELS: Readonly<Record<RelicBehaviour, string>> = {
@@ -882,6 +909,15 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
     describe: () => "Fairies won't start a fight with you",
     score: () => SCORE_SIGNATURE_MECHANIC,
     modifiers: () => ({ fairyTruce: true }),
+  },
+  groundHazardWard: {
+    describe: (t) => {
+      const hazard = GROUND_HAZARD_LABELS[t.hazard];
+      if (t.damageShare === 0) return `Immune to ${hazard}`;
+      return `${percent(1 - t.damageShare)}% less damage from ${hazard}`;
+    },
+    score: (t) => (1 - t.damageShare) * SCORE_FLAT_MECHANIC,
+    modifiers: (t) => ({ groundHazardShares: groundHazardSharesWith(t.hazard, t.damageShare) }),
   },
   fistFamily: {
     describe: (t) => `Punches land as ${WEAPON_FAMILY_LABELS[t.family].toLowerCase()} blows`,

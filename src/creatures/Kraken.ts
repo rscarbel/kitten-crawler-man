@@ -19,6 +19,7 @@ import { prewarmKrakenTentacle } from '../sprites/krakenTentacleSprite';
 import { SLAM_RISE_SHARE, SLAM_LOOM_SHARE, SLAM_DIVE_SHARE } from '../sprites/krakenAttackTiming';
 import type { KrakenTentacle } from './KrakenTentacle';
 import type { TilePoint } from '../systems/bossRooms/bossRoomLayout';
+import { feetPointPx } from '../map/collisionAnchors';
 
 /**
  * Base HP for a floor-1 boss fought at levels 3–7: above the Trash Gremlin,
@@ -442,7 +443,7 @@ export class Kraken extends Mob implements KrakenRoomControl {
     this.guardTentacles.push(tentacle);
   }
 
-  /** Run here rather than in `updateAI` because a fogged boss skips her AI entirely. */
+  /** Run here rather than in `updateAI` because a smoke-blinded boss skips her AI entirely. */
   override tickTimers(): void {
     super.tickTimers();
     if (!this.roomDrained) this.submergedTicks++;
@@ -744,8 +745,9 @@ export class Kraken extends Mob implements KrakenRoomControl {
       }
     }
 
-    this.slamTargetX = slamTarget.x + ts * CENTER_OFFSET;
-    this.slamTargetY = slamTarget.y + ts * CENTER_OFFSET;
+    const targetFeet = feetPointPx(slamTarget, ts);
+    this.slamTargetX = targetFeet.x;
+    this.slamTargetY = targetFeet.y;
 
     // Snapshotted with the target and never revised: the rise is the first half
     // of the same promise the ring makes, and a tentacle that slid around her
@@ -782,8 +784,9 @@ export class Kraken extends Mob implements KrakenRoomControl {
     const ts = this.tileSize;
     for (const t of targets) {
       if (!t.isAlive) continue;
-      const dx = t.x + ts * CENTER_OFFSET - this.slamTargetX;
-      const dy = t.y + ts * CENTER_OFFSET - this.slamTargetY;
+      const feet = feetPointPx(t, ts);
+      const dx = feet.x - this.slamTargetX;
+      const dy = feet.y - this.slamTargetY;
       if (Math.hypot(dx, dy) < KRAKEN_SLAM_RADIUS_PX) {
         // Priced as a share of the victim's own health, which already scales
         // with the party; level-scaling it again would count that twice.

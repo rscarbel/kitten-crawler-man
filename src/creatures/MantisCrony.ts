@@ -131,8 +131,8 @@ export class MantisCrony extends Mob {
    * Drops a strike that confusion has frozen.
    *
    * `MobUpdateLoop` skips `updateAI` for a confused mob and `slashTimer` only
-   * advances inside it, so a fogged mantis would wander the map holding a
-   * half-finished swing and then land it the instant the fog lifted. `tickTimers`
+   * advances inside it, so a smoke-blinded mantis would wander the map holding a
+   * half-finished swing and then land it the instant the smoke lifted. `tickTimers`
    * is the one per-frame hook the loop runs for confused mobs too.
    */
   override tickTimers(): void {

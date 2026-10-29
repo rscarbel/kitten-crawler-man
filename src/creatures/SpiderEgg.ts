@@ -6,7 +6,7 @@ import { drawSpiderEggSprite, type SpiderEggState } from '../sprites/spiderEggSp
 
 /**
  * Frames from the tick an egg lands to the tick it hatches. Counted in the mob
- * loop's per-mob timer tick rather than its AI, so a confusing fog cannot stall
+ * loop's per-mob timer tick rather than its AI, so a smoke bomb's cloud cannot stall
  * it, while anything that halts the mob loop still does.
  */
 export const EGG_HATCH_FRAMES = 240;

@@ -9,7 +9,7 @@
  * Two people read in this town and they are not the same act. Madame Voss works
  * the plaza with cards and showmanship. Old Lori reads in her own kitchen for
  * less, has no cards, and tells you what she actually sees — which is mostly
- * about the curse, the ruins and the thing humming under the tower.
+ * about the bad year and the ruins it left.
  */
 
 import { pickLine, speakerLines } from '../line';

@@ -156,14 +156,14 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
     name: 'e-long-title',
     spec: {
       questTitle: 'The Extraordinarily Long-Winded Affair of the Seventeen Borrowed Wheelbarrows',
-      renderQuestIcon: rewardIconPainter('skill_book_cat_reflexes'),
+      renderQuestIcon: rewardIconPainter('skill_book_warp_speed'),
       sections: [
         { kind: 'xp', amount: 1934, recipient: crawlerName('human') },
         { kind: 'xp', amount: 2000, recipient: crawlerName('cat') },
         {
           kind: 'items',
           items: [
-            bagItemRewardLine('skill_book_cat_reflexes', 1, {
+            bagItemRewardLine('skill_book_warp_speed', 1, {
               describe: true,
               note: `In ${crawlerName('cat')}'s bag.`,
             }),

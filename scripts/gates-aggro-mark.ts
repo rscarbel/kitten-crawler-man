@@ -26,10 +26,10 @@ const { beginFigureFrame, figureRowInkPending } =
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
   await import('../src/core/party/mercenaryTemplates.js');
-const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
-const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
+const { GravediggerBeetle } = await import('../src/creatures/GravediggerBeetle.js');
+const { FuzzyNightmare } = await import('../src/creatures/FuzzyNightmare.js');
 const { Lemur } = await import('../src/creatures/Lemur.js');
-const { CityElfCultist } = await import('../src/creatures/CityElfCultist.js');
+const { Elf } = await import('../src/creatures/Elf.js');
 const { Cockroach } = await import('../src/creatures/Cockroach.js');
 const { Cow } = await import('../src/creatures/Cow.js');
 const { DarkKnight } = await import('../src/creatures/DarkKnight.js');
@@ -45,7 +45,7 @@ const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { Kraken } = await import('../src/creatures/Kraken.js');
 const { KrakenTentacle } = await import('../src/creatures/KrakenTentacle.js');
 const { Krasue } = await import('../src/creatures/Krasue.js');
-const { Llama } = await import('../src/creatures/Llama.js');
+const { AcidLlama } = await import('../src/creatures/AcidLlama.js');
 const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
@@ -68,8 +68,8 @@ const { TallClown } = await import('../src/creatures/TallClown.js');
 const { MassiveClown } = await import('../src/creatures/MassiveClown.js');
 const { TrashGremlin } = await import('../src/creatures/TrashGremlin.js');
 const { TheLich } = await import('../src/creatures/TheLich.js');
-const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
-const { Tuskling } = await import('../src/creatures/Tuskling.js');
+const { Lizardman } = await import('../src/creatures/Lizardman.js');
+const { Wereboar } = await import('../src/creatures/Wereboar.js');
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 
@@ -131,10 +131,10 @@ function unmarked(mob: Mob, label: string): Subject {
   return { label, mob, marked: false };
 }
 
-function grubAt(stage: InstanceType<typeof BrindleGrub>['stage'], label: string): Subject {
-  const grub = new BrindleGrub(WORLD_TILE, WORLD_TILE, TILE_SIZE);
-  grub.stage = stage;
-  return unmarked(grub, label);
+function beetleAt(stage: InstanceType<typeof GravediggerBeetle>['stage'], label: string): Subject {
+  const beetle = new GravediggerBeetle(WORLD_TILE, WORLD_TILE, TILE_SIZE);
+  beetle.stage = stage;
+  return unmarked(beetle, label);
 }
 
 /** A tentacle is built underground, where it draws only the floor breaking. */
@@ -174,8 +174,8 @@ function subjects(): Subject[] {
     provoke(new TheLich(...at), 'the Lich'),
     provoke(new DarkKnight(...at), 'dark knight'),
     provoke(new RockGolem(...at), 'rock golem'),
-    provoke(new Llama(...at), 'llama'),
-    provoke(new Bugaboo(...at), 'bugaboo'),
+    provoke(new AcidLlama(...at), 'acid llama'),
+    provoke(new FuzzyNightmare(...at), 'fuzzy nightmare'),
     provoke(new MantisCrony(...at), 'mantis crony'),
     provoke(new Mantid(...at), 'mantid'),
     provoke(new GraveBull(...at), 'grave bull'),
@@ -185,21 +185,21 @@ function subjects(): Subject[] {
     provoke(new TallClown(...at), 'tall clown'),
     provoke(new MassiveClown(...at), 'Massive Clown'),
     provoke(new FireFairy(...at), 'fire fairy'),
-    provoke(new CityElfCultist(...at), 'elf cultist'),
+    provoke(new Elf(...at), 'elf'),
     provoke(new RuinsGhoul(...at), 'ruins ghoul'),
     provoke(new Lemur(...at), 'lemur'),
     provoke(new Krasue(...at), 'krasue'),
     provoke(new Lion(...at), 'lion'),
     provoke(new DireBear(...at), 'dire bear'),
     unmarked(new RatkinSoldier(...at, 'sedge'), 'ratkin soldier'),
-    unmarked(new Troglodyte(...at), 'troglodyte'),
+    unmarked(new Lizardman(...at), 'lizardman'),
     unmarked(new Cockroach(...at), 'cockroach'),
-    grubAt(1, 'brindle grub'),
-    grubAt(2, 'cow-tailed grub'),
-    grubAt(3, 'brindled vespa'),
+    beetleAt('larva', 'gravedigger larva'),
+    beetleAt('pupa', 'gravedigger pupa'),
+    beetleAt('adult', 'gravedigger beetle'),
     unmarked(new Remex(...at), 'remex'),
     unmarked(new Hawkfolk(...at, HAWKFOLK_TOUGH_FAMILY.canonical), 'hawkfolk'),
-    unmarked(new Tuskling(...at), 'tuskling'),
+    unmarked(new Wereboar(...at), 'wereboar'),
     unmarked(new TrashGremlin(...at), 'the Trash Gremlin'),
     unmarked(new SmallSpider(...at), 'small spider'),
     unmarked(new GrotesqueSpider(...at), 'grotesque spider'),

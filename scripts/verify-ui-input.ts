@@ -772,7 +772,7 @@ section(
   const readout = stackedBandEntry({
     id: 'readout',
     priority: 'encounter',
-    rows: [{ kind: 'text', text: 'Bugaboos in 18s', role: 'label' }],
+    rows: [{ kind: 'text', text: 'Fuzzy Nightmares in 18s', role: 'label' }],
   });
   const withControl: TopBandEntry = {
     id: 'with-control',

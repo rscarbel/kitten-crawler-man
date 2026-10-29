@@ -21,9 +21,9 @@ import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
-import { Bugaboo } from '../creatures/Bugaboo';
+import { FuzzyNightmare } from '../creatures/FuzzyNightmare';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
-import { prewarmBugaboo } from '../sprites/bugabooSprite';
+import { prewarmFuzzyNightmare } from '../sprites/fuzzyNightmareSprite';
 import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { QuestNPC } from '../creatures/QuestNPC';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
@@ -142,7 +142,7 @@ const TILE_CENTER_OFFSET = 0.5;
 const BARRIER_HIT_FLASH_FRAMES = 12;
 const BARRIER_HIT_ALPHA_FRACTION = 0.45;
 
-const APPROACH_TITLE = 'BUGABOOS INCOMING';
+const APPROACH_TITLE = 'FUZZY NIGHTMARES INCOMING';
 /** Shown while the segment is called off — the timer is frozen and there is nothing to count. */
 const HELD_TITLE = 'SEGMENT ON HOLD';
 const HELD_VALUE = 'GO BACK IN';
@@ -265,8 +265,8 @@ export interface WoodBarrier {
   hitFlash: number;
   /**
    * Spikes a crawler with Construction added to the boards: absent without
-   * any. They take a bugaboo's blows before the boards do, and hand each blow
-   * back to the bugaboo that struck.
+   * any. They take a fuzzy nightmare's blows before the boards do, and hand each blow
+   * back to the fuzzy nightmare that struck.
    */
   spikesHp?: number;
   /** Which crawler added the spikes, whose kill a thorn death is credited to. */
@@ -316,7 +316,7 @@ export interface DefendQuestCheckpoint {
   readonly pendingBuild: Readonly<PendingBuild> | null;
   readonly audienceAbsenceFrames: number;
   readonly encounterAborted: boolean;
-  readonly questMobs: readonly Bugaboo[];
+  readonly questMobs: readonly FuzzyNightmare[];
   /**
    * The goblin mother is owned by this system rather than by the scene's mob
    * array, so nothing else rewinds her — and a dead one re-fails the quest on
@@ -375,8 +375,8 @@ export class DefendQuestSystem implements GameSystem {
   barrierBrokenSoundPending = false;
   /** Set when a dialog box opens; DungeonScene clears it and plays menu_open. */
   menuOpenSoundPending = false;
-  // Spawned Bugaboos (tracked separately for quest-end cleanup)
-  private questMobs: Bugaboo[] = [];
+  // Spawned Fuzzy Nightmares (tracked separately for quest-end cleanup)
+  private questMobs: FuzzyNightmare[] = [];
 
   /**
    * A crawler tried to build or repair without the boards for it, so the wood
@@ -429,7 +429,7 @@ export class DefendQuestSystem implements GameSystem {
     addMob: (mob: Mob) => void,
     private readonly conversation: Conversation,
     /**
-     * The level one bugaboo spawns at, rolled per body against the floor's own
+     * The level one fuzzy nightmare spawns at, rolled per body against the floor's own
      * band and the party's level.
      *
      * The quest is a mandatory choke crossed mid-floor 1 by a level-3 party
@@ -546,7 +546,7 @@ export class DefendQuestSystem implements GameSystem {
             ...base,
             status: 'active',
             objective: `Hold the room — ${secondsLabel(this.defenseTimer)} left`,
-            hint: 'She dies, the quest dies. Keep the bugaboos off her.',
+            hint: 'She dies, the quest dies. Keep the Fuzzy Nightmares off her.',
           },
         ];
       case 'complete_pending':
@@ -870,7 +870,7 @@ export class DefendQuestSystem implements GameSystem {
    * them back to the wood pile. Returns false so the caller can fall through to
    * the normal attack, which is also what a boardless tap does when something
    * hostile is on or beside that grate: on a phone the same tap is the attack,
-   * and a player swinging at a bugaboo coming up through the floor must not be
+   * and a player swinging at a fuzzy nightmare coming up through the floor must not be
    * told to fetch wood instead.
    */
   tryMobileTapOnGrate(
@@ -904,7 +904,7 @@ export class DefendQuestSystem implements GameSystem {
     const mobs = this.roster?.mobs ?? [];
     return mobs.some((mob) => {
       if (!mob.isAlive || !mob.isHostile) return false;
-      if (mob instanceof Bugaboo && mob.assignedGrate === grate) return true;
+      if (mob instanceof FuzzyNightmare && mob.assignedGrate === grate) return true;
       const tileX = pixelToTile(mob.x);
       const tileY = pixelToTile(mob.y);
       const reach = Math.max(Math.abs(tileX - grate.x), Math.abs(tileY - grate.y));
@@ -947,7 +947,7 @@ export class DefendQuestSystem implements GameSystem {
   /**
    * Check if a barrier exists at a grate position. damage=0 just checks
    * existence. A blow is scaled by the floor's barrier-damage multiplier. A
-   * spiked barrier's spikes take the blow first, and `attacker` — the bugaboo
+   * spiked barrier's spikes take the blow first, and `attacker` — the fuzzy nightmare
    * clawing at it — takes its own unscaled blow back: the thorns hurt as much
    * as the claw that met them, whichever floor it is.
    */
@@ -1055,7 +1055,7 @@ export class DefendQuestSystem implements GameSystem {
 
       case 'tutorial':
       case 'failed':
-        // Remaining mobs now target players (handled by Bugaboo AI fallback)
+        // Remaining mobs now target players (handled by Fuzzy Nightmare AI fallback)
         break;
     }
 
@@ -1090,7 +1090,7 @@ export class DefendQuestSystem implements GameSystem {
     this.effects.hammerStrike(tileCentre(grate), TILE_SIZE);
   }
 
-  /** Grit sifting up between the boards of every grate a bugaboo is clawing at from below. */
+  /** Grit sifting up between the boards of every grate a fuzzy nightmare is clawing at from below. */
   private shakeGritFromBreaches(): void {
     for (const mob of this.questMobs) {
       const grate = mob.assignedGrate;
@@ -1118,7 +1118,7 @@ export class DefendQuestSystem implements GameSystem {
    * The entrance is deliberately never barred, so a party that accepts the
    * quest and then walks back into the corridor would otherwise watch the
    * encounter resolve itself from safety — the timer running out, or the
-   * bugaboos finishing the mother unopposed — and be paid for a segment they
+   * fuzzy nightmares finishing the mother unopposed — and be paid for a segment they
    * spent in a corridor.
    *
    * The show has no reason to run for an empty room either: a nursery defence
@@ -1132,7 +1132,7 @@ export class DefendQuestSystem implements GameSystem {
 
     // The *controlled* crawler, conscious, and standing in the room. A body is
     // not an audience: the companion can be told to hold position and to stop
-    // swinging, and the bugaboos walk past it to reach the mother anyway — so
+    // swinging, and the fuzzy nightmares walk past it to reach the mother anyway — so
     // counting one would let a player park the cat in the corner and watch the
     // whole segment resolve itself from the corridor, which is the exact bypass
     // this exists to close.
@@ -1157,7 +1157,7 @@ export class DefendQuestSystem implements GameSystem {
    *
    * Rewinding rather than merely pausing is what stops a party from yo-yoing
    * through the doorway to burn the defense timer down a grace period at a time
-   * without ever meeting a bugaboo. The boards come down with it — an abandoned
+   * without ever meeting a fuzzy nightmare. The boards come down with it — an abandoned
    * segment is one nobody is playing, and a room nobody is playing must not be
    * a room nobody can walk through.
    */
@@ -1185,14 +1185,14 @@ export class DefendQuestSystem implements GameSystem {
 
   /**
    * Cuts the live wave loose from the segment, which is the guarantee that the
-   * mother cannot die off camera: only a bugaboo holding her as its
+   * mother cannot die off camera: only a fuzzy nightmare holding her as its
    * `defendTarget` can damage her, and every other damage path in the game skips
    * her outright.
    *
    * They are released rather than killed. Killing a body the party has already
    * hit pays the full split — `resolveKills` credits any mob with a damage
    * ledger, whoever landed the last blow — and the `mobKilled` that goes with it
-   * drops loot and, on floor 2, hatches a litter of brindle grubs. A segment the
+   * drops loot and, on floor 2, hatches a litter of gravedigger larvae. A segment the
    * player walked out of must not pay for itself, let alone pay again on every
    * repeat. So the brood simply turns on the crawlers and follows them out; the
    * XP is there for anyone who wants to fight for it.
@@ -1224,7 +1224,7 @@ export class DefendQuestSystem implements GameSystem {
 
   private questExitDoorState(): QuestExitDoorState {
     if (RESOLVED_PHASES.has(this.phase)) return 'smashed';
-    // Only while bugaboos are actually in the room, and deliberately not during
+    // Only while fuzzy nightmares are actually in the room, and deliberately not during
     // the staging countdown. A crawler who accepts and thinks better of it has
     // the whole approach to walk out the far side, and one who walks out on a
     // live wave gets the boards down with the abort and a fresh countdown to
@@ -1246,10 +1246,10 @@ export class DefendQuestSystem implements GameSystem {
       this.defenseTimer = DEFENSE_TIMER_FRAMES;
       this.spawnTimer = FIRST_WAVE_DELAY_FRAMES;
       // Every wave is scheduled before it lands, and this is the first of them.
-      // A cold Bugaboo row costs a full-cell paint on the frame a body arrives,
+      // A cold Fuzzy Nightmare row costs a full-cell paint on the frame a body arrives,
       // so the delay the quest already puts between committing to a wave and
       // spawning it is the lead the cache is warmed during.
-      prewarmBugaboo();
+      prewarmFuzzyNightmare();
     }
   }
 
@@ -1268,7 +1268,7 @@ export class DefendQuestSystem implements GameSystem {
       // The next wave is now committed to, three to five seconds out. Warming a
       // row that is already warm is nearly free, so this fires every wave
       // rather than tracking which rows the last one left behind.
-      prewarmBugaboo();
+      prewarmFuzzyNightmare();
     }
 
     this.questMobs = this.questMobs.filter((m) => m.isAlive);
@@ -1311,7 +1311,7 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   /**
-   * The room's doorways a bugaboo can actually run in through.
+   * The room's doorways a fuzzy nightmare can actually run in through.
    *
    * The goblin mother bars the onward doorway for the length of the encounter,
    * so during a wave this is normally just the way the player came — but it is
@@ -1332,18 +1332,18 @@ export class DefendQuestSystem implements GameSystem {
 
     if (spawnAtEntrance) {
       const ent = doorways[Math.floor(Math.random() * doorways.length)];
-      this.spawnBugaboo(ent.x, ent.y, -1);
+      this.spawnFuzzyNightmare(ent.x, ent.y, -1);
     } else {
       const grateIdx = Math.floor(Math.random() * this.roomData.grateTiles.length);
       const grate = this.roomData.grateTiles[grateIdx];
-      this.spawnBugaboo(grate.x, grate.y, grateIdx);
+      this.spawnFuzzyNightmare(grate.x, grate.y, grateIdx);
     }
   }
 
-  private spawnBugaboo(tileX: number, tileY: number, grateIdx: number): void {
+  private spawnFuzzyNightmare(tileX: number, tileY: number, grateIdx: number): void {
     if (!this.npc) return;
     const bug = spawnMob(
-      'bugaboo',
+      'fuzzy_nightmare',
       { x: tileX, y: tileY },
       this.gameMap,
       liveSpawnContext('quest:defend'),
@@ -1378,9 +1378,9 @@ export class DefendQuestSystem implements GameSystem {
 
   private triggerDefenseComplete(): void {
     // The segment ends; the bodies already out of the grates do not.
-    // Force-killing survivors here would route a bugaboo the party had merely
+    // Force-killing survivors here would route a fuzzy nightmare the party had merely
     // chipped through `resolveKills` as a full kill, hatching a litter of
-    // brindle grubs on floor 2 and drawing a second set of gore on top of this
+    // gravedigger larvae on floor 2 and drawing a second set of gore on top of this
     // one. The nursery held — that is what the sixty seconds bought. Whatever
     // is still standing in it is the party's problem, worth exactly the XP
     // they fight it for.
@@ -2013,7 +2013,7 @@ export class DefendQuestSystem implements GameSystem {
   /**
    * The wave's status: what to do, how long is left as a draining bar, and a
    * pip per grate showing which are boarded — with the mother's health once
-   * the bugaboos are in. `null` outside the countdown and the defence.
+   * the fuzzy nightmares are in. `null` outside the countdown and the defence.
    */
   topBandEntry(): TopBandEntry | null {
     if (this.phase !== 'countdown' && this.phase !== 'defending') return null;
@@ -2027,7 +2027,7 @@ export class DefendQuestSystem implements GameSystem {
       ? HELD_VALUE
       : defending
         ? `Her child is back in ${clockLabel(seconds)}`
-        : `Bugaboos in ${seconds}s — board up the grates`;
+        : `Fuzzy Nightmares in ${seconds}s — board up the grates`;
     const timeFraction = held
       ? 1
       : defending

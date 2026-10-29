@@ -461,10 +461,10 @@ console.log('\nDriving the full issue → kill → collect loop…');
     boss?.mobLevel === bossLevel,
     `the mark is levelled to ${bossLevel} (found ${boss?.mobLevel ?? 'none'})`,
   );
-  check(boss?.immuneToConfusion === true, 'the mark is immune to the fog');
+  check(boss?.immuneToConfusion === true, 'the mark is immune to the smoke');
   check(
     spawned.filter((mob) => mob.immuneToConfusion).length === 1,
-    'the escort is NOT immune to the fog',
+    'the escort is NOT immune to the smoke',
   );
   check(
     spawned.every((mob) => mob.ignoresTownSafeZone),

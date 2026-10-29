@@ -8,9 +8,10 @@
  *    (the dead still dead), the same crawlers, every system's state as it was
  *    at the door, and no freshly spawned population.
  *  - The party stands on the tile in front of the door.
- *  - The collapse clock reads on the way out exactly what it read on the way
- *    in, however long the visit took; indoors the HUD shows it held; and it
- *    runs again on the first frames outside.
+ *  - The floor clock reads on the way out exactly what it read on the way
+ *    in, however long the visit took; indoors the HUD shows Nightmare's time
+ *    limit held, and shows none on another difficulty; and the clock runs
+ *    again on the first frames outside.
  *  - The save written at the door describes floor 2 with the party in front
  *    of the door, so a reload inside resumes there.
  *
@@ -34,8 +35,8 @@ const DEFAULT_SEEDS: readonly number[] = [FIRST_SEED, SECOND_SEED];
 const FAULTS = [
   /** The exit rebuilds the floor around the party the way the overworld does. */
   'regenerate-on-exit',
-  /** The exit hands the clock back at the floor's full time limit. */
-  'timer-from-limit',
+  /** The exit hands the clock back as if the floor had just begun. */
+  'clock-from-zero',
   /** A death on the floor handed back after a defeat indoors does nothing. */
   'defeat-skips-rewind',
 ] as const;
@@ -84,6 +85,7 @@ const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js
 const { level2 } = await import('../src/levels/level2.js');
 const { sceneSetupFromSave } = await import('../src/scenes/resumeFromSave.js');
 const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+const { settings } = await import('../src/core/input/Settings.js');
 useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
@@ -96,6 +98,10 @@ type SaveOptions = NonNullable<ConstructorParameters<typeof DungeonScene>[3]>;
 type SavedProgress = Parameters<NonNullable<SaveOptions['saveProgress']>>[0];
 type Tile = { readonly x: number; readonly y: number };
 
+/** The one tier that holds a floor to its time limit, so the HUD shows one. */
+const NIGHTMARE = 'hard' as const satisfies Difficulty;
+/** A tier with no time limit, on which the HUD shows none. */
+const UNTIMED_DIFFICULTY = 'normal' as const satisfies Difficulty;
 /** What the prison's difficulty picker is answered with; the visits never move inside it. */
 const PRISON_DIFFICULTY = 'normal' as const satisfies Difficulty;
 /** Creatures killed before the visit, so the way back can be asked about them. */
@@ -111,8 +117,8 @@ const SETTLE_FRAMES = 30;
 const FRAMES_INSIDE = 5000;
 /** Frames ticked outside to prove the clock runs. */
 const RUNNING_CHECK_FRAMES = 120;
-/** The least a running clock may lose over a running check, leaving room for a held frame. */
-const MIN_RUNNING_LOSS = RUNNING_CHECK_FRAMES / 2;
+/** The least a running clock may count over a running check, leaving room for a held frame. */
+const MIN_RUNNING_COUNT = RUNNING_CHECK_FRAMES / 2;
 /** Frames given to a barrier being set down, past its own construct time. */
 const BARRIER_FRAMES = 120;
 const BARRIER_ITEM = 'gym_dumbbell';
@@ -132,6 +138,17 @@ function check(ok: boolean, message: string): void {
   console.log(`  FAIL: ${message}`);
 }
 
+/** Reads `read` with `difficulty` in play for the session, then puts the tier back. */
+function onDifficulty<T>(difficulty: Difficulty, read: () => T): T {
+  const previous = settings.difficulty;
+  settings.setDifficultyForSession(difficulty);
+  try {
+    return read();
+  } finally {
+    settings.setDifficultyForSession(previous);
+  }
+}
+
 // ── Faults ─────────────────────────────────────────────────────────────────
 
 function injectFault(active: Fault | null): void {
@@ -145,12 +162,11 @@ function injectFault(active: Fault | null): void {
     case 'defeat-skips-rewind':
       proto['respawnAfterDeath'] = () => undefined;
       return;
-    case 'timer-from-limit': {
+    case 'clock-from-zero': {
       const apply: unknown = Reflect.get(proto, 'applyInteriorReturn');
       if (typeof apply !== 'function') throw new Error('DungeonScene has no applyInteriorReturn');
-      const fullClock = level2.collapseTimeLimitFrames ?? 0;
       proto['applyInteriorReturn'] = function (this: Scene, held) {
-        Reflect.apply(apply, this, [{ ...held, levelTimerFrames: fullClock }]);
+        Reflect.apply(apply, this, [{ ...held, floorElapsedFrames: 0 }]);
       };
       return;
     }
@@ -360,16 +376,19 @@ async function verifySeed(worldSeed: number): Promise<void> {
 
   placeAt(human, returnTile);
   placeAt(cat, returnTile);
-  const lostOutside = (() => {
-    const start = outside.levelTimerRemainingFrames;
+  const countedOutside = (() => {
+    const start = outside.floorClockElapsedFrames;
     tickPinned(outside, RUNNING_CHECK_FRAMES);
-    return start - outside.levelTimerRemainingFrames;
+    return outside.floorClockElapsedFrames - start;
   })();
   check(
-    lostOutside >= MIN_RUNNING_LOSS,
-    `${label}: the clock runs in front of the door (lost ${lostOutside}/${RUNNING_CHECK_FRAMES})`,
+    countedOutside >= MIN_RUNNING_COUNT,
+    `${label}: the clock runs in front of the door (counted ${countedOutside}/${RUNNING_CHECK_FRAMES})`,
   );
-  const clockAtDoor = outside.levelTimerRemainingFrames;
+  const clockAtDoor = outside.floorClockElapsedFrames;
+  const timeLimit = level2.nightmareTimeLimitFrames;
+  check(timeLimit !== undefined, `${label}: floor 2 has a Nightmare time limit`);
+  const timeLeftAtDoor = (timeLimit ?? 0) - clockAtDoor;
 
   // ── In ──
   quietTheDoorStep(outside, label);
@@ -387,18 +406,23 @@ async function verifySeed(worldSeed: number): Promise<void> {
   if (doorSave !== undefined) verifyDoorSave(doorSave, returnTile, clockAtDoor, label);
 
   check(await settleArrival(inside, ctx), `${label}: the building's arrival screen finishes`);
-  const heldClock = inside['hudModel']().levelTimer;
+  const heldClock = onDifficulty(NIGHTMARE, () => inside['hudModel']().levelTimer);
   check(
-    heldClock !== null && heldClock.frames === clockAtDoor && heldClock.paused,
-    `${label}: the HUD indoors shows the clock held at ${clockAtDoor} (shows ${JSON.stringify(heldClock)})`,
+    heldClock !== null && heldClock.frames === timeLeftAtDoor && heldClock.paused,
+    `${label}: the HUD indoors shows the time limit held at ${timeLeftAtDoor} (shows ${JSON.stringify(heldClock)})`,
+  );
+  const untimedClock = onDifficulty(UNTIMED_DIFFICULTY, () => inside['hudModel']().levelTimer);
+  check(
+    untimedClock === null,
+    `${label}: the HUD indoors shows no time limit off Nightmare (shows ${JSON.stringify(untimedClock)})`,
   );
   tickPinned(inside, FRAMES_INSIDE);
   inside['gameStats'].recordGoldEarned(GOLD_EARNED_INDOORS);
   const goldIndoors = inside['gameStats'].snapshot().goldEarned;
-  const heldClockLater = inside['hudModel']().levelTimer;
+  const heldClockLater = onDifficulty(NIGHTMARE, () => inside['hudModel']().levelTimer);
   check(
-    heldClockLater?.frames === clockAtDoor,
-    `${label}: the clock indoors still reads ${clockAtDoor} after ${FRAMES_INSIDE} frames`,
+    heldClockLater?.frames === timeLeftAtDoor,
+    `${label}: the time limit indoors still reads ${timeLeftAtDoor} after ${FRAMES_INSIDE} frames`,
   );
 
   // ── Out ──
@@ -411,8 +435,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   if (!(back instanceof DungeonScene)) return;
 
   check(
-    back.levelTimerRemainingFrames === clockAtDoor,
-    `${label}: the clock reads ${clockAtDoor} on the way out (reads ${back.levelTimerRemainingFrames})`,
+    back.floorClockElapsedFrames === clockAtDoor,
+    `${label}: the clock reads ${clockAtDoor} on the way out (reads ${back.floorClockElapsedFrames})`,
   );
   const backMobs = back['world'].roster.mobs;
   const systemSpawnedAfter = back['systemSpawnedMobs'];
@@ -476,12 +500,12 @@ async function verifySeed(worldSeed: number): Promise<void> {
     `${label}: ${forgotten} explored minimap tile(s) went dark over the visit`,
   );
 
-  const clockOnExit = back.levelTimerRemainingFrames;
+  const clockOnExit = back.floorClockElapsedFrames;
   tickPinned(back, RUNNING_CHECK_FRAMES);
-  const lostAfter = clockOnExit - back.levelTimerRemainingFrames;
+  const countedAfter = back.floorClockElapsedFrames - clockOnExit;
   check(
-    lostAfter >= MIN_RUNNING_LOSS,
-    `${label}: the clock runs again outside (lost ${lostAfter}/${RUNNING_CHECK_FRAMES})`,
+    countedAfter >= MIN_RUNNING_COUNT,
+    `${label}: the clock runs again outside (counted ${countedAfter}/${RUNNING_CHECK_FRAMES})`,
   );
   const goblinsBeforeDeath = goblinsOnFloor(back);
   check(
@@ -680,8 +704,8 @@ function verifyDoorSave(save: SavedProgress, returnTile: Tile, clock: number, la
     `${label}: the door save resumes in front of the door (${JSON.stringify(save.world?.resumeTile)})`,
   );
   check(
-    save.world?.levelTimerFrames === clock,
-    `${label}: the door save keeps the clock at ${clock} (${String(save.world?.levelTimerFrames)})`,
+    save.world?.floorElapsedFrames === clock,
+    `${label}: the door save keeps the clock at ${clock} (${String(save.world?.floorElapsedFrames)})`,
   );
   const { levelDef, options } = sceneSetupFromSave({ skipIntro: true }, save);
   const reloaded = new DungeonScene(levelDef, new InputManager(), new SceneManager(), options);

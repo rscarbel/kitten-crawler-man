@@ -1,8 +1,7 @@
 /**
  * Soul bolts — the cult's signature ranged attack: a shrieking violet orb of
- * harvested soul-stuff. Shared by CityElfCultist and MissQuill so the
- * projectile physics and look stay identical between the foot soldiers and
- * their mistress.
+ * cold fire. Shared by `Elf` and `MissQuill` so the projectile physics and
+ * look stay identical between the two.
  */
 
 import type { Player } from '../Player';

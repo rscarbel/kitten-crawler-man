@@ -37,22 +37,23 @@ import {
 } from '../src/sprites/art/krakenFigure.js';
 import { COCKROACH_FIGURE } from '../src/sprites/art/cockroachFigure.js';
 import { RAT_FIGURE } from '../src/sprites/art/ratFigure.js';
-import { TUSKLING_FIGURE } from '../src/sprites/art/tusklingFigure.js';
+import { WEREBOAR_FIGURE } from '../src/sprites/art/wereboarFigure.js';
 import {
   ENERGY_SHIELD_FIGURE,
   ENERGY_SHIELD_MINI_FIGURE,
   ENERGY_SHIELD_SHOCKWAVE_FIGURE,
 } from '../src/sprites/art/energyShieldFigure.js';
 import { SPIDER_FIGURE } from '../src/sprites/art/spiderFigure.js';
-import { BUGABOO_FIGURE } from '../src/sprites/art/bugabooFigure.js';
-import { LLAMA_FIGURE } from '../src/sprites/art/llamaFigure.js';
-import { BRINDLE_GRUB_FIGURE, COW_TAILED_GRUB_FIGURE } from '../src/sprites/art/grubFigure.js';
-import { BRINDLED_VESPA_FIGURE } from '../src/sprites/art/brindledVespaFigure.js';
-import { GOBLIN_FIGURES } from '../src/sprites/art/goblinFigure.js';
+import { FUZZY_NIGHTMARE_FIGURE } from '../src/sprites/art/fuzzyNightmareFigure.js';
+import { ACID_LLAMA_FIGURE } from '../src/sprites/art/acidLlamaFigure.js';
 import {
-  TROGLODYTE_FIGURE,
-  TROGLODYTE_TONGUE_FIGURE,
-} from '../src/sprites/art/troglodyteFigure.js';
+  GRAVEDIGGER_BEETLE_FIGURE,
+  GRAVEDIGGER_LARVA_FIGURE,
+  GRAVEDIGGER_PUPA_FIGURE,
+} from '../src/sprites/art/gravediggerBeetleFigure.js';
+import { GIANT_WASP_FIGURE } from '../src/sprites/art/giantWaspFigure.js';
+import { GOBLIN_FIGURES } from '../src/sprites/art/goblinFigure.js';
+import { LIZARDMAN_FIGURE, LIZARDMAN_TONGUE_FIGURE } from '../src/sprites/art/lizardmanFigure.js';
 import {
   DEINONYCHUS_STAGES,
   drawDeinonychusSide,
@@ -134,15 +135,20 @@ import {
   SKELETON_SOUL_BURST_FIGURE,
 } from '../src/sprites/art/skeletonEffectsFigure.js';
 import {
-  LLAMA_LAVA_BOLT_FIGURE,
-  LLAMA_LAVA_BURST_FIGURE,
-  LLAMA_LAVA_FLAME_FIGURE,
-} from '../src/sprites/art/lavaBallFigure.js';
+  FIREBALL_BOLT_FIGURE,
+  FIREBALL_BURST_FIGURE,
+  FIREBALL_FLAME_FIGURE,
+} from '../src/sprites/art/fireballFigure.js';
+import {
+  ACID_GLOB_BOLT_FIGURE,
+  ACID_GLOB_BURST_FIGURE,
+  ACID_GLOB_PUDDLE_FIGURE,
+} from '../src/sprites/art/acidGlobFigure.js';
 import {
   SPIT_STATE,
-  VESPA_ACID_SPIT_IMPACT_FIGURE,
-  VESPA_ACID_SPIT_PROJECTILE_FIGURE,
-} from '../src/sprites/art/vespaSpitFigure.js';
+  WASP_ACID_SPIT_IMPACT_FIGURE,
+  WASP_ACID_SPIT_PROJECTILE_FIGURE,
+} from '../src/sprites/art/waspSpitFigure.js';
 
 // A painter that composes on scratch surfaces of its own — the Lich's edge
 // light is one — reaches for `document.createElement('canvas')`.
@@ -305,7 +311,7 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(KRAKEN_FIGURE, 'idle'),
   figureSubject(KRAKEN_TENTACLE_FIGURE, 'idle'),
   figureSubject(KRAKEN_SLAM_FIGURE, 'loom'),
-  figureSubject(TUSKLING_FIGURE, 'idle'),
+  figureSubject(WEREBOAR_FIGURE, 'idle'),
   figureSubject(BIG_ROOSTER_FIGURE, 'idle'),
   figureSubject(LITTLE_ROOSTER_FIGURE, 'idle'),
   figureSubject(BENT_ROOSTER_FIGURE, 'idle'),
@@ -314,17 +320,18 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(ENERGY_SHIELD_SHOCKWAVE_FIGURE, 'expand'),
   figureSubject(COCKROACH_FIGURE, 'skitter_side'),
   figureSubject(RAT_FIGURE, 'walk_side'),
-  figureSubject(LLAMA_FIGURE, 'idle'),
-  figureSubject(BRINDLE_GRUB_FIGURE, 'walk_side'),
-  figureSubject(COW_TAILED_GRUB_FIGURE, 'walk_side'),
-  figureSubject(BRINDLED_VESPA_FIGURE, 'hover_side'),
+  figureSubject(ACID_LLAMA_FIGURE, 'idle'),
+  figureSubject(GRAVEDIGGER_LARVA_FIGURE, 'walk_side'),
+  figureSubject(GRAVEDIGGER_PUPA_FIGURE, 'pupa'),
+  figureSubject(GRAVEDIGGER_BEETLE_FIGURE, 'fly_side'),
+  figureSubject(GIANT_WASP_FIGURE, 'hover_side'),
   figureSubject(GOBLIN_FIGURES.sword, 'walk'),
   figureSubject(GOBLIN_FIGURES.axe, 'walk'),
   figureSubject(GOBLIN_FIGURES.mace, 'walk'),
   figureSubject(GOBLIN_FIGURES.warhammer, 'walk'),
   figureSubject(GOBLIN_FIGURES.bow, 'walk'),
-  figureSubject(TROGLODYTE_FIGURE, 'idle'),
-  figureSubject(TROGLODYTE_TONGUE_FIGURE, 'extend'),
+  figureSubject(LIZARDMAN_FIGURE, 'idle'),
+  figureSubject(LIZARDMAN_TONGUE_FIGURE, 'extend'),
   figureSubject(LICH_FIGURE, 'idle'),
   figureSubject(SKELETON_LORD_FIGURE, 'idle'),
   figureSubject(SKELETON_SWORD_FIGURE, 'walk_side'),
@@ -346,7 +353,7 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE, 'fly'),
   figureSubject(GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, 'idle'),
   figureSubject(SPIDER_FIGURE, 'walk'),
-  figureSubject(BUGABOO_FIGURE, 'walk_side'),
+  figureSubject(FUZZY_NIGHTMARE_FIGURE, 'walk_side'),
   figureSubject(LIFE_MACHINE_FIGURE, lifeMachineStateName('printing')),
   figureSubject(MAGIC_MISSILE_PROJECTILE_FIGURE, 'tier4'),
   figureSubject(MAGIC_MISSILE_EXPLOSION_FIGURE, 'tier4'),
@@ -354,11 +361,14 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(SKELETON_SOUL_BURST_FIGURE, 'burst'),
   figureSubject(SKELETON_BONE_ARROW_FIGURE, 'fly'),
   figureSubject(SKELETON_GRASPING_HANDS_FIGURE, 'erupt'),
-  figureSubject(LLAMA_LAVA_BOLT_FIGURE, 'fly'),
-  figureSubject(LLAMA_LAVA_BURST_FIGURE, 'burst'),
-  figureSubject(LLAMA_LAVA_FLAME_FIGURE, 'burn'),
-  figureSubject(VESPA_ACID_SPIT_PROJECTILE_FIGURE, SPIT_STATE),
-  figureSubject(VESPA_ACID_SPIT_IMPACT_FIGURE, SPIT_STATE),
+  figureSubject(FIREBALL_BOLT_FIGURE, 'fly'),
+  figureSubject(FIREBALL_BURST_FIGURE, 'burst'),
+  figureSubject(FIREBALL_FLAME_FIGURE, 'burn'),
+  figureSubject(ACID_GLOB_BOLT_FIGURE, 'fly'),
+  figureSubject(ACID_GLOB_BURST_FIGURE, 'burst'),
+  figureSubject(ACID_GLOB_PUDDLE_FIGURE, 'puddle'),
+  figureSubject(WASP_ACID_SPIT_PROJECTILE_FIGURE, SPIT_STATE),
+  figureSubject(WASP_ACID_SPIT_IMPACT_FIGURE, SPIT_STATE),
 ];
 
 const WARMUP_ITERATIONS = 20;

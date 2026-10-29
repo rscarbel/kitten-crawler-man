@@ -11,7 +11,7 @@
  * this catches.
  *
  * The preview's first row draws two existing inventory icons (health potion,
- * goblin dynamite) through the real `drawItemIcon` dispatcher, as a visual
+ * dynamite) through the real `drawItemIcon` dispatcher, as a visual
  * ruler for how much of the cell a properly scaled icon fills.
  *
  *   npm run gates:village-icons
@@ -83,9 +83,9 @@ const REFERENCE_HEALTH_POTION: InventoryItem = {
   stackable: true,
   canHotlist: true,
 };
-const REFERENCE_GOBLIN_DYNAMITE: InventoryItem = {
-  id: 'goblin_dynamite',
-  name: 'Goblin Dynamite',
+const REFERENCE_DYNAMITE: InventoryItem = {
+  id: 'dynamite',
+  name: 'Dynamite',
   quantity: 1,
   stackable: true,
   canHotlist: true,
@@ -97,8 +97,8 @@ const REFERENCE_ICONS: readonly IconSpec[] = [
     reference: true,
   },
   {
-    label: 'reference:goblin_dynamite',
-    draw: (ctx, rect) => drawItemIcon(ctx, rect, REFERENCE_GOBLIN_DYNAMITE),
+    label: 'reference:dynamite',
+    draw: (ctx, rect) => drawItemIcon(ctx, rect, REFERENCE_DYNAMITE),
     reference: true,
   },
 ];
@@ -130,7 +130,7 @@ const BLEED_ALPHA = 8;
 const CELL_PAD = 4;
 /**
  * An icon's opaque bounding box, along its longer axis, must cover at least
- * this fraction of the cell. `health_potion` and `goblin_dynamite` — both
+ * this fraction of the cell. `health_potion` and `dynamite` — both
  * drawn through the real `drawItemIcon` dispatcher — measure 0.71 at every
  * size in this file's own reference row, so 0.6 leaves room below an existing
  * icon's fill without tolerating the "small smudge in the corner" a

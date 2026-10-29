@@ -217,35 +217,45 @@ const OPEN_SOUTH = 2;
 const OPEN_EAST = 4;
 const OPEN_WEST = 8;
 
+/** How a wall takes a light: the share it catches, and the open tile beside it the light arrives through. */
+interface WallLighting {
+  readonly share: number;
+  readonly frontX: number;
+  readonly frontY: number;
+}
+
 /**
- * The share of a light seen from tile (`fromX`, `fromY`) that falls on the
- * wall at (`x`, `y`), on the side of it the player sees. A wall with floor to
- * its south is drawn as a face looking south, so only a light south of it
- * lights it, however much of it the shadowcast reached from the north; a side
- * lip takes light from its open side. A wall seen only from the north shows
- * just its top, which catches a little light at its lip and no more. Solid
- * mass glimpsed past a corner takes none: light never pools on the wall tops.
+ * How the light seen from tile (`fromX`, `fromY`) falls on the wall at
+ * (`x`, `y`), on the side of it the player sees, or null when it takes none. A
+ * wall with floor to its south is drawn as a face looking south, so only a
+ * light south of it lights it, however much of it the shadowcast reached from
+ * the north; a side lip takes light from its open side. A wall seen only from
+ * the north shows just its top, which catches a little light at its lip and no
+ * more. Solid mass glimpsed past a corner takes none: light never pools on the
+ * wall tops.
  */
-function wallLightShare(
+function wallLighting(
   x: number,
   y: number,
   fromX: number,
   fromY: number,
   isOpaque: (x: number, y: number) => boolean,
-): number {
+): WallLighting | null {
   let open = 0;
   if (!isOpaque(x, y - 1)) open |= OPEN_NORTH;
   if (!isOpaque(x, y + 1)) open |= OPEN_SOUTH;
   if (!isOpaque(x + 1, y)) open |= OPEN_EAST;
   if (!isOpaque(x - 1, y)) open |= OPEN_WEST;
-  if ((open & OPEN_SOUTH) !== 0) return fromY > y ? 1 : 0;
-  if ((open & (OPEN_EAST | OPEN_WEST)) !== 0) {
-    const facesLight =
-      ((open & OPEN_EAST) !== 0 && fromX > x) || ((open & OPEN_WEST) !== 0 && fromX < x);
-    return facesLight ? 1 : 0;
+  if ((open & OPEN_SOUTH) !== 0) {
+    return fromY > y ? { share: 1, frontX: x, frontY: y + 1 } : null;
   }
-  if ((open & OPEN_NORTH) !== 0) return fromY < y ? WALL_TOP_LIP_LIGHT : 0;
-  return 0;
+  if ((open & OPEN_EAST) !== 0 && fromX > x) return { share: 1, frontX: x + 1, frontY: y };
+  if ((open & OPEN_WEST) !== 0 && fromX < x) return { share: 1, frontX: x - 1, frontY: y };
+  if ((open & (OPEN_EAST | OPEN_WEST)) !== 0) return null;
+  if ((open & OPEN_NORTH) !== 0 && fromY < y) {
+    return { share: WALL_TOP_LIP_LIGHT, frontX: x, frontY: y - 1 };
+  }
+  return null;
 }
 
 /** How much of a light the top of a wall seen from the north catches at its lip. */
@@ -255,7 +265,7 @@ const WALL_TOP_LIP_LIGHT = 0.35;
  * Every tile a light seen from one tile's centre reaches, on a small grid
  * round that tile, with the share of the light each takes: the open tiles in
  * sight, the walls in sight whose visible side faces the light (see
- * {@link wallLightShare}), and the upper rows of each such face.
+ * {@link wallLighting}), and the upper rows of each such face.
  */
 export class OriginVisibility {
   readonly originTileX: number;
@@ -284,17 +294,26 @@ export class OriginVisibility {
       const index = ly * size + lx;
       this.seen[index] = Math.max(this.seen[index], share);
     };
-    const feet: Array<{ x: number; y: number }> = [];
+    const walls: Array<{ x: number; y: number; lighting: WallLighting }> = [];
     shadowcast(fromX, fromY, reachTiles + HALF, isOpaque, (x, y) => {
       if (!isOpaque(x, y)) {
         mark(x, y);
         return;
       }
-      const share = wallLightShare(x, y, fromX, fromY, isOpaque);
-      if (share <= 0) return;
-      mark(x, y, share);
-      if (!isOpaque(x, y + 1)) feet.push({ x, y });
+      const lighting = wallLighting(x, y, fromX, fromY, isOpaque);
+      if (lighting !== null) walls.push({ x, y, lighting });
     });
+    // The shadowcast never lets one tile of a row shade another in the same
+    // row, so past a doorway's jamb it can reach a wall through a sliver of
+    // cone that the jamb itself covers. The light reaches a wall's lit side
+    // only through the open tile in front of it, so a wall whose front tile
+    // the light never reached is not lit.
+    const feet: Array<{ x: number; y: number }> = [];
+    for (const { x, y, lighting } of walls) {
+      if (!this.sees(lighting.frontX, lighting.frontY)) continue;
+      mark(x, y, lighting.share);
+      if (!isOpaque(x, y + 1)) feet.push({ x, y });
+    }
     if (alsoLit !== undefined) mark(alsoLit.x, alsoLit.y);
     // A wall face rises over more than its foot tile, and the shadowcast only
     // reaches the foot; the light falls on the whole face.

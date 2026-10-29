@@ -8,7 +8,6 @@
  */
 
 import type { GameMap } from '../../map/GameMap';
-import { drawDangerCircle } from '../../sprites/dangerTelegraph';
 import { TRASH_BAG, TRASH_PILE, TRASH_TOWER } from '../../map/tileTypes';
 
 const TRASH_JUNK_TYPES: ReadonlySet<number> = new Set([TRASH_PILE, TRASH_TOWER, TRASH_BAG]);
@@ -44,22 +43,12 @@ const BILE_SHADOW_RX_PX = 7;
 const BILE_SHADOW_RY_PX = 3;
 const BILE_SHADOW = 'rgba(20,14,6,0.45)';
 
-/** The warning under a bolus is at full strength for its whole flight: it can strike on any frame. */
-const BILE_WARNING_FADE = 1;
-
 /**
- * What a bolus marks on the floor: its shadow, which is where it really is,
- * and round it the red ground warning of everywhere a body would be struck
- * from, `hitRadiusPx` from the shadow. It flies until a wall or a body stops
- * it, so the warning travels with it rather than waiting at a landing.
+ * The bolus's shadow on the floor, which is where it really is: the bolus
+ * itself is drawn lifted off the ground by its lob height. No ground warning
+ * goes round it — a bolus already in the air is its own cue.
  */
-export function drawBileGroundMark(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  hitRadiusPx: number,
-): void {
-  drawDangerCircle(ctx, x, y, hitRadiusPx, BILE_WARNING_FADE, { locked: true });
+export function drawBileShadow(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   ctx.fillStyle = BILE_SHADOW;
   ctx.beginPath();
   ctx.ellipse(x, y, BILE_SHADOW_RX_PX, BILE_SHADOW_RY_PX, 0, 0, Math.PI * 2);

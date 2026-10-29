@@ -57,6 +57,11 @@ const WHEEL_NOTCH = 120;
 /** More notches than the Settings page could ever need; a control still unseen is not drawn. */
 const MAX_WHEEL_NOTCHES = 40;
 
+const GUARD_CONFIRMATION = {
+  title: 'Restart the test?',
+  body: 'Changing the difficulty restarts what the guard protects.',
+} as const;
+
 const STARTING_DIFFICULTY: Difficulty = 'normal';
 const CHOSEN_DIFFICULTY: Difficulty = 'hard';
 
@@ -173,12 +178,16 @@ function openSettings(): boolean {
   return menu.currentSection === 'settings';
 }
 
-/** Records every restart the guard is asked for. */
-function recordingGuard(): { guard: DifficultyChangeGuard; restarts: Difficulty[] } {
+/**
+ * Records every restart the guard is asked for. `asks` is whether it wants a
+ * change confirmed; a guard with nothing to ask lets the change through.
+ */
+function recordingGuard(asks = true): { guard: DifficultyChangeGuard; restarts: Difficulty[] } {
   const restarts: Difficulty[] = [];
   return {
     restarts,
     guard: {
+      confirmation: () => (asks ? GUARD_CONFIRMATION : null),
       restartWithDifficulty: (next) => {
         restarts.push(next);
         settings.setDifficulty(next);
@@ -295,6 +304,19 @@ export function runDifficultyGuardChecks(fault: DifficultyGuardFault | null): st
     'setDifficultyForSession asked the guard to restart',
   );
   clearDifficultyChangeGuard(handle);
+
+  // A guard with nothing to ask about a tier lets the pick through as an ordinary change.
+  settings.setDifficulty(STARTING_DIFFICULTY);
+  const silent = recordingGuard(false);
+  const silentHandle = register(silent.guard);
+  openSettings();
+  pickChosen();
+  check(!promptIsUp(), 'a guard with nothing to ask raised the restart prompt');
+  check(
+    settings.difficulty === CHOSEN_DIFFICULTY && silent.restarts.length === 0,
+    `a guard with nothing to ask held the change (difficulty ${settings.difficulty}, restarts ${silent.restarts.length})`,
+  );
+  clearDifficultyChangeGuard(silentHandle);
 
   // A stale owner's clear cannot release a newer registration.
   const olderHandle = register(recordingGuard().guard);

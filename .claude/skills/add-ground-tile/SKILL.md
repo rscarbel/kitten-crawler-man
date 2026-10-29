@@ -38,7 +38,7 @@ The painters are pure `Float64Array` maths with no canvas and no filesystem,
 which is what lets the game and the offline harnesses run the identical code.
 
 The sheets are `ground_overworld`, `ground_floor1`, `ground_floor2`,
-`ground_interior` (town building interiors), `ground_dungeon` (the shared Bopca
+`ground_interior` (town building interiors), `ground_dungeon` (the shared safe-room
 station set) and `ground_masks`. Their manifest entries still live in
 `src/images/environment/tilesets/manifest.json` — a row's `frameCount`,
 `patchTiles` and label are what every draw site and every material union is

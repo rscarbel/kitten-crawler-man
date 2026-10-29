@@ -1144,7 +1144,7 @@ export class ElectricGoblin extends Mob {
         const across = Math.abs(offsetX * wave.dirY - offsetY * wave.dirX);
         if (Math.abs(along - wave.travelled) > halfDepthPx || across > halfWidthPx) continue;
         wave.struck.add(target);
-        this.dealRangedDamage(target, SLAM_WAVE_DAMAGE, SLAM_WAVE_ATTACK_TYPE);
+        this.dealGroundDamage(target, SLAM_WAVE_DAMAGE, 'electricity', SLAM_WAVE_ATTACK_TYPE);
       }
     }
   }
@@ -1173,6 +1173,7 @@ export class ElectricGoblin extends Mob {
         mobType: this.mobType,
         attackType: CHARGED_PUDDLE_ATTACK_TYPE,
         undodgeable: true,
+        groundHazard: 'electricity',
         from: this.centre(),
       });
     }

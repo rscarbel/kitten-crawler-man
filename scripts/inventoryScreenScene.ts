@@ -379,8 +379,8 @@ section('a dungeon floor');
   // Already earned, so arriving pays no chest whose reward screen would sit over the bag.
   const humanAchievements = new AchievementManager();
   const catAchievements = new AchievementManager();
-  humanAchievements.recordUnlock('down_the_hatch');
-  catAchievements.recordUnlock('down_the_hatch');
+  humanAchievements.recordUnlock('entered_dungeon');
+  catAchievements.recordUnlock('entered_dungeon');
   const scene = new DungeonScene(getLevelDef('level1'), new InputManager(), sceneManager, {
     worldSeed: WORLD_SEED,
     skipIntro: true,

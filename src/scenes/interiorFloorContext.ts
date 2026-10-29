@@ -1,3 +1,4 @@
+import type { FloorClock } from '../core/difficulty/nightmareTimeLimit';
 import { ASSET_GROUPS, type AssetGroup } from '../core/spriteAssets/assetGroups';
 import type { SpriteKey } from '../core/spriteAssets/SpriteLoader';
 import { level3 } from '../levels/level3';
@@ -37,10 +38,11 @@ export interface InteriorFloorContext {
    */
   readonly ownsMusic: boolean;
   /**
-   * The floor's collapse clock as it stood at the door, shown paused for the
-   * whole visit; null for a floor with no clock. Nothing indoors ticks it.
+   * The floor's clock as it stood at the door, its Nightmare time limit shown
+   * paused for the whole visit; null for a building with no floor clock
+   * outside. Nothing indoors ticks it.
    */
-  readonly heldLevelTimerFrames: number | null;
+  readonly heldFloorClock: FloorClock | null;
   /**
    * The room's shape when the floor decides it. Absent for a town building,
    * whose shape the town's own questlines choose.
@@ -84,5 +86,5 @@ export const TOWN_INTERIOR_FLOOR: InteriorFloorContext = {
   ...interiorArt(['town'], level3),
   sightRadiusPx: Number.POSITIVE_INFINITY,
   ownsMusic: true,
-  heldLevelTimerFrames: null,
+  heldFloorClock: null,
 };

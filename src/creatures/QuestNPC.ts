@@ -28,11 +28,11 @@ export type NPCMarkerType = QuestMarkerState;
 
 /**
  * A non-combatant quest NPC: the goblin mother, carrying her baby.
- * Extends Player so Bugaboos can target her via updateAI(targets).
+ * Extends Player so Fuzzy Nightmares can target her via updateAI(targets).
  * She does NOT move and does NOT attack.
  */
 export class QuestNPC extends Player {
-  /** Flag for Bugaboos to identify her as the defend target. */
+  /** Flag for Fuzzy Nightmares to identify her as the defend target. */
   readonly isDefendTarget = true;
   /** Current overhead marker — drives minimap and overhead icon. */
   markerType: NPCMarkerType = 'exclamation';

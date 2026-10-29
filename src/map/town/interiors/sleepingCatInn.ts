@@ -6,8 +6,8 @@
  * sandstone inglenook against the partition, with the cat's stool and the
  * painted sign beside it; Ossie's bar in the north-east corner, back bar and
  * counter with the barkeep's lane between; and the supper tables laid down
- * the south half. The Bopca's counter run lands between the hearth and the
- * bar on its own, and Dave and the sleeping bed stand where the safe room
+ * the south half. The doctor's corner lands between the hearth and the bar
+ * on its own, and Dave and the sleeping bed stand where the safe room
  * puts them — the layout leaves those tiles, and a way round each, open.
  *
  * The three guest rooms differ at a glance, because that difference is what a
@@ -16,7 +16,7 @@
  * patchwork bed, a shelf of books and a brazier.
  *
  * The shell size and the taproom's row band are exported for `GameMap` to
- * read: the safe-room bounds and the Bopca counter run both need the same
+ * read: the safe-room bounds and the doctor's corner both need the same
  * numbers this layout is built from, and a row written twice is a row that
  * comes apart.
  */
@@ -56,8 +56,11 @@ const BEER_ENGINE_SECTION = 0;
 const TILL_SECTION = 1;
 /** The warm red-fielded runner, not the blue one: the landing belongs to the same house as the taproom. */
 const LANDING_RUNNER_COLOURWAY = 1;
-/** Back bench, galley strip and front bar: the rows `planSafeRoomCounters` lays the Bopca's run across. */
-const SAFE_ROOM_COUNTER_DEPTH_ROWS = 3;
+/**
+ * Rows south of the partition the patients' mat lies: past the cabinet and the
+ * doctor's own row, with a row between to stand in.
+ */
+const PATIENTS_MAT_ROWS_SOUTH_OF_PARTITION = 3;
 
 const CONTRACT_SITE = 'taloncrest_inn' satisfies PlannedBuildingId;
 const CONTRACT_COT_INDEX = 0;
@@ -74,13 +77,13 @@ function innHearthSide() {
   /*
    * The archway down to the taproom is deliberately off-centre.
    *
-   * The Bopca's counter run is laid against the north wall of the safe
-   * room's bounds — this partition row — and centred on the widest span of
-   * it that no doorway opens onto, three rows deep including the galley
-   * behind. An archway in the middle would sit directly under that run,
-   * whose back bench is solid: the guest wing would be sealed off with no
-   * error and no log anywhere. Kept hard against the taproom's west end
-   * instead, which leaves the span east of it for the run.
+   * The doctor's medicine cabinet is laid against the north wall of the
+   * safe room's bounds — this partition row — on a span of it that no
+   * doorway opens onto. An archway in the middle would split that span, and
+   * a careless one would sit under the cabinet, which is solid: the guest
+   * wing would be sealed off with no error and no log anywhere. Kept hard
+   * against the taproom's west end instead, which leaves the span east of
+   * it for the corner.
    */
   const archwayWestCol = 3;
   const archwayEastCol = 4;
@@ -88,9 +91,8 @@ function innHearthSide() {
   const catSignCol = archwayEastCol + 1;
   const logBasketCol = catSignCol + 1;
   /**
-   * Flush against the Bopca's back bench: the run lands on columns 10–15,
-   * and a hearth stopping one column short of it would leave a one-tile
-   * slot behind the counter that only the hearth rug's corner reaches.
+   * The hearth ends where the free span begins, so the doctor's cabinet
+   * stands flush against it and no one-tile slot opens between the two.
    */
   const hearthCol = logBasketCol + 1;
   const catStoolRow = taproomNorthRow + 1;
@@ -198,9 +200,9 @@ export function buildSleepingCatInnLayout(
   /*
    * Ossie's bar. The counter faces south, so the row behind it is the
    * barkeep's lane and the row behind that the back bar against the
-   * partition. The lane opens at its west end only, onto the column between
-   * the bar and the Bopca's run: the stove the safe room would like to stand
-   * there refuses any tile that strands the lane, so it never can.
+   * partition. The lane opens at its west end only: the stove the safe room
+   * would like to stand beside it refuses any tile that strands the lane, so
+   * it never can.
    */
   const backBarWidth = 6;
   const backBarCol = eastCol - backBarWidth + 1;
@@ -209,14 +211,13 @@ export function buildSleepingCatInnLayout(
   const barTillCol = backBarCol + barSectionWidth;
   const barStoolRow = barRow + 1;
   const barStoolPitch = 2;
-  /** A mat in front of the Bopca's counter, where the queue for supper stands. */
-  const galleyRugCol = 10;
-  /** One row south of the Bopca's three-row run. */
-  const galleyRugRow = taproomNorthRow + SAFE_ROOM_COUNTER_DEPTH_ROWS;
+  /** A mat in front of the doctor's corner, where the next patient waits. */
+  const patientsMatCol = 10;
+  const patientsMatRow = taproomNorthRow + PATIENTS_MAT_ROWS_SOUTH_OF_PARTITION;
 
   const tableWidth = 3;
   const westTableCol = westCol;
-  const westUpperTableRow = galleyRugRow + 1;
+  const westUpperTableRow = patientsMatRow + 1;
   /** A table, its bench, and a lane for the next table's diners. */
   const tableRowPitch = 3;
   const westLowerTableRow = westUpperTableRow + tableRowPitch;
@@ -334,7 +335,7 @@ export function buildSleepingCatInnLayout(
     prop(backBarCol, taproomNorthRow, 'inn_back_bar'),
     prop(backBarCol, barRow, 'inn_bar', BEER_ENGINE_SECTION, contractTarget(CONTRACT_SITE, 'bar')),
     prop(barTillCol, barRow, 'inn_bar', TILL_SECTION),
-    prop(galleyRugCol, galleyRugRow, 'rag_rug', 1),
+    prop(patientsMatCol, patientsMatRow, 'rag_rug', 1),
   );
   for (let rx = backBarCol; rx <= eastCol; rx += barStoolPitch)
     entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - backBarCol}`));

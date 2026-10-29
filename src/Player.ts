@@ -17,6 +17,7 @@ import {
   ABSORB_BREAK_LINGER_TICKS,
   isAbsorbing,
   CHILLED_STATUS,
+  CHILL_WEAKENED_BY,
   FROZEN_STATUS,
   OVERHEAL_STATUS,
   WARD_STATUSES,
@@ -49,11 +50,7 @@ import {
 } from './core/skills/tattoos';
 import { applyRetchPose, retchPoseOf } from './sprites/status/statusBloodVomit';
 import type { StatusMouth } from './sprites/status/statusPaint';
-import {
-  CHILLED_ACTION_SPEED_FACTOR,
-  CHILLED_MOVE_SPEED_FACTOR,
-  FREEZE_GRACE_FRAMES,
-} from './core/combat/statusTuning';
+import { CHILLED_ACTION_SPEED_FACTOR, FREEZE_GRACE_FRAMES } from './core/combat/statusTuning';
 import { Inventory } from './core/items/inventory/Inventory';
 import { GearState } from './gear/gearState';
 import {
@@ -64,6 +61,7 @@ import {
   runHurtHooks,
 } from './gear/gearHooks';
 import type { ResistanceType } from './core/items/defs/ItemDefs';
+import type { GroundHazard } from './core/combat/groundHazard';
 import { normalize } from './utils';
 import { worldPlate } from './ui/world/worldShapes';
 import { worldText } from './ui/world/worldText';
@@ -164,7 +162,8 @@ export interface PlayerConfig {
 /** Every standing hazard an environmental blow can name. */
 type EnvironmentalHazard =
   | 'burningTree'
-  | 'lavaFlames'
+  | 'fireballFlames'
+  | 'acidPuddle'
   | 'burningOil'
   | 'clownGas'
   | 'lichFirewall'
@@ -174,13 +173,35 @@ type EnvironmentalHazard =
 /** Which standing hazards are spells, and so turned aside by magic resistance. */
 const HAZARD_IS_MAGIC = {
   burningTree: false,
-  lavaFlames: false,
+  fireballFlames: false,
+  acidPuddle: false,
   burningOil: false,
   clownGas: false,
   lichFirewall: true,
   lichOrb: true,
   trashAvalanche: false,
 } as const satisfies Record<EnvironmentalHazard, boolean>;
+
+/** Which standing hazards are the floor itself hurting whoever stands on it, and how. */
+const HAZARD_GROUND = {
+  burningTree: null,
+  fireballFlames: null,
+  acidPuddle: 'acid',
+  burningOil: null,
+  clownGas: null,
+  lichFirewall: null,
+  lichOrb: null,
+  trashAvalanche: null,
+} as const satisfies Record<EnvironmentalHazard, GroundHazard | null>;
+
+/** The ground hazard a blow from `source` is, or null when the floor did not deal it. */
+function groundHazardOf(source: DamageSource | undefined): GroundHazard | null {
+  if (source?.kind === 'mob' || source?.kind === 'status') return source.groundHazard ?? null;
+  if (source?.kind === 'environmental' && source.hazard !== undefined) {
+    return HAZARD_GROUND[source.hazard];
+  }
+  return null;
+}
 
 /** Whether a blow from `source` is magic, which magic resistance turns aside. */
 function isMagicSource(source: DamageSource | undefined): boolean {
@@ -232,10 +253,18 @@ export type DamageSource =
        * lands, and of any status it carries.
        */
       readonly magic?: boolean;
+      /**
+       * Set when the floor under the victim deals the blow — a charged puddle,
+       * current running along the floor, standing acid — so gear guarding the
+       * feet thins it as it lands.
+       */
+      readonly groundHazard?: GroundHazard;
     }
   | {
       readonly kind: 'status';
       readonly effectType: StatusId;
+      /** Copied off the effect: the ground hazard that laid it, see {@link StatusEffect.groundHazard}. */
+      readonly groundHazard?: GroundHazard;
       /**
        * Whoever applied the status this tick came from, copied off the effect —
        * see {@link StatusEffect.applier}. `Mob` reads it to credit a kill that
@@ -788,7 +817,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   private _baseSpeedMultiplier = 1;
   /** Speed multiplier contributed by active Speed Fizz. Reset to 1 on expiry. */
   private _potionSpeedBoost = 1;
-  /** Movement speed multiplier — product of base, any active potion boost, any chill and any refreshed boon. */
+  /** Movement speed multiplier — product of base, any active potion boost, any slowing status and any refreshed boon. */
   get speedMultiplier(): number {
     return (
       this._baseSpeedMultiplier *
@@ -807,16 +836,21 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * follow speed of its own and has to be slowed by this and nothing else.
    */
   get statusMoveFactor(): number {
-    return this.hasStatus(CHILLED_STATUS) ? this.chillGrip(CHILLED_MOVE_SPEED_FACTOR) : 1;
+    let factor = 1;
+    for (const effect of this.statusEffects) {
+      const moveSlow = STATUS_DEFS[effect.type].moveSlow;
+      if (moveSlow === null) continue;
+      factor *= this.resistedSlow(moveSlow.moveSpeedFactor, moveSlow.weakenedBy);
+    }
+    return factor;
   }
 
   /**
-   * A chill's slowing `factor` after magic resistance takes its share of the
-   * slow off. Every chill that reaches a crawler is an ice fairy's spell, so
-   * magic-resistant gear weakens all of them.
+   * A slowing `factor` after the matching resistance takes its share of the
+   * slow off, the same share it would take off a blow of that channel.
    */
-  private chillGrip(factor: number): number {
-    return 1 - (1 - factor) * this.survivingShare('magic');
+  private resistedSlow(factor: number, weakenedBy: ResistanceType): number {
+    return 1 - (1 - factor) * this.survivingShare(weakenedBy);
   }
 
   /**
@@ -833,7 +867,9 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * directly, because the timers are whole frames and this is a fraction.
    */
   get actionSpeedMultiplier(): number {
-    return this.hasStatus(CHILLED_STATUS) ? this.chillGrip(CHILLED_ACTION_SPEED_FACTOR) : 1;
+    return this.hasStatus(CHILLED_STATUS)
+      ? this.resistedSlow(CHILLED_ACTION_SPEED_FACTOR, CHILL_WEAKENED_BY)
+      : 1;
   }
 
   /**
@@ -1223,14 +1259,16 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * What a blow of `amount` actually costs this crawler before any dodge: the
-   * difficulty's incoming-damage scale, then her statuses' scale, then the
+   * share her magic resistance and her gear against the ground hazard it is
+   * let through, the difficulty's incoming-damage scale, then her statuses' scale, then the
    * source's cap as a share of her own max HP. The cap comes last so nothing
    * multiplies a blow past it — a curse doubling damage must not turn a capped
    * bounty blow into one and a half bars. Public so a headless harness prices
    * a blow exactly as it lands.
    */
   incomingDamage(rawAmount: number, source?: DamageSource): number {
-    const amount = isMagicSource(source) ? rawAmount * this.survivingShare('magic') : rawAmount;
+    const magicShare = isMagicSource(source) ? this.survivingShare('magic') : 1;
+    const amount = rawAmount * magicShare * this.groundHazardShare(source);
     if (source?.kind !== 'mob') return this.statusScaledDamage(amount);
     // Read live rather than stamped at spawn: flipping to Kitten mid-bounty must
     // help immediately, or the toggle fails the player who needed it most.
@@ -1244,9 +1282,16 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     return Math.min(statusScaled, this.maxHp * source.maxShareOfTargetHp);
   }
 
+  /** The share of a blow from `source` that gets past what this body wears against the ground it is. */
+  private groundHazardShare(source: DamageSource | undefined): number {
+    const hazard = groundHazardOf(source);
+    if (hazard === null || !this.isCrawler) return 1;
+    return gearModifiers(this).groundHazardShares[hazard];
+  }
+
   /**
    * @returns whether the attack connected. False when it was dodged, or when the
-   *   safe room, god mode, a knockout or i-frames swallowed it — attackers use
+   *   safe room, god mode, a knockout, i-frames or gear immune to it swallowed it — attackers use
    *   this to hold back the status riders they apply alongside their damage, so a
    *   `MISS!` does not come with a helping of poison.
    */
@@ -1254,6 +1299,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     if (source?.kind === 'scripted') return this.dieScripted(source.death);
     if (amount <= 0 || !this.canBeHarmed) return false;
     const scaledAmount = this.incomingDamage(amount, source);
+    // Gear immune to the blow leaves nothing to dodge, so it must not train or show a dodge.
+    if (scaledAmount <= 0) return false;
     if (isDodgeableSource(source)) {
       if (this.rollDodge()) {
         this.onDodged();
@@ -1640,7 +1687,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * Credit an Iron Stomach use. Called from every place a crawler swallows
-   * something — potions, Bopca dishes, tavern rounds — so the skill trains on
+   * something — potions, food from the bag, tavern rounds — so the skill trains on
    * the whole habit rather than one source.
    */
   recordSwallowed(): void {
@@ -2218,6 +2265,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
       kind: 'status',
       effectType: effect.type,
       applier: effect.applier,
+      groundHazard: effect.groundHazard,
     });
     this.effectDamageSoundPending = true;
   }

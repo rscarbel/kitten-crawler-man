@@ -1,7 +1,7 @@
 /**
  * CultHideoutSystem — the Blackwood Lodge beat of "The Krasue Murders",
- * fought inside the barracks interior. The cult's nest: clear every city elf
- * cultist to find the letter that names Miss Quill. Owned by
+ * fought inside the barracks interior. The cult's nest: clear every elf
+ * to find the letter that names Miss Quill. Owned by
  * BuildingInteriorScene, which supplies the combat stack; quest state
  * crosses scenes via MurderQuestProgress.
  */
@@ -13,7 +13,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import type { CityElfCultist } from '../creatures/CityElfCultist';
+import type { Elf } from '../creatures/Elf';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
@@ -22,7 +22,7 @@ import { questMobLevel } from './questMobLevel';
 
 const SPAWN_SEARCH_RADIUS_TILES = 5;
 /** The congregation, spread through the barracks hall (offsets from room centre). */
-const CULTIST_SPAWN_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
+const ELF_SPAWN_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
   { dx: 0, dy: -3 },
   { dx: -3, dy: -1 },
   { dx: 3, dy: -1 },
@@ -34,13 +34,14 @@ const CULTIST_SPAWN_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
  * in the town are meant to be the same fight, and two numbers that have to agree
  * eventually stop agreeing.
  */
-export const CULT_HIDEOUT_CULTIST_LEVEL = 6;
+export const CULT_HIDEOUT_ELF_LEVEL = 6;
 
 export class CultHideoutSystem implements GameSystem {
   /** Shown by BuildingInteriorScene if the players fall here. */
-  readonly defeatMessage = 'The cult added your souls to the harvest.';
+  readonly defeatMessage =
+    'The elves burned you as an offering. If Caroline noticed, she never said.';
 
-  private cultists: CityElfCultist[] = [];
+  private elves: Elf[] = [];
   private bannerTimer = QUEST_BANNER_FRAMES;
   private cleared = false;
 
@@ -51,13 +52,13 @@ export class CultHideoutSystem implements GameSystem {
     private readonly progress: MurderQuestProgress,
     private readonly partyLevel: number,
   ) {
-    this.spawnCultists();
+    this.spawnElves();
   }
 
-  private spawnCultists(): void {
+  private spawnElves(): void {
     const centreY = Math.floor(this.map.structure.length / 2);
     const centreX = Math.floor((this.map.structure[0]?.length ?? 0) / 2);
-    for (const { dx, dy } of CULTIST_SPAWN_OFFSETS) {
+    for (const { dx, dy } of ELF_SPAWN_OFFSETS) {
       const tile = findNearbyWalkableTile(
         this.map,
         centreX + dx,
@@ -65,23 +66,18 @@ export class CultHideoutSystem implements GameSystem {
         SPAWN_SEARCH_RADIUS_TILES,
       );
       if (!tile) continue;
-      const cultist = spawnMob(
-        'city_elf_cultist',
-        tile,
-        this.map,
-        liveSpawnContext('quest:cult-hideout'),
-      );
-      cultist.applyMobLevel(questMobLevel(CULT_HIDEOUT_CULTIST_LEVEL, this.partyLevel));
-      applySpawnDifficulty(cultist);
-      this.addMob(cultist);
-      this.cultists.push(cultist);
+      const elf = spawnMob('elf', tile, this.map, liveSpawnContext('quest:cult-hideout'));
+      elf.applyMobLevel(questMobLevel(CULT_HIDEOUT_ELF_LEVEL, this.partyLevel));
+      applySpawnDifficulty(elf);
+      this.addMob(elf);
+      this.elves.push(elf);
     }
   }
 
   update(_ctx: SystemContext): void {
     if (this.bannerTimer > 0) this.bannerTimer--;
     if (this.cleared) return;
-    if (this.cultists.length === 0 || this.cultists.some((c) => c.isAlive)) return;
+    if (this.elves.length === 0 || this.elves.some((c) => c.isAlive)) return;
 
     this.cleared = true;
     this.progress.stage = 'confrontation';
@@ -109,7 +105,7 @@ export class CultHideoutSystem implements GameSystem {
         tone: 'success',
       };
     }
-    const remaining = this.cultists.filter((c) => c.isAlive).length;
+    const remaining = this.elves.filter((c) => c.isAlive).length;
     return { text: `Cleanse the cult — ${remaining} remaining`, tone: 'warning' };
   }
 }

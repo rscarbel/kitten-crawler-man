@@ -2,7 +2,8 @@
  * Caroline's objective intel: for every objective, where it is, what it is
  * and whether it is optional. She gives it once per objective, when the party
  * first walks into a safe room while it is current. How to survive the thing
- * is Dave's to say (`dave.ts`).
+ * is Dave's to say (`dave.ts`). Also her verdict on a party that ran out of
+ * time on Nightmare.
  */
 
 import { carolineLines, type CarolineMessage } from '../caroline';
@@ -113,3 +114,8 @@ export const CAROLINE_OBJECTIVE_INTEL = {
     (direction) => `His stall is ${direction} of here.`,
   ),
 } as const satisfies Record<AdviceObjectiveId, Intel>;
+
+/** Said to a party whose Nightmare time limit has run out, just before she ends them. */
+export const CAROLINE_TIME_LIMIT_VERDICT = carolineLines.message(
+  'I am very displeased with your incompetence. You took too long. Goodbye.',
+);

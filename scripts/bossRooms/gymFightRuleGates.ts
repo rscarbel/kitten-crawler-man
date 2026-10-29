@@ -255,8 +255,8 @@ function gateKickedStickKeepsFuse(context: RoomGateContext, gym: GymRoomSystem):
   crawler.y = layout.spawn.y * TILE_SIZE;
   const dynamite = new DynamiteSystem(frame.gameMap);
   setExplosiveSources([dynamite]);
-  crawler.inventory.addItem('goblin_dynamite', 1);
-  dynamite.ready(crawler, 'goblin_dynamite');
+  crawler.inventory.addItem('dynamite', 1);
+  dynamite.ready(crawler, 'dynamite');
   dynamite.throwReadiedAt(minion.x + TILE_SIZE * HALF, minion.y + TILE_SIZE * HALF);
   let lastFuse: number | null = null;
   let kicked = false;

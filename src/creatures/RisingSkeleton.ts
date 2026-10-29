@@ -79,10 +79,10 @@ export abstract class RisingSkeleton extends Mob {
    *
    * `tickTimers` runs for every active mob every frame regardless of which AI
    * branch `MobUpdateLoop` takes for it — unlike `updateAI`, which a confused or
-   * held mob never reaches. A skeleton summoned inside a fog cloud is confused
+   * held mob never reaches. A skeleton summoned inside a smoke cloud is confused
    * on the very frame it rises, so advancing the climb from `updateAI` left it
    * stuck at its first frame — undamageable and visually still buried — for as
-   * long as the fog kept re-confusing it.
+   * long as the smoke kept re-confusing it.
    */
   override tickTimers(): void {
     super.tickTimers();

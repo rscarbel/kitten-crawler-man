@@ -133,35 +133,29 @@
     "tileY": 0,
     "tileScale": 64,
     "states": {
-      "bopca_scuff": {
+      "safe_room_tile": {
         "row": 0,
-        "frameCount": 16,
-        "patchTiles": 2,
-        "label": "Bopca station worn threshold (bare screed)"
-      },
-      "bopca_hearth": {
-        "row": 1,
         "frameCount": 32,
         "patchTiles": 4,
-        "label": "Bopca station quarry tile (galley)"
-      },
-      "bopca_tile": {
-        "row": 2,
-        "frameCount": 32,
-        "patchTiles": 4,
-        "label": "Bopca station tile (glazed, calm)"
+        "label": "Safe room tile (glazed, calm)"
       },
       "station_plate": {
-        "row": 3,
+        "row": 1,
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Field station galvanised decking"
       },
       "station_stripe": {
-        "row": 4,
+        "row": 2,
         "frameCount": 8,
         "patchTiles": 2,
         "label": "Field station decontamination stripe"
+      },
+      "safe_room_scuff": {
+        "row": 3,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Safe room worn threshold (bare screed)"
       }
     }
   },

@@ -68,8 +68,8 @@ const STOMP_GUARD_COLUMNS_PAST_WEST_HALL = 3;
 const SEISMIC_STOMP_GATE_COLUMNS_FROM_SAFE_ROOM = 4;
 /**
  * Columns from the safe room's west wall to the centre of the human's doorway. Far
- * enough east that the Bopca counter, which avoids north-wall doorway columns,
- * still gets a full-length run west of the door.
+ * enough east that the doctor's corner, which avoids north-wall doorway columns,
+ * stands well clear of the door.
  */
 const HUMAN_DOOR_COLUMNS_INTO_SAFE_ROOM = 10;
 
@@ -159,7 +159,7 @@ export const TUTORIAL_SAFE_ROOM_BOUNDS: TutorialRect = {
 
 /**
  * The connector into the safe room's west wall. It hugs the room's bottom
- * interior row, leaving the rows above it to Dave's patch and the counter.
+ * interior row, leaving the rows above it to Dave's patch and the doctor's corner.
  */
 export const TUTORIAL_L_HORIZONTAL_HALL_BOUNDS: TutorialRect = rectFromInclusive(
   WEST_HALL_X2 + 1,
@@ -216,7 +216,7 @@ const ALL_CARVED: ReadonlyArray<TutorialRect> = [
 const MAP_W = Math.max(...ALL_CARVED.map((rect) => lastX(rect))) + 1 + CAMERA_WALL_MARGIN_TILES;
 const MAP_H = Math.max(...ALL_CARVED.map((rect) => lastY(rect))) + 1 + CAMERA_WALL_MARGIN_TILES;
 
-/** The safe room as `SafeRoomSystem` and the counter/decor stampers read it. */
+/** The safe room as `SafeRoomSystem` and the clinic/decor stampers read it. */
 export const TUTORIAL_SAFE_ROOM = {
   bounds: TUTORIAL_SAFE_ROOM_BOUNDS,
   centre: SAFE_ROOM_CENTRE,
@@ -430,7 +430,7 @@ function tutorialDressingLayout(grid: TileContent[][]): TutorialDressingLayout {
         x: TUTORIAL_CHEST_POS.x,
         y: TUTORIAL_TREASURE_ROOM_BOUNDS.y,
       }),
-      // Dave wanders the safe room and its counter and decor are stamped
+      // Dave wanders the safe room and its clinic and decor are stamped
       // in at runtime, so nothing else is set down in it.
       TUTORIAL_SAFE_ROOM_BOUNDS,
       stairApproach,

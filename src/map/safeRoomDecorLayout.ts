@@ -1,13 +1,13 @@
 /**
  * Where a safe room's furnishings go, and how they get written into the map.
  *
- * Modelled on `safeRoomCounterLayout`, and for the same reasons: planning is
+ * Modelled on `safeRoomClinicLayout`, and for the same reasons: planning is
  * separated from stamping because two callers need the geometry and only one of
  * them may touch tiles, and the whole module is pure geometry with no canvas code
  * so `src/map` never has to depend on `src/systems`.
  *
- * Placement runs **after** the counter is planned, and treats as occupied every
- * tile the counter run owns, Dave's tile and the bed's, the tile inside each
+ * Placement runs **after** the doctor's corner is planned, and treats as occupied
+ * every tile the corner owns, Dave's tile and the bed's, the tile inside each
  * doorway, and the `SAFE_ROOM_THRESHOLD` traffic band. On top of that, every
  * placement is checked for reachability: a prop that would strand any floor the
  * player could previously walk to is refused outright.
@@ -17,7 +17,7 @@
  * every time the chunk cache is re-baked and on every reconstruction of the
  * scene — which `Math.random()` would not.
  *
- * The three wall-hung props sit on the room's **north** row, like the counter and
+ * The three wall-hung props sit on the room's **north** row, like the cabinet and
  * for the same reason: the oblique projection's viewpoint is fixed to the south,
  * so a hanging on any other wall is seen from behind or edge-on. They are
  * therefore subject to the same door-column rule — a solid prop over a doorway
@@ -27,7 +27,11 @@
 import type { GameMap } from './GameMap';
 import type { TileContent } from './tileTypes';
 import { isFieldStation, guideAndBedTiles } from './safeRoomFixtures';
-import { planSafeRoomCounters, type SafeRoomCounterLayout } from './safeRoomCounterLayout';
+import {
+  clinicCornerTiles,
+  planSafeRoomClinics,
+  type SafeRoomClinicLayout,
+} from './safeRoomClinicLayout';
 import {
   placeProp,
   SAFE_ROOM_BANNER,
@@ -63,13 +67,16 @@ const LANTERN_CORNER_INSET_TILES = 1;
 const STOOL_COUNT = 3;
 /** Runner tiles laid in the room's open middle. */
 const RUG_TILE_COUNT = 2;
+/** Rows the doctor's corner takes from the north wall: the cabinet and the doctor's row. */
+const CLINIC_CORNER_ROWS = 2;
+/** A row to walk along, a row for the table and its stools, and the doorway band below them. */
+const OPEN_ROWS_BELOW_CORNER = 3;
+/** Rows a room needs before it is worth furnishing at all. */
+const MIN_ROOM_HEIGHT_FOR_DECOR = CLINIC_CORNER_ROWS + OPEN_ROWS_BELOW_CORNER;
 /**
- * Rows of clear floor a room needs south of its north wall before it is worth
- * furnishing: the counter's three, one for the player to stand in, and one more
- * for the table and its stools.
+ * A room narrower than this is all side-wall doorway band, corner and bed, with
+ * nowhere a furnishing can stand without crowding the path.
  */
-const MIN_ROOM_HEIGHT_FOR_DECOR = 6;
-/** A room narrower than this has no side wall free of the counter's own span. */
 const MIN_ROOM_WIDTH_FOR_DECOR = 6;
 
 /** Decorrelated multipliers for the per-room placement hash. */
@@ -114,9 +121,9 @@ const DECOR_TYPES: ReadonlySet<number> = new Set([
  * band, or a tile one of these passes already claimed.
  *
  * Reading the *current* type and counting this module's own output as free is
- * what makes planning stamp-independent. The counter run, the galley strip and
- * any furniture the interior generator laid down are all other types, so they
- * are excluded without needing a second list to keep in step.
+ * what makes planning stamp-independent. The cabinet and any furniture the
+ * interior generator laid down are other types, so they are excluded without
+ * needing a second list to keep in step.
  *
  * A town building's own floor counts too. A safe room carved out of a dungeon is
  * floored in `SAFE_ROOM_FLOOR`, but one that occupies a band of an inn's taproom
@@ -145,7 +152,7 @@ interface RoomOccupancy {
  *
  * A doorway's own interior tile is barred on every wall. On the north wall that
  * is also the wall row the three hangings go on, so the same entry covers the
- * counter's door-column rule: nothing solid is ever hung in a doorway's column.
+ * cabinet's door-column rule: nothing solid is ever hung in a doorway's column.
  *
  * Barring tiles is necessary but nowhere near sufficient — props one row further
  * in can wall a doorway off from the rest of the room without ever touching it.
@@ -154,7 +161,7 @@ interface RoomOccupancy {
 function occupiedTiles(
   map: GameMap,
   safeRoomIndex: number,
-  counterLayout: SafeRoomCounterLayout | undefined,
+  clinicLayout: SafeRoomClinicLayout | undefined,
 ): RoomOccupancy {
   const safeRoom = map.safeRooms[safeRoomIndex];
   const { bounds } = safeRoom;
@@ -162,22 +169,16 @@ function occupiedTiles(
   const doorwayTiles: Array<{ x: number; y: number }> = [];
 
   for (const tile of guideAndBedTiles(safeRoom)) occupied.add(tileKey(tile.x, tile.y));
-  // From the counter's *plan*, not from the tile types it will eventually write.
+  // From the corner's *plan*, not from the tile types it will eventually write.
   // `SafeRoomSystem` builds itself — and so calls this — before the scene stamps
-  // the counter, so on an unstamped map the whole run still reads as plain floor:
-  // measured over 400 safe rooms, inferring the run from types alone moved the
-  // lanterns in 52% of rooms and the stove in 34%, leaving lamplight pooling on
-  // bare floor and steam rising off nothing. `planSafeRoomCounters` is itself
-  // stamp-independent — it takes its door columns from walkability outside the
-  // room — so consulting the counter layout is stable wherever this is called from.
-  if (counterLayout !== undefined) {
-    for (const tile of [
-      ...counterLayout.counterTiles,
-      ...counterLayout.backTiles,
-      ...counterLayout.galleyTiles,
-    ]) {
-      occupied.add(tileKey(tile.x, tile.y));
-    }
+  // the cabinet, so on an unstamped map the corner still reads as plain floor,
+  // and inferring it from types alone would move furnishings between the two
+  // passes. `planSafeRoomClinics` is itself stamp-independent — it takes its door
+  // columns from walkability outside the room — so consulting the corner's layout
+  // is stable wherever this is called from. The doctor's and the bag's tiles are
+  // floor, but nothing may be stood on them either.
+  if (clinicLayout !== undefined) {
+    for (const tile of clinicCornerTiles(clinicLayout)) occupied.add(tileKey(tile.x, tile.y));
   }
 
   // A town room's own furniture keeps its tile type as floor, so without this
@@ -223,11 +224,10 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
  * strand part of the room behind the furniture.
  *
  * The reachability test is the load-bearing half. Barring the tile inside each
- * doorway is not enough on its own: over 240 generated safe rooms, a corner
- * lantern one row south of a doorway, or two wall hangings closing the ends of a
- * row the counter's back bench already fills, left 71 rooms with an unreachable
- * pocket and sealed 2 rooms outright — Dave, the bed and the Bopca all cut
- * off from the only entrance.
+ * doorway is not enough on its own: a corner lantern one row south of a
+ * doorway, or two wall hangings closing the ends of a row a solid fixture
+ * already fills, can leave an unreachable pocket or seal a room outright —
+ * Dave, the bed and the doctor all cut off from the only entrance.
  */
 class DecorPlacer {
   private readonly placed: SafeRoomDecorProp[] = [];
@@ -241,20 +241,20 @@ class DecorPlacer {
     private readonly bounds: { x: number; y: number; w: number; h: number },
     private readonly structure: TileContent[][],
     private readonly doorwayTiles: ReadonlyArray<{ x: number; y: number }>,
-    counterRunTiles: ReadonlyArray<{ x: number; y: number }>,
+    cabinetTiles: ReadonlyArray<{ x: number; y: number }>,
     furnitureTiles: ReadonlyArray<{ x: number; y: number }>,
   ) {
-    // The counter run blocks the flood from the start. Taken from the counter's
-    // plan rather than left to `isDecorSurface`, so the answer is the same
-    // whether or not the run has been stamped yet — see `occupiedTiles`.
-    for (const tile of counterRunTiles) this.blocked.add(tileKey(tile.x, tile.y));
+    // The cabinet blocks the flood from the start. Taken from the corner's plan
+    // rather than left to `isDecorSurface`, so the answer is the same whether or
+    // not it has been stamped yet — see `occupiedTiles`.
+    for (const tile of cabinetTiles) this.blocked.add(tileKey(tile.x, tile.y));
     // A town room's solid furniture reads as floor by tile type; left out, the
     // flood walks straight through a bar counter and a lantern beside it seals
     // the floor behind with nothing reporting it.
     for (const tile of furnitureTiles) this.blocked.add(tileKey(tile.x, tile.y));
-    // A room can already have unreachable corners before any furniture arrives —
-    // the galley strip is sealed by design. Those are recorded up front so the
-    // test measures what the furniture strands rather than what it inherited.
+    // A room can already have unreachable corners before any furniture arrives.
+    // Those are recorded up front so the test measures what the furniture
+    // strands rather than what it inherited.
     this.baselineStranded = this.strandedTiles();
   }
 
@@ -402,7 +402,7 @@ function cornerCandidates(bounds: {
  */
 export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan> {
   const plans: SafeRoomDecorPlan[] = [];
-  const counterLayouts = planSafeRoomCounters(map);
+  const clinicLayouts = planSafeRoomClinics(map);
 
   for (let safeRoomIndex = 0; safeRoomIndex < map.safeRooms.length; safeRoomIndex++) {
     const safeRoom = map.safeRooms[safeRoomIndex];
@@ -410,19 +410,15 @@ export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan
     const { bounds, centre } = safeRoom;
     if (bounds.h < MIN_ROOM_HEIGHT_FOR_DECOR || bounds.w < MIN_ROOM_WIDTH_FOR_DECOR) continue;
 
-    const counterLayout = counterLayouts.find((layout) => layout.safeRoomIndex === safeRoomIndex);
-    const { occupied, doorwayTiles } = occupiedTiles(map, safeRoomIndex, counterLayout);
-    const counterRunTiles =
-      counterLayout === undefined
-        ? []
-        : [...counterLayout.counterTiles, ...counterLayout.backTiles, ...counterLayout.galleyTiles];
+    const clinicLayout = clinicLayouts.find((layout) => layout.safeRoomIndex === safeRoomIndex);
+    const { occupied, doorwayTiles } = occupiedTiles(map, safeRoomIndex, clinicLayout);
     const placer = new DecorPlacer(
       occupied,
       centre,
       bounds,
       map.structure,
       doorwayTiles,
-      counterRunTiles,
+      clinicLayout?.cabinetTiles ?? [],
       map.placedInteriorPropFootprintTiles().filter((tile) => tile.blocksMovement),
     );
     const wallRow = wallRowCandidates(bounds);
@@ -430,25 +426,6 @@ export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan
     placer.placeFirstFree(wallRow, SAFE_ROOM_MENU_BOARD, SLOT_MENU_BOARD);
     placer.placeFirstFree(wallRow, SAFE_ROOM_HERB_RACK, SLOT_HERB_RACK);
     placer.placeFirstFree(wallRow, SAFE_ROOM_BANNER, SLOT_BANNER);
-
-    // The stove is the counter's own range spilling out of the galley, so it goes
-    // beside the run rather than anywhere warm-looking.
-    if (counterLayout !== undefined) {
-      const run = counterLayout.counterTiles;
-      // The front bar is the run's southernmost row; the side returns share the
-      // list but sit a row north of it.
-      const frontRow = Math.max(...run.map((tile) => tile.y));
-      const westOfRun = Math.min(...run.map((tile) => tile.x)) - 1;
-      const eastOfRun = Math.max(...run.map((tile) => tile.x)) + 1;
-      placer.placeFirstFree(
-        [
-          { x: eastOfRun, y: frontRow },
-          { x: westOfRun, y: frontRow },
-        ],
-        SAFE_ROOM_STOVE,
-        SLOT_STOVE,
-      );
-    }
 
     placeTableAndStools(placer, bounds, centre);
 
@@ -459,10 +436,13 @@ export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan
       if (placer.place(corner.x, corner.y, SAFE_ROOM_LANTERN)) lanternsPlaced++;
     }
 
+    // The stove and the larder both stand against a side wall, so the floor in
+    // front of the doctor and the middle of the room stay open.
     const sideWalls: Array<{ x: number; y: number }> = [];
     for (let y = bounds.y + 1; y < bounds.y + bounds.h - 1; y++) {
       sideWalls.push({ x: bounds.x, y }, { x: bounds.x + bounds.w - 1, y });
     }
+    placer.placeFirstFree(sideWalls, SAFE_ROOM_STOVE, SLOT_STOVE);
     placer.placeFirstFree(sideWalls, SAFE_ROOM_LARDER, SLOT_LARDER);
 
     placeRug(placer, bounds, centre);

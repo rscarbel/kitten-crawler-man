@@ -440,11 +440,9 @@ export class TilePreviewScene extends PreviewScene {
     // meet on a map — previewed anyway because the pair is the only way to see
     // both interior floors at the same scale.
     ['interior_boards', 'interior_stone'],
-    // The two joints a safe room actually draws: the hearth paving under the
-    // counter run meeting the room tile, and the scuffed threshold band worn
-    // through it inside each doorway.
-    ['bopca_hearth', 'bopca_tile'],
-    ['bopca_scuff', 'bopca_tile'],
+    // The joint a safe room actually draws: the scuffed threshold band worn
+    // through the room tile inside each doorway.
+    ['safe_room_scuff', 'safe_room_tile'],
   ];
 
   /** A previewed material, in the shape the renderer's fringe consumes. */

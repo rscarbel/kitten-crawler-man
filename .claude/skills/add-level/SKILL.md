@@ -7,7 +7,7 @@ description: Add or modify a level, map feature, or tile type in Kitten Crawler 
 
 ## Levels
 
-A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize, roomMobs, hallwayMobs`, plus optional `bossRooms`, `nextLevelId` (chaining), `arrivalLoadingScreen`, `hasCollapseTimer`, `hasTreasureRoomGuards`, `numStairwells`, `isOverworld`, `hasSpiderLab`, `extraSpawns`, `onMobKilledSpawns`, `progression`. `MobSpawnRule`: `{ type, chance, minCount, maxCount, minLevel, maxLevel, config?, escorts?, terrain? }` (`terrain` limits an overworld rule to forest-edge or open-field points; see `add-creature`) where `type` is a fixed string union — new mob keys must be added to that union and registered in `spawner.ts` (see `add-creature`).
+A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize, roomMobs, hallwayMobs`, plus optional `bossRooms`, `nextLevelId` (chaining), `arrivalLoadingScreen`, `nightmareTimeLimitFrames` (a time limit held only on Nightmare; the floor clock counts on every difficulty, and `nightmareTimeRemaining` in `src/core/difficulty/nightmareTimeLimit.ts` is the one place that turns it into time left), `hasTreasureRoomGuards`, `numStairwells`, `isOverworld`, `hasSpiderLab`, `extraSpawns`, `onMobKilledSpawns`, `progression`. `MobSpawnRule`: `{ type, chance, minCount, maxCount, minLevel, maxLevel, config?, escorts?, terrain? }` (`terrain` limits an overworld rule to forest-edge or open-field points; see `add-creature`) where `type` is a fixed string union — new mob keys must be added to that union and registered in `spawner.ts` (see `add-creature`).
 
 ### Checklist
 

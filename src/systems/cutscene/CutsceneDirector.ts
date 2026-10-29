@@ -231,7 +231,7 @@ export class CutsceneDirector<Action extends CutsceneWorldAction = never> {
             this.talkRequest(
               running,
               { lines: [step.message.line], reward: null, questRelated: false },
-              false,
+              step.world === 'halts',
             ),
           ),
         };
@@ -275,8 +275,9 @@ export class CutsceneDirector<Action extends CutsceneWorldAction = never> {
   }
 
   /**
-   * A talk the player must read to the end. Caroline's messages do not halt
-   * the world; everything else said in a cutscene does.
+   * A talk the player must read to the end. Caroline's messages halt the
+   * world only when their step says so; everything else said in a cutscene
+   * does.
    */
   private talkRequest(
     running: RunningCutscene<Action>,

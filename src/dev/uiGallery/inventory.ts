@@ -51,8 +51,8 @@ const HUMAN_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] =
   { id: 'speed_fizz', quantity: 3 },
   { id: 'jugg_juice', quantity: 2 },
   { id: 'catnip_tuna_water', quantity: 4 },
-  { id: 'goblin_dynamite', quantity: 9 },
-  { id: 'scroll_of_confusing_fog', quantity: 2 },
+  { id: 'dynamite', quantity: 9 },
+  { id: 'scroll_of_entanglement', quantity: 2 },
   { id: 'hearthguard_cap', quantity: 1 },
   { id: 'cockscomb_crest', quantity: 1 },
   { id: 'hearthguard_quilted_vest', quantity: 1 },
@@ -127,7 +127,7 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
       const cat = fixtureOwner('cat', CAT_STATS);
       stock(human, HUMAN_BAG);
       stock(cat, CAT_BAG);
-      human.inventory.placeOnHotbar('goblin_dynamite', 2);
+      human.inventory.placeOnHotbar('dynamite', 2);
       human.inventory.placeOnHotbar('speed_fizz', 1);
       human.inventory.equipByItemId('hearthguard_cap');
       human.inventory.equipByItemId('hearthguard_quilted_vest');

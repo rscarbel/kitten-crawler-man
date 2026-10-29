@@ -611,7 +611,7 @@ export class MenusKit {
     }
 
     if (id === 'hamburger') {
-      audio?.play('bopca_eating');
+      audio?.play('eating_chew');
     } else {
       audio?.play('slurping_soup');
       this.world.bus.emit('healingPotionUsed', {

@@ -1254,7 +1254,7 @@ console.log('\nA companion fights indoors, and forgets the target it left');
   const groundFloor = makeInterior(INTERIOR_GROUND_FLOOR);
   const upperFloor = makeInterior(INTERIOR_UPPER_FLOOR);
   const groundStart = groundFloor.startTile;
-  const cultistTile = nearbyWalkable(groundFloor, groundStart);
+  const elfTile = nearbyWalkable(groundFloor, groundStart);
   const party = makeParty(groundFloor);
   const companion = new CompanionSystem(groundFloor, groundStart.x, groundStart.y);
 
@@ -1264,17 +1264,17 @@ console.log('\nA companion fights indoors, and forgets the target it left');
   runCompanion(companion, party, SETTLE_FRAMES);
   check(party.cat.autoTarget === null, 'an empty room gives the companion nothing to do');
 
-  if (cultistTile === null) {
+  if (elfTile === null) {
     check(false, 'a generated interior offered floor to stage a fight on');
   } else {
-    const cultist = addMob(party, 'city_elf_cultist', cultistTile.x, cultistTile.y);
-    cultist.currentTarget = party.human;
+    const elf = addMob(party, 'elf', elfTile.x, elfTile.y);
+    elf.currentTarget = party.human;
     runCompanion(companion, party, SETTLE_FRAMES);
     // The whole point of the interior context: it carries no boss room, and the
     // veto has to read that as "nothing to veto" rather than as a reason to sit
     // the fight out.
     check(
-      party.cat.autoTarget === cultist,
+      party.cat.autoTarget === elf,
       'with no boss room in the context she answers what is attacking the human',
     );
 
@@ -2041,7 +2041,7 @@ console.log('\nA wooden chest still makes the party wait for its lock to fall');
 }
 
 console.log(
-  "\nA wooden chest's room-clear check answers to hostiles alone, not to Deinonychus or a grub",
+  "\nA wooden chest's room-clear check answers to hostiles alone, not to Deinonychus or a larva",
 );
 {
   const map = new GameMap(MAP_OPTIONS);
@@ -2066,7 +2066,7 @@ console.log(
     DEINONYCHUS_TEST_STARTING_HP,
   );
   party.roster.add(deinonychus);
-  addMob(party, 'brindle_grub', bounds.x + 2, bounds.y + 1);
+  addMob(party, 'gravedigger_beetle', bounds.x + 2, bounds.y + 1);
   const guard = addMob(party, 'goblin', bounds.x + 2, bounds.y + 2);
 
   chests.update(party.roster.mobs);
@@ -2076,7 +2076,7 @@ console.log(
   chests.update(party.roster.mobs);
   check(
     chest.state !== 'locked',
-    'unlocks once the guard is dead, even with Deinonychus and a grub still standing in the room',
+    'unlocks once the guard is dead, even with Deinonychus and a larva still standing in the room',
   );
 }
 

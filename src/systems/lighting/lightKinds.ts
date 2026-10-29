@@ -17,7 +17,7 @@ export type DynamicLightKind =
   | 'companion'
   | 'magic_missile'
   | 'fireball'
-  | 'lava_bolt'
+  | 'fireball_bolt'
   | 'explosion'
   | 'coals'
   | 'bolt'
@@ -34,15 +34,15 @@ export type GlowColour = LightColour | 'arcane' | 'fire' | 'acid' | 'specimen';
 export type MoodLightKind = 'hanging_bulb' | 'strip_light' | 'vat_glow' | 'flood_shimmer';
 
 /**
- * The spider lab's field station: a steady cool emergency lamp where a Bopca
- * station has its hearth, and the team's battery lantern beside the cot. The
+ * The spider lab's field station: a steady cool emergency lamp where an
+ * ordinary safe room has the doctor's lamp, and the team's battery lantern beside the cot. The
  * steadiness is the point — the hallways either side of it flicker.
  */
 export type FieldStationLightKind = 'station_lamp' | 'camp_lantern';
 
 /** Every kind of light the lighting pass knows how to draw. */
 export type LightKind =
-  LightSourceKind | DynamicLightKind | MoodLightKind | FieldStationLightKind | 'hearth';
+  LightSourceKind | DynamicLightKind | MoodLightKind | FieldStationLightKind | 'clinic_lamp';
 
 /**
  * How a light's strength moves over time.
@@ -101,10 +101,17 @@ const FAINT_GLOW_STRENGTH = 0.6;
 const BOILER_WINDOW_REACH_TILES = 2.5;
 const DESK_LAMP_REACH_TILES = 2.5;
 const DESK_LAMP_GLOW_RADIUS_TILES = 2;
-const HEARTH_REACH_TILES = 6;
-const HEARTH_GLOW_RADIUS_TILES = 5;
-const HEARTH_GLOW_STRENGTH = 0.6;
-/** Reaches the station's corners from its middle, as a hearth does a Bopca station's. */
+/**
+ * The small warm lamp on a safe room's medicine cabinet. It is not what keeps
+ * the room bright: the `safe` lighting profile's ambient is `lit`, so every
+ * tile of the room is lit wherever the lamp stands, whatever the room's size.
+ * Its glow is a lamp's pool by the cabinet, and its reach is how far the lamp's
+ * light carries out through the room's doorways into the dark corridors.
+ */
+const CLINIC_LAMP_REACH_TILES = 8;
+const CLINIC_LAMP_GLOW_RADIUS_TILES = 2.2;
+const CLINIC_LAMP_GLOW_STRENGTH = 0.7;
+/** Reaches the station's corners from its middle. */
 const STATION_LAMP_REACH_TILES = 5;
 const STATION_LAMP_GLOW_RADIUS_TILES = 4;
 const STATION_LAMP_GLOW_STRENGTH = 0.5;
@@ -237,10 +244,10 @@ export const LIGHT_KINDS = {
     colour: 'tallow',
     flicker: 'steady',
   },
-  hearth: {
-    reachTiles: HEARTH_REACH_TILES,
-    glowRadiusTiles: HEARTH_GLOW_RADIUS_TILES,
-    glowStrength: HEARTH_GLOW_STRENGTH,
+  clinic_lamp: {
+    reachTiles: CLINIC_LAMP_REACH_TILES,
+    glowRadiusTiles: CLINIC_LAMP_GLOW_RADIUS_TILES,
+    glowStrength: CLINIC_LAMP_GLOW_STRENGTH,
     colour: 'warm',
     flicker: 'candle',
   },
@@ -315,7 +322,7 @@ export const LIGHT_KINDS = {
     colour: 'fire',
     flicker: 'brazier',
   },
-  lava_bolt: {
+  fireball_bolt: {
     reachTiles: FIREBALL_REACH_TILES,
     glowRadiusTiles: FIREBALL_GLOW_RADIUS_TILES,
     glowStrength: FULL,

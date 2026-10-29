@@ -46,17 +46,16 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   BigRooster: 'bigRooster',
   LittleRooster: 'roosterPeck',
   SlightlyBentRooster: 'roosterPunch',
-  Tuskling: 'tuskling',
-  Troglodyte: 'troglodyte',
+  Wereboar: 'wereboar',
+  Lizardman: 'lizardman',
   SmallSpider: 'smallSpider',
   SpiderHatchling: 'spiderHatchling',
   Hawkfolk: 'hawkfolk',
-  Llama: 'llama',
+  AcidLlama: 'acidLlama',
   Rat: 'rat',
-  Bugaboo: 'bugaboo',
-  BrindleGrub: 'brindleGrub',
-  CowTailedGrub: 'cowTailedGrub',
-  BrindledVespa: 'brindledVespa',
+  FuzzyNightmare: 'fuzzyNightmare',
+  GravediggerBeetle: 'gravediggerBeetle',
+  GiantWasp: 'giantWasp',
   RuinsGhoul: 'ruinsGhoul',
   Krasue: 'krasue',
   Lemur: 'lemur',
@@ -77,7 +76,7 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   RockGolem: 'rockGolem',
   RockGolemBoss: 'rockGolem',
   Lion: 'lion',
-  CityElfCultist: 'cityElfCultist',
+  Elf: 'elf',
   DireBear: 'direBear',
   MissQuill: 'missQuill',
   ShieldFairy: 'shieldFairy',
@@ -87,8 +86,8 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
 
 /**
  * The bespoke death this blow was. Exported because an interior raises its own
- * death screen: `resolveDeathCause` reads a *floor's* state — its collapse
- * timer, its revive deadline — and a building has neither, so a room that wants
+ * death screen: `resolveDeathCause` reads a *floor's* state — its revive
+ * deadline — and a building has none, so a room that wants
  * one specific hazard to speak for itself asks about the blow directly.
  */
 export function causeFromDamageSource(source: DamageSource): DeathCause {
@@ -99,11 +98,11 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // A wheel penalty stops at 1 HP, so it is never the blow that killed.
   if (source.kind === 'wheelPenalty') return 'unknown';
   // Standing hazards. Without this the contact damage — which is what actually
-  // kills, well before the eight-second `burn` DoT they also apply gets there —
-  // reports an unknown cause on the death screen. An untagged source is a
-  // burning tree, which was the only producer before lava flames existed.
+  // kills, well before the status they also apply gets there — reports an
+  // unknown cause on the death screen. An untagged source is a burning tree.
   if (source.kind === 'environmental') {
-    if (source.hazard === 'lavaFlames') return 'lavaFlames';
+    if (source.hazard === 'fireballFlames') return 'fireballFlames';
+    if (source.hazard === 'acidPuddle') return 'acidPuddle';
     if (source.hazard === 'burningOil') return 'burningOil';
     if (source.hazard === 'clownGas') return 'clownGas';
     if (source.hazard === 'lichFirewall') return 'lichFirewall';
@@ -234,22 +233,22 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
  * Inspect current game state at the moment of death and return the cause.
  * Mirrors the priority ordering of `checkDeath` in GameLoopPhases.
  */
-export function resolveDeathCause(
-  human: HumanPlayer,
-  cat: CatPlayer,
-  hasCollapseTimer: boolean,
-  levelTimerFrames: number,
-): DeathCause {
+export function resolveDeathCause(human: HumanPlayer, cat: CatPlayer): DeathCause {
   // Direct kill: an active player's HP dropped to 0 — check this first so a
   // simultaneous knockout-timeout does not shadow the real killing blow.
   const deadPlayer =
     human.isActive && !human.isAlive ? human : cat.isActive && !cat.isAlive ? cat : null;
 
   if (deadPlayer !== null && deadPlayer.lastDamageSource !== null) {
+    const source = deadPlayer.lastDamageSource;
+    // A script's death names itself whatever state it found the victim in:
+    // its cause can decide where the death screen sends the party, and the
+    // time limit's must restart the floor even for a crawler frozen solid.
+    if (source.kind === 'scripted') return causeFromDamageSource(source);
     // Encased and unable to act, whatever landed the blow — the lesson is the
     // ice, not the thing that walked up to a target that could not move.
     if (deadPlayer.hasStatus(FROZEN_STATUS)) return 'frozenSolid';
-    return causeFromDamageSource(deadPlayer.lastDamageSource);
+    return causeFromDamageSource(source);
   }
 
   // Companion was not revived before the 90-second timer expired.
@@ -259,8 +258,6 @@ export function resolveDeathCause(
   ) {
     return 'failureToRevive';
   }
-
-  if (hasCollapseTimer && levelTimerFrames <= 0) return 'levelTimerRanOut';
 
   return 'unknown';
 }

@@ -179,27 +179,27 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'bopca',
+    name: 'dwarf-cook',
     views: async () => {
-      const { drawBopcaSprite, bopcaPaletteForSeed } =
-        await import('../src/sprites/bopcaSprite.js');
+      const { drawDwarfCookSprite, dwarfCookPaletteForSeed } =
+        await import('../src/sprites/dwarfCookSprite.js');
       const options = {
         animFrames: STILL_FRAME,
         lookX: 0,
         lookY: 0,
-        palette: bopcaPaletteForSeed(REPEATABLE_SEED),
+        palette: dwarfCookPaletteForSeed(REPEATABLE_SEED),
         blinking: false,
       };
       return [
         {
           name: 'idle',
           paint: ({ dom, unit }) =>
-            drawBopcaSprite(dom, unit / 2, unit, unit, { ...options, state: 'idle' }),
+            drawDwarfCookSprite(dom, unit / 2, unit, unit, { ...options, state: 'idle' }),
         },
         {
           name: 'cooking',
           paint: ({ dom, unit }) =>
-            drawBopcaSprite(dom, unit / 2, unit, unit, { ...options, state: 'cooking' }),
+            drawDwarfCookSprite(dom, unit / 2, unit, unit, { ...options, state: 'cooking' }),
         },
       ];
     },
@@ -581,18 +581,18 @@ export const SUBJECTS: readonly SvgSubject[] = [
   },
   {
     // Painted on the biped rig, so the same raster exception as the human applies.
-    name: 'city-elf-cultist',
+    name: 'elf',
     views: async (frame) => {
-      const { CITY_ELF_CULTIST_FIGURE, CULTIST_ROLES, CULTIST_VIEWS, cultistStateName } =
-        await import('../src/sprites/art/cityElfCultistFigure.js');
-      return CULTIST_ROLES.flatMap((role) =>
-        CULTIST_VIEWS.map((view): SvgView => {
-          const state = cultistStateName(role, view);
+      const { ELF_FIGURE, ELF_ROLES, ELF_VIEWS, elfStateName } =
+        await import('../src/sprites/art/elfFigure.js');
+      return ELF_ROLES.flatMap((role) =>
+        ELF_VIEWS.map((view): SvgView => {
+          const state = elfStateName(role, view);
           return {
             name: state,
             paint: ({ dom, unit }) =>
-              inUnitSpace(dom, unit / CITY_ELF_CULTIST_FIGURE.tileScale, (ctx) =>
-                CITY_ELF_CULTIST_FIGURE.paintFrame(ctx, state, frame),
+              inUnitSpace(dom, unit / ELF_FIGURE.tileScale, (ctx) =>
+                ELF_FIGURE.paintFrame(ctx, state, frame),
               ),
           };
         }),
@@ -629,34 +629,38 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'bugaboo',
+    name: 'fuzzy_nightmare',
     views: async (frame) => {
-      const { drawBugabooFront, drawBugabooBack, drawBugabooSide } =
-        await import('../src/sprites/art/bugabooArt.js');
-      const { BUGABOO_ROWS } = await import('../src/sprites/art/bugabooFigure.js');
+      const { drawFuzzyNightmareFront, drawFuzzyNightmareBack, drawFuzzyNightmareSide } =
+        await import('../src/sprites/art/fuzzyNightmareArt.js');
+      const { FUZZY_NIGHTMARE_ROWS } = await import('../src/sprites/art/fuzzyNightmareFigure.js');
       return sheetViews(
-        BUGABOO_ROWS,
-        { front: drawBugabooFront, back: drawBugabooBack, side: drawBugabooSide },
+        FUZZY_NIGHTMARE_ROWS,
+        {
+          front: drawFuzzyNightmareFront,
+          back: drawFuzzyNightmareBack,
+          side: drawFuzzyNightmareSide,
+        },
         frame,
         domContextOf,
       );
     },
   },
   {
-    name: 'llama',
+    name: 'acid-llama',
     views: async () => {
-      const { drawLlamaSprite } = await import('../src/sprites/llamaSprite.js');
+      const { drawAcidLlamaSprite } = await import('../src/sprites/acidLlamaSprite.js');
       return [
-        { name: 'idle', paint: ({ dom, unit }) => drawLlamaSprite(dom, 0, 0, unit) },
+        { name: 'idle', paint: ({ dom, unit }) => drawAcidLlamaSprite(dom, 0, 0, unit) },
         {
           name: 'walk',
           paint: ({ dom, unit }) =>
-            drawLlamaSprite(dom, 0, 0, unit, { walkFrame: WALK_FRAME, isMoving: true }),
+            drawAcidLlamaSprite(dom, 0, 0, unit, { walkFrame: WALK_FRAME, isMoving: true }),
         },
         {
           name: 'spit',
           paint: ({ dom, unit }) =>
-            drawLlamaSprite(dom, 0, 0, unit, {
+            drawAcidLlamaSprite(dom, 0, 0, unit, {
               walkFrame: STILL_FRAME,
               spitProgress: ATTACK_MIDPOINT,
             }),

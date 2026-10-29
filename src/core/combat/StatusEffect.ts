@@ -1,15 +1,19 @@
 import type { Player } from '../../Player';
 import type { StatId } from '../party/stats';
 import type { ResistanceType } from '../items/defs/ItemDefs';
+import type { GroundHazard } from './groundHazard';
 import { MAGIC_HIT, UNTAGGED_HIT, type DamageTags } from './damageTags';
 import { BURN_WARD_SKILL, type ProficiencySkillId } from '../skills/proficiency';
 import {
   AEGIS_DAMAGE_SCALE,
   BLOOD_VOMIT_RETCH_FRAMES,
   CHILLED_FRAMES,
+  CHILLED_MOVE_SPEED_FACTOR,
   DOUBLE_DAMAGE_FRAMES,
   DOUBLE_DAMAGE_SCALE,
   FROZEN_FRAMES,
+  NUMBED_FRAMES,
+  NUMBED_MOVE_SPEED_FACTOR,
 } from './statusTuning';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
@@ -37,6 +41,7 @@ export const STATUS_IDS = [
   'double_damage',
   'chilled',
   'frozen',
+  'numbed',
   'shield',
   'overheal',
   'fairy_ward',
@@ -87,6 +92,17 @@ export interface StatusDamageOverTime {
   readonly seizeTicks: number | null;
 }
 
+/** A status that slows its carrier's walking, and the resistance that eases it. */
+export interface StatusMoveSlow {
+  /** Share of normal walking pace left while the status is live, before resistance. */
+  readonly moveSpeedFactor: number;
+  /**
+   * The resistance that takes a share of the slow off: the same share a blow
+   * of that channel loses (`Player.survivingShare`).
+   */
+  readonly weakenedBy: ResistanceType;
+}
+
 /** Stat deltas a boon status grants while it is live. */
 type StatBoon = Readonly<Partial<Record<StatId, number>>>;
 
@@ -118,6 +134,11 @@ export interface StatusDef {
    * long as it lasts: read by `Player.canAct` for crawlers and mobs alike.
    */
   readonly incapacitates: boolean;
+  /**
+   * How the status slows its carrier's walking, or null for one that leaves the
+   * pace alone. Read by `Player.statusMoveFactor`, which crawlers and mobs share.
+   */
+  readonly moveSlow: StatusMoveSlow | null;
   readonly damageOverTime: StatusDamageOverTime | null;
   /** The proficiency skill that shortens the status on whoever carries it, or null when none does. */
   readonly durationWardedBy: ProficiencySkillId | null;
@@ -159,10 +180,17 @@ const PLAIN_STATUS: StatusDef = {
   statBoon: null,
   incomingDamageScale: DAMAGE_UNCHANGED,
   incapacitates: false,
+  moveSlow: null,
   damageOverTime: null,
   durationWardedBy: null,
   persistence: 'saved',
 };
+
+/**
+ * Every chill that reaches a body is an ice fairy's spell, so magic resistance
+ * eases all of it: the walking slow here and the action slow `Player` applies.
+ */
+export const CHILL_WEAKENED_BY = 'magic' as const satisfies ResistanceType;
 
 const PLAIN_AILMENT: StatusDef = { ...PLAIN_STATUS, cure: 'ailment' };
 
@@ -230,8 +258,16 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
     cure: 'death_only',
     incomingDamageScale: DOUBLE_DAMAGE_SCALE,
   },
-  chilled: PLAIN_AILMENT,
+  chilled: {
+    ...PLAIN_AILMENT,
+    moveSlow: { moveSpeedFactor: CHILLED_MOVE_SPEED_FACTOR, weakenedBy: CHILL_WEAKENED_BY },
+  },
   frozen: { ...PLAIN_AILMENT, incapacitates: true },
+  // A lizardman's venom, so whatever turns aside poison eases it too.
+  numbed: {
+    ...PLAIN_AILMENT,
+    moveSlow: { moveSpeedFactor: NUMBED_MOVE_SPEED_FACTOR, weakenedBy: 'poison' },
+  },
   shield: { ...PLAIN_STATUS, ward: { drainOrder: DRAINED_SECOND }, heldByCaster: true },
   // Drained before the shield because it decays on its own clock whatever
   // happens, so spending it first wastes the least.
@@ -274,7 +310,7 @@ export interface StatusEffect {
    * an attributable kill rather than an anonymous one — a mob that dies to the
    * poison a piece of gear applied credits the crawler wearing the piece.
    *
-   * Null for anything nobody owns: an acid pool, a burning tree, a lava flame,
+   * Null for anything nobody owns: an acid pool, a burning tree, a fire patch,
    * a status restored from a snapshot taken in another scene. Every consumer of
    * kill credit already treats null as "not killed by anyone".
    */
@@ -286,6 +322,13 @@ export interface StatusEffect {
    * neither boost nor train the applier's skills.
    */
   readonly creditOnly?: true;
+  /**
+   * Set when the floor laid this on — the poison an acid puddle seeps in — so
+   * its bites are thinned by the same gear share as the floor's own damage;
+   * otherwise boots that halve the puddle would leave its poison, most of
+   * what a long stay costs, at full strength.
+   */
+  groundHazard?: GroundHazard;
   /**
    * Damage this effect will still soak up before any reaches HP. Only an
    * absorbing effect (see {@link makeShield}) carries it; `Player.takeDamage`
@@ -315,6 +358,9 @@ export const CHILLED_STATUS = 'chilled' as const satisfies StatusId;
 
 /** Encased in ice: no walking, attacking, casting or item use; see {@link makeFrozen}. */
 export const FROZEN_STATUS = 'frozen' as const satisfies StatusId;
+
+/** Legs gone slow under a lizardman's venom; see {@link makeNumbed}. */
+export const NUMBED_STATUS = 'numbed' as const satisfies StatusId;
 
 /**
  * One retch of blood, which a crawler brings up on entering the lowest HP
@@ -440,6 +486,11 @@ export function makeFrozen(ticks: number = FROZEN_FRAMES): StatusEffect {
   return { type: FROZEN_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }
 
+/** Numbed for `ticks`: slower walking, with swings and casts left at full pace. */
+export function makeNumbed(ticks: number = NUMBED_FRAMES): StatusEffect {
+  return { type: NUMBED_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
+
 /**
  * How long a broken ward stays on the character after its pool runs dry: long
  * enough for the dome to be seen coming apart, rather than vanishing between
@@ -529,7 +580,18 @@ export function reappliedStatus(existing: StatusEffect, applied: StatusEffect): 
   if (STATUS_DEFS[applied.type].damageOverTime === null) return applied;
   const elapsed = Math.max(0, existing.totalTicks - existing.ticksRemaining);
   const ticksRemaining = Math.max(existing.ticksRemaining, applied.ticksRemaining);
-  return { ...applied, ticksRemaining, totalTicks: elapsed + ticksRemaining };
+  // The source that supplies the surviving run decides its ground-hazard share,
+  // or a short acid dose would discount the rest of a long mob poison.
+  const survivingSource = existing.ticksRemaining > applied.ticksRemaining ? existing : applied;
+  const { groundHazard: _replacedHazard, ...appliedWithoutHazard } = applied;
+  return {
+    ...appliedWithoutHazard,
+    ...(survivingSource.groundHazard === undefined
+      ? {}
+      : { groundHazard: survivingSource.groundHazard }),
+    ticksRemaining,
+    totalTicks: elapsed + ticksRemaining,
+  };
 }
 
 /** Whether `effect` holds its carrier unable to walk, attack, cast or use an item this frame. */
@@ -570,7 +632,7 @@ export const CURABLE_AILMENT_STATUSES: ReadonlyArray<StatusId> = AILMENT_STATUSE
 // Preset constructors
 
 /** Eight seconds at 60 fps. */
-const BURN_TICKS = 480;
+export const BURN_TICKS = 480;
 
 /** 8-second burn: 1 damage / second for 8 seconds. */
 export function makeBurn(applier: Player | null = null): StatusEffect {

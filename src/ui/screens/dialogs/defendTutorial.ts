@@ -59,7 +59,7 @@ const PAGES: readonly PagedOverlayPage[] = [
   ),
   page(
     'The threat',
-    'Bugaboos crawl up from grates to attack! Barriers hold them — repair any that are clawed. Survive the full timer to complete the quest.',
+    'Fuzzy Nightmares crawl up from grates to attack! Barriers hold them — repair any that are clawed. Survive the full timer to complete the quest.',
     drawDefendThreatPage,
   ),
 ];

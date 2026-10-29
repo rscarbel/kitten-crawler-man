@@ -1,6 +1,5 @@
 import type { EventBus } from '../core/EventBus';
 import type { Mob } from '../creatures/Mob';
-import { DISH_DEF } from '../systems/bopcaDialog';
 import { bindCue, equipChangeCue } from './gearSoundCues';
 import {
   clawSoundsOf,
@@ -2255,19 +2254,10 @@ export class AudioManager {
       this.play('healing_potion');
     });
 
-    // The Bopca's one-shots. The cook sizzle is deliberately absent: it is a loop
-    // that has to be stopped as well as started, so `BopcaSystem` drives it from
-    // its own per-frame state instead — see `updateCookingLoop` there.
-    bus.on('bopcaGreeted', (e) => {
-      this.play(e.tone === 'toCat' ? 'bopca_happy_grunt' : 'bopca_grunt');
-    });
-
-    bus.on('bopcaServedFood', () => {
-      this.play('bopca_dish_set_down');
-    });
-
-    bus.on('bopcaFoodEaten', (e) => {
-      this.play(DISH_DEF[e.dishId].eating === 'slurp' ? 'slurping_soup' : 'bopca_eating');
+    // The safe room's doctor has no recordings of its own yet, so a treatment
+    // borrows the health potion's healing cue.
+    bus.on('doctorTreated', () => {
+      this.play('healing_potion');
     });
 
     // No bespoke assets exist for the skill system yet, so each of these borrows

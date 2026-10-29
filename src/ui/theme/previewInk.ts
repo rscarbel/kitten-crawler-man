@@ -50,7 +50,7 @@ const grid = {
 export const previewInk = {
   floor,
   grid,
-  bugaboo: { frameCounter: '#d8d2c4' },
+  fuzzyNightmare: { frameCounter: '#d8d2c4' },
   mantid: { frameCounter: '#e4e8d4' },
   rockGolem: {
     backdrops: ['#2b2b30', '#4a4034', '#6f7a5c', '#8d8477'],
@@ -71,13 +71,12 @@ export const previewInk = {
     panel: '#14161c',
     label: '#d6dde8',
   },
-  bopca: {
+  dwarfCook: {
     backdrop: '#1b2436',
     panel: '#232f47',
     sublabel: '#93a2c0',
-    dishVessel: '#e8e0cc',
-    dishContent: '#b4762e',
-    dishGarnish: '#6f9f4a',
+    /** Plain warm paving for the figure to stand on, so its feet read against a floor. */
+    floor: '#8f6651',
   },
   fairy: { backdrop: '#2a2f3d' },
   /** The `?pipeboard` bench's backdrop, a bathroom wall in the dark. */

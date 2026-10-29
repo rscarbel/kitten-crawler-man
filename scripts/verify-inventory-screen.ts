@@ -136,7 +136,7 @@ console.log('Item effect lines name the stat a weapon grows with');
     ['rattlestick_sling', 'ranged'],
     ['stormcaller', 'melee'],
     ['magic_missile_tome', 'magic'],
-    ['goblin_dynamite', 'explosivesHandling'],
+    ['dynamite', 'explosivesHandling'],
   ] as const satisfies readonly (readonly [ItemId, StatId])[]) {
     const expected = `Scales with ${STAT_DEFS[stat].label}`;
     check(lines(id).includes(expected), `${id} says "${expected}"`);

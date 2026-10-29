@@ -1,0 +1,474 @@
+import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
+import { Mob } from './Mob';
+import { FUZZY_NIGHTMARE_EYE_PLACEMENT } from '../sprites/art/fuzzyNightmareFigure';
+import { TILE_SIZE } from '../core/constants';
+import { randomIntFrom } from '../utils';
+import { mulberry32, type Rng } from '../sprites/person/rng';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import {
+  FUZZY_NIGHTMARE_SWIPE_FRAMES,
+  FUZZY_NIGHTMARE_SWIPE_IMPACT_FRAME,
+  drawFuzzyNightmareSprite,
+} from '../sprites/fuzzyNightmareSprite';
+
+const FUZZY_NIGHTMARE_HP = 8;
+const FUZZY_NIGHTMARE_SPEED = 0.8;
+const AGGRO_RANGE_TILES = 20;
+const ATTACK_RANGE_TILES = 1.2;
+const ATTACK_COOLDOWN = 60;
+export const FUZZY_NIGHTMARE_ATTACK_FRAMES = 16;
+const ATTACK_DAMAGE = 2;
+/** Fraction of attack range used as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.6;
+
+/**
+ * The frame of the swing on which the claws are at full reach, counted down the
+ * way `attackAnimTimer` runs. Damage lands here rather than on the frame the
+ * swing starts, so the hit and the picture of the hit are the same event.
+ */
+const SWIPE_IMPACT_TIMER = Math.round(
+  FUZZY_NIGHTMARE_ATTACK_FRAMES *
+    (1 - FUZZY_NIGHTMARE_SWIPE_IMPACT_FRAME / FUZZY_NIGHTMARE_SWIPE_FRAMES),
+);
+
+/** Shortest and longest wait between growls while it stalks someone, in frames (4–8 s at 60 fps). */
+const STALK_GROWL_MIN_GAP_FRAMES = 240;
+const STALK_GROWL_MAX_GAP_FRAMES = 480;
+
+const GROWL_TIMING_SEED = 0xf022;
+
+/**
+ * The draws that only decide when a Fuzzy Nightmare growls. A stream of their
+ * own rather than `Math.random`: seeded fights replace `Math.random` and the
+ * creatures' AI rolls come from it, so a sound's timing drawn there would
+ * reshuffle every roll after it and change how a seeded fight plays.
+ */
+const growlRandom: Rng = mulberry32(GROWL_TIMING_SEED);
+
+/** What a Fuzzy Nightmare has to say, drained by the scene's mob cue player. */
+export type FuzzyNightmareVoice = 'growl' | 'grateClaw';
+
+/** How long it takes to haul itself out of a grate once the boards give. */
+export const FUZZY_NIGHTMARE_EMERGE_FRAMES = 34;
+
+/**
+ * How close a player has to stand to a breach before the arm coming out of it
+ * can reach them, and how hard it grabs. Kept inside a tile: the hazard is
+ * "standing on the hole", not "standing near it".
+ */
+const BREACH_GRAB_RANGE_TILES = 0.7;
+const BREACH_GRAB_DAMAGE = 1;
+const BREACH_GRAB_COOLDOWN = 42;
+/**
+ * How close it has to get to a barricaded grate before it counts as breaching
+ * it. The breach is drawn *at the grate*, so the body has to be standing there
+ * too — stopped a tile short, as it is for anything it can reach with a claw,
+ * the player swings at a hole with nothing behind it and the damageable body
+ * sits in empty floor beside it.
+ */
+const BREACH_STAND_RANGE_TILES = 0.2;
+
+/**
+ * How far outside the viewport one still has to be drawn.
+ *
+ * Measured off the bake, not guessed: the art reaches 1.11 tiles above its own
+ * tile — its windup throws a claw up over the arch of its back — and its rake
+ * reaches a tile out to either side, so at the default one tile of slack it
+ * pops in with claw still owed to the edge of the screen. The same number
+ * sizes the hit-flash silhouette box.
+ */
+const FUZZY_NIGHTMARE_CULL_MARGIN_TILES = 1.3;
+
+const NO_FUZZY_NIGHTMARE_TACTICS: readonly TacticsTrait[] = [];
+
+/** What a Fuzzy Nightmare is doing with its arms this frame, in priority order. */
+type SwingTarget = { readonly player: Player } | { readonly barrier: { x: number; y: number } };
+
+export class FuzzyNightmare extends Mob {
+  readonly xpValue = 3;
+  protected coinDropMin = 0;
+  protected coinDropMax = 1;
+  displayName = 'Fuzzy Nightmare';
+  description =
+    'The thing under the bed, grown up. It stalks through basements, sewers and shadows, and comes for you up through the floor.';
+
+  /** Breaking in, it is still under the grate. */
+  protected override get eyePlacement(): EyePlacement | null {
+    if (this.isBreakingIn) return null;
+    return FUZZY_NIGHTMARE_EYE_PLACEMENT;
+  }
+
+  /** Grate tile this Fuzzy Nightmare spawned from (used by quest system for barrier targeting). */
+  assignedGrate: { x: number; y: number } | null = null;
+  /** The defend target (quest NPC) this Fuzzy Nightmare should prioritize. */
+  defendTarget: Player | null = null;
+  /** Callback for damaging a wood barrier at the assigned grate. */
+  onBarrierAttack: ((grate: { x: number; y: number }, damage: number) => boolean) | null = null;
+  /** True while this fuzzy nightmare is actively breaking through a wood barrier. */
+  isBreakingIn = false;
+
+  private aggroRangePx: number;
+  private attackRangePx: number;
+  private attackCooldown = 0;
+  private attackAnimTimer = 0;
+  private isAggro = false;
+  /** What the swing currently in the air is aimed at; null when it is not swinging. */
+  private swingTarget: SwingTarget | null = null;
+  private emergeTimer = 0;
+  private breachGrabCooldown = 0;
+  /**
+   * Frames to the next growl while it stalks. Starts somewhere in a full gap
+   * so a wave that notices the party together does not growl in unison.
+   */
+  private growlTimer = randomIntFrom(growlRandom, 0, STALK_GROWL_MAX_GAP_FRAMES);
+  /** The cue raised since the scene last drained it. */
+  voicePending: FuzzyNightmareVoice | null = null;
+  /**
+   * Desynchronises the clock-driven idle and breach loops, so several of these
+   * in one room do not breathe or grope in lockstep.
+   */
+  private readonly loopOffsetSeconds = Math.random();
+
+  override get cullMarginTiles(): number {
+    return FUZZY_NIGHTMARE_CULL_MARGIN_TILES;
+  }
+
+  /**
+   * None, although defense waves are levelled into the tactics range. A
+   * fuzzy nightmare's fight is with the boards and the goblin mother, not with the
+   * player: the movement tactics all plan an approach to a crawler, and the
+   * wave's pressure is paced by the defense quest instead. A guard's shove
+   * would also knock the body off a grate mid-breach, so a player boarding it
+   * up would see the creature pop out of the floor and walk back in.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return NO_FUZZY_NIGHTMARE_TACTICS;
+  }
+
+  /**
+   * Breaking in, the body is under the floor and the only thing above it is an
+   * arm out of a hole. Left solid, a crawler standing beside the grate shoves
+   * that hidden body more than `BREACH_STAND_RANGE_TILES` off it, the breach
+   * lapses, and the whole creature pops up on the floor and walks back into the
+   * grate — every time someone stands close enough to board it.
+   */
+  override get displacesPlayers(): boolean {
+    return !this.isBreakingIn;
+  }
+
+  /** Nothing on the floor can reach a body that is under it; see `displacesPlayers`. */
+  override applySeparation(dx: number, dy: number): void {
+    if (this.isBreakingIn) return;
+    super.applySeparation(dx, dy);
+  }
+
+  /** A hireling's charge or blast wave cannot fling a body out from under the floor either. */
+  override applyKnockback(dirX: number, dirY: number, distancePx: number, frames: number): void {
+    if (this.isBreakingIn) return;
+    super.applyKnockback(dirX, dirY, distancePx, frames);
+  }
+
+  constructor(tileX: number, tileY: number, tileSize: number) {
+    super(tileX, tileY, tileSize, FUZZY_NIGHTMARE_HP, FUZZY_NIGHTMARE_SPEED);
+    this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
+    this.attackRangePx = tileSize * ATTACK_RANGE_TILES;
+  }
+
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.swingTarget = null;
+    this.emergeTimer = 0;
+    this.breachGrabCooldown = 0;
+    this.growlTimer = randomIntFrom(growlRandom, 0, STALK_GROWL_MAX_GAP_FRAMES);
+    this.voicePending = null;
+    this.isBreakingIn = false;
+    this.isAggro = false;
+    // The quest system rebuilds its barrier list and its wave roster on a
+    // checkpoint restore, so a grate assignment, its barrier callback and a
+    // defend target held across the rewind all point at the old encounter.
+    this.releaseFromWave();
+  }
+
+  /**
+   * Plays the haul-out animation before this Fuzzy Nightmare can act.
+   *
+   * Called when one spawns straight onto an unbarricaded grate, and again the
+   * moment a barricade it was breaking through finally gives — in both cases
+   * the creature is coming up through the floor and has to be seen to do it.
+   */
+  beginEmerge(): void {
+    this.emergeTimer = FUZZY_NIGHTMARE_EMERGE_FRAMES;
+    this.isMoving = false;
+    // Whatever it was swinging at is behind it now. Left running, the swing
+    // lands during the climb and its cooldown burns down out of sight, so it
+    // stands next to the player for half a second after arriving unable to act.
+    this.attackAnimTimer = 0;
+    this.attackCooldown = 0;
+    this.swingTarget = null;
+    this.releaseGrate();
+    this.voicePending = 'grateClaw';
+  }
+
+  /**
+   * Forgets the grate this one came up. Boarding grates is the player's whole
+   * job in this quest, so a creature that keeps its assignment walks back across
+   * the room and dives through the floor again the moment that grate is
+   * re-boarded — rendering as an arm out of a hole while standing on top of
+   * intact planks, with its health bar snapped off its body onto the grate.
+   */
+  private releaseGrate(): void {
+    this.assignedGrate = null;
+    this.onBarrierAttack = null;
+  }
+
+  /**
+   * Cuts every tie to the defense encounter: its grate, the barrier callback,
+   * the goblin mother, and the swing already in the air.
+   *
+   * The swing is the one that is easy to forget and the one that matters. A
+   * strike commits its target at wind-up and lands on it a quarter of a second
+   * later, re-checking only that the target is alive and in range — never
+   * whether it is still this creature's `defendTarget`. So a wave released
+   * mid-swing lands one more blow on a mother the quest has just healed back to
+   * full, and the re-staged segment starts with her already chipped.
+   */
+  releaseFromWave(): void {
+    this.releaseGrate();
+    this.defendTarget = null;
+    this.swingTarget = null;
+  }
+
+  updateAI(targets: Player[]) {
+    if (!this.isAlive) return;
+
+    if (this.attackCooldown > 0) this.attackCooldown--;
+    if (this.breachGrabCooldown > 0) this.breachGrabCooldown--;
+    this.tickSwing();
+
+    const wasBreakingIn = this.isBreakingIn;
+    this.isBreakingIn = false;
+
+    if (this.emergeTimer > 0) {
+      this.emergeTimer--;
+      this.isMoving = false;
+      this.isAggro = true;
+      return;
+    }
+
+    // Priority 1: a grate barrier outranks any player target.
+    if (this.assignedGrate && this.onBarrierAttack) {
+      const barrierX = this.assignedGrate.x * TILE_SIZE;
+      const barrierY = this.assignedGrate.y * TILE_SIZE;
+      const distToBarrier = Math.hypot(barrierX - this.x, barrierY - this.y);
+
+      const barrierExists = this.onBarrierAttack(this.assignedGrate, 0);
+      if (barrierExists) {
+        this.isAggro = true;
+        const standRange = TILE_SIZE * BREACH_STAND_RANGE_TILES;
+        if (distToBarrier > standRange) {
+          // Still walking to it, so it is a creature crossing the floor and is
+          // drawn as one; the hole only appears once it is standing on it.
+          this.followTargetCollide(barrierX, barrierY, this.speed, standRange);
+        } else {
+          this.isBreakingIn = true;
+          this.isMoving = false;
+          if (this.attackCooldown === 0) this.beginSwing({ barrier: this.assignedGrate });
+          this.clawAtAnyoneOnTheBreach(targets);
+        }
+        return;
+      }
+      // The boards are gone. Released here rather than only on the emerge
+      // path, because a swing lands on whatever it was aimed at without
+      // re-checking range: shoved off its grate mid-swing — by the separation
+      // push, or by a second Fuzzy Nightmare spawning on the same grate — this one
+      // still breaks the boards, and `wasBreakingIn` is false when it does.
+      this.releaseGrate();
+      // It climbs out before it does anything else, but only if it was actually
+      // still in the hole. The grate is where the player's eye already is.
+      if (wasBreakingIn) {
+        this.beginEmerge();
+        return;
+      }
+    }
+
+    // Priority 2: the defend target, if the quest assigned one.
+    if (this.defendTarget?.isAlive) {
+      const dist = Math.hypot(this.defendTarget.x - this.x, this.defendTarget.y - this.y);
+      this.isAggro = true;
+      this.tickStalkGrowl();
+      this.currentTarget = this.defendTarget;
+
+      if (dist > this.attackRangePx) {
+        this.followTargetCollide(
+          this.defendTarget.x,
+          this.defendTarget.y,
+          this.speed,
+          this.attackRangePx * FOLLOW_STOP_FRACTION,
+        );
+      } else {
+        this.isMoving = false;
+        // Nothing else writes facing once it holds position to fight; held still
+        // mid-swing so the swipe cannot flip halfway through.
+        if (this.attackAnimTimer === 0) this.faceToward(this.defendTarget);
+        if (this.attackCooldown === 0) this.beginSwing({ player: this.defendTarget });
+      }
+      return;
+    }
+
+    // Priority 3: fall back to the nearest player.
+    const nearest = this.acquireTarget(targets, this.aggroRangePx);
+
+    this.currentTarget = nearest;
+
+    if (!nearest) {
+      this.isAggro = false;
+      this.doWander();
+      return;
+    }
+
+    this.isAggro = true;
+    this.tickStalkGrowl();
+    const nearestDist = this.distanceTo(nearest);
+    this.updateLastKnown(nearest);
+
+    if (nearestDist > this.attackRangePx) {
+      this.followTargetCollide(
+        this.lastKnownTargetX,
+        this.lastKnownTargetY,
+        this.speed,
+        this.attackRangePx * FOLLOW_STOP_FRACTION,
+      );
+    } else {
+      this.isMoving = false;
+    }
+
+    if (nearestDist <= this.attackRangePx && this.attackAnimTimer === 0) {
+      this.faceToward(nearest);
+    }
+
+    if (nearestDist <= this.attackRangePx && this.attackCooldown === 0) {
+      this.beginSwing({ player: nearest });
+    }
+  }
+
+  private tickStalkGrowl(): void {
+    if (this.growlTimer > 0) {
+      this.growlTimer--;
+      return;
+    }
+    this.growlTimer = randomIntFrom(
+      growlRandom,
+      STALK_GROWL_MIN_GAP_FRAMES,
+      STALK_GROWL_MAX_GAP_FRAMES,
+    );
+    this.voicePending ??= 'growl';
+  }
+
+  private beginSwing(target: SwingTarget): void {
+    this.attackCooldown = this.scaledCooldownFrames(ATTACK_COOLDOWN);
+    this.attackAnimTimer = FUZZY_NIGHTMARE_ATTACK_FRAMES;
+    this.swingTarget = target;
+  }
+
+  /**
+   * Advances the swing and lands it on the frame the claws are actually out.
+   *
+   * The target is re-checked at that moment rather than at the windup: a swing
+   * whose damage is committed on the frame it starts hits whatever has since
+   * walked out of range, half a second before the picture of the blow.
+   */
+  private tickSwing(): void {
+    if (this.attackAnimTimer === 0) return;
+    this.attackAnimTimer--;
+    const target = this.swingTarget;
+    if (target === null || this.attackAnimTimer !== SWIPE_IMPACT_TIMER) return;
+    this.swingTarget = null;
+    if ('barrier' in target) {
+      this.onBarrierAttack?.(target.barrier, ATTACK_DAMAGE);
+      this.voicePending = 'grateClaw';
+      return;
+    }
+    if (!target.player.isAlive) return;
+    if (this.distanceTo(target.player) > this.attackRangePx) return;
+    this.dealDamage(target.player, ATTACK_DAMAGE);
+  }
+
+  /**
+   * The arm out of a breach mauls whatever is standing over the hole.
+   *
+   * The barricade is a place the player has to stand to build and repair, so
+   * the thing clawing up through it has to make standing there cost something —
+   * otherwise a boarded grate is a free safe square with a monster under it.
+   */
+  private clawAtAnyoneOnTheBreach(targets: readonly Player[]): void {
+    const grate = this.assignedGrate;
+    if (grate === null || this.breachGrabCooldown > 0) return;
+    // Both sides of this comparison are tile *corners*, which is the coordinate
+    // every entity in this game carries. Centring one of them and not the other
+    // slides the hazard half a tile down and to the right of the grate, so it
+    // reaches the three tiles south-east of the hole and not the hole itself.
+    const grateX = grate.x * TILE_SIZE;
+    const grateY = grate.y * TILE_SIZE;
+    const reach = TILE_SIZE * BREACH_GRAB_RANGE_TILES;
+    for (const target of targets) {
+      if (!target.isAlive || target.isDefendTarget) continue;
+      if (Math.hypot(target.x - grateX, target.y - grateY) > reach) continue;
+      this.dealDamage(target, BREACH_GRAB_DAMAGE);
+      this.breachGrabCooldown = this.scaledCooldownFrames(BREACH_GRAB_COOLDOWN);
+      return;
+    }
+  }
+
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
+    if (!this.isAlive) return;
+
+    // Breaking in, the creature itself is under the floor: what is drawn is the
+    // hole in the grate it is coming up through, at that grate rather than at
+    // the body's own position, which is stopped short of it.
+    if (this.isBreakingIn && this.assignedGrate) {
+      const holeX = this.assignedGrate.x * TILE_SIZE - camX;
+      const holeY = this.assignedGrate.y * TILE_SIZE - camY;
+      const holeArtTopY = this.paintSpriteMeasuringTop(ctx, holeY, () => {
+        drawFuzzyNightmareSprite(ctx, holeX, holeY, tileSize, {
+          breaching: true,
+          loopOffsetSeconds: this.loopOffsetSeconds,
+        });
+      });
+      this.renderAggroIndicator(ctx, holeX, holeArtTopY, holeY, tileSize);
+      // Anchored to the hole rather than to the body, so the bar a player is
+      // whittling down sits over the thing they are hitting.
+      this.renderMobHealthBar(ctx, holeX, holeY, holeArtTopY);
+      return;
+    }
+
+    const sx = this.x - camX;
+    const sy = this.y - camY;
+
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawFuzzyNightmareSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        swipeProgress:
+          this.attackAnimTimer > 0
+            ? 1 - this.attackAnimTimer / FUZZY_NIGHTMARE_ATTACK_FRAMES
+            : null,
+        emergeProgress:
+          this.emergeTimer > 0 ? 1 - this.emergeTimer / FUZZY_NIGHTMARE_EMERGE_FRAMES : null,
+        loopOffsetSeconds: this.loopOffsetSeconds,
+      });
+    });
+
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
+  }
+}

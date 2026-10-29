@@ -86,7 +86,7 @@ export const palette = {
    */
   skillBook: {
     nine_lives: { cover: '#155e75', spine: '#083344' },
-    cat_reflexes: { cover: '#4c1d95', spine: '#2a0f57' },
+    warp_speed: { cover: '#4c1d95', spine: '#2a0f57' },
     pugilism: { cover: '#7f1d1d', spine: '#450a0a' },
     iron_stomach: { cover: '#3f6212', spine: '#1f3006' },
     mechanical_fist: { cover: '#3f4854', spine: '#1c2129' },

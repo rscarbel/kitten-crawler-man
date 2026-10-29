@@ -1,5 +1,5 @@
 /**
- * The human crawler lighting a stick of goblin dynamite with his Zippo and
+ * The human crawler lighting a stick of dynamite with his Zippo and
  * lobbing it overhand, in three row families per view:
  *
  * - **light** — the Zippo comes up in the left fist beside the stick in the

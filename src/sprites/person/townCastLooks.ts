@@ -252,7 +252,7 @@ const CHILD_LOOKS: readonly TownCastLookPerson[] = CHILD_SPECS.map((spec, index)
  * look, so every adult stands the same height regardless of build and no
  * build is ever a shrunk or stretched rig.
  */
-const BUILD_WIDTH_SCALE: Readonly<Record<Exclude<TownCastBuild, 'child'>, number>> = {
+export const BUILD_WIDTH_SCALE: Readonly<Record<Exclude<TownCastBuild, 'child'>, number>> = {
   slight: 0.78,
   standard: 1.0,
   heavy: 1.32,
@@ -267,14 +267,14 @@ export const ADULT_STRIDE_FRACTION = 0.42;
  * `buildWidthScale` only ever touches the horizontal half of the paint
  * transform and never the rig's own height.
  */
-const FEMININE_WIDTH_SCALE = 0.93;
+export const FEMININE_WIDTH_SCALE = 0.93;
 
 /** How calm a townsfolk look's brow sits against the rig's own combat scowl (`pose.brow`, up to 1). */
 const MASCULINE_ANGER_SCALE = 0.22;
 const FEMININE_ANGER_SCALE = 0.14;
 const FEMININE_LIP_FULLNESS = 1.15;
 
-const MASCULINE_EXPRESSION: BipedExpression = {
+export const MASCULINE_EXPRESSION: BipedExpression = {
   angerScale: MASCULINE_ANGER_SCALE,
   profileBrow: PROFILE_BROW_DEFAULT,
   facingBrow: FACING_BROW_DEFAULT,
@@ -283,7 +283,7 @@ const MASCULINE_EXPRESSION: BipedExpression = {
   eyes: RIG_EYES,
   browTone: RIG_BROW_TONE,
 };
-const FEMININE_EXPRESSION: BipedExpression = {
+export const FEMININE_EXPRESSION: BipedExpression = {
   angerScale: FEMININE_ANGER_SCALE,
   profileBrow: FEMININE_PROFILE_BROW,
   facingBrow: FEMININE_FACING_BROW,

@@ -165,6 +165,7 @@ import { boardTileToTent, type MirrorBoard } from '../map/starlightTent/mirrorBo
 import {
   clearDifficultyChangeGuard,
   registerDifficultyChangeGuard,
+  type DifficultyChangeConfirmation,
   type DifficultyGuardHandle,
 } from '../core/difficulty/difficultyChangeGuard';
 import { settings } from '../core/input/Settings';
@@ -198,6 +199,11 @@ import { questBannerEntry } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 
 const FRAMES_PER_SECOND = 60;
+/** Any change of difficulty mid-show deals a new hall, so every one is asked about. */
+const TENT_RESTART_CONFIRMATION: DifficultyChangeConfirmation = {
+  title: 'Restart the Starlight Tent?',
+  body: 'Changing the difficulty changes the hall of mirrors. The show will start over from Act I.',
+};
 
 /**
  * How long a newly opened way flares before it settles into its quiet art.
@@ -650,6 +656,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    */
   private holdDifficulty(): void {
     this.difficultyGuard = registerDifficultyChangeGuard({
+      confirmation: () => TENT_RESTART_CONFIRMATION,
       restartWithDifficulty: (next) => {
         settings.setDifficulty(next);
         this.restartOnDifficulty(next);

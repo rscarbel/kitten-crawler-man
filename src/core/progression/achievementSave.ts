@@ -23,7 +23,7 @@ const ACHIEVEMENT_IDS = [
   'on_retainer',
   'casino_jackpot',
   'bartenders_choice',
-  'down_the_hatch',
+  'entered_dungeon',
   'spark_to_flame',
   'flat_out',
   'wrecking_ball',

@@ -22,7 +22,7 @@ import {
   spillVariant,
   type SpillKind,
 } from './spillDecals';
-import { drawLavaFlame } from '../../sprites/lavaBallSprite';
+import { drawFireballFlame } from '../../sprites/fireballSprite';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../../creatures/mobLevelScaling';
 
 export interface Wreckage {
@@ -371,7 +371,7 @@ export class WreckageField {
       const strength = fireStrength(entry);
       for (let index = 0; index < FLAME_OFFSETS.length; index++) {
         const offset = FLAME_OFFSETS[index];
-        drawLavaFlame(
+        drawFireballFlame(
           ctx,
           centreX(entry) + offset.x * TILE_SIZE - camX,
           centreY(entry) + offset.y * TILE_SIZE - camY,

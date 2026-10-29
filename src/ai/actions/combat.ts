@@ -1,4 +1,4 @@
-/** Challenge and combat actions: hostiles, statuses, stats, HP and the collapse clock. */
+/** Challenge and combat actions: hostiles, statuses, stats, HP and Nightmare's floor time limit. */
 import {
   activeDifficultyProfile,
   applySpawnDifficulty,
@@ -91,7 +91,7 @@ const PERCENT = 100;
 const SET_HP_MIN_PERCENT = LOW_HP_PERCENT;
 
 export const TIMER_DELTA_LIMIT_SECONDS = 60;
-/** The clock is never cut below this many seconds: a floor must stay escapable. */
+/** The time limit is never cut below this many seconds left: a floor must stay escapable. */
 export const TIMER_FLOOR_SECONDS = 120;
 
 const PLACEMENTS = ['near', 'ambush', 'behind'] as const;
@@ -624,12 +624,14 @@ const setHp: AIActionDef = {
 const TIMER_DELTA = intParam('delta_seconds', {
   min: -TIMER_DELTA_LIMIT_SECONDS,
   max: TIMER_DELTA_LIMIT_SECONDS,
-  description: 'Seconds to add to (or take from) the floor collapse timer. Not zero.',
+  description: 'Seconds to add to (or take from) the time left on the floor. Not zero.',
 });
+
+const NO_TIME_LIMIT_REFUSAL = 'this floor has no time limit on this difficulty';
 
 const adjustLevelTimer: AIActionDef = {
   name: 'adjust_level_timer',
-  description: `Move the floor collapse timer by up to ${TIMER_DELTA_LIMIT_SECONDS}s either way. Never leaves less than ${TIMER_FLOOR_SECONDS}s.`,
+  description: `Move the time left before the floor's Nightmare time limit runs out, by up to ${TIMER_DELTA_LIMIT_SECONDS}s either way. Never leaves less than ${TIMER_FLOOR_SECONDS}s. Only on Nightmare, and only on a timed floor.`,
   params: [TIMER_DELTA],
   policy: {
     cost: 3,
@@ -644,19 +646,21 @@ const adjustLevelTimer: AIActionDef = {
     const delta = params.get(TIMER_DELTA);
     if (delta === 0) return 'a change of zero is no change';
     const timer = scene.getLevelTimer?.() ?? null;
-    if (timer === null) return 'this floor has no collapse timer';
+    if (timer === null) return NO_TIME_LIMIT_REFUSAL;
     if (
       delta < 0 &&
       timer.remainingFrames - secondsToFrames(-delta) < secondsToFrames(TIMER_FLOOR_SECONDS)
     ) {
-      return `the timer cannot drop under ${TIMER_FLOOR_SECONDS}s`;
+      return `the time limit cannot drop under ${TIMER_FLOOR_SECONDS}s left`;
     }
-    if (delta > 0 && timer.remainingFrames >= timer.limitFrames) return 'the timer is already full';
+    if (delta > 0 && timer.remainingFrames >= timer.limitFrames) {
+      return 'the time limit is already full';
+    }
     return null;
   },
   execute({ params, scene }) {
     const timer = scene.getLevelTimer?.() ?? null;
-    if (timer === null) return refused('this floor has no collapse timer');
+    if (timer === null) return refused(NO_TIME_LIMIT_REFUSAL);
     const delta = params.get(TIMER_DELTA);
     const before = timer.remainingFrames;
     const floorFrames = secondsToFrames(TIMER_FLOOR_SECONDS);
@@ -669,7 +673,7 @@ const adjustLevelTimer: AIActionDef = {
     timer.setRemainingFrames(next);
     const movedSeconds = (next - before) / secondsToFrames(1);
     const sign = movedSeconds >= 0 ? '+' : '-';
-    const shown = `Collapse timer ${sign}${formatSeconds(movedSeconds)}`;
+    const shown = `Time limit ${sign}${formatSeconds(movedSeconds)}`;
     notifyPlayer(scene, shown, { tone: delta > 0 ? 'success' : 'danger', urgent: delta < 0 });
     return ok(() => shown);
   },

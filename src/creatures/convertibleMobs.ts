@@ -16,7 +16,7 @@ import type { Mob } from './Mob';
 import { SkeletonWarrior } from './SkeletonWarrior';
 import { RuinsGhoul } from './RuinsGhoul';
 import { Goblin } from './Goblin';
-import { Troglodyte } from './Troglodyte';
+import { Lizardman } from './Lizardman';
 import { RaisedRatkin } from './RaisedRatkin';
 
 /** A creature class, as `instanceof` needs it. */
@@ -27,7 +27,7 @@ export const CONVERTIBLE_MOB_TYPES: readonly MobClass[] = [
   SkeletonWarrior,
   RuinsGhoul,
   Goblin,
-  Troglodyte,
+  Lizardman,
 ];
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Review sheet for what the bomber goblins throw: the black powder bomb and
- * the goblin dynamite stick in the air, the stick burning down on the floor,
+ * a goblin's dynamite stick in the air, the stick burning down on the floor,
  * both blasts through their lives, and both warning circles. Everything is
  * drawn at the in-game tile size, because that is the only size these are
  * ever seen at, with a zoomed copy of the projectiles beside it.

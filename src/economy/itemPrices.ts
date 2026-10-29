@@ -192,7 +192,7 @@ export const ITEM_PRICES = {
   seismic_stomp_tome:                   { base:  1000, category: 'tome' },
   explosives_handling_tome:     { base:   400, category: 'tome' },
   skill_book_nine_lives:         { base:   400, category: 'tome' },
-  skill_book_cat_reflexes:      { base:   400, category: 'tome' },
+  skill_book_warp_speed:      { base:   400, category: 'tome' },
   skill_book_pugilism:          { base:  1400, category: 'tome' },
   skill_book_iron_stomach:      { base:   400, category: 'tome' },
   skill_book_swordsmanship:     { base:   900, category: 'tome' },
@@ -204,10 +204,11 @@ export const ITEM_PRICES = {
   skill_book_pyros_touch:       { base:   900, category: 'tome' },
   skill_book_demolitionist:     { base:   900, category: 'tome' },
   // magic scroll
-  scroll_of_confusing_fog:      { base:   150, category: 'magic_scroll' },
+  scroll_of_entanglement:       { base:   150, category: 'magic_scroll' },
   // explosive
-  goblin_dynamite:              { base:    40, category: 'explosive' },
+  dynamite:                     { base:    40, category: 'explosive' },
   black_powder_bomb:            { base:    60, category: 'explosive' },
+  smoke_bomb:                   { base:    60, category: 'explosive' },
   // trap
   trebuchet_kit:                { base:   300, category: 'trap' },
   snare_kit:                    { base:   100, category: 'trap' },

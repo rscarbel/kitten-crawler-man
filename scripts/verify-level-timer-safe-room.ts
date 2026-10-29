@@ -1,13 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * The floor's collapse timer holds while the controlled crawler stands in a
- * safe room, and runs everywhere else.
+ * The floor clock — the time on the floor that Nightmare's time limit is
+ * measured against — holds while the controlled crawler stands in a safe
+ * room, and runs everywhere else. It is counted on every difficulty, so this
+ * runs on whichever one is set.
  *
- * Drives the real `DungeonScene` headless on every floor that has a collapse
- * timer, placing the party by hand and ticking `update()`:
+ * Drives the real `DungeonScene` headless on every floor with a Nightmare time
+ * limit, placing the party by hand and ticking `update()`:
  *
- *  - the active crawler outside every safe room: the timer counts down;
- *  - the active crawler inside one: the timer does not move;
+ *  - the active crawler outside every safe room: the clock runs;
+ *  - the active crawler inside one: the clock does not move;
  *  - the active crawler outside while the other is parked inside: it runs,
  *    because only the character being played counts;
  *  - the active crawler inside while the other is outside: it holds.
@@ -45,11 +47,11 @@ type Tile = { readonly x: number; readonly y: number };
 /** Frames ticked per case: long enough that a running clock cannot hide in rounding. */
 const FRAMES_PER_CASE = 120;
 /**
- * The least a running clock may lose over a case. Below one frame per update
+ * The least a running clock may count over a case. Below one frame per update
  * rather than exactly one, so a frame some other rule halts the world on does
  * not read as a paused clock.
  */
-const MIN_RUNNING_LOSS = FRAMES_PER_CASE / 2;
+const MIN_RUNNING_COUNT = FRAMES_PER_CASE / 2;
 /** More presses than any story talk has pages, reveals included. */
 const MAX_READ_PRESSES = 40;
 /** World ticks run after each press, enough for a walk-up to reach its speaker. */
@@ -84,7 +86,7 @@ function pressSpace(): void {
  * Reads whatever story cutscene the last case set off to its end: walking
  * into the safe room is Dave's arrival, and his talk halts the world until it
  * is read, as it does for a player. A case measured under it would read the
- * talk's halt as the timer's own.
+ * talk's halt as the clock's own.
  */
 function readOutCutscenes(scene: Scene): boolean {
   const cutscenes: unknown = Reflect.get(scene, 'cutscenes');
@@ -123,14 +125,14 @@ function findOutsideTile(map: InstanceType<typeof GameMap>): Tile | null {
 
 /**
  * Ticks the scene with the active crawler pinned to `activeTile` and the other
- * to `inactiveTile`, and returns how many frames the timer lost. Re-pinned
+ * to `inactiveTile`, and returns how many frames the clock counted. Re-pinned
  * every frame so neither walking AI nor a shove moves anyone across a wall,
  * and topped up every frame so a mob wandering over cannot end the run: a
  * dead party stops the clock too, which would pass a "holds" case vacuously.
  */
-function framesLost(scene: Scene, activeTile: Tile, inactiveTile: Tile): number {
+function framesCounted(scene: Scene, activeTile: Tile, inactiveTile: Tile): number {
   if (!readOutCutscenes(scene)) throw new Error('a story cutscene never finished');
-  const before = scene.levelTimerRemainingFrames;
+  const before = scene.floorClockElapsedFrames;
   const startingHp = scene.pm.players().map((player) => player.hp);
   for (let frame = 0; frame < FRAMES_PER_CASE; frame++) {
     scene.pm.players().forEach((player, index) => {
@@ -140,7 +142,7 @@ function framesLost(scene: Scene, activeTile: Tile, inactiveTile: Tile): number 
     placeAt(scene.pm.inactive(), inactiveTile);
     scene.update();
   }
-  return before - scene.levelTimerRemainingFrames;
+  return scene.floorClockElapsedFrames - before;
 }
 
 async function checkFloor(name: string, levelDef: LevelDef): Promise<void> {
@@ -167,37 +169,40 @@ async function checkFloor(name: string, levelDef: LevelDef): Promise<void> {
   const ctx = sceneManager.canvas.getContext('2d');
   if (ctx === null) throw new Error('the shim canvas has no 2d context');
   check(await settleArrival(scene, ctx), `${name}: the arrival screen finishes`);
-  check(scene.levelTimerRemainingFrames > 0, `${name}: the collapse timer starts with time on it`);
-
-  const lostOutside = framesLost(scene, outside, outside);
   check(
-    lostOutside >= MIN_RUNNING_LOSS,
-    `${name}: the timer runs with the party outside (lost ${lostOutside}/${FRAMES_PER_CASE})`,
+    scene.floorClockElapsedFrames === 0,
+    `${name}: a fresh floor starts its clock at zero (${scene.floorClockElapsedFrames})`,
   );
 
-  const lostInside = framesLost(scene, inside, inside);
+  const countedOutside = framesCounted(scene, outside, outside);
   check(
-    lostInside === 0,
-    `${name}: the timer holds with the party in the safe room (lost ${lostInside})`,
+    countedOutside >= MIN_RUNNING_COUNT,
+    `${name}: the clock runs with the party outside (counted ${countedOutside}/${FRAMES_PER_CASE})`,
   );
 
-  const lostActiveOutside = framesLost(scene, outside, inside);
+  const countedInside = framesCounted(scene, inside, inside);
   check(
-    lostActiveOutside >= MIN_RUNNING_LOSS,
-    `${name}: the timer runs when only the inactive crawler is inside (lost ${lostActiveOutside})`,
+    countedInside === 0,
+    `${name}: the clock holds with the party in the safe room (counted ${countedInside})`,
   );
 
-  const lostActiveInside = framesLost(scene, inside, outside);
+  const countedActiveOutside = framesCounted(scene, outside, inside);
   check(
-    lostActiveInside === 0,
-    `${name}: the timer holds when the active crawler is inside alone (lost ${lostActiveInside})`,
+    countedActiveOutside >= MIN_RUNNING_COUNT,
+    `${name}: the clock runs when only the inactive crawler is inside (counted ${countedActiveOutside})`,
+  );
+
+  const countedActiveInside = framesCounted(scene, inside, outside);
+  check(
+    countedActiveInside === 0,
+    `${name}: the clock holds when the active crawler is inside alone (counted ${countedActiveInside})`,
   );
 
   // A world that stopped for any other reason would also read as "held".
-  const lostAfterLeaving = framesLost(scene, outside, outside);
+  const countedAfterLeaving = framesCounted(scene, outside, outside);
   check(
-    lostAfterLeaving >= MIN_RUNNING_LOSS,
-    `${name}: the timer runs again once the party leaves (lost ${lostAfterLeaving})`,
+    countedAfterLeaving >= MIN_RUNNING_COUNT,
+    `${name}: the clock runs again once the party leaves (counted ${countedAfterLeaving})`,
   );
 
   scene.onExit();
@@ -208,9 +213,9 @@ const TIMED_FLOORS: ReadonlyArray<readonly [string, LevelDef]> = [
   ['floor 2', level2],
 ];
 for (const [name, levelDef] of TIMED_FLOORS) {
-  check(levelDef.hasCollapseTimer === true, `${name}: has a collapse timer`);
+  check(levelDef.nightmareTimeLimitFrames !== undefined, `${name}: has a Nightmare time limit`);
   await checkFloor(name, levelDef);
 }
 
-console.log(failures === 0 ? '\nAll level-timer checks passed.' : `\n${failures} check(s) failed.`);
+console.log(failures === 0 ? '\nAll floor-clock checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

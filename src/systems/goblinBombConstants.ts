@@ -73,7 +73,7 @@ export interface GoblinBombShotBase {
 }
 
 /**
- * A stick of goblin dynamite, carrying the fuse it will burn once it lands,
+ * A goblin's stick of dynamite, carrying the fuse it will burn once it lands,
  * from the throw-frame tuning, so a difficulty changed while it is live never
  * re-times it.
  */
@@ -186,7 +186,7 @@ export interface BomberActionFrames {
  * flight and fuse it was thrown with. Never touches the blast's damage.
  */
 export interface BomberTuning {
-  /** Frames a stick of goblin dynamite spends in the air. Never level-scaled. */
+  /** Frames a goblin's stick of dynamite spends in the air. Never level-scaled. */
   readonly dynamiteFlightFrames: number;
   /** Frames a black powder bomb spends in the air. Never level-scaled. */
   readonly blackPowderFlightFrames: number;

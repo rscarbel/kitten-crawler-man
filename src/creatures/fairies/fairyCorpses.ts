@@ -10,7 +10,7 @@
 import type { GameMap } from '../../map/GameMap';
 import { TILE_SIZE } from '../../core/constants';
 import type { Mob } from '../Mob';
-import { BrindleGrub } from '../BrindleGrub';
+import { GravediggerBeetle } from '../GravediggerBeetle';
 import { Fairy } from './Fairy';
 import { RESURRECT_RANGE_TILES } from './fairyTuning';
 
@@ -79,7 +79,7 @@ export class FairyCorpseLedger {
 
 /**
  * Kinds that may ever be raised: a hostile that is neither a boss, a boss's
- * add, a summon, a fairy nor a brindle grub (at any stage of its evolution),
+ * add, a summon, a fairy nor a gravedigger beetle (at any stage of its life),
  * and has not already been raised once. Raising a boss or its adds would undo
  * or rewrite a fight; raising a summon or a fairy would let casters farm each
  * other; and a body that has already come back once stays down. A boss to the
@@ -94,7 +94,7 @@ function isRaisableKind(mob: Mob): boolean {
     !mob.isSummon &&
     !mob.wasResurrected &&
     !(mob instanceof Fairy) &&
-    !(mob instanceof BrindleGrub)
+    !(mob instanceof GravediggerBeetle)
   );
 }
 

@@ -1,5 +1,5 @@
 /**
- * The furnishings of a Bopca station: what turns a cleared room into a mess hall.
+ * The furnishings of a safe room: what turns a cleared room into a mess hall.
  *
  * Everything here reads as *inhabited and provisioned* — food, light, storage,
  * rest — rather than as dungeon set dressing, and everything is drawn to the
@@ -16,13 +16,9 @@
  * the game draws at and at the sizes the review harnesses use.
  */
 
-import { drawDishSteam } from './safeRoomCounter';
-
 // ── Palette ───────────────────────────────────────────────────────────────────
-// Warm oiled oak and blackened iron against the station's cream tile, with the
-// Bopca's own mossy green for anything the cooks made themselves. Sampled from
-// `safeRoomCounter.ts` and `bopcaSprite.ts` so nothing here clashes with the
-// counter run or the chef standing behind it.
+// Warm oiled oak and blackened iron against the station's cream tile, with a
+// mossy green for the cloth.
 const WOOD = '#6b452a';
 const WOOD_DARK = '#4e3220';
 const WOOD_LIGHT = '#87593a';
@@ -34,9 +30,9 @@ const SLATE = '#2b2b28';
 const SLATE_FRAME = '#5a3b24';
 const CHALK = '#e6e2d2';
 const CHALK_FAINT = 'rgba(230,226,210,0.55)';
-const BOPCA_GREEN = '#546146';
-const BOPCA_GREEN_LIGHT = '#6f7f5c';
-const BOPCA_GREEN_DARK = '#3d4733';
+const SAFE_ROOM_GREEN = '#546146';
+const SAFE_ROOM_GREEN_LIGHT = '#6f7f5c';
+const SAFE_ROOM_GREEN_DARK = '#3d4733';
 const HERB_GREEN = '#5f7040';
 const HERB_DRY = '#8a7a3e';
 const CURED_MEAT = '#8e4f3c';
@@ -94,7 +90,7 @@ const BOARD_LINE_HEIGHT = 1;
 const BOARD_PEG_WIDTH_FRACTION = 0.04;
 const BOARD_PEG_HEIGHT_FRACTION = 0.1;
 
-/** A chalk slate listing the day's stew, hung on the north wall beside the counter. */
+/** A chalk slate listing the day's stew, hung on the north wall. */
 export function drawMenuBoardTile(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -207,7 +203,7 @@ const BANNER_STRIPE_TOP_FRACTION = 0.3;
 const BANNER_STRIPE_HEIGHT_FRACTION = 0.09;
 const BANNER_SHADE_WIDTH_FRACTION = 0.22;
 
-/** A long dyed cloth pennant in Bopca green, hung on the north wall. */
+/** A long dyed green cloth pennant, hung on the north wall. */
 export function drawBannerTile(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -220,7 +216,7 @@ export function drawBannerTile(
   const bottom = sy + ts * BANNER_BOTTOM_FRACTION;
   const notch = ts * BANNER_TAIL_NOTCH_FRACTION;
 
-  ctx.fillStyle = BOPCA_GREEN;
+  ctx.fillStyle = SAFE_ROOM_GREEN;
   ctx.beginPath();
   ctx.moveTo(left, top);
   ctx.lineTo(right, top);
@@ -233,7 +229,7 @@ export function drawBannerTile(
   ctx.fill();
 
   // Lit up-left, shadowed down-right, matching the ground.
-  ctx.fillStyle = BOPCA_GREEN_DARK;
+  ctx.fillStyle = SAFE_ROOM_GREEN_DARK;
   ctx.fillRect(
     right - ts * BANNER_SHADE_WIDTH_FRACTION,
     top,
@@ -241,7 +237,7 @@ export function drawBannerTile(
     bottom - notch - top,
   );
 
-  ctx.fillStyle = BOPCA_GREEN_LIGHT;
+  ctx.fillStyle = SAFE_ROOM_GREEN_LIGHT;
   ctx.fillRect(
     left + ts * BANNER_STRIPE_INSET_FRACTION,
     top + ts * BANNER_STRIPE_TOP_FRACTION,
@@ -420,12 +416,16 @@ export function drawStoveTile(
   ctx.fillRect(centreX - potWidth / 2, potTop, potWidth, STOVE_POT_RIM_HEIGHT);
 }
 
-/**
- * Wisps rising off the stove's pot, drawn per frame over the baked tile.
- *
- * The counter's own `drawDishSteam`, anchored on the pot's rim instead of a
- * dish's — so a stew on the range and a bowl on the bar steam alike.
- */
+const STEAM_WISP_COUNT = 3;
+const STEAM_RISE_FRACTION = 0.5;
+const STEAM_WISP_RADIUS_FRACTION = 0.05;
+const STEAM_WISP_SPREAD_FRACTION = 0.11;
+const STEAM_SWAY_FRACTION = 0.05;
+const STEAM_SWAY_RATE = 2.4;
+const STEAM_CYCLE_SECONDS = 1.6;
+const STEAM_COLOR = '255,250,240';
+
+/** Wisps rising off the stove's pot, drawn per frame over the baked tile. */
 export function drawStoveSteam(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -433,14 +433,29 @@ export function drawStoveSteam(
   ts: number,
   elapsedSeconds: number,
 ): void {
-  drawDishSteam(
-    ctx,
-    sx + ts / 2,
-    sy + ts * STOVE_POT_TOP_FRACTION,
-    ts,
-    elapsedSeconds,
-    STOVE_STEAM_ALPHA,
-  );
+  const cx = sx + ts / 2;
+  const rimY = sy + ts * STOVE_POT_TOP_FRACTION;
+  ctx.save();
+  for (let i = 0; i < STEAM_WISP_COUNT; i++) {
+    const phase = (elapsedSeconds / STEAM_CYCLE_SECONDS + i / STEAM_WISP_COUNT) % 1;
+    const rise = phase * ts * STEAM_RISE_FRACTION;
+    const sway = Math.sin((elapsedSeconds + i) * STEAM_SWAY_RATE) * ts * STEAM_SWAY_FRACTION;
+    const spread = (i / (STEAM_WISP_COUNT - 1) - 0.5) * ts * STEAM_WISP_SPREAD_FRACTION;
+    // Each wisp fades in as it leaves the pot and out again near the top, so
+    // no wisp ever pops into or out of existence mid-air.
+    const fade = Math.sin(phase * Math.PI);
+    ctx.fillStyle = `rgba(${STEAM_COLOR},${STOVE_STEAM_ALPHA * fade})`;
+    ctx.beginPath();
+    ctx.arc(
+      cx + spread + sway,
+      rimY - rise,
+      ts * STEAM_WISP_RADIUS_FRACTION * (1 + phase),
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ── Refectory table and stools ────────────────────────────────────────────────

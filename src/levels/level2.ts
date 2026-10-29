@@ -3,9 +3,9 @@ import { FLOOR_TWO_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
 
 const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
-const LEVEL2_COLLAPSE_TIME_LIMIT_MINUTES = 60;
-export const LEVEL2_COLLAPSE_TIME_LIMIT_FRAMES =
-  LEVEL2_COLLAPSE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+const LEVEL2_NIGHTMARE_TIME_LIMIT_MINUTES = 60;
+export const LEVEL2_NIGHTMARE_TIME_LIMIT_FRAMES =
+  LEVEL2_NIGHTMARE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
 
 /** Branch count leaving the start room toward the Current Goblin's gateway. */
 const ELECTRIC_GOBLIN_BRANCH_MIN = 2;
@@ -74,7 +74,7 @@ const LEVEL2_XP_THIRD_MULTIPLIER = 0.3;
 const LEVEL2_XP_FIFTH_MULTIPLIER = 0.2;
 
 /**
- * Level band shared by every ordinary floor-2 mob — troglodytes, llamas,
+ * Level band shared by every ordinary floor-2 mob — lizardmen, acid llamas,
  * goblins and their archer escorts, in rooms and hallways alike. Tuned so
  * the floor's ambient ceiling lands the recommended arrival level at 10.
  */
@@ -131,16 +131,16 @@ const BOMBER_ESCORTS: EscortSpawnRule[] = [
 ];
 
 /**
- * The goblin mother's bugaboo wave on this floor. A choke on the spine past the
+ * The goblin mother's Fuzzy Nightmare wave on this floor. A choke on the spine past the
  * Current Goblin is crossed by a party well past the level floor 1's nursery is fought
  * at, so the same base-stat body would be a formality here.
  */
-const BUGABOO_MIN_LEVEL = 4;
-const BUGABOO_MAX_LEVEL = 7;
+const FUZZY_NIGHTMARE_MIN_LEVEL = 4;
+const FUZZY_NIGHTMARE_MAX_LEVEL = 7;
 
 /**
  * Boss level bands. The Current Goblin gates the floor's first gauntlet and is
- * levelled to stay tougher than the troglodytes in the rooms leading to it.
+ * levelled to stay tougher than the lizardmen in the rooms leading to it.
  * Big Rooster closes the floor, so his band is the top of its curve.
  */
 const ELECTRIC_GOBLIN_MIN_LEVEL = 6;
@@ -206,8 +206,8 @@ const LEVEL2_ROOM_HEALER_CHANCE = 0.2;
 
 /**
  * Level 2 — "The Dungeon, Level 2".
- * Runs against the same collapse countdown as floor 1 and guards its treasure
- * rooms, and is fully populated besides: troglodytes, llamas and goblins roam
+ * Timed on Nightmare like floor 1, guards its treasure rooms, and is fully
+ * populated besides: lizardmen, acid llamas and goblins roam
  * it, the Current Goblin guards the first gauntlet, and past him a single
  * winding chain of rooms — the goblin mother's nursery among them, and the
  * spider lab hanging off it — runs to Big Rooster's gym, past which lie the
@@ -219,7 +219,6 @@ export const level2: LevelDef = {
   floorNumber: 2,
   arrivalLoadingScreen: {
     tips: [
-      'The collapse countdown is running again. Keep an eye on the clock.',
       'A goblin wired to a generator holds the power lab. Stay out of the puddles.',
       'Past the power lab, a long chain of rooms leads to Big Rooster and his gym.',
       'A spider lab hangs off the chain of rooms. Something large has made it home.',
@@ -247,7 +246,7 @@ export const level2: LevelDef = {
   interiorSpriteGroups: [],
   roomMobs: [
     {
-      type: 'troglodyte',
+      type: 'lizardman',
       chance: 0.4,
       minCount: 1,
       maxCount: 3,
@@ -255,7 +254,7 @@ export const level2: LevelDef = {
       maxLevel: AMBIENT_MAX_LEVEL,
     },
     {
-      type: 'llama',
+      type: 'acid_llama',
       chance: 0.35,
       minCount: 1,
       maxCount: 3,
@@ -285,7 +284,7 @@ export const level2: LevelDef = {
     },
   ],
   hallwayMobs: [
-    { type: 'troglodyte', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
+    { type: 'lizardman', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
     {
       type: 'goblin',
       chance: 0.3,
@@ -337,7 +336,7 @@ export const level2: LevelDef = {
     ],
   },
   hasSpiderLab: true,
-  defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
+  defendQuestWave: { minLevel: FUZZY_NIGHTMARE_MIN_LEVEL, maxLevel: FUZZY_NIGHTMARE_MAX_LEVEL },
   defendQuestIntensity: FLOOR_TWO_DEFEND_QUEST_INTENSITY,
   fairies: {
     roomRatesByRegion: [
@@ -356,8 +355,7 @@ export const level2: LevelDef = {
     ],
   },
   worldGearDrops: true,
-  hasCollapseTimer: true,
-  collapseTimeLimitFrames: LEVEL2_COLLAPSE_TIME_LIMIT_FRAMES,
+  nightmareTimeLimitFrames: LEVEL2_NIGHTMARE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level3',
   numStairwells: 2,
@@ -384,7 +382,7 @@ export const level2: LevelDef = {
   ],
   onMobKilledSpawns: [
     {
-      type: 'brindle_grub',
+      type: 'gravedigger_beetle',
       minCount: 1,
       maxCount: 5,
       spreadRadius: 2,

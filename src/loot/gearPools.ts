@@ -77,7 +77,7 @@ const EVERY_FLOOR = [FIRST_FLOOR, SECOND_FLOOR, THIRD_FLOOR] as const;
 export const GEAR_SOURCES: Readonly<Record<GearId, ReadonlyArray<GearSource>>> = {
   // Human only.
   lucky_hoodie: [{ kind: 'achievement', id: 'first_kill' }],
-  scrappers_wraps: [{ kind: 'achievement', id: 'down_the_hatch' }],
+  scrappers_wraps: [{ kind: 'achievement', id: 'entered_dungeon' }],
   hobnail_boots: [
     { kind: 'achievement', id: 'flat_out' },
     { kind: 'chest', chest: 'wooden', floors: FLOOR_ONE },
@@ -113,7 +113,7 @@ export const GEAR_SOURCES: Readonly<Record<GearId, ReadonlyArray<GearSource>>> =
   pot_lid_buckler: [{ kind: 'chest', chest: 'wooden', floors: FLOORS_ONE_TWO }],
 
   // Cat only.
-  velvet_harness: [{ kind: 'achievement', id: 'down_the_hatch' }],
+  velvet_harness: [{ kind: 'achievement', id: 'entered_dungeon' }],
   mousehide_booties: [
     { kind: 'chest', chest: 'wooden', floors: FLOOR_ONE },
     { kind: 'pool', floors: FLOOR_ONE },

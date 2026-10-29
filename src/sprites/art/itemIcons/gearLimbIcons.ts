@@ -9,11 +9,11 @@
  */
 
 import type { Rect } from '../../../ui/core/geom';
+import { BLACK_RUBBER, MUSTARD_RUBBER } from '../insulatedRubber';
 import {
   BOLD_DETAIL,
   disc,
   glint,
-  hairlineWidth,
   bandedFill,
   ICON_OUTLINE,
   litFill,
@@ -96,7 +96,6 @@ const SEAM_TONE = -0.5;
 const CREASE_TONE = -0.4;
 const STAMP_TONE = -0.4;
 const HOLLOW_TONE = -0.65;
-const SOLE_TONE = -0.55;
 const KNUCKLE_PLATE_TONE = -0.1;
 /** A turned-over cuff faces up into the light, so it sits a step brighter than the body. */
 const TURNED_CUFF_TONE = 0.15;
@@ -249,75 +248,64 @@ const paintHearthguardBoots: IconArtPainter = (ctx, px) => {
   glint(ctx, GARRISON_GLINT[0], GARRISON_GLINT[1], BOOT_GLINT_R);
 };
 
-const PIG_LEATHER = '#d9958a';
-const HOOF = '#4a3a36';
+/**
+ * The Current Goblin's own boot: a tall black rubber shaft with a rolled cuff,
+ * a high round toe cap and a slab of mustard sole lit along its top edge.
+ * Its rubber sits a step above the goblin's so it does not sink into the slot.
+ */
+const LINEMAN_RUBBER = BLACK_RUBBER.light;
+const LINEMAN_CUFF = tone(BLACK_RUBBER.light, TURNED_CUFF_TONE);
+const LINEMAN_SOLE_RUBBER = MUSTARD_RUBBER.dark;
+const LINEMAN_SOLE_LIP = MUSTARD_RUBBER.light;
+const LINEMAN_SHEEN = BLACK_RUBBER.rim;
 const LINEMAN_UPPER: Shape = [
-  [0.26, 0.18, 0.04],
-  [0.54, 0.18, 0.04],
-  [0.56, 0.48],
-  [0.68, 0.55, 0.06],
-  [0.84, 0.62, 0.08],
-  [0.86, 0.8],
-  [0.2, 0.8],
-  [0.23, 0.48],
+  [0.25, 0.2, 0.03],
+  [0.55, 0.2, 0.03],
+  [0.57, 0.48],
+  [0.7, 0.5, 0.08],
+  [0.88, 0.56, 0.12],
+  [0.9, 0.72],
+  [0.2, 0.72],
+  [0.23, 0.46],
 ];
-/** A cloven trotter cap on the toe: two rounded toes split by a notch, the one shape that says "pig" at slot size. */
-const LINEMAN_TROTTER: Shape = [
-  [0.7, 0.6, 0.06],
-  [0.86, 0.62, 0.06],
-  [0.93, 0.7, 0.04],
-  [0.8, 0.74],
-  [0.94, 0.79, 0.04],
-  [0.9, 0.88, 0.02],
-  [0.68, 0.88, 0.04],
-  [0.66, 0.72, 0.06],
+const LINEMAN_CUFF_SHAPE: Shape = [
+  [0.2, 0.14, 0.04],
+  [0.6, 0.14, 0.04],
+  [0.6, 0.27, 0.03],
+  [0.2, 0.27, 0.03],
 ];
-const LINEMAN_CLEFT: Shape = [
-  [0.8, 0.74],
-  [0.74, 0.74],
-];
+/** Far thicker than any other boot's: the slab is what plants the goblin at the tile. */
 const LINEMAN_SOLE: Shape = [
-  [0.18, 0.8, 0.02],
-  [0.7, 0.8],
-  [0.7, 0.88],
-  [0.18, 0.88, 0.02],
+  [0.16, 0.7, 0.02],
+  [0.93, 0.7, 0.05],
+  [0.93, 0.89, 0.04],
+  [0.16, 0.89, 0.02],
 ];
-const LINEMAN_WRINKLES: readonly Shape[] = [
-  [
-    [0.3, 0.5],
-    [0.38, 0.47],
-    [0.46, 0.5],
-  ],
-  [
-    [0.32, 0.6],
-    [0.42, 0.57],
-    [0.52, 0.6],
-  ],
+/** The sole's bright top edge, a quarter of its depth, as his boot draws it. */
+const LINEMAN_SOLE_LIP_TOP = 0.7;
+const LINEMAN_SOLE_LIP_DEPTH = 0.05;
+/** A hard sheen down the shaft toward the light, so the rubber reads as a round tube. */
+const LINEMAN_SHEEN_LINE: Shape = [
+  [0.31, 0.32],
+  [0.3, 0.62],
 ];
-/** The pull tab at the back of the shaft curls like a pig's tail. */
-const TAIL_CX = 0.2;
-const TAIL_CY = 0.26;
-const TAIL_R = 0.06;
-const TAIL_START = -Math.PI * 0.4;
-const TAIL_SWEEP = Math.PI * 1.6;
-const LINEMAN_GLINT: Point = [0.32, 0.3];
+const LINEMAN_TOE_CAP_SEAM: Shape = [
+  [0.62, 0.7],
+  [0.63, 0.56, 0.04],
+  [0.72, 0.51],
+];
+const LINEMAN_GLINT: Point = [0.78, 0.58];
 
 const paintLinemanBoots: IconArtPainter = (ctx, px) => {
-  ctx.beginPath();
-  ctx.arc(TAIL_CX, TAIL_CY, TAIL_R, TAIL_START, TAIL_START + TAIL_SWEEP);
-  ctx.strokeStyle = ICON_OUTLINE;
-  ctx.lineWidth = hairlineWidth(px) * BOLD_DETAIL * OUTLINE_UNDERLAY;
-  ctx.stroke();
-  ctx.strokeStyle = PIG_LEATHER;
-  ctx.lineWidth = hairlineWidth(px) * BOLD_DETAIL;
-  ctx.stroke();
-  litForm(ctx, px, LINEMAN_SOLE, tone(PIG_LEATHER, SOLE_TONE));
-  litForm(ctx, px, LINEMAN_UPPER, PIG_LEATHER);
-  for (const wrinkle of LINEMAN_WRINKLES) {
-    strokeDetail(ctx, px, wrinkle, tone(PIG_LEATHER, CREASE_TONE), MEDIUM_DETAIL);
-  }
-  litForm(ctx, px, LINEMAN_TROTTER, HOOF);
-  strokeDetail(ctx, px, LINEMAN_CLEFT, ICON_OUTLINE, BOLD_DETAIL);
+  litForm(ctx, px, LINEMAN_SOLE, LINEMAN_SOLE_RUBBER);
+  insideOf(ctx, LINEMAN_SOLE, () => {
+    ctx.fillStyle = LINEMAN_SOLE_LIP;
+    ctx.fillRect(0, LINEMAN_SOLE_LIP_TOP, 1, LINEMAN_SOLE_LIP_DEPTH);
+  });
+  litForm(ctx, px, LINEMAN_UPPER, LINEMAN_RUBBER);
+  strokeDetail(ctx, px, LINEMAN_SHEEN_LINE, LINEMAN_SHEEN, BOLD_DETAIL);
+  strokeDetail(ctx, px, LINEMAN_TOE_CAP_SEAM, tone(LINEMAN_RUBBER, SEAM_TONE), MEDIUM_DETAIL);
+  litForm(ctx, px, LINEMAN_CUFF_SHAPE, LINEMAN_CUFF);
   glint(ctx, LINEMAN_GLINT[0], LINEMAN_GLINT[1], BOOT_GLINT_R);
 };
 

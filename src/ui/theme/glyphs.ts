@@ -237,6 +237,8 @@ export const GLYPH_PATHS = {
     'M7 14c3.22-2.91 4.29-8.75 5-12 1.66 2.38 4.94 9 5 12',
     'M22 9c-4.29 0-7.14-2.33-10-7 5.71 0 10 4.67 10 7Z',
   ],
+  male: ['M16 3h5v5', 'm21 3-6.75 6.75', 'M4 14a6 6 0 1 0 12 0a6 6 0 1 0-12 0'],
+  female: ['M12 15v7', 'M9 19h6', 'M6 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type GlyphId = keyof typeof GLYPH_PATHS;

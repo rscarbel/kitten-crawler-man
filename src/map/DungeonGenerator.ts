@@ -275,9 +275,9 @@ export interface SafeRoomData {
    * the floor's own run of stops — the spider lab's field station, on the
    * lab's dead-end branch. It is not a scatter room, not a gateway and not a
    * safe-access pocket, so the rules for those leave it out; it furnishes
-   * itself as a field station rather than a Bopca station, and it is always
-   * the last entry in `safeRooms`, so no earlier room's index (which keys its
-   * Bopca's name) depends on whether the floor has one.
+   * itself as a field station rather than an ordinary safe room, and it is
+   * always the last entry in `safeRooms`, so no earlier room's index (which
+   * keys its doctor's name and face) depends on whether the floor has one.
    */
   servesSpecialRoom?: SafeRoomService;
 }
@@ -841,11 +841,10 @@ function isCarvedFloor(grid: TileContent[][], x: number, y: number): boolean {
  * identical.
  *
  * Dave's tile and the bed's are skipped: they are the room's fixed furniture
- * and the band would otherwise be drawn under them in a narrow room. The Bopca's
- * counter run is *not* skipped, and does not need to be — it is stamped later
- * with `placeProp`, which overwrites the type, and `DUNGEON_GROUND` maps all
- * three counter types straight to the hearth paving regardless of what they
- * replaced.
+ * and the band would otherwise be drawn under them in a narrow room. The
+ * doctor's cabinet is *not* skipped, and does not need to be — it is stamped
+ * later with `placeProp`, which records the floor it replaced, so the cabinet
+ * stands on whatever the band left there.
  */
 function stampSafeRoomThresholds(
   grid: TileContent[][],
@@ -889,15 +888,19 @@ function corridorTileKeys(tiles: ReadonlyArray<Point>): Set<number> {
 }
 
 /**
- * Where the quest room's bugaboo grates go.
+ * Where the quest room's Fuzzy Nightmare grates go.
  *
  * The room is a pass-through with a doorway on two or more walls, so fixed
  * columns could put a grate in the mouth of one. Walls with no doorway are
  * preferred, each takes an even share of the grates spread along it a fixed
  * inset inside the wall, and a spot too close to a doorway in that same wall,
  * or touching a grate already placed, is passed over for the next wall — so nothing lands where a corridor arrives
- * and the goblin mother at the centre always has a clear approach. Only a room
- * with doorways on every wall falls back to the passed-over spots.
+ * and the goblin mother at the centre always has a clear approach.
+ *
+ * When the planned spots run out, every tile along each wall's inset line is
+ * swept, first those clear of doorways and then any. Grates never touch, even
+ * in that sweep: two touching grates' barriers would overlap and one
+ * Fuzzy Nightmare breach would open both.
  */
 function questGrateTiles(
   bounds: Rect,
@@ -931,7 +934,6 @@ function questGrateTiles(
     );
 
   const tiles: Point[] = [];
-  const passedOver: Point[] = [];
   // Two walls that meet at a corner would otherwise put their end grates
   // diagonally touching, and one barrier's boards would overhang the other.
   const touchesChosenGrate = (tile: Point): boolean =>
@@ -940,29 +942,40 @@ function questGrateTiles(
         Math.max(Math.abs(chosen.x - tile.x), Math.abs(chosen.y - tile.y)) <
         QUEST_GRATE_MIN_SEPARATION,
     );
+  const insetTile = (wall: RoomWall, along: number): Point =>
+    wall === 'north'
+      ? { x: along, y: bounds.y + QUEST_GRATE_WALL_INSET }
+      : wall === 'south'
+        ? { x: along, y: lastY - QUEST_GRATE_WALL_INSET }
+        : wall === 'west'
+          ? { x: bounds.x + QUEST_GRATE_WALL_INSET, y: along }
+          : { x: lastX - QUEST_GRATE_WALL_INSET, y: along };
+
   for (const wall of ranked) {
+    const wallCentre = wall === 'north' || wall === 'south' ? centreX : centreY;
     let takenOnWall = 0;
     for (const offset of offsets) {
       if (tiles.length >= grateCount || takenOnWall >= perWall) break;
-      const tile =
-        wall === 'north'
-          ? { x: centreX + offset, y: bounds.y + QUEST_GRATE_WALL_INSET }
-          : wall === 'south'
-            ? { x: centreX + offset, y: lastY - QUEST_GRATE_WALL_INSET }
-            : wall === 'west'
-              ? { x: bounds.x + QUEST_GRATE_WALL_INSET, y: centreY + offset }
-              : { x: lastX - QUEST_GRATE_WALL_INSET, y: centreY + offset };
-      if (tooCloseToDoorway(wall, tile) || touchesChosenGrate(tile)) {
-        passedOver.push(tile);
-        continue;
-      }
+      const tile = insetTile(wall, wallCentre + offset);
+      if (tooCloseToDoorway(wall, tile) || touchesChosenGrate(tile)) continue;
       tiles.push(tile);
       takenOnWall++;
     }
   }
-  for (const tile of passedOver) {
-    if (tiles.length >= grateCount) break;
-    tiles.push(tile);
+
+  for (const keepClearOfDoorways of [true, false]) {
+    for (const wall of ranked) {
+      const runsAlongX = wall === 'north' || wall === 'south';
+      const firstAlong = (runsAlongX ? bounds.x : bounds.y) + QUEST_GRATE_WALL_INSET;
+      const lastAlong = (runsAlongX ? lastX : lastY) - QUEST_GRATE_WALL_INSET;
+      for (let along = firstAlong; along <= lastAlong; along++) {
+        if (tiles.length >= grateCount) return tiles;
+        const tile = insetTile(wall, along);
+        if (keepClearOfDoorways && tooCloseToDoorway(wall, tile)) continue;
+        if (touchesChosenGrate(tile)) continue;
+        tiles.push(tile);
+      }
+    }
   }
   return tiles;
 }

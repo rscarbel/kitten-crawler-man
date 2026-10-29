@@ -289,13 +289,13 @@ const FLAME_IGNITE_PX = TILE_SIZE;
 /** The dynamic lights that are fire, and so set oil alight. */
 const FLAME_LIGHT_KINDS: ReadonlySet<DynamicLightKind> = new Set<DynamicLightKind>([
   'fireball',
-  'lava_bolt',
+  'fireball_bolt',
   'explosion',
   'coals',
 ]);
 /** Damage a burning spill does to anyone standing in it, per tick. */
 const OIL_FIRE_DAMAGE = 1;
-/** No one is to blame for a burning floor, so it is undodgeable, like the llama's fire. */
+/** No one is to blame for a burning floor, so it is undodgeable, like a fireball's fire patch. */
 const OIL_FIRE_DAMAGE_SOURCE: DamageSource = { kind: 'environmental', hazard: 'burningOil' };
 
 /** What a wall fixture leaves on the floor below it when it breaks. */

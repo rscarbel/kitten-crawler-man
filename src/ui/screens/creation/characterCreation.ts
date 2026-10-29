@@ -30,6 +30,7 @@ import { button, buttonHeight } from '../../widgets/button';
 import { card } from '../../widgets/card';
 import { choiceModal, type ChoiceButton, type ChoiceModalConfig } from '../../widgets/choiceModal';
 import { lineHeightOf, text } from '../../widgets/text';
+import type { GlyphId } from '../../theme/glyphs';
 import type { TextRole } from '../../theme/skins';
 import { textField } from '../../widgets/textField';
 
@@ -94,6 +95,11 @@ const BODY_LABELS = {
   male: 'Male',
   female: 'Female',
 } as const satisfies Record<CrawlerBody, string>;
+
+const BODY_GLYPHS = {
+  male: 'male',
+  female: 'female',
+} as const satisfies Record<CrawlerBody, GlyphId>;
 
 /** How tall each figure's card stands, by whether the sheet is a phone's. */
 const FIGURE_CARD_HEIGHT = 220;
@@ -380,6 +386,7 @@ export class CharacterCreation {
           button(ui, columns[index], {
             id: bodyButtonId(body),
             label: BODY_LABELS[body],
+            icon: BODY_GLYPHS[body],
             size: BODY_BUTTON_SIZE,
             variant: 'secondary',
             selected: chosen === body,

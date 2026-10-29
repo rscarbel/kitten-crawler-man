@@ -23,6 +23,7 @@ import {
   tentacleCentre,
 } from '../systems/bossRooms/floodedPumpRoom/raftTentacles';
 import { rectContainsTile } from '../systems/bossRooms/floodedPumpRoom/platforms';
+import { feetPointPx, tileUnderFeet } from '../map/collisionAnchors';
 
 const GUARD_TENTACLE_HP = 15;
 /** It is rooted in the floor it came out of; nothing about it walks. */
@@ -342,11 +343,12 @@ export class KrakenTentacle extends Mob {
   }
 
   private reachesFromPlatform(platform: TileRect, target: Player): boolean {
-    const centreX = target.x / this.tileSize + CENTER_OFFSET;
-    const centreY = target.y / this.tileSize + CENTER_OFFSET;
-    const nearestX = Math.min(Math.max(centreX, platform.x), platform.x + platform.w);
-    const nearestY = Math.min(Math.max(centreY, platform.y), platform.y + platform.h);
-    return Math.hypot(centreX - nearestX, centreY - nearestY) <= WATER_WHIP_REACH_TILES;
+    const feet = feetPointPx(target, this.tileSize);
+    const feetX = feet.x / this.tileSize;
+    const feetY = feet.y / this.tileSize;
+    const nearestX = Math.min(Math.max(feetX, platform.x), platform.x + platform.w);
+    const nearestY = Math.min(Math.max(feetY, platform.y), platform.y + platform.h);
+    return Math.hypot(feetX - nearestX, feetY - nearestY) <= WATER_WHIP_REACH_TILES;
   }
 
   /** Rooted in the floor: the separation shove must not slide it off its crack. */
@@ -494,9 +496,9 @@ export class KrakenTentacle extends Mob {
     const quarry = this.quarry;
     this.currentTarget = quarry;
     if (quarry === null || !quarry.isAlive || this.strikeCooldownTimer > 0) return;
-    const tile = this.tileUnder(quarry);
+    const tile = tileUnderFeet(quarry, this.tileSize);
     if (!rectContainsTile(platform, tile.x, tile.y)) return;
-    const footprint = chooseSlamFootprint(platform, tentacleCentre(this.tileUnder(this)), tile);
+    const footprint = chooseSlamFootprint(platform, tentacleCentre(this.ownTile()), tile);
     if (footprint === null) return;
     this.slamFootprint = footprint;
     this.state = 'slam_telegraph';
@@ -521,7 +523,7 @@ export class KrakenTentacle extends Mob {
     this.slamSoundPending = true;
     const quarry = this.quarry;
     if (footprint === null || quarry?.isAlive !== true) return;
-    const tile = this.tileUnder(quarry);
+    const tile = tileUnderFeet(quarry, this.tileSize);
     if (!rectContainsTile(footprint, tile.x, tile.y)) return;
     const connected = this.dealPreScaledRangedDamage(
       quarry,
@@ -531,11 +533,11 @@ export class KrakenTentacle extends Mob {
     if (connected) quarry.applyStatus(makeStun(KRAKEN_TENTACLE_STUN_FRAMES));
   }
 
-  /** The tile under a body's centre. */
-  private tileUnder(body: { readonly x: number; readonly y: number }): TilePoint {
+  /** The tile under the tentacle's own centre, where it rises from. */
+  private ownTile(): TilePoint {
     return {
-      x: Math.floor((body.x + this.tileSize * CENTER_OFFSET) / this.tileSize),
-      y: Math.floor((body.y + this.tileSize * CENTER_OFFSET) / this.tileSize),
+      x: Math.floor((this.x + this.tileSize * CENTER_OFFSET) / this.tileSize),
+      y: Math.floor((this.y + this.tileSize * CENTER_OFFSET) / this.tileSize),
     };
   }
 
@@ -559,8 +561,9 @@ export class KrakenTentacle extends Mob {
   private startStrikeWindup(target: Player): void {
     this.state = 'strike_windup';
     this.phaseTimer = TENTACLE_STRIKE_WINDUP_FRAMES;
-    this.strikePointX = target.x + this.tileSize * CENTER_OFFSET;
-    this.strikePointY = target.y + this.tileSize * CENTER_OFFSET;
+    const feet = feetPointPx(target, this.tileSize);
+    this.strikePointX = feet.x;
+    this.strikePointY = feet.y;
     this.faceToward(target);
     this.facingLocked = true;
   }
@@ -619,8 +622,9 @@ export class KrakenTentacle extends Mob {
   private resolveStrike(targets: Player[]): void {
     for (const target of targets) {
       if (!target.isAlive) continue;
-      const dx = target.x + this.tileSize * CENTER_OFFSET - this.strikePointX;
-      const dy = target.y + this.tileSize * CENTER_OFFSET - this.strikePointY;
+      const feet = feetPointPx(target, this.tileSize);
+      const dx = feet.x - this.strikePointX;
+      const dy = feet.y - this.strikePointY;
       if (Math.hypot(dx, dy) > TENTACLE_STRIKE_HIT_RADIUS_PX) continue;
       const connected = this.dealPreScaledRangedDamage(
         target,

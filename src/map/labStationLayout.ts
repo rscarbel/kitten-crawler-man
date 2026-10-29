@@ -207,8 +207,8 @@ function columnTiles(bounds: Rect, x: number, fromY: number): Point[] {
 }
 
 /**
- * Lays out the station's kit. The cot takes the tile a Bopca station gives its
- * bed, beside Dave's; the two hangings take the north row; the locker,
+ * Lays out the station's kit. The cot takes the tile an ordinary safe room
+ * gives its bed, beside Dave's; the two hangings take the north row; the locker,
  * the barricade, the jerry can and the lantern go against whichever walls the
  * corridors left free.
  */

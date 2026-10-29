@@ -8,9 +8,9 @@ import {
 const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 /** Floor 1 is the shorter of the two timed floors — a first-time crawler's own dungeon. */
-const LEVEL1_COLLAPSE_TIME_LIMIT_MINUTES = 40;
-export const LEVEL1_COLLAPSE_TIME_LIMIT_FRAMES =
-  LEVEL1_COLLAPSE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+const LEVEL1_NIGHTMARE_TIME_LIMIT_MINUTES = 40;
+export const LEVEL1_NIGHTMARE_TIME_LIMIT_FRAMES =
+  LEVEL1_NIGHTMARE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
 
 /** Goblin spawn chance (85%). */
 const GOBLIN_CHANCE = 0.85;
@@ -53,16 +53,16 @@ const POST_KRAKEN_REGION = 2;
 const BOMBER_MIN_LEVEL = 1;
 const BOMBER_MAX_LEVEL = 3;
 
-/** Llama spawn chance (15%). */
-const LLAMA_CHANCE = 0.15;
+/** Acid llama spawn chance (15%). */
+const ACID_LLAMA_CHANCE = 0.15;
 
-/** Llama count range. */
-const LLAMA_MIN = 1;
-const LLAMA_MAX = 2;
+/** Acid llama count range. */
+const ACID_LLAMA_MIN = 1;
+const ACID_LLAMA_MAX = 2;
 
-/** Llama level range. */
-const LLAMA_MIN_LEVEL = 1;
-const LLAMA_MAX_LEVEL = 3;
+/** Acid llama level range. */
+const ACID_LLAMA_MIN_LEVEL = 1;
+const ACID_LLAMA_MAX_LEVEL = 3;
 
 /** Rat spawn chance (100%). */
 const RAT_CHANCE = 1.0;
@@ -143,12 +143,12 @@ const KRAKEN_MIN_LEVEL = 3;
 const KRAKEN_MAX_LEVEL = 7;
 
 /**
- * The goblin mother's bugaboo wave. The nursery sits between the Trash Gremlin and
+ * The goblin mother's Fuzzy Nightmare wave. The nursery sits between the Trash Gremlin and
  * the Kraken, so it is fought by a party around level 3–5 rather than by the
  * level-7 one the encounter was first tuned against.
  */
-const BUGABOO_MIN_LEVEL = 1;
-const BUGABOO_MAX_LEVEL = 3;
+const FUZZY_NIGHTMARE_MIN_LEVEL = 1;
+const FUZZY_NIGHTMARE_MAX_LEVEL = 3;
 
 /**
  * Fairies on the first floor. None before the Trash Gremlin, for the same reason the
@@ -171,7 +171,7 @@ const LEVEL1_ROOM_HEALER_CHANCE = 0;
 
 /**
  * Level 1 — "The Dungeon".
- * Rooms spawn goblins (85 %) or llamas (15 %); hallways spawn rats.
+ * Rooms spawn goblins (85 %) or acid llamas (15 %); hallways spawn rats.
  */
 export const level1: LevelDef = {
   id: 'level1',
@@ -180,11 +180,10 @@ export const level1: LevelDef = {
   floorNumber: 1,
   arrivalLoadingScreen: {
     tips: [
-      'The floor is on a countdown. Find a stairwell before it collapses with you on it.',
       'The Trash Gremlin and then the Kraken stand between you and the stairwells.',
       'Something big has flooded the pump room. Wade carefully, and watch the water.',
       'A safe room saves your run, and a death returns you to your last save.',
-      'The Bopca in each safe room runs a shop. Spend your coins before you descend.',
+      'The doctor in each safe room patches you up for free: full health, ailments cured.',
       'Other crawlers have painted signs on the walls. They point toward the stairwell.',
       'Treasure rooms are guarded. Clear the guards before you reach for the chest.',
     ],
@@ -235,12 +234,12 @@ export const level1: LevelDef = {
       ],
     },
     {
-      type: 'llama',
-      chance: LLAMA_CHANCE,
-      minCount: LLAMA_MIN,
-      maxCount: LLAMA_MAX,
-      minLevel: LLAMA_MIN_LEVEL,
-      maxLevel: LLAMA_MAX_LEVEL,
+      type: 'acid_llama',
+      chance: ACID_LLAMA_CHANCE,
+      minCount: ACID_LLAMA_MIN,
+      maxCount: ACID_LLAMA_MAX,
+      minLevel: ACID_LLAMA_MIN_LEVEL,
+      maxLevel: ACID_LLAMA_MAX_LEVEL,
     },
   ],
   hallwayMobs: [{ type: 'rat', chance: RAT_CHANCE, minLevel: RAT_LEVEL, maxLevel: RAT_LEVEL }],
@@ -286,7 +285,7 @@ export const level1: LevelDef = {
     regionSpawnBonus: [PRE_GREMLIN_SPAWN_BONUS, POST_GREMLIN_SPAWN_BONUS, POST_KRAKEN_SPAWN_BONUS],
     regionLevelBonus: [PRE_GREMLIN_LEVEL_BONUS, POST_GREMLIN_LEVEL_BONUS, POST_KRAKEN_LEVEL_BONUS],
   },
-  defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
+  defendQuestWave: { minLevel: FUZZY_NIGHTMARE_MIN_LEVEL, maxLevel: FUZZY_NIGHTMARE_MAX_LEVEL },
   fairies: {
     roomRatesByRegion: [null, POST_GREMLIN_FAIRY_RATE, POST_KRAKEN_FAIRY_RATE],
     roomHealerChance: LEVEL1_ROOM_HEALER_CHANCE,
@@ -294,8 +293,7 @@ export const level1: LevelDef = {
   // Floor 1 keeps the curve it was tuned on when the shared one was flattened
   // for the deeper floors, so none of its fights got easier with them.
   levelledCurve: LEARNING_FLOOR_LEVELLED_CURVE,
-  hasCollapseTimer: true,
-  collapseTimeLimitFrames: LEVEL1_COLLAPSE_TIME_LIMIT_FRAMES,
+  nightmareTimeLimitFrames: LEVEL1_NIGHTMARE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level2',
   stairwellCountMultiplier: LEVEL1_STAIRWELL_MULTIPLIER,

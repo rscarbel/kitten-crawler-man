@@ -96,7 +96,7 @@ export async function enterPrison(
     spriteGroups: level2.spriteGroups,
     sightRadiusPx: Number.POSITIVE_INFINITY,
     ownsMusic: false,
-    heldLevelTimerFrames: null,
+    heldFloorClock: null,
     variant: { kind: 'goblin_prison', plan },
     stealthKeySnatch: visit,
   };

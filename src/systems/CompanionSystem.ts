@@ -500,6 +500,33 @@ export class CompanionSystem implements GameSystem {
     this._followOverride = false;
   }
 
+  /**
+   * Takes back a companion the world has just set down beside the leader —
+   * brought into a safe room the leader walked into — and holds it on that
+   * spot until {@link clearDirective}, while it is built there.
+   *
+   * Everything it held named the place it was lifted out of: a cached route,
+   * a chase target, a recall in flight, a harvest channel on a node across the
+   * map, the cat's wander spot, the evasion stall count. Left alone, any one of
+   * them walks it straight back out of the room.
+   */
+  regroup(companion: HumanPlayer | CatPlayer, humanIsActive: boolean): void {
+    this.companionPaths.delete(companion);
+    companion.autoTarget = null;
+    if (this.harvestSource?.isHarvesting(companion) === true) {
+      this.harvestSource.stopHarvest(companion);
+    }
+    const stance = this.stanceFor(humanIsActive);
+    stance.anchorX = companion.x;
+    stance.anchorY = companion.y;
+    this.catWanderTargetX = companion.x;
+    this.catWanderTargetY = companion.y;
+    this.catWanderTimer = 0;
+    this.fleeingAvoidMob = false;
+    this.humanEvasionStuckFrames = 0;
+    this.setDirective({ x: companion.x, y: companion.y, hold: true });
+  }
+
   /** Companion attacks enemies on sight. */
   setAggressive(humanIsActive: boolean): void {
     this.stanceFor(humanIsActive).combatStance = 'aggressive';
@@ -870,7 +897,7 @@ export class CompanionSystem implements GameSystem {
             // Picking an unseen target is what sent the companion jogging into a
             // wall to fight something on the other side of it. A mob that has
             // actually spat on somebody — or been hit by somebody — is exempt:
-            // that fight is a known fact, wall or no wall. A vespa that has
+            // that fight is a known fact, wall or no wall. A beetle that has
             // merely locked on through the bricks is not, and it was exactly
             // that exemption that walked the human companion off the map.
             const bloodDrawn = mob.hasStruckPlayer || mob.wasDamagedByParty;
@@ -972,7 +999,7 @@ export class CompanionSystem implements GameSystem {
    * The bounds of the locked boss room both crawlers are sealed inside
    * together, or null when they are not sealed in one. Companion AI uses this
    * to keep a sealed-in companion from reaching for a target outside the room
-   * it cannot leave — a brindled vespa's aggro range reaches walls a locked
+   * it cannot leave — a gravedigger beetle's aggro range reaches walls a locked
    * door does not.
    */
   private sealedRoomBounds(

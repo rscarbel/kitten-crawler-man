@@ -37,7 +37,7 @@ export class GoblinDynamiter extends GoblinBomber {
   }
 
   protected override get carriedExplosive(): ItemId {
-    return 'goblin_dynamite';
+    return 'dynamite';
   }
 
   protected override get aimsBeforeThrowing(): boolean {

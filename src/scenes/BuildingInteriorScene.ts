@@ -53,6 +53,7 @@ import { type BuildingId, buildingDisplayName } from '../map/buildingIds';
 import { snapPlayer, restorePlayer } from '../core/save/PlayerSnapshot';
 import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { SafeRoomRegroupSystem } from '../systems/SafeRoomRegroupSystem';
 import { DaveGuideSystem } from '../systems/DaveGuideSystem';
 import { prewarmDaveSprite } from '../sprites/daveSprite';
 import { adviceIntel, adviceTactics } from '../systems/daveAdvice';
@@ -64,8 +65,8 @@ import { noWorldActions, type WalkToStep } from '../systems/cutscene/cutsceneSte
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import { pixelToTile } from '../utils';
 import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
-import { BopcaSystem } from '../systems/BopcaSystem';
-import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import { DoctorSystem } from '../systems/DoctorSystem';
+import { stampSafeRoomClinics } from '../map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem } from '../systems/ShopSystem';
 import { TouchMoveState } from '../core/input/TouchMoveState';
@@ -417,6 +418,14 @@ import {
 import { detachedPartyRun, type InteriorPartyRun } from './interiorPartyRun';
 import { reloadPage, type SaveWriteOutcome } from '../core/save/progressPersistence';
 import { settings } from '../core/input/Settings';
+import {
+  holdDifficultyForTimeLimit,
+  nightmareTimeRemaining,
+} from '../core/difficulty/nightmareTimeLimit';
+import {
+  clearDifficultyChangeGuard,
+  type DifficultyGuardHandle,
+} from '../core/difficulty/difficultyChangeGuard';
 import { bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
 import { DeinonychusSystem, deinonychusXpFraction } from '../systems/DeinonychusSystem';
@@ -755,14 +764,16 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Null in every interior but the one the town plan flags with `hasSafeRoom`. */
   private readonly safeRoom: SafeRoomSystem | null;
   private readonly dave: DaveGuideSystem | null;
+  /** Brings a straggling companion into the safe room the player walks into; null with no safe room here. */
+  private readonly safeRoomRegroup: SafeRoomRegroupSystem | null;
   private wasInSafeRoom = false;
   /** Null in every interior but the one the town plan flags as the safe room. */
-  private readonly bopca: BopcaSystem | null;
+  private readonly doctor: DoctorSystem | null;
   /**
    * This scene's single event bus, wired to audio once and cleared once on exit —
    * the same contract `DungeonScene` follows.
    *
-   * One bus rather than one per concern (skill unlocks, the Bopca's grunts,
+   * One bus rather than one per concern (skill unlocks, the doctor's treatments,
    * and a combat stack's own) is what lets every system indoors
    * hear every other one, and what makes `AudioManager.wireEvents` — rather than
    * a hand-played sound at each emit site — the place a cue is chosen.
@@ -1041,6 +1052,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly statusChanges = new StatusChangeWatcher();
   /** Stops this scene's bus hearing every shop counter's trades; set in `onEnter`. */
   private stopForwardingSceneHooks: () => void = () => undefined;
+  /** Holds a switch to Nightmare that would end the held floor at once; null on an untimed floor. */
+  private timeLimitGuard: DifficultyGuardHandle | null = null;
   /** Drives ability XP and levelling for everything the party does indoors. */
   private readonly abilityManager: AbilityManager;
 
@@ -1115,7 +1128,7 @@ export class BuildingInteriorScene extends GameplayScene {
     /**
      * Tactics-trait System notices already shown this run, threaded by
      * reference from `DungeonScene` like `townMemory`, so a trait first met
-     * indoors (a cultist, a rat) isn't announced a second time outside.
+     * indoors (an elf, a rat) isn't announced a second time outside.
      */
     tacticsNoticesSeen?: Set<TacticsTrait>,
     /** What the overworld does with a defeat here, so the death screen names it. */
@@ -1350,6 +1363,15 @@ export class BuildingInteriorScene extends GameplayScene {
           );
     this.dave?.holdWhile(() => this.cutscenes.isActive);
     this.dave?.setMarkerSource(() => this.daveMarker());
+    this.safeRoomRegroup =
+      this.safeRoom === null
+        ? null
+        : new SafeRoomRegroupSystem({
+            safeRooms: this.safeRoom,
+            companions: this.companion,
+            audio: this.audio,
+            partyIsHeld: () => this.scriptOwnsParty,
+          });
     this.story = new StoryDelivery({
       director: partyRun.story.director,
       cutscenes: this.cutscenes.director,
@@ -1358,19 +1380,18 @@ export class BuildingInteriorScene extends GameplayScene {
     });
 
     if (entry.hasSafeRoom === true) {
-      this.bopca = new BopcaSystem(
-        this.map,
-        stampSafeRoomCounters(this.map),
+      this.doctor = new DoctorSystem(
+        stampSafeRoomClinics(this.map),
+        { kind: 'interior', building: entry.id },
         this.bus,
         this.conversation,
-        this.audioScope,
         true,
       );
-      // After the counter, because the furnishings keep clear of every tile it
-      // owns and cannot know them until it is planned.
+      // After the doctor's corner, because the furnishings keep clear of every
+      // tile it owns and cannot know them until it is planned.
       stampSafeRoomDecor(this.map);
     } else {
-      this.bopca = null;
+      this.doctor = null;
     }
 
     // After the safe room's fittings are stamped: the arrival has to keep clear
@@ -1836,6 +1857,8 @@ export class BuildingInteriorScene extends GameplayScene {
       safeRoom !== null &&
       (safeRoom.safeRoomAt(this.active()) ?? safeRoom.safeRoomAt(this.inactive())) !== null;
     if (this.dave !== null && arrivesInSafeRoom) prewarmDaveSprite();
+    const arrivalCamera = this.computeCamera(this.map);
+    this.doctor?.prewarmInView(arrivalCamera.x, arrivalCamera.y);
     // After everything that warms figures or queues art — the occupants, the
     // party, the companions — so the loader measures what this room really owes.
     this.arrivalLoading.begin({
@@ -2495,6 +2518,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // The floor outside waits for the party to come back out unchanged, so
     // time spent in here must not age its art toward the idle sweeps.
     holdIdleClock();
+    // The floor scene let go of its guard at the door, and a switch made in
+    // here lands on its clock the moment the party walks back out.
+    const heldClock = this.floor.heldFloorClock;
+    if (heldClock !== null) this.timeLimitGuard = holdDifficultyForTimeLimit(() => heldClock);
     bindRunStats(this.gameStats);
     this.stopForwardingSceneHooks = forwardSceneHooksToBus(this.bus, {
       conversation: this.conversation,
@@ -2686,6 +2713,8 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    if (this.timeLimitGuard !== null) clearDifficultyChangeGuard(this.timeLimitGuard);
+    this.timeLimitGuard = null;
     // A conversation cut off by the scene changing never closes on its own,
     // and its talk row would stay pinned.
     this.releaseCitizenDialogTarget();
@@ -2720,7 +2749,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.audioScope?.dispose();
     this.ambientSound?.dispose();
     this.contractSite?.dispose();
-    this.bopca?.dispose();
     // Ahead of the companion's own teardown, because a quest fight's cleanup
     // withdraws the orders and hazards it gave the companion, and it should be
     // able to do that against a companion that still exists.
@@ -2728,6 +2756,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Drops any standing order along with the hazard sources that were meant to
     // steer around it. Both name systems this scene is taking with it.
     this.companion.dispose();
+    this.safeRoomRegroup?.dispose();
     // Every floor's kit, not just the live one: each holds its own mob loop, and
     // the pack-alert grid that loop publishes is a module-level handle. An
     // interior that exited without this leaves its mobs — and through them its
@@ -2779,6 +2808,7 @@ export class BuildingInteriorScene extends GameplayScene {
           humanAchievements: this.humanAchievements,
           catAchievements: this.catAchievements,
           gameStats: this.gameStats,
+          floorNumber: getLevelDef(this.floor.levelId).floorNumber,
         }),
         togglePause: () => this.togglePause(),
       }),
@@ -2886,8 +2916,8 @@ export class BuildingInteriorScene extends GameplayScene {
    * line from anyone not listed leave Escape to the pause menu.
    */
   private conversationEscape(): (() => void) | null {
-    const bopca = this.bopca;
-    if (bopca?.isDialogOpen === true) return () => void bopca.dismissDialog();
+    const doctor = this.doctor;
+    if (doctor?.isDialogOpen === true) return () => void doctor.dismissDialog();
     const maze = this.starlightTentMaze;
     if (maze?.isDialogOpen === true) return () => void maze.dismissDialog();
     const tower = this.towerConfrontation;
@@ -3123,6 +3153,9 @@ export class BuildingInteriorScene extends GameplayScene {
   private updateSafeRoomProtection(): void {
     const safeRoom = this.safeRoom;
     if (safeRoom === null) return;
+    // Ahead of the protection pass, so a companion brought in is protected,
+    // and counted as in the room, on the frame it lands.
+    this.safeRoomRegroup?.update(this.human, this.cat, this.map);
     this.pm.updateProtection(safeRoom);
     const nowInSafeRoom = this.pm.isAnySafe(safeRoom);
     const justEntered = nowInSafeRoom && !this.wasInSafeRoom;
@@ -3281,10 +3314,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // The dialogs below advance from their surfaces, on the key event rather
     // than from the held-key set: a polled advance on top of that would turn
     // one press into two pages.
-    if (this.bopca?.isDialogOpen === true) {
-      // The cook timer has to keep running through the conversation — the dish
-      // is meant to land while the player is still reading the order line.
-      this.bopca.tick(this.human, this.cat, this.active(), this.inactive());
+    if (this.doctor?.isDialogOpen === true) {
+      // The doctor keeps ticking through the conversation, so a treatment's
+      // animation and its popups play out while the player reads the line.
+      this.doctor.tick(this.human, this.cat, this.active(), this.inactive());
       return;
     }
     const shop = this.shop;
@@ -3295,8 +3328,8 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.club?.modalOpen) {
       // The blackjack table deals, flips and settles on its own clock, so it has
-      // to keep ticking through its own panel — the same reason the Bopca's cook
-      // timer runs through her dialog above.
+      // to keep ticking through its own panel — the same reason the doctor
+      // ticks through their dialog above.
       this.club.tickOpenModals(this.active(), this.inactive());
       return;
     }
@@ -3394,19 +3427,19 @@ export class BuildingInteriorScene extends GameplayScene {
     const interactPressed = (): boolean =>
       this.interactArmed && !overlayOwnsInteract && keybindings.isHeld(this.input, 'attack');
 
-    // Safe room: whichever of the Bopca and Dave is nearer. Only consume
+    // Safe room: whichever of the doctor and Dave is nearer. Only consume
     // Space when actually acting, so an unrelated press can still fall through
     // to talking to an ambient occupant sharing the room.
     if (interactPressed() && this.questResidentInReach(player) && this.tryTalkToOccupant(player)) {
       keybindings.release(this.input, 'attack');
     }
 
-    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, player);
+    const safeRoomSpeaker = safeRoomSpeakerFor(this.doctor, this.dave, player);
     if (
-      this.bopca !== null &&
-      safeRoomSpeaker === 'bopca' &&
+      this.doctor !== null &&
+      safeRoomSpeaker === 'doctor' &&
       interactPressed() &&
-      this.bopca.tryInteract(player)
+      this.doctor.tryInteract(player)
     ) {
       keybindings.release(this.input, 'attack');
     }
@@ -3502,7 +3535,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.dave?.update(player);
     this.startOwedDaveTalk();
     this.story.update();
-    this.bopca?.tick(this.human, this.cat, player, this.inactive());
+    this.doctor?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
     this.club?.update(this.active(), this.inactive(), this.occupants?.people ?? []);
     this.occupants?.update();
@@ -4009,7 +4042,7 @@ export class BuildingInteriorScene extends GameplayScene {
           companions,
           indoors: true,
         };
-        const held = this.floor.heldLevelTimerFrames;
+        const held = this.heldTimeLimitFrames();
         if (held !== null) session.levelTimerSeconds = Math.ceil(held / AI_FRAMES_PER_SECOND);
         return session;
       },
@@ -4311,7 +4344,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const openOverlays = surfacesOverHud(this.ui, ROOM_STATUS_ONLY);
     if (openOverlays.length !== 1 || openOverlays[0] !== CONVERSATION_SURFACE_ID) return false;
     const player = this.active();
-    const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(this.bopca, this.dave, player);
+    const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(this.doctor, this.dave, player);
     return this.conversation.handOff(
       player,
       pressIsForSomeoneElse,
@@ -4322,10 +4355,10 @@ export class BuildingInteriorScene extends GameplayScene {
     );
   }
 
-  /** Whichever of the Bopca and Dave is nearer. Returns whether either took the press. */
+  /** Whichever of the doctor and Dave is nearer. Returns whether either took the press. */
   private trySafeRoomPress(player: ReturnType<BuildingInteriorScene['active']>): boolean {
-    const speaker = safeRoomSpeakerFor(this.bopca, this.dave, player);
-    if (speaker === 'bopca') return this.bopca?.tryInteract(player) === true;
+    const speaker = safeRoomSpeakerFor(this.doctor, this.dave, player);
+    if (speaker === 'doctor') return this.doctor?.tryInteract(player) === true;
     if (speaker === 'dave') {
       this.talkToDave(player);
       return true;
@@ -4851,7 +4884,7 @@ export class BuildingInteriorScene extends GameplayScene {
    *
    * Talking is the last link of the Space chain, so this is drawn after every
    * surface that raises a prompt of its own — the counters, the desk, the bed,
-   * Dave, the Bopca, the readables, the quest fights — and yields to any
+   * Dave, the doctor, the readables, the quest fights — and yields to any
    * of them already on screen: that one takes the press first.
    */
   private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -5134,12 +5167,6 @@ export class BuildingInteriorScene extends GameplayScene {
     const hiddenProps = this.hiddenInteriorProps();
     drawTownInteriorGroundProps(ctx, this.map, camX, camY, TILE_SIZE, hiddenProps);
 
-    // Before the entity pass, not after: the Bopca render redraws the counter's
-    // front face over itself, and a player standing at the counter reaches up
-    // into that tile. Drawn here, the player is painted on top of the counter —
-    // which is right, since the player is on the near side of it.
-    this.bopca?.renderObjects(ctx, camX, camY, this.active(), this.inactive());
-
     // With the room's fixtures — the bed, the lantern pools, the stove steam.
     // Ahead of the sorted pass, not after it, because Dave sorts *in* that
     // pass: drawn after it, the bed would cover him. The dungeon scene orders
@@ -5180,11 +5207,14 @@ export class BuildingInteriorScene extends GameplayScene {
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
       ...this.world.roster.mobs.filter((mob) => mob.belongsInMobGrid),
-      this.inactive(),
-      this.active(),
+      ...[this.inactive(), this.active()].filter(
+        (crawler) => this.safeRoomRegroup?.hides(crawler) !== true,
+      ),
+      ...(this.safeRoomRegroup?.sortedFigures() ?? []),
       ...(this.occupants?.people ?? []),
       ...(this.occupants?.sortedFigures() ?? []),
       ...safeRoomFigures,
+      ...(this.doctor?.sortedFigures(camX, camY) ?? []),
       ...(this.club?.sortedRenderables() ?? []),
       ...townInteriorPropFigures(this.map, hiddenProps),
       // After the props: a tie in the sort keeps a prop under its own damage.
@@ -5310,14 +5340,14 @@ export class BuildingInteriorScene extends GameplayScene {
       this.menus.syncPotionCooldownOverlay(invPlayer);
     }
 
-    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
+    const safeRoomSpeaker = safeRoomSpeakerFor(this.doctor, this.dave, this.active());
     if (this.safeRoom) {
       this.safeRoom.renderUI(ctx, this.active());
     }
-    this.dave?.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
+    this.dave?.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'doctor');
 
-    if (this.bopca !== null) {
-      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
+    if (this.doctor !== null) {
+      this.doctor.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
     }
     // Last of the world prompts; see the method for why.
     this.renderMercenaryPrompt(ctx, camX, camY);
@@ -5435,12 +5465,18 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * The floor's collapse clock, held where it stood at the door. Shown rather
-   * than dropped so the player can see it is not running.
+   * The floor's Nightmare time limit, held where it stood at the door. Shown
+   * rather than dropped so the player can see it is not running.
    */
   private heldLevelTimer(): LevelTimerModel | null {
-    const frames = this.floor.heldLevelTimerFrames;
+    const frames = this.heldTimeLimitFrames();
     return frames === null ? null : { frames, paused: true };
+  }
+
+  /** Frames left on the floor's Nightmare time limit at the door; null where there is none. */
+  private heldTimeLimitFrames(): number | null {
+    const clock = this.floor.heldFloorClock;
+    return clock === null ? null : nightmareTimeRemaining(clock);
   }
 
   private hudMinimap(): MinimapModel {
@@ -5715,9 +5751,9 @@ export class BuildingInteriorScene extends GameplayScene {
     ) {
       return;
     }
-    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
-    if (this.bopca !== null && !this.bopca.isDialogOpen && safeRoomSpeaker === 'bopca') {
-      this.bopca.tryInteract(this.active());
+    const safeRoomSpeaker = safeRoomSpeakerFor(this.doctor, this.dave, this.active());
+    if (this.doctor !== null && !this.doctor.isDialogOpen && safeRoomSpeaker === 'doctor') {
+      this.doctor.tryInteract(this.active());
     }
     if (this.dave?.dialogOpen !== true && safeRoomSpeaker === 'dave') {
       this.talkToDave(this.active());
@@ -5782,7 +5818,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop?.isOpen === true ||
       this.club?.modalOpen === true ||
       this.dave?.dialogOpen === true ||
-      this.bopca?.isDialogOpen === true ||
+      this.doctor?.isDialogOpen === true ||
       this.servicePanel?.isOpen === true ||
       this.readingPanel?.isOpen === true ||
       this.mercenaryDesk?.open === true ||

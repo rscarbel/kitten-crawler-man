@@ -81,7 +81,7 @@ export class DaveWanderer {
    *   the phase advances with distance and his planted foot does not skate.
    * @param canStand   Whether a tile is floor he may stand on. Consulted for
    *   every candidate target, which is what keeps him out of the bed, the
-   *   Bopca's counter and the furniture.
+   *   doctor's corner and the furniture.
    */
   constructor(
     room: { x: number; y: number; w: number; h: number },
@@ -174,7 +174,7 @@ export class DaveWanderer {
     const stepX = (dx / remaining) * step;
     const stepY = (dy / remaining) * step;
     // The *path* is checked, not only the destination. Vetting the target alone
-    // stops him finishing inside the bed or the counter but happily walks him
+    // stops him finishing inside the bed or the cabinet but happily walks him
     // straight through either on the way to somewhere else — and in a small safe
     // room the bed sits exactly on the edge of his roam rect.
     if (!this.canStand(tileOf(this.x + stepX), tileOf(this.y + stepY))) {

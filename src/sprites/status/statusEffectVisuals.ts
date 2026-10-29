@@ -27,6 +27,7 @@ import {
   FAIRY_WARD_STATUS,
   FROZEN_STATUS,
   HAMBURGER_FED_STATUS,
+  NUMBED_STATUS,
   OVERHEAL_STATUS,
   REFRESHED_STATUS,
   SHIELD_STATUS,
@@ -36,7 +37,14 @@ import {
 } from '../../core/combat/StatusEffect';
 import type { StatusVisualFrame } from './statusPaint';
 import { ARCANE_FLAME, NATURAL_FLAME, drawFlames, flameBodyLayers } from './statusFlames';
-import { drawPoison, drawSpitVenom, poisonBodyLayer, venomBodyLayer } from './statusAilments';
+import {
+  drawNumbed,
+  drawPoison,
+  drawSpitVenom,
+  numbedBodyLayers,
+  poisonBodyLayer,
+  venomBodyLayer,
+} from './statusAilments';
 import {
   drawElectrified,
   drawStuck,
@@ -297,6 +305,14 @@ const STATUS_VISUALS: Readonly<Record<StatusId, StatusVisual | null>> = {
     showsHudPill: true,
     bodyLayers: (f) => [frozenBodyLayer(f)],
     overlay: drawFrozen,
+  },
+  [NUMBED_STATUS]: {
+    label: 'NUMB',
+    color: '#7c9a5e',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: numbedBodyLayers,
+    overlay: drawNumbed,
   },
   [FAIRY_WARD_STATUS]: {
     label: 'WARD',

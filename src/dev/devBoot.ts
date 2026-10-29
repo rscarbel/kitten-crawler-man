@@ -5,12 +5,12 @@ import { DungeonScene, type DungeonSceneOptions } from '../scenes/DungeonScene';
 import { PaintBenchScene } from '../scenes/PaintBenchScene';
 import { PersonPreviewScene } from '../scenes/PersonPreviewScene';
 import { TilePreviewScene } from '../scenes/TilePreviewScene';
-import { BopcaPreviewScene } from '../scenes/BopcaPreviewScene';
+import { DwarfCookPreviewScene } from '../scenes/DwarfCookPreviewScene';
 import { HumanPreviewScene } from '../scenes/HumanPreviewScene';
 import { CatPreviewScene } from '../scenes/CatPreviewScene';
 import { GoblinPreviewScene } from '../scenes/GoblinPreviewScene';
 import { RatPreviewScene } from '../scenes/RatPreviewScene';
-import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
+import { AcidLlamaPreviewScene } from '../scenes/AcidLlamaPreviewScene';
 import { CowPreviewScene } from '../scenes/CowPreviewScene';
 import { RockGolemPreviewScene } from '../scenes/RockGolemPreviewScene';
 import { SkeletonPreviewScene } from '../scenes/SkeletonPreviewScene';
@@ -23,9 +23,9 @@ import { DemonLiaisonPreviewScene } from '../scenes/DemonLiaisonPreviewScene';
 import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
 import { ScientistPreviewScene } from '../scenes/ScientistPreviewScene';
 import { NecromancerPreviewScene } from '../scenes/NecromancerPreviewScene';
-import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
-import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
-import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
+import { FuzzyNightmarePreviewScene } from '../scenes/FuzzyNightmarePreviewScene';
+import { LizardmanPreviewScene } from '../scenes/LizardmanPreviewScene';
+import { WereboarPreviewScene } from '../scenes/WereboarPreviewScene';
 import { KrakenPreviewScene } from '../scenes/KrakenPreviewScene';
 import { ElectricGoblinPreviewScene } from '../scenes/ElectricGoblinPreviewScene';
 import { TrashGremlinPreviewScene } from '../scenes/TrashGremlinPreviewScene';
@@ -424,8 +424,8 @@ function devRouteNamed(
     return () => sceneManager.replace(new CatPreviewScene());
   }
 
-  if (params.get('bopca') !== null) {
-    return () => sceneManager.replace(new BopcaPreviewScene());
+  if (params.get('dwarf-cook') !== null) {
+    return () => sceneManager.replace(new DwarfCookPreviewScene());
   }
 
   if (params.get('goblins') !== null) {
@@ -436,8 +436,8 @@ function devRouteNamed(
     return () => sceneManager.replace(new RatPreviewScene());
   }
 
-  if (params.get('llama') !== null) {
-    return () => sceneManager.replace(new LlamaPreviewScene());
+  if (params.get('acid-llama') !== null) {
+    return () => sceneManager.replace(new AcidLlamaPreviewScene());
   }
 
   if (params.get('cows') !== null) {
@@ -456,12 +456,12 @@ function devRouteNamed(
     return () => sceneManager.replace(new DeinonychusPreviewScene());
   }
 
-  if (params.get('bugaboo') !== null) {
-    return () => sceneManager.replace(new BugabooPreviewScene());
+  if (params.get('fuzzy-nightmare') !== null) {
+    return () => sceneManager.replace(new FuzzyNightmarePreviewScene());
   }
 
-  if (params.get('tuskling') !== null) {
-    return () => sceneManager.replace(new TusklingPreviewScene());
+  if (params.get('wereboar') !== null) {
+    return () => sceneManager.replace(new WereboarPreviewScene());
   }
 
   if (params.get('kraken') !== null) {
@@ -480,8 +480,8 @@ function devRouteNamed(
     return () => sceneManager.replace(new BigRoosterPreviewScene());
   }
 
-  if (params.get('trog') !== null) {
-    return () => sceneManager.replace(new TroglodytePreviewScene());
+  if (params.get('lizardman') !== null) {
+    return () => sceneManager.replace(new LizardmanPreviewScene());
   }
 
   if (params.get('mantid') !== null) {

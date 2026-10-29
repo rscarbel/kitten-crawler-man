@@ -48,7 +48,7 @@ import {
   YARD_GRAVEL,
   type TileContent,
 } from '../src/map/tileTypes';
-import { isOverworldFairyTileAllowed } from '../src/levels/fairySpawner';
+import { isOverworldSpawnTileAllowed } from '../src/levels/overworldSpawnTiles';
 import {
   checkBriarHollowIsIntact,
   checkBriarHollowIsReachable,
@@ -424,7 +424,7 @@ function checkMap(seed: number, fault: Fault): string[] {
     }
   }
   for (const tile of tilesOf(exclusion)) {
-    if (isOverworldFairyTileAllowed(map, tile.x, tile.y)) {
+    if (isOverworldSpawnTileAllowed(map, tile.x, tile.y)) {
       problems.push(
         `fairies may be placed at (${tile.x}, ${tile.y}), inside the village exclusion`,
       );

@@ -372,9 +372,9 @@ prompted. The
 reference for adding or tuning a material; only the load-bearing facts are repeated
 here.
 
-Thirty-one materials ship across five sheets, listed in
+Thirty materials ship across five sheets, listed in
 `src/map/tilegen/sheetConfigs.ts`: the overworld's ten (grass through scree), the two
-dungeon floors' five each, the Bopca station's three, and eight for the town's building
+dungeon floors' five each, the safe room's two, and eight for the town's building
 interiors.
 
 Four properties the renderer depends on:
@@ -487,16 +487,15 @@ so inserting one re-rolls the art of every material after it.
 **Every walkable tile must be reachable from `startTile`.** A partition wall that seals a
 wing produces no error, no log and no symptom except a room the player can see across and
 never enter. `verify:interiors` flood-fills every interior — all fifteen walk-ins, the Starlight
-Tent and all four tower storeys — and the only tiles it excuses are the Bopca's galley
-strip, which the counter's own side returns seal on purpose.
+Tent and all four tower storeys — and it excuses none.
 
 **The safe room is the inn's taproom.** `hasSafeRoom` on the planned building is what
-puts Dave, the Bopca's counter and the lantern light in a room, and the bounds it
+puts Dave, the doctor's corner and the lantern light in a room, and the bounds it
 uses are name-addressable, so the inn registers the taproom band rather than its whole
-floor. `planSafeRoomCounters` lays the counter run against the **north wall of those
-bounds** — which is why the taproom's archways to the landing are deliberately off-centre
-and why the middle of the taproom's top rows carry no authored furniture. A run laid
-across an archway would wall off the entire guest wing.
+floor. `planSafeRoomClinics` lays the doctor's medicine cabinet against the **north wall
+of those bounds**, on a span free of doorways and furniture — which is why the taproom's
+archways to the landing are deliberately off-centre. A cabinet laid across an archway
+would wall off the entire guest wing.
 
 **Dave teleports into the taproom.** He is not a resident and never stands in an empty
 inn: the building's `DaveGuideSystem` brings him in `DAVE_ARRIVAL_DELAY_FRAMES` after the
@@ -756,6 +755,52 @@ owed. See `docs/asset-management.md`.
 
 ---
 
+## History and belief
+
+Every line about the town's past and its faiths agrees with this section. A resident
+still gives at most one of these facts per conversation (see [Talking to people](#talking-to-people)).
+
+**The Fraying.** Taloncrest was once a city ten times its size. In "the bad year" the
+world came apart at a seam under the old city, and its streets unravelled into rubble
+overnight. The people caught inside the fray did not die: they came back wrong and
+wandered out into what became the ruins. Ruins ghouls and krasue are what the Fraying
+made of the citizens. The survivors walled the hill that was left. The seam never fully
+closed, the ground there still does not sit right, and on stormy nights the edge of the
+ruins shifts.
+
+- Nobody knows why it happened. Caroline has never said, and no creature or person
+  caused it. No line invents a culprit.
+- It was never a poison, a gas or a sickness in the water, and no line describes it as one.
+- The temple calls it the Fraying. Old people call it the bad year.
+
+**The Hawkfolk and the Carrying.** During the Fraying the Hawkfolk flew the old city's
+people over the fray to the hill, along with whatever could be lifted. The smith's anvil
+came in on a sledge; the people came in on wings. Their faith grew from that: a wing is
+owed.
+
+- Every Hawkfolk who can fly owes carries to those who cannot. "Nest-debt" is the
+  everyday word for it. A Hawkfolk who refuses a carry is "clipped": shunned.
+- The temple's tract is _On the Carrying_: carry what the ground cannot; set it down
+  gently; never take a fee for the first carry; remember every name you could not lift.
+- The Hawkfolk council is the High Roost. It meets on the temple dome and answers to no
+  official of the town.
+- Hawkfolk are not angels and nobody worships them. They are a proud, dutiful majority
+  who carried the city once and have never quite let the groundfolk forget it.
+
+**The cult's elves.** Elves who would not be carried went down instead of up during the
+Fraying, into the cellars and cisterns under the old city. They came back certain the
+Fraying was Caroline's own hand.
+
+- Their creed: Caroline chooses whom she speaks to, and she can be made to choose.
+  Offerings get her attention.
+- They burn offerings as a signal to be noticed: candles, trinkets, a lock of hair and,
+  in the worst of them, blood. Never souls.
+- Their mark is an open eye over a cupped hand, an offering held up to be seen, which
+  nods to Caroline's floating eyes.
+- They call the Hawkfolk "carriers of dead weight".
+
+---
+
 ## Talking to people
 
 Every conversation goes through the scene's one `Conversation` (`src/dialog/`).
@@ -778,7 +823,7 @@ tile. The margin is the hysteresis: shuffling while reading never closes it, and
 that really leaves does. Between the two ranges the box stays up to be read, but an
 interact press is handed to whoever the player has walked up to (`Conversation.handOff`),
 so turning from one speaker to the next never lets a stale box take the key. In the safe
-room the Bopca and Dave's ranges overlap. `safeRoomSpeakerFor`
+room the doctor's and Dave's ranges can overlap. `safeRoomSpeakerFor`
 (`src/systems/safeRoomSpeaker.ts`) gives a press to the nearer of the two.
 `npm run verify:walk-away` holds the rule.
 
@@ -1045,7 +1090,7 @@ that side's wall (`battlePostByLane`).
 
 Each wave (`ASSAULT_WAVES`) raises all its undead at once, never fewer than
 `MIN_UNDEAD_PER_WAVE`. Every other regular hostile of the crawl comes along across the
-four waves; spiders, grubs and bosses are the exceptions, and rock golems come with
+four waves; spiders, gravedigger beetles and bosses are the exceptions, and rock golems come with
 the last. The bounty mark comes levelled to the siege, with a share of its health and
 an `outgoingDamageScale`. The wave's fairy comes too, along with every earlier wave's
 fairy that has fallen since. Fairies are not enlisted: they fly with the wave and leave

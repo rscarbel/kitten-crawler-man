@@ -79,3 +79,22 @@ export const GENERATOR_RIG_HUM_LOOP = {
   fadeInMs: AMBIENT_RAMP_MS,
   fadeOutMs: AMBIENT_RAMP_MS,
 } as const satisfies LoopLevel;
+
+/** One adult Gravedigger Beetle's wing drone with the listener on top of it. */
+export const GRAVEDIGGER_WING_DRONE_LOOP = {
+  id: 'gravedigger_wing_drone_loop',
+  volume: 0.3,
+  fadeInMs: AMBIENT_RAMP_MS,
+  fadeOutMs: AMBIENT_RAMP_MS,
+} as const satisfies LoopLevel;
+
+/**
+ * One Giant Wasp's wings with the listener on top of it. Quiet on purpose:
+ * every wasp in earshot adds its share, so a swarm is what reads as loud.
+ */
+export const GIANT_WASP_BUZZ_LOOP = {
+  id: 'giant_wasp_buzz_loop',
+  volume: 0.15,
+  fadeInMs: AMBIENT_RAMP_MS,
+  fadeOutMs: AMBIENT_RAMP_MS,
+} as const satisfies LoopLevel;

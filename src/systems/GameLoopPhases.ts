@@ -5,7 +5,11 @@ import { type InputManager } from '../core/input/InputManager';
 import { keybindings } from '../core/input/Keybindings';
 import { normalize, clamp } from '../utils';
 import { type GameMap } from '../map/GameMap';
-import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
+import {
+  CENTER_COLLISION_OFFSET,
+  SOLE_COLLISION_OFFSET,
+  tileUnderFeet,
+} from '../map/collisionAnchors';
 import { tileSpeedFactor } from '../map/tileSpeed';
 import { type Player } from '../Player';
 import { pushPlayerWithCollision } from './playerDisplacement';
@@ -38,6 +42,7 @@ import { ElectricGoblin } from '../creatures/ElectricGoblin';
 import { Mantid } from '../creatures/Mantid';
 import { AttackCow } from '../creatures/AttackCow';
 import { Cow, type CowVoice } from '../creatures/Cow';
+import { FuzzyNightmare, type FuzzyNightmareVoice } from '../creatures/FuzzyNightmare';
 import { Deinonychus } from '../creatures/Deinonychus';
 import { mobVoiceTakes } from './mobVoices';
 import { Kraken } from '../creatures/Kraken';
@@ -68,7 +73,7 @@ import {
  *   5. updateSystems         — barriers, gym room, companion, spells, etc.
  *   6. updateMobAI           — activate nearby mobs, run AI, clamp bosses
  *   7. resolveCombat         — attack hits, kills, XP split, loot drops
- *   8. postCombat            — gore, grub spawns, Deinonychus
+ *   8. postCombat            — gore, larva spawns, Deinonychus
  *   9. tickTimers            — player timers, loot TTL, dynamite, seismic stomp blasts, level timer
  *   10. checkDeath           — game over conditions
  */
@@ -151,13 +156,12 @@ export function readMovement(
  *
  * Reading the destination instead would brake a step early on the bank and
  * accelerate one step early on the way out, so the slowdown would not line up
- * with the splash or with the sprite sinking. Tested on the tile under the
- * player's centre, the same point the renderer uses to decide they are wading.
+ * with the splash or with the sprite sinking. Read at the same feet tile as
+ * {@link isStandingInWater}, the test the renderer uses.
  */
 export function footingSpeedFactor(player: Player, gameMap: GameMap): number {
   const riverFactor = isStandingInWater(player, gameMap) ? WADE_SPEED_FACTOR : 1;
-  const tileX = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
-  const tileY = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
+  const { x: tileX, y: tileY } = tileUnderFeet(player, TILE_SIZE);
   const insideMap =
     tileY >= 0 &&
     tileY < gameMap.structure.length &&
@@ -172,17 +176,16 @@ export function footingSpeedFactor(player: Player, gameMap: GameMap): number {
  *
  * The single definition of "in the water", shared by the movement slowdown, the
  * submerged rendering and the splash effects, so the three cannot disagree about
- * where the bank is. It reads the tile under the player's centre rather than
- * their soles: the soles sit at the very bottom of the sprite box and would
- * report water for a frame while the body still visibly stands on the bank.
+ * where the bank is. The waterline is cut from the bottom of the sprite box, so
+ * the test is taken where the feet are drawn ({@link tileUnderFeet}): a body
+ * reads as wading exactly when its drawn feet stand on water.
  *
  * A `BRIDGE` tile is its own type and is not water, so crossing a bridge is dry
  * and full speed — which is the whole point of a bridge.
  */
 export function isStandingInWater(player: Player, gameMap: GameMap): boolean {
-  const tileX = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
-  const tileY = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
-  return gameMap.isWadeable(tileX, tileY);
+  const feet = tileUnderFeet(player, TILE_SIZE);
+  return gameMap.isWadeable(feet.x, feet.y);
 }
 
 /**
@@ -337,12 +340,7 @@ export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
  * - Inactive player dying enters the knocked-out state (handled in DungeonScene before this call).
  * - A knocked-out player has 90 seconds to be revived; expiry is game over.
  */
-export function checkDeath(
-  human: HumanPlayer,
-  cat: CatPlayer,
-  hasCollapseTimer: boolean,
-  levelTimerFrames: number,
-): boolean {
+export function checkDeath(human: HumanPlayer, cat: CatPlayer): boolean {
   // Active player death = immediate game over
   if (human.isActive && !human.isAlive) return true;
   if (cat.isActive && !cat.isAlive) return true;
@@ -352,7 +350,6 @@ export function checkDeath(
   // Knocked-out timer expired
   if (human.isKnockedOut && human.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
   if (cat.isKnockedOut && cat.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
-  if (hasCollapseTimer && levelTimerFrames <= 0) return true;
   return false;
 }
 
@@ -581,6 +578,7 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   }
   playMantidHiss(mob, audio);
   playCowVoice(mob, audio);
+  playFuzzyNightmareVoice(mob, audio);
   playAttackCowCues(mob, audio);
   playCastWindup(mob, audio);
   playDarkKnightCues(mob, audio);
@@ -723,6 +721,35 @@ function playCowVoice(mob: Mob, audio: PlacedCuePlayer | null): void {
   const voice = mob.voicePending;
   mob.voicePending = null;
   audio?.playRandom(COW_VOICE_SOUNDS[voice]);
+}
+
+const FUZZY_NIGHTMARE_VOICE_SOUNDS = {
+  growl: [
+    'fuzzy_nightmare_growl_1',
+    'fuzzy_nightmare_growl_2',
+    'fuzzy_nightmare_growl_3',
+    'fuzzy_nightmare_growl_4',
+    'fuzzy_nightmare_growl_5',
+  ],
+  grateClaw: [
+    'fuzzy_nightmare_grate_claw_1',
+    'fuzzy_nightmare_grate_claw_2',
+    'fuzzy_nightmare_grate_claw_3',
+    'fuzzy_nightmare_grate_claw_4',
+    'fuzzy_nightmare_grate_claw_5',
+  ],
+} as const satisfies Record<FuzzyNightmareVoice, readonly SoundId[]>;
+
+/**
+ * A Fuzzy Nightmare's growl as it stalks and its claws on the grate it comes
+ * up through. A queued voice rather than the shared flags: neither is the
+ * swipe that `attackSoundPending` stands for.
+ */
+function playFuzzyNightmareVoice(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (!(mob instanceof FuzzyNightmare) || mob.voicePending === null) return;
+  const voice = mob.voicePending;
+  mob.voicePending = null;
+  audio?.playRandom(FUZZY_NIGHTMARE_VOICE_SOUNDS[voice]);
 }
 
 const ATTACK_COW_HEADBUTT_SOUNDS: readonly SoundId[] = [

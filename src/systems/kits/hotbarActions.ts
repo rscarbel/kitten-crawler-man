@@ -11,7 +11,7 @@ import { hotbarAbilityOf } from '../../gear/gearHooks';
 import type { AbilityManager } from '../../core/skills/AbilityManager';
 import { castShieldWithGesture, isCastingShield } from '../../creatures/humanGestures';
 import { weaponStatsOf, type InventoryItem } from '../../core/items/defs/ItemDefs';
-import { isThrownExplosive, type DynamiteSystem, type ThrownExplosiveId } from '../DynamiteSystem';
+import { isThrownItem, type DynamiteSystem, type ThrownItemId } from '../DynamiteSystem';
 import { crawlerLabel } from '../AchievementAwards';
 import type { SkillBookReadRequest } from '../../ui/screens/inventory/InventoryActions';
 import type { SpellSystem } from '../SpellSystem';
@@ -127,13 +127,12 @@ export function activateHotbarSlot(
     return;
   }
 
-  if (slot.id === 'scroll_of_confusing_fog') {
-    host.spells.castConfusingFog(active);
-    audio?.play('confusing_fog');
+  if (slot.id === 'scroll_of_entanglement') {
+    host.spells.castEntanglement(active, host.world.roster.grid);
     return;
   }
 
-  if (isThrownExplosive(slot.id) && host.dynamite !== null) {
+  if (isThrownItem(slot.id) && host.dynamite !== null) {
     if (host.dynamite.isCharging) {
       releaseDynamite(host);
     } else if (dynamiteGrip === 'ready') {
@@ -161,16 +160,16 @@ export function activateHotbarSlot(
   }
 }
 
-/** What the hotbar says when a stick is lit where lighting one is refused. */
-export const DYNAMITE_SAFE_ROOM_REFUSAL = 'No explosives in the safe room.';
+/** What the hotbar says when a throw is wound up where throwing is refused. */
+const THROW_SAFE_ROOM_REFUSAL = 'No throwing things in the safe room.';
 
 /** Buzzes and explains a refused light, from any route that tried one. */
 export function refuseDynamiteInSafeRoom(host: Pick<HotbarHost, 'world' | 'menus'>): void {
   host.world.audio?.play('error_taking_action');
-  host.menus.announce(DYNAMITE_SAFE_ROOM_REFUSAL);
+  host.menus.announce(THROW_SAFE_ROOM_REFUSAL);
 }
 
-function readyDynamite(host: HotbarHost, dynamite: DynamiteSystem, item: ThrownExplosiveId): void {
+function readyDynamite(host: HotbarHost, dynamite: DynamiteSystem, item: ThrownItemId): void {
   if (!dynamite.ready(host.world.pm.active(), item)) {
     refuseDynamiteInSafeRoom(host);
     return;

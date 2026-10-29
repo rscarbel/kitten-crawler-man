@@ -1008,7 +1008,7 @@ section('Luck: 200,000 seeded ticks land within ±10% of the request’s rates')
     `boards vs rope split ${boardShare.toFixed(SHARE_DIGITS)} ≈ 50/50`,
   );
   const stoneL5 = tally(REFINED_LEVEL, 'stone', LUCK_SEED_STONE);
-  const dynamite = (stoneL5.get('goblin_dynamite') ?? 0) / TICKS;
+  const dynamite = (stoneL5.get('dynamite') ?? 0) / TICKS;
   check(
     within(dynamite, EXPECTED_REFINED_STONE),
     `stone L5 dynamite ${dynamite.toFixed(RATE_DIGITS)} ≈ 0.04`,
@@ -1039,7 +1039,7 @@ section('Luck: 200,000 seeded ticks land within ±10% of the request’s rates')
     'a missed trebuchet roll falls to the snare roll before any refined roll',
   );
   const l15 = tally(TOP_LEVEL, 'stone', LUCK_SEED_TOP);
-  const l15Refined = (l15.get('goblin_dynamite') ?? 0) / TICKS;
+  const l15Refined = (l15.get('dynamite') ?? 0) / TICKS;
   const l15KitMisses = (1 - EXPECTED_TREB_KIT) * (1 - EXPECTED_SNARE_KIT);
   check(
     within(l15Refined, l15KitMisses),
@@ -1276,13 +1276,7 @@ section('Thralls: lifetime, cooldown, count, resources, XP and no luck');
     `level 15 summons three (${rig.thralls.snapshot.length})`,
   );
 
-  const LUCKY: readonly ItemId[] = [
-    'trebuchet_kit',
-    'snare_kit',
-    'wood_board',
-    'rope',
-    'goblin_dynamite',
-  ];
+  const LUCKY: readonly ItemId[] = ['trebuchet_kit', 'snare_kit', 'wood_board', 'rope', 'dynamite'];
   const luckyBefore = LUCKY.map((id) => rig.human.inventory.countOf(id));
   let workingTicks = 0;
   let gone = -1;

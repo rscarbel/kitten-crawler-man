@@ -160,7 +160,7 @@ export class MercenaryGuildSystem {
       return;
     }
     spendPartyCoins(player, companion, template.price, player);
-    activeRunStats()?.recordHirelingHired();
+    activeRunStats()?.recordMercenaryHired();
     // Warmed on the signature rather than on the first frame the hire is
     // drawn: it steps away from the desk already moving.
     MERCENARY_ART[template.art].prewarm();

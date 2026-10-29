@@ -1,6 +1,6 @@
 /**
  * MobUpdateLoop — handles per-frame mob AI ticking, spatial grid updates,
- * and mob-specific behaviors (BrindleGrub evolution, boss clamping).
+ * and mob-specific behaviors (gravedigger beetle growth, boss clamping).
  *
  * Extracted from DungeonScene.updateGameplay() to reduce orchestrator size.
  */
@@ -8,7 +8,7 @@
 import { TILE_SIZE } from '../core/constants';
 import { perfMonitor } from '../core/perf/PerfMonitor';
 import type { Player } from '../Player';
-import { BrindleGrub } from '../creatures/BrindleGrub';
+import { GravediggerBeetle } from '../creatures/GravediggerBeetle';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
@@ -166,14 +166,14 @@ export class MobUpdateLoop implements GameSystem {
     setExplosiveSources(this.explosiveSources);
     setTrebuchetThreatDefense(this.trebuchetDefense);
 
-    // Over the whole roster rather than the active mobs: a grub evolves off
+    // Over the whole roster rather than the active mobs: a larva grows off
     // screen, and a flyer ticked for its own reasons can meet a body outside
     // the party's activation radius.
     const airspaceBodies = this.airspaceBodies;
     airspaceBodies.length = 0;
     for (const mob of mobs) {
       if (!mob.isAlive) continue;
-      if (mob instanceof BrindleGrub) mob.tickEvolve();
+      if (mob instanceof GravediggerBeetle) mob.tickEvolve();
       if (mob.fillsAirspace) airspaceBodies.push(mob);
     }
     setAirspaceBodies(airspaceBodies);
@@ -197,7 +197,7 @@ export class MobUpdateLoop implements GameSystem {
     if (!cat.hiddenFromMobs) playerTargets.push(cat);
     if (extraTargets) {
       for (const t of extraTargets) {
-        // Defend-quest NPCs (e.g. Goblin Mother) are handled by Bugaboo's own
+        // Defend-quest NPCs (e.g. Goblin Mother) are handled by FuzzyNightmare's own
         // defendTarget field — exclude them from the shared target list so regular
         // enemies ignore them.
         if (t.isAlive && !t.isDefendTarget) playerTargets.push(t);
@@ -249,8 +249,8 @@ export class MobUpdateLoop implements GameSystem {
           }
         }
 
-        // Vespa-stage BrindleGrubs need the full mob list to target other mobs.
-        if (mob instanceof BrindleGrub) {
+        // An adult gravedigger beetle needs the full mob list to target other mobs.
+        if (mob instanceof GravediggerBeetle) {
           mob.allMobs = mobs;
         }
 
@@ -266,7 +266,7 @@ export class MobUpdateLoop implements GameSystem {
         // never the party list.
         if (mob.isConverted) {
           aiTargets = mob.allyTargets;
-        } else if (mob.retaliateMob && !(mob instanceof BrindleGrub)) {
+        } else if (mob.retaliateMob && !(mob instanceof GravediggerBeetle)) {
           this.aiTargets.length = 0;
           this.aiTargets.push(...playerTargets, mob.retaliateMob);
           aiTargets = this.aiTargets;

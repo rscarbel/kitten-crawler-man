@@ -19,6 +19,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
 import type { PlayerManager } from '../../core/party/PlayerManager';
 import type { SpellSystem } from '../SpellSystem';
+import { SmokeCloudSystem } from '../SmokeCloudSystem';
 
 /**
  * A scene's population: the render/update list and the spatial index over it,
@@ -38,6 +39,12 @@ export class MobRoster {
    */
   readonly mobs: Mob[] = [];
   private _grid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
+  /**
+   * The smoke bombs' clouds on this map. Held beside the population they
+   * confuse, so the dynamite that throws a bomb and the combat kit that ticks
+   * the cloud — each built from the same world — reach the same clouds.
+   */
+  readonly smokeClouds = new SmokeCloudSystem();
 
   constructor(
     private readonly map: GameMap,

@@ -141,6 +141,10 @@ export class DestructionKit {
       this.dynamite.explosionSoundPending = false;
       audio?.playRandom(BOMBER_GOBLIN_CUES[blastCue(this.dynamite.explosionSoundKind)]);
     }
+    if (this.dynamite.smokeBurstSoundPending) {
+      this.dynamite.smokeBurstSoundPending = false;
+      audio?.play('smoke_cloud_billow');
+    }
 
     return smashes.wood > 0 || smashes.iron > 0 || smashes.trash > 0;
   }

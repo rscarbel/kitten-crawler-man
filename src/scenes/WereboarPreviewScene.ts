@@ -1,0 +1,292 @@
+/**
+ * Localhost-only harness for watching a Wereboar move, hook, snort and charge.
+ *
+ * Reached via `?wereboar` in `devBootScene`; never on a production path. It
+ * exists because a still cannot answer the questions that matter here:
+ * `scripts/render-wereboar.ts` shows that the walk loop closes and the tusks
+ * clear the snout, but only playback shows whether the thirty-five-frame
+ * wind-up reads as a warning in the time the player has to get out of the way,
+ * and whether the sprint's shorter frame hold reads as speed or as strobing.
+ *
+ * All four facings play every row at once on a labelled grid, over a backdrop
+ * that cycles the real floor palettes so the contrast check happens against the
+ * thing the creature actually stands on. "kill" fires the real
+ * `BodyPartGoreSystem`, which is the only way to see whether the pieces tumble
+ * about their own centres rather than orbiting them.
+ */
+
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { WEREBOAR_BODY_PART_KEY, drawWereboarSprite } from '../sprites/wereboarSprite';
+import {
+  WEREBOAR_CHARGE_FRAMES,
+  WEREBOAR_CHARGE_FRAME_HOLD,
+  WEREBOAR_HOOK_FRAMES,
+  WEREBOAR_IDLE_FRAMES,
+  WEREBOAR_WINDUP_GAME_FRAMES,
+  wereboarActionFrames,
+} from '../sprites/wereboarAttackTiming';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
+import { GameMap } from '../map/GameMap';
+import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
+import { previewInk } from '../ui/theme/previewInk';
+
+/** A facing vector per column, chosen so the wrapper picks each viewpoint. */
+interface ViewSpec {
+  readonly label: string;
+  readonly facingX: number;
+  readonly facingY: number;
+}
+
+const VIEWS: ReadonlyArray<ViewSpec> = [
+  { label: 'side →', facingX: 1, facingY: 0 },
+  { label: 'side ←', facingX: -1, facingY: 0 },
+  { label: 'toward', facingX: 0, facingY: 1 },
+  { label: 'away', facingX: 0, facingY: -1 },
+];
+
+type RowKind = 'idle' | 'walk' | 'hook' | 'snort' | 'charge';
+
+interface RowSpec {
+  readonly kind: RowKind;
+  /**
+   * How many *game* frames the row spans. The attacks use the same counts
+   * `Wereboar` drives them with, so the pacing seen here is the pacing the
+   * player gets rather than a second guess at it.
+   */
+  readonly gameFrames: number;
+}
+
+const IDLE_GAME_FRAMES = 60;
+const WALK_GAME_FRAMES = 44;
+const CHARGE_GAME_FRAMES = WEREBOAR_CHARGE_FRAMES * WEREBOAR_CHARGE_FRAME_HOLD;
+
+const ROWS: ReadonlyArray<RowSpec> = [
+  { kind: 'idle', gameFrames: IDLE_GAME_FRAMES },
+  { kind: 'walk', gameFrames: WALK_GAME_FRAMES },
+  { kind: 'hook', gameFrames: wereboarActionFrames(WEREBOAR_HOOK_FRAMES) },
+  { kind: 'snort', gameFrames: WEREBOAR_WINDUP_GAME_FRAMES },
+  { kind: 'charge', gameFrames: CHARGE_GAME_FRAMES },
+];
+
+/** 1× is what a player sees; 4× is where a tusk becomes visible at all. */
+const ZOOM_IN_GAME = 1;
+const ZOOM_DOUBLE = 2;
+const ZOOM_REVIEW = 4;
+const ZOOM_LEVELS: ReadonlyArray<number> = [ZOOM_IN_GAME, ZOOM_DOUBLE, ZOOM_REVIEW];
+
+const SPEED_QUARTER = 0.25;
+const SPEED_HALF = 0.5;
+const SPEED_FULL = 1;
+const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
+
+/** The floor mids a Wereboar actually stands on, from `src/map/tilegen/palette.ts`. */
+const BACKDROPS: ReadonlyArray<{ readonly name: string; readonly color: string }> = [
+  { name: 'floor 1 — cellar stone', color: previewInk.floor.cellarStone },
+  { name: 'floor 1 — dressed stone', color: previewInk.floor.dressedStone },
+  { name: 'floor 2 — poured concrete', color: previewInk.floor.pouredConcrete },
+  { name: 'floor 3 — grass', color: previewInk.floor.grass },
+  { name: 'unlit cave', color: previewInk.floor.unlitCave },
+];
+
+const BASE_TILE_SIZE = 32;
+const MARGIN = 16;
+const ROW_LABEL_WIDTH = 96;
+const CELL_PADDING = 10;
+const LABEL_SIZE = 11;
+const LABEL_GAP = 2;
+const CELL_WIDTH_TILES = 2.6;
+const CELL_HEIGHT_TILES = 2.2;
+/** Where a cell's creature stands, as a fraction of the cell's height. */
+const GROUND_FRACTION = 0.92;
+
+/** Gore needs a map to settle onto; a small empty one is enough for a preview. */
+const PREVIEW_MAP_SIZE = 24;
+const KILL_IMPACT_X = 1;
+const KILL_IMPACT_Y = -0.4;
+
+const TAU = Math.PI * 2;
+
+export class WereboarPreviewScene extends PreviewScene {
+  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly gore = new BodyPartGoreSystem(this.map);
+
+  private zoomIndex = ZOOM_LEVELS.indexOf(ZOOM_DOUBLE);
+  private speedIndex = SPEED_LEVELS.length - 1;
+  private backdropIndex = 0;
+  private paused = false;
+  /** Fractional frame counter, so a 0.25× speed still advances. */
+  private clock = 0;
+  private stepRequested = false;
+
+  update(): void {
+    if (this.stepRequested) {
+      this.clock += 1;
+      this.stepRequested = false;
+    } else if (!this.paused) {
+      this.clock += SPEED_LEVELS[this.speedIndex];
+    }
+    this.gore.update();
+  }
+
+  /** 0–1 through a row's own game-frame span. */
+  private progressOf(row: RowSpec): number {
+    return (Math.floor(this.clock) % row.gameFrames) / row.gameFrames;
+  }
+
+  private cellSize(): { readonly w: number; readonly h: number } {
+    const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
+    return { w: tile * CELL_WIDTH_TILES, h: tile * CELL_HEIGHT_TILES };
+  }
+
+  render(ctx: CanvasRenderingContext2D): void {
+    const width = viewportWidth();
+    const height = viewportHeight();
+
+    ctx.fillStyle = BACKDROPS[this.backdropIndex].color;
+    ctx.fillRect(0, 0, width, height);
+
+    const cell = this.cellSize();
+    const gridLeft = MARGIN + ROW_LABEL_WIDTH;
+    const gridTop = this.headerBottom + MARGIN + LABEL_SIZE;
+    const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
+
+    VIEWS.forEach((view, column) => {
+      const x = gridLeft + column * (cell.w + CELL_PADDING);
+      worldText(ctx, view.label, {
+        x: x + cell.w / 2,
+        y: gridTop - LABEL_SIZE - LABEL_GAP,
+        size: LABEL_SIZE,
+        align: 'center',
+        color: previewInk.grid.caption,
+        outline: true,
+      });
+    });
+
+    ROWS.forEach((row, rowIndex) => {
+      const y = gridTop + rowIndex * (cell.h + CELL_PADDING);
+      const progress = this.progressOf(row);
+      worldText(ctx, row.kind, {
+        x: MARGIN,
+        y: y + cell.h / 2 - LABEL_SIZE,
+        size: LABEL_SIZE,
+        color: previewInk.grid.caption,
+        outline: true,
+      });
+      worldText(ctx, `t${progress.toFixed(2)}  ${row.gameFrames}gf`, {
+        x: MARGIN,
+        y: y + cell.h / 2 + LABEL_GAP,
+        size: LABEL_SIZE,
+        color: previewInk.grid.timingReadout,
+        outline: true,
+      });
+
+      VIEWS.forEach((view, column) => {
+        const x = gridLeft + column * (cell.w + CELL_PADDING);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, cell.w, cell.h);
+        ctx.clip();
+        drawWereboarSprite(
+          ctx,
+          x + cell.w / 2 - tile / 2,
+          y + cell.h * GROUND_FRACTION - tile,
+          tile,
+          {
+            walkFrame: progress * TAU,
+            isMoving: row.kind === 'walk',
+            facingX: view.facingX,
+            facingY: view.facingY,
+            hookProgress: row.kind === 'hook' ? progress : null,
+            snortProgress: row.kind === 'snort' ? progress : null,
+            chargeFrame:
+              row.kind === 'charge' ? Math.floor(progress * WEREBOAR_CHARGE_FRAMES) : null,
+            // Driven from this scene's own clock rather than the wall clock, or
+            // the one row that plays most would ignore pause, step and speed —
+            // which is the whole reason this harness exists.
+            idleFrame:
+              row.kind === 'idle' ? Math.floor(progress * WEREBOAR_IDLE_FRAMES) : undefined,
+          },
+        );
+        ctx.restore();
+
+        ctx.strokeStyle = previewInk.grid.cellBorder;
+        ctx.strokeRect(x, y, cell.w, cell.h);
+      });
+    });
+
+    this.gore.renderSettled(ctx, 0, 0);
+    this.gore.renderFlying(ctx, 0, 0);
+    this.renderChrome(ctx);
+  }
+
+  /**
+   * Fire the real gore system at the middle of the screen. Deliberately the
+   * real one: only the runtime's own rotate-about-measured-ink-centre path can
+   * answer whether a severed tusk spins about itself or orbits a point beside
+   * it.
+   */
+  private kill(): void {
+    this.gore.spawnParts(
+      viewportWidth() / 2,
+      viewportHeight() / 2,
+      WEREBOAR_BODY_PART_KEY,
+      BASE_TILE_SIZE,
+      KILL_IMPACT_X,
+      KILL_IMPACT_Y,
+    );
+  }
+
+  protected previewTitle(): string {
+    return 'wereboar preview — ?wereboar';
+  }
+
+  protected previewCaptions(): readonly string[] {
+    return [BACKDROPS[this.backdropIndex].name];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'zoom',
+        label: `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`,
+        onTap: () => {
+          this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
+        },
+      },
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
+      },
+      {
+        label: 'step',
+        onTap: () => {
+          this.paused = true;
+          this.stepRequested = true;
+        },
+      },
+      {
+        id: 'speed',
+        label: `speed ${SPEED_LEVELS[this.speedIndex]}x`,
+        onTap: () => {
+          this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+        },
+      },
+      {
+        label: 'backdrop',
+        onTap: () => {
+          this.backdropIndex = (this.backdropIndex + 1) % BACKDROPS.length;
+        },
+      },
+      {
+        label: 'kill',
+        onTap: () => {
+          this.kill();
+        },
+      },
+    ];
+  }
+}

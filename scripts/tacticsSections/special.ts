@@ -53,10 +53,10 @@ import { ShrineVermin } from '../../src/creatures/ShrineVermin';
 import { LEMUR_THROW_STANDOFF_TILES, Lemur } from '../../src/creatures/Lemur';
 import { Krasue } from '../../src/creatures/Krasue';
 import { Hawkfolk } from '../../src/creatures/Hawkfolk';
-import { Bugaboo } from '../../src/creatures/Bugaboo';
+import { FuzzyNightmare } from '../../src/creatures/FuzzyNightmare';
 import { SmallSpider } from '../../src/creatures/SmallSpider';
 import { Cockroach } from '../../src/creatures/Cockroach';
-import { Tuskling } from '../../src/creatures/Tuskling';
+import { Wereboar } from '../../src/creatures/Wereboar';
 import { KrakenTentacle } from '../../src/creatures/KrakenTentacle';
 
 /** The pass/fail reporting `verify-tactics.ts` owns, so its failure count covers these too. */
@@ -122,9 +122,9 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: ['flank', 'regroup'],
   },
   {
-    name: 'bugaboo',
-    build: spawned('bugaboo'),
-    isExpectedClass: (mob) => mob instanceof Bugaboo,
+    name: 'fuzzy_nightmare',
+    build: spawned('fuzzy_nightmare'),
+    isExpectedClass: (mob) => mob instanceof FuzzyNightmare,
     expected: [],
   },
   {
@@ -140,9 +140,9 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: [],
   },
   {
-    name: 'tuskling',
-    build: spawned('tuskling'),
-    isExpectedClass: (mob) => mob instanceof Tuskling,
+    name: 'wereboar',
+    build: spawned('wereboar'),
+    isExpectedClass: (mob) => mob instanceof Wereboar,
     expected: [],
   },
   {
@@ -166,7 +166,7 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
 ];
 
 /** The spawner keys the shared "nothing below the minimum level" sweep must cover. */
-const SWEPT_TYPES: readonly MobKind[] = ['rat', 'lemur', 'krasue', 'hawkfolk', 'bugaboo'];
+const SWEPT_TYPES: readonly MobKind[] = ['rat', 'lemur', 'krasue', 'hawkfolk', 'fuzzy_nightmare'];
 
 /** Every trait `mob` could ever roll: the top level, the hard profile, every roll a yes. */
 function eligibilityOf(mob: Mob): readonly TacticsTrait[] {

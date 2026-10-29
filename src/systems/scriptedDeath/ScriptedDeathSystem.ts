@@ -1,8 +1,10 @@
 import { TILE_SIZE } from '../../core/constants';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
+import type { NonEmpty } from '../../dialog/line';
 import type { CutsceneDirector } from '../cutscene/CutsceneDirector';
 import type { CutscenePoint } from '../cutscene/cutsceneCamera';
+import type { CutsceneScript } from '../cutscene/cutsceneSteps';
 import type { ScriptedDeathKind } from './scriptedDeathKinds';
 import { SCRIPTED_DEATHS } from './scriptedDeaths';
 
@@ -11,6 +13,19 @@ import { SCRIPTED_DEATHS } from './scriptedDeaths';
  * ticking down before this system's update cannot open a one-frame gap.
  */
 const INVULNERABILITY_MARGIN_FRAMES = 1;
+
+/** One crawler a death takes, and the world point (pixels) its animation is centred on. */
+export interface ScriptedDeathVictim {
+  readonly victim: HumanPlayer | CatPlayer;
+  readonly at: CutscenePoint;
+}
+
+/** What the system needs from the scene it plays in. */
+export interface ScriptedDeathDeps {
+  readonly cutscenes: Pick<CutsceneDirector, 'play'>;
+  /** Throws one heavy burst of blood from a world point (pixels) along a direction. */
+  readonly spawnGore: (x: number, y: number, dx: number, dy: number) => void;
+}
 
 interface PlayingDeath {
   readonly kind: ScriptedDeathKind;
@@ -30,7 +45,7 @@ interface PlayingDeath {
  * again, a decal is left, and after the def's delay the victim dies through
  * {@link HumanPlayer.dieScripted}, which no dodge, ward or 9 Lives stops. The
  * scene's ordinary death check then raises the death screen with the def's
- * cause, and the run goes back to its last save like any other death.
+ * cause, and the run goes wherever the death screen sends that cause.
  *
  * Everything advances on world ticks only, so the whole death holds under the
  * pause menu. A death rewind calls {@link reset}.
@@ -41,7 +56,7 @@ interface PlayingDeath {
 export class ScriptedDeathSystem {
   private readonly playing: PlayingDeath[] = [];
 
-  constructor(private readonly cutscenes: Pick<CutsceneDirector, 'play'>) {}
+  constructor(private readonly deps: ScriptedDeathDeps) {}
 
   /**
    * Plays `kind` on `victim` at `at`, the world point (pixels) where the
@@ -49,19 +64,51 @@ export class ScriptedDeathSystem {
    * taken is left to the death under way.
    */
   play(kind: ScriptedDeathKind, victim: HumanPlayer | CatPlayer, at: CutscenePoint): void {
-    if (this.playing.some((death) => death.victim === victim)) return;
+    this.playTogether(kind, [{ victim, at }], null);
+  }
+
+  /**
+   * Plays `kind` on every one of `victims` at once, in one cutscene, so they
+   * swell, burst and die on the same ticks. `leadIn`, when given, is a
+   * cutscene played first: the deaths start the moment it ends, and the
+   * victims are already beyond harm while it plays. A victim already being
+   * taken is left to the death under way.
+   */
+  playTogether(
+    kind: ScriptedDeathKind,
+    victims: NonEmpty<ScriptedDeathVictim>,
+    leadIn: CutsceneScript | null,
+  ): void {
+    const deaths: PlayingDeath[] = [];
+    for (const { victim, at } of victims) {
+      if (this.playing.some((death) => death.victim === victim)) continue;
+      const death: PlayingDeath = { kind, victim, at: { x: at.x, y: at.y }, frame: null };
+      this.playing.push(death);
+      this.holdOffOtherHarm(death);
+      deaths.push(death);
+    }
+    if (deaths.length === 0) return;
+    // Queued back to back, so nothing asked for meanwhile can play between them.
+    if (leadIn !== null) this.deps.cutscenes.play(leadIn);
     const def = SCRIPTED_DEATHS[kind];
-    const death: PlayingDeath = { kind, victim, at: { x: at.x, y: at.y }, frame: null };
-    this.playing.push(death);
-    this.holdOffOtherHarm(death);
-    this.cutscenes.play(
+    this.deps.cutscenes.play(
       [
-        { kind: 'sound', cue: def.cue, at: null },
-        { kind: 'wait', frames: def.deathDelayFrames },
+        { kind: 'wait', frames: def.cue.atFrame },
+        { kind: 'sound', cue: def.cue.sound, at: null },
+        { kind: 'wait', frames: def.deathDelayFrames - def.cue.atFrame },
       ],
-      () => this.finish(death),
-      () => this.start(death),
+      () => {
+        for (const death of deaths) this.finish(death);
+      },
+      () => {
+        for (const death of deaths) this.start(death);
+      },
     );
+  }
+
+  /** Whether a death of `kind` has been asked for and not yet rewound or spared. */
+  isPlaying(kind: ScriptedDeathKind): boolean {
+    return this.playing.some((death) => death.kind === kind);
   }
 
   /** Whether `crawler` has been taken and must not be drawn. */
@@ -78,6 +125,9 @@ export class ScriptedDeathSystem {
     for (const death of this.playing) {
       if (death.frame !== null) death.frame++;
       this.holdOffOtherHarm(death);
+      if (death.frame === SCRIPTED_DEATHS[death.kind].animation.takenAtFrame) {
+        this.throwGore(death);
+      }
     }
   }
 
@@ -99,6 +149,16 @@ export class ScriptedDeathSystem {
       const animation = SCRIPTED_DEATHS[death.kind].animation;
       if (death.frame >= animation.frames) continue;
       animation.paint(ctx, death.frame, death.at.x - camX, death.at.y - camY, TILE_SIZE);
+    }
+  }
+
+  /** The def's blood, thrown from the victim's body on the tick they are taken. */
+  private throwGore(death: PlayingDeath): void {
+    const gore = SCRIPTED_DEATHS[death.kind].gore;
+    if (gore === null) return;
+    const fromY = death.at.y - gore.riseTiles * TILE_SIZE;
+    for (const burst of gore.bursts) {
+      this.deps.spawnGore(death.at.x, fromY, burst.dx, burst.dy);
     }
   }
 

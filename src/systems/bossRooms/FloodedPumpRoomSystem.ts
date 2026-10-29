@@ -85,6 +85,8 @@ import {
 } from './floodedPumpRoom/sharkModel';
 import { sharkWatchRect } from './floodedPumpRoom/sharkWatch';
 import type { WorldRect } from '../../core/rendering/worldRect';
+import { feetPointPx, tileUnderFeet } from '../../map/collisionAnchors';
+import { isStandingInWater } from '../GameLoopPhases';
 import { InertBossRoomDressing } from './InertBossRoomDressing';
 
 const SWAP_IN_WATER_REFUSAL = "You can't switch crawlers in the water.";
@@ -295,6 +297,19 @@ function tileUnder(body: { readonly x: number; readonly y: number }): TilePoint 
 }
 
 /**
+ * Where a crawler stands, in world tiles: {@link feetPointPx}, the one point
+ * every raft, water and slam-footprint question in the room is put at.
+ */
+function feetTilesOf(body: { readonly x: number; readonly y: number }): TileVec {
+  const feet = feetPointPx(body, TILE_SIZE);
+  return { x: feet.x / TILE_SIZE, y: feet.y / TILE_SIZE };
+}
+
+function tileUnderFeetOf(body: { readonly x: number; readonly y: number }): TilePoint {
+  return tileUnderFeet(body, TILE_SIZE);
+}
+
+/**
  * The Kraken's flooded pump room on floor 1: the corridor's barrels, the
  * intro, the water, the rafts and their tentacles, the shark, the pumps and
  * the drain. The Kraken herself is her own creature; the room tells her when
@@ -333,9 +348,10 @@ export class FloodedPumpRoomSystem
   private readonly pumps: Record<PumpWall, Pump>;
   private pumpsMarked = false;
   /**
-   * A pump shut off and the run's save is owed it, until the scene and the
-   * party allow one. Dropped once the room has moved past `flooded`: by then
-   * the room has a fight the pump save was never meant to rebuild.
+   * The run's save is owed the room — for its intro handing over, or for a
+   * pump shut off — until the scene and the party allow one. Dropped once the
+   * room has moved past `flooded`: by then the room has a fight the pump save
+   * was never meant to rebuild.
    */
   private owedPumpSave = false;
 
@@ -573,7 +589,7 @@ export class FloodedPumpRoomSystem
     }
     for (const tentacle of this.liveTentacles.values()) tentacle.quarry = active;
     this.noteKilledTentacles();
-    const platform = platformAt(this.layout, tileUnder(active));
+    const platform = platformAt(this.layout, tileUnderFeetOf(active));
     const inWater = this.isInRoomWater(active);
 
     if (this.trackedCrawler !== active) {
@@ -589,7 +605,7 @@ export class FloodedPumpRoomSystem
     this.wasInWater = inWater;
     const wasFeeding = this.shark.mode.kind === 'feeding';
     this.moveShark(
-      inWater ? { kind: 'hunt', prey: centreTilesOf(active) } : this.guardSense(active),
+      inWater ? { kind: 'hunt', prey: feetTilesOf(active) } : this.guardSense(active),
       active,
     );
     if (!wasFeeding && this.shark.mode.kind === 'feeding') this.takeCrawler(active);
@@ -708,8 +724,8 @@ export class FloodedPumpRoomSystem
   }
 
   private guardedPlatform(active: Crawler): PlatformId {
-    const under = platformAt(this.layout, tileUnder(active));
-    return under?.id ?? this.lastPlatform ?? nearestPlatform(this.layout, centreTilesOf(active)).id;
+    const under = platformAt(this.layout, tileUnderFeetOf(active));
+    return under?.id ?? this.lastPlatform ?? nearestPlatform(this.layout, feetTilesOf(active)).id;
   }
 
   /**
@@ -748,12 +764,15 @@ export class FloodedPumpRoomSystem
     this.tentacleGuarding(this.lastPlatform)?.whip(active);
   }
 
-  /** Whether `body` is in the room's water: inside it, wading, and on no float. */
+  /**
+   * Whether `body` is in the room's water: their feet inside the room, on no
+   * float, and wading by the same test that draws them sunk in it.
+   */
   private isInRoomWater(body: Crawler): boolean {
-    const tile = tileUnder(body);
+    const tile = tileUnderFeetOf(body);
     if (!rectContainsTile(this.bounds, tile.x, tile.y)) return false;
     if (platformAt(this.layout, tile) !== null) return false;
-    return this.gameMap.isWadeable(tile.x, tile.y);
+    return isStandingInWater(body, this.gameMap);
   }
 
   /**
@@ -762,7 +781,7 @@ export class FloodedPumpRoomSystem
    * always is, so the jaws never come up through a raft.
    */
   private takeCrawler(victim: Crawler): void {
-    const prey = centreTilesOf(victim);
+    const prey = feetTilesOf(victim);
     const fin = this.shark.at;
     const midpoint = { x: (prey.x + fin.x) * HALF, y: (prey.y + fin.y) * HALF };
     const midpointTile = { x: Math.floor(midpoint.x), y: Math.floor(midpoint.y) };
@@ -835,9 +854,13 @@ export class FloodedPumpRoomSystem
   }
 
   /**
-   * Every pump shut off is the run's save, so a death in the water costs the
-   * party the crossing they are on, not the pumps already done. The party
-   * comes back on the landing, the one way a flooded room is ever entered.
+   * The room saves the run as the fight begins, when the intro hands over to
+   * the flood, and again at every pump shut off. A death anywhere in the
+   * fight therefore comes back to the landing raft with the fight as it
+   * stood: no pumps if none were done, the banked ones if some were. Without
+   * the first save, a death before any pump would return to whatever the run
+   * last saved outside the room. The party always comes back on the landing,
+   * the one way a flooded room is ever entered.
    */
   private bankPumpProgress(active: Crawler): void {
     if (!this.owedPumpSave) return;
@@ -868,7 +891,7 @@ export class FloodedPumpRoomSystem
 
   /** The pumps whose raft `player` stands on, the only place a valve is hauled from. */
   private pumpsMooredUnder(player: Crawler): PumpWall[] {
-    const tile = tileUnder(player);
+    const tile = tileUnderFeetOf(player);
     return PUMP_WALLS.filter((wall) =>
       rectContainsTile(this.layout.pumps[wall].rect, tile.x, tile.y),
     );
@@ -1116,7 +1139,9 @@ export class FloodedPumpRoomSystem
       return;
     }
     stage.playCutscene(this.introScript(), () => {
-      if (this.state.kind === 'intro_cutscene') this.transition({ kind: 'flooded' });
+      if (this.state.kind !== 'intro_cutscene') return;
+      this.transition({ kind: 'flooded' });
+      this.owedPumpSave = true;
     });
   }
 
@@ -1228,7 +1253,7 @@ export class FloodedPumpRoomSystem
   }
 
   override getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
-    const body = centreTilesOf({ x, y });
+    const body = feetTilesOf({ x, y });
     for (const tentacle of this.liveTentacles.values()) {
       const mark = tentacle.slamMark;
       if (mark === null) continue;

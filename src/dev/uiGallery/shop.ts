@@ -145,8 +145,8 @@ function stallMenu(): ShopMenu {
       },
       item('health_potion', 'Health Potion', STALL_PRICES.potion, 'Restores 50% max HP', null),
       item(
-        'goblin_dynamite',
-        'Goblin Dynamite',
+        'dynamite',
+        'Dynamite',
         STALL_PRICES.dynamite,
         'Throw for AoE damage',
         GATE_LOCKED_LABEL,

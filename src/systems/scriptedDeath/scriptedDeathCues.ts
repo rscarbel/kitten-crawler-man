@@ -5,13 +5,14 @@
  * it is switched over.
  *
  * Every take must sit in a preload group of each floor a death can play on:
- * the shark's bite is in `level1`, the only floor with a shark.
+ * the shark's bite is in `level1`, the only floor with a shark, and the time
+ * limit's splats are `universal`, since any timed floor can end in one.
  */
 
 import type { CueSlot } from '../../audio/cueSlot';
 
-/** The recordings the slots are waiting for; none, while every death has its own. */
-type WantedScriptedDeathSound = never;
+/** The recordings the slots are waiting for. */
+type WantedScriptedDeathSound = 'caroline_detonation_burst';
 
 export const SCRIPTED_DEATH_CUES = {
   /**
@@ -20,4 +21,9 @@ export const SCRIPTED_DEATH_CUES = {
    * 0.4 s, on `SHARK_ATTACK_TAKEN_FRAME`.
    */
   sharkBreachBite: { takes: ['shark_breach_bite'] },
+  /** Both crawlers bursting at once as Caroline ends them for running out of time. */
+  timeLimitDetonationBurst: {
+    takes: ['splat_1', 'splat_2', 'splat_3'],
+    standInFor: 'caroline_detonation_burst',
+  },
 } as const satisfies Record<string, CueSlot<WantedScriptedDeathSound>>;

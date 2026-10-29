@@ -3,7 +3,7 @@
  *
  * Evasiveness approaches a per-crawler soft limit: each point is worth less
  * than the last, and points past about a hundred spent return very little.
- * Flat bonuses (gear, Cat-like Reflexes) land after the curve, so gear can
+ * Flat bonuses (gear, Warp Speed) land after the curve, so gear can
  * carry a crawler past her soft limit — but never past the hard ceiling,
  * which is what keeps anything able to hit her at all.
  */

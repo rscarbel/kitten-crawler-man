@@ -3,17 +3,31 @@
  * difficulty change would invalidate part-way through.
  *
  * A system that is mid-run registers a guard; the Settings tab asks
- * {@link activeDifficultyChangeGuard} at click time and, when one is active,
- * asks the player to confirm before handing the new tier to the guard. The
- * question is asked at click time, never when the tab is built, so a guard
- * registered after the pause menu was constructed is still honoured.
+ * {@link activeDifficultyChangeGuard} at click time and, when one is active
+ * and its {@link DifficultyChangeGuard.confirmation} has something to say
+ * about the new tier, asks the player to confirm before handing the tier to
+ * the guard. The question is asked at click time, never when the tab is
+ * built, so a guard registered after the pause menu was constructed is still
+ * honoured.
  *
  * Only one guard is held at a time: the latest registration wins.
  */
 
 import type { Difficulty } from './difficultyProfiles';
 
+/** What the player is asked before a guarded difficulty change goes ahead. */
+export interface DifficultyChangeConfirmation {
+  readonly title: string;
+  readonly body: string;
+}
+
 export interface DifficultyChangeGuard {
+  /**
+   * What to ask before changing to `next`, or null when that change disturbs
+   * nothing this guard protects and goes straight through as an ordinary
+   * change. Asked only for a tier that differs from the current one.
+   */
+  readonly confirmation: (next: Difficulty) => DifficultyChangeConfirmation | null;
   /**
    * Performs a confirmed difficulty change. Called at most once per
    * confirmation, only with a tier that differs from the current one, and only

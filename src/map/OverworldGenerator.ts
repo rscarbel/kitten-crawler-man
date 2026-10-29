@@ -568,7 +568,7 @@ export function generateOverworld(size: number): OverworldData {
     // Classified off the finished grid, so every tree any pass planted counts.
     hallwaySpawnPoints: reachableSpawnPoints.map((point) => ({
       ...point,
-      terrain: classifySpawnTerrain(grid, point.x, point.y),
+      terrain: classifySpawnTerrain(grid.cells, point.x, point.y),
     })),
     stairwellTiles: [],
     mainTowerAnchor,

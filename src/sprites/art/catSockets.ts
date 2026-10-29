@@ -318,19 +318,25 @@ export function catGripOf(look: HeldVisualDef): CatGripArchetype | null {
 }
 
 /**
- * Looks she carries end for end from the way the human holds them: the
- * bomb's iron ball sits behind the neck a hand closes on, so held as he holds
- * it the ball rides above her nose; turned, it hangs below her jaws.
+ * Looks she carries end for end from the way the human holds them: a bomb's
+ * iron ball or clay pot sits behind the neck a hand closes on, so held as he
+ * holds it the ball rides above her nose; turned, it hangs below her jaws.
  */
-const TURNED_IN_JAWS: ReadonlySet<HeldVisualId> = new Set<HeldVisualId>(['prop_black_powder_bomb']);
+const TURNED_IN_JAWS: ReadonlySet<HeldVisualId> = new Set<HeldVisualId>([
+  'prop_black_powder_bomb',
+  'prop_smoke_bomb',
+]);
 
 /**
  * Looks drawn in her jaws with her own light outline round them: the bomb's
  * black iron is lost against her dark coat without one, and its lit fuse is
- * all that shows, where it reads as a glowing eye.
+ * all that shows, where it reads as a glowing eye. The smoke bomb's fired
+ * clay is near the hue of her rust and ginger patches and melts into them
+ * without one.
  */
 const OUTLINED_IN_JAWS: ReadonlySet<HeldVisualId> = new Set<HeldVisualId>([
   'prop_black_powder_bomb',
+  'prop_smoke_bomb',
 ]);
 
 /** Whether `look` is drawn in her jaws with her outline round it. */

@@ -3,8 +3,8 @@
  *
  * Lives in the map layer rather than in `SafeRoomSystem` because two things
  * need it and the dependency has to run one way: `SafeRoomSystem` places the
- * bed and the tile Dave arrives on here, and `safeRoomCounterLayout` has to
- * keep the Bopca's counter off the same tiles. The map layer has no other
+ * bed and the tile Dave arrives on here, and `safeRoomClinicLayout` has to
+ * keep the doctor's corner off the same tiles. The map layer has no other
  * dependency on `src/systems`, and pulling one in would drag both player
  * classes along with it.
  */
@@ -35,8 +35,8 @@ export function guideAndBedTiles(
 }
 
 /**
- * Whether a safe room is a special room's field station rather than a Bopca
- * station: no counter, no Bopca, no furnishings and no bed. Asked explicitly
+ * Whether a safe room is a special room's field station rather than an
+ * ordinary safe room: no doctor, no cabinet, no furnishings and no bed. Asked explicitly
  * by every planner rather than left to their size minimums, which a station
  * could outgrow.
  */

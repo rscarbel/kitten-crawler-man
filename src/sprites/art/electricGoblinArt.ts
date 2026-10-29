@@ -44,6 +44,7 @@ import {
   type Ramp,
   type Skeleton,
 } from './goblinArt';
+import { BLACK_RUBBER, MUSTARD_RUBBER } from './insulatedRubber';
 import { withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -52,28 +53,6 @@ const HALF = 0.5;
 const QUARTER = 0.25;
 
 // ── Materials ────────────────────────────────────────────────────────────────
-
-/**
- * Mustard insulating rubber, the lineman's colour: warm and pale enough to part
- * from the lime skin and from every dungeon floor, and far from the cool cyan
- * of the electricity so the light always reads as light.
- */
-const RUBBER: Ramp = {
-  shadow: '#3b2a07',
-  dark: '#6d4f10',
-  mid: '#a87d1a',
-  light: '#d3a838',
-  rim: '#f2d67c',
-};
-
-/** Black rubber: boots, gauntlet cuffs, knee pads, the rod grips and the skullcap. */
-const BLACK_RUBBER: Ramp = {
-  shadow: '#08090b',
-  dark: '#15171b',
-  mid: '#24272d',
-  light: '#3a3e46',
-  rim: '#6d737e',
-};
 
 /** Gunmetal for the generator housing and the rod shafts. */
 const STEEL: Ramp = {
@@ -203,10 +182,10 @@ function drawRubberCoat(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
   const t = p.torsoLength;
   const span = (p.hipHalfWidth + p.bellyBulge) * COAT_REACH;
-  ctx.fillStyle = RUBBER.mid;
+  ctx.fillStyle = MUSTARD_RUBBER.mid;
   ctx.fillRect(-span, -t * COAT_REACH, span * 2, t * COAT_REACH * 2);
 
-  ctx.fillStyle = RUBBER.light;
+  ctx.fillStyle = MUSTARD_RUBBER.light;
   ctx.beginPath();
   ctx.moveTo(p.shoulderHalfWidth * COAT_LIT.backX, -t * COAT_REACH);
   ctx.lineTo(p.shoulderHalfWidth * COAT_LIT.frontX, -t * COAT_REACH);
@@ -220,7 +199,7 @@ function drawRubberCoat(ctx: Ctx, style: GoblinStyle): void {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = RUBBER.dark;
+  ctx.fillStyle = MUSTARD_RUBBER.dark;
   ctx.beginPath();
   ctx.moveTo(-span, t * COAT_TERMINATOR.backY + t);
   ctx.quadraticCurveTo(
@@ -237,9 +216,9 @@ function drawRubberCoat(ctx: Ctx, style: GoblinStyle): void {
 
   for (const seam of COAT_SEAMS) {
     const y = -t * seam;
-    ctx.fillStyle = RUBBER.shadow;
+    ctx.fillStyle = MUSTARD_RUBBER.shadow;
     ctx.fillRect(-span, y, span * 2, COAT_SEAM_WIDTH);
-    ctx.fillStyle = rgba(RUBBER.rim, HALF);
+    ctx.fillStyle = rgba(MUSTARD_RUBBER.rim, HALF);
     ctx.fillRect(-span, y - t * COAT_SEAM_LIP, span * 2, COAT_SEAM_WIDTH * HALF);
   }
 
@@ -256,7 +235,7 @@ function drawRubberCoat(ctx: Ctx, style: GoblinStyle): void {
   plate();
   ctx.fill();
   withClip(ctx, plate, () => {
-    ctx.strokeStyle = RUBBER.light;
+    ctx.strokeStyle = MUSTARD_RUBBER.light;
     ctx.lineWidth = HAZARD_STRIPE_WIDTH;
     const left = p.shoulderHalfWidth * CHEST_PLATE.back;
     const width = p.shoulderHalfWidth * (CHEST_PLATE.front - CHEST_PLATE.back) * 2;
@@ -290,7 +269,7 @@ function drawBeltAndSeat(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
   const t = p.torsoLength;
   const h = p.hipHalfWidth;
-  ctx.fillStyle = RUBBER.dark;
+  ctx.fillStyle = MUSTARD_RUBBER.dark;
   ctx.beginPath();
   ctx.ellipse(
     h * (SEAT.back + SEAT.front) * HALF,
@@ -354,7 +333,7 @@ function drawRubberLeg(ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: boo
   const legWidth = style.proportions.legWidth;
   const footHeight = style.proportions.footHeight;
   const half = (legWidth * TROUSER_WIDTH) / 2;
-  const fill = near ? RUBBER.mid : RUBBER.dark;
+  const fill = near ? MUSTARD_RUBBER.mid : MUSTARD_RUBBER.dark;
   fillCapsule(ctx, chain.anchor, chain.joint, half, half * TROUSER_KNEE, fill);
   fillCapsule(
     ctx,
@@ -372,7 +351,7 @@ function drawRubberLeg(ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: boo
       lit(mixPt(chain.anchor, chain.joint, SHEEN.to)),
       half * SHEEN.rootWidth,
       half * SHEEN.endWidth,
-      RUBBER.light,
+      MUSTARD_RUBBER.light,
     );
   }
 
@@ -467,14 +446,14 @@ function paintBoot(ctx: Ctx, style: GoblinStyle, near: boolean): void {
   withClip(ctx, trace, () => {
     ctx.fillStyle = near ? ramp.light : ramp.mid;
     ctx.fillRect(heel, -sole * BOOT.toeCapRise * 2, (toe - heel) * HALF, sole * BOOT.ankleRise);
-    ctx.fillStyle = RUBBER.dark;
+    ctx.fillStyle = MUSTARD_RUBBER.dark;
     ctx.fillRect(
       heel,
       sole * (1 - BOOT.soleDepth * 2),
       toe - heel + sole,
       sole * BOOT.soleDepth * 2,
     );
-    ctx.fillStyle = RUBBER.light;
+    ctx.fillStyle = MUSTARD_RUBBER.light;
     ctx.fillRect(
       heel,
       sole * (1 - BOOT.soleDepth * 2),
@@ -496,7 +475,7 @@ const GAUNTLET_FLARE_WIDTH = 1.75;
 
 function drawRubberSleeve(ctx: Ctx, chain: BoneChain, width: number, near: boolean): void {
   const half = (width * SLEEVE_WIDTH) / 2;
-  const fill = near ? RUBBER.mid : RUBBER.dark;
+  const fill = near ? MUSTARD_RUBBER.mid : MUSTARD_RUBBER.dark;
   fillCapsule(ctx, chain.anchor, chain.joint, half, half, fill);
   fillCapsule(ctx, chain.joint, chain.end, half, half * SLEEVE_WRIST_TAPER, fill);
   if (near) {
@@ -507,7 +486,7 @@ function drawRubberSleeve(ctx: Ctx, chain: BoneChain, width: number, near: boole
       lit(mixPt(chain.anchor, chain.joint, SHEEN.to)),
       half * SHEEN.rootWidth,
       half * SHEEN.endWidth,
-      RUBBER.light,
+      MUSTARD_RUBBER.light,
     );
   }
   ctx.fillStyle = near ? BLACK_RUBBER.mid : BLACK_RUBBER.dark;

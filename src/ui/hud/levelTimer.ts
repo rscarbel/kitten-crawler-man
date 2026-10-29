@@ -1,7 +1,9 @@
 /**
- * The level's collapse timer — a card in the top band on a roomy screen, a
- * chip beside the coin pill on a compact one — and the audible cues it owes
- * as it crosses each warning tier.
+ * The floor's Nightmare time limit — a card in the top band on a roomy
+ * screen, a chip beside the coin pill on a compact one — and the audible cues
+ * it owes as it crosses each warning tier. Both show only on Nightmare; the
+ * scene decides that (`nightmareTimeRemaining`) and hands over nothing
+ * otherwise.
  *
  * Urgency grows through colour, weight and pulse rather than size: amber at
  * ten minutes, red and throbbing at five, and in the final minute a pulsing
@@ -126,7 +128,7 @@ function chipOpacity(ui: Ui, model: LevelTimerModel, totalSeconds: number): numb
 }
 
 /**
- * The collapse timer as one pill-shaped line — a clock glyph and the time —
+ * The time limit as one pill-shaped line — a clock glyph and the time —
  * drawn from `slot`'s top-left corner and sized to its reading. Returns the
  * drawn chip.
  */
@@ -164,7 +166,7 @@ export function levelTimerChip(ui: Ui, slot: Rect, model: LevelTimerModel): Rect
   return chip;
 }
 
-/** The collapse timer's card for `timerFrames` left on the clock. */
+/** The time limit's card for `timerFrames` left on the clock. */
 export function levelTimerEntry(timerFrames: number, paused: boolean): TopBandEntry {
   const totalSeconds = secondsShown(timerFrames);
   const clock = clockText(totalSeconds);

@@ -1,4 +1,3 @@
-import type { SoundId } from '../audio/sounds';
 import type { AudioManager } from '../audio/AudioManager';
 import { TILE_SIZE } from '../core/constants';
 import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
@@ -10,14 +9,17 @@ import { DAVE_SPEAKER_REF } from '../dialog/scripts/dave';
 import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
 import type { TilePoint } from '../map/town/townPlan';
 import {
-  DAVE_TELEPORT_IN_FRAMES,
-  DAVE_TELEPORT_OUT_FRAMES,
   DAVE_TILES_PER_WALK_CYCLE,
   daveHeadTop,
   drawDaveSprite,
   prewarmDaveSprite,
-  type DaveTeleportDraw,
 } from '../sprites/daveSprite';
+import {
+  TELEPORT_IN_FRAMES,
+  TELEPORT_OUT_FRAMES,
+  TELEPORT_SOUNDS,
+  type TeleportDraw,
+} from '../sprites/teleportEffect';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../sprites/questBeacon';
@@ -51,12 +53,6 @@ const WAITING_BOUNDS_SPAN_TILES = WAITING_BOUNDS_MARGIN_TILES * 2 + 1;
 
 /** Clear air between the top of his hair and the tip of the "…" bubble's tail, as a share of a tile so it holds at every zoom. */
 const DAVE_BUBBLE_GAP_TILES = 0.0625;
-
-/** What his arrival and his departure sound like. */
-const DAVE_TELEPORT_SOUNDS = {
-  in: 'dave_teleport_in',
-  out: 'dave_teleport_out',
-} as const satisfies Record<DaveTeleportDraw['direction'], SoundId>;
 
 /** Tiles from where he stands within which a press talks to him. */
 export const DAVE_NEAR_DISTANCE_TILES = 2.5;
@@ -284,7 +280,7 @@ export class DaveGuideSystem {
     switch (visit.phase.kind) {
       case 'teleportingIn': {
         const elapsedFrames = visit.phase.elapsedFrames + 1;
-        if (elapsedFrames < DAVE_TELEPORT_IN_FRAMES) {
+        if (elapsedFrames < TELEPORT_IN_FRAMES) {
           visit.phase = { kind: 'teleportingIn', elapsedFrames };
           return;
         }
@@ -304,7 +300,7 @@ export class DaveGuideSystem {
         return;
       case 'teleportingOut': {
         const elapsedFrames = visit.phase.elapsedFrames + 1;
-        if (elapsedFrames < DAVE_TELEPORT_OUT_FRAMES) {
+        if (elapsedFrames < TELEPORT_OUT_FRAMES) {
           visit.phase = { kind: 'teleportingOut', elapsedFrames };
           return;
         }
@@ -329,7 +325,7 @@ export class DaveGuideSystem {
     if (placement === null) return;
     this.standIn(placement.id, placement, { kind: 'teleportingIn', elapsedFrames: 0 });
     const at = this.worldCentre(placement.home);
-    this.deps.audio?.playAt(DAVE_TELEPORT_SOUNDS.in, at.x, at.y);
+    this.deps.audio?.playAt(TELEPORT_SOUNDS.in, at.x, at.y);
   }
 
   private standIn(room: SafeRoomId | null, placement: StandPlacement, phase: DavePhase): void {
@@ -361,7 +357,7 @@ export class DaveGuideSystem {
       return;
     }
     visit.phase = { kind: 'teleportingOut', elapsedFrames: 0 };
-    this.deps.audio?.playAt(DAVE_TELEPORT_SOUNDS.out, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+    this.deps.audio?.playAt(TELEPORT_SOUNDS.out, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
   }
 
   private isOnScreen(worldX: number, worldY: number): boolean {
@@ -509,7 +505,7 @@ export class DaveGuideSystem {
 
   /**
    * How far `entity` stands from him in tiles while in talk range, or null —
-   * for choosing between him and the Bopca when both could hear a press. Talk
+   * for choosing between him and the doctor when both could hear a press. Talk
    * range is measured from where he stands, not from his arrival tile.
    */
   talkDistanceTiles(entity: { x: number; y: number }): number | null {
@@ -557,7 +553,7 @@ export class DaveGuideSystem {
     return speechBubbleOriginAbove(bubbleBottom, ts);
   }
 
-  private teleportDraw(phase: DavePhase): DaveTeleportDraw | null {
+  private teleportDraw(phase: DavePhase): TeleportDraw | null {
     switch (phase.kind) {
       case 'teleportingIn':
         return { direction: 'in', elapsedFrames: phase.elapsedFrames };
@@ -575,16 +571,10 @@ export class DaveGuideSystem {
   /**
    * Dave, as a figure for the scene's Y-sorted pass.
    *
-   * He is *not* drawn with the room's fixtures, and the Bopca's counter is why.
-   * That counter's front face is repainted after the world pass so it occludes
-   * the cook standing behind it, which means anything drawn in the world pass
-   * is behind the counter too. The players avoid that by being in the sorted
-   * pass; putting him there gives him the same depth against the counter, the
-   * table, the stove and the braziers.
-   *
-   * Always drawing over the counter is not merely parity, it is correct: the run
-   * is stamped against the room's north wall and its own tiles are reserved, so
-   * there is no floor he can reach that is behind it.
+   * He is *not* drawn with the room's fixtures: he walks among the table, the
+   * stove, the braziers and the doctor's cabinet, and the sorted pass gives him
+   * the same depth against them as the players — against the cabinet too,
+   * whichever row of the corner it was stamped on.
    */
   sortedRenderables(
     active: { x: number; y: number },
@@ -635,9 +625,9 @@ export class DaveGuideSystem {
    * His `Talk` world prompt.
    *
    * `suppressWorldPrompt` exists because a safe room holds two things worth
-   * pressing Space at — Dave and the Bopca's counter — and in a small room
-   * both can be in range at once. The scene silences this prompt when the
-   * counter has the press; without it the player saw two `Talk` prompts and
+   * pressing Space at — Dave and the doctor — and in a small room both can be
+   * in range at once. The scene silences this prompt when the doctor has the
+   * press; without it the player saw two `Talk` prompts and
    * only one of them did anything.
    */
   renderUI(

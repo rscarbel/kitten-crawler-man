@@ -385,8 +385,8 @@ export class RockGolem extends Mob {
       damage: this.scaledDamage(THROW_DAMAGE),
       mobType: this.mobType,
       // Carried unconditionally and deduplicated by the system: the interesting
-      // case is a target that is neither player — a mob made hostile by Vespa
-      // acid — which nothing else would tell the projectile about.
+      // case is a target that is neither player — a mob turned on it by a gravedigger
+      // beetle's attack — which nothing else would tell the projectile about.
       aimedAt: target,
       thrower: this,
       // A wild golem is nobody's ally, so the shot stays hostile to everything.

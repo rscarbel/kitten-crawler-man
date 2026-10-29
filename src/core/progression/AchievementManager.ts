@@ -122,7 +122,7 @@ function dungeonKillsDescription(kills: number): string {
 export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> = {
   first_kill: {
     id: 'first_kill',
-    name: 'Off the Mark',
+    name: 'First Kill',
     description: 'Kill your first monster.',
     playerType: 'both',
     reward: { rarity: 'Common' },
@@ -218,10 +218,10 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
       fixed: [{ kind: 'item', id: 'lucky_penny', quantity: 1, to: 'cat' }],
     },
   },
-  down_the_hatch: {
-    id: 'down_the_hatch',
-    name: 'Down the Hatch',
-    description: 'Descend into the dungeon for the first time.',
+  entered_dungeon: {
+    id: 'entered_dungeon',
+    name: 'The chosen one',
+    description: 'Become chosen by the world dominating AI to embark on a journey',
     playerType: 'both',
     reward: {
       rarity: 'Common',
@@ -270,7 +270,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     reward: {
       rarity: 'Common',
       fixed: [
-        { kind: 'item', id: 'goblin_dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS },
+        { kind: 'item', id: 'dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS },
         { kind: 'item', id: 'hazard_goggles', quantity: 1, to: 'human' },
       ],
     },
@@ -283,7 +283,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     reward: {
       rarity: 'Uncommon',
       fixed: [
-        { kind: 'item', id: 'goblin_dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS },
+        { kind: 'item', id: 'dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS },
         { kind: 'item', id: 'explosives_handling_tome', quantity: 1 },
       ],
     },

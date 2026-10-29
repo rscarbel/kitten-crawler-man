@@ -58,7 +58,7 @@
  *   and frames it.
  * - `--x`, `--y`, `--w`, `--h` (tiles) override whatever the framing chose.
  *
- * The framings that exist to show a prop — a station's counter run, a sign, the
+ * The framings that exist to show a prop — a station's doctor's corner, a sign, the
  * nursery's doorway, the lab — turn `--props` on by themselves.
  *
  * `--scale=N` multiplies the output; `--out=path` names it.
@@ -78,7 +78,7 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap, type QuestExitDoorState } from '../src/map/GameMap.js';
 import { CRAWLER_SIGN } from '../src/map/tileTypes.js';
 import { renderCanvas } from '../src/map/TileRenderer.js';
-import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
+import { stampSafeRoomClinics } from '../src/map/safeRoomClinicLayout.js';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
 import { type Point, type Rect } from '../src/map/roomDoorways.js';
 import { type RoomRegion } from '../src/map/regionMap.js';
@@ -262,7 +262,7 @@ const gameMap = tutorialRequested
     });
 
 // The other framings are the rooms whose contents are decided by the generator
-// rather than by a tile painter — a station's counter run, the nursery's
+// rather than by a tile painter — a station's doctor's corner, the nursery's
 // doorways and its grates, the lab's scientist standing in his own doorway — and
 // every one of them is a question only a framed screenshot answers.
 const safeRoom = flag('safe-room') ? gameMap.safeRooms[0] : undefined;
@@ -310,11 +310,11 @@ if (signKind !== '' && framedSign === undefined) {
   throw new Error(`this map has no ${signKind} sign; try another --seed`);
 }
 
-// The generator lays the room; `DungeonScene` stamps the counter run and the
+// The generator lays the room; `DungeonScene` stamps the doctor's cabinet and the
 // furnishings on entering the floor. A harness that skipped them framed an empty
 // station, which is the one thing a station screenshot is not for.
 if (safeRoom !== undefined || tutorialRequested) {
-  stampSafeRoomCounters(gameMap);
+  stampSafeRoomClinics(gameMap);
   stampSafeRoomDecor(gameMap);
 }
 

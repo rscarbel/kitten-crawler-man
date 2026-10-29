@@ -28,8 +28,7 @@ import {
   FENCE,
   MODERN_DECORATION,
   WALKABLE_MODERN_DECORATION_VARIANTS,
-  SAFE_ROOM_COUNTER,
-  SAFE_ROOM_COUNTER_BACK,
+  SAFE_ROOM_MEDICINE_CABINET,
   SAFE_ROOM_MENU_BOARD,
   SAFE_ROOM_HERB_RACK,
   SAFE_ROOM_BANNER,
@@ -130,10 +129,9 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   TENT_POLE,
   TOWN_WALL,
   FENCE,
-  SAFE_ROOM_COUNTER,
-  SAFE_ROOM_COUNTER_BACK,
-  // The safe room's furnishings. `SAFE_ROOM_RUG` is deliberately absent — a
-  // runner is walkable ground decoration, not furniture.
+  // The doctor's medicine cabinet and the safe room's furnishings. `SAFE_ROOM_RUG` is
+  // deliberately absent — a runner is walkable ground decoration, not furniture.
+  SAFE_ROOM_MEDICINE_CABINET,
   SAFE_ROOM_MENU_BOARD,
   SAFE_ROOM_HERB_RACK,
   SAFE_ROOM_BANNER,

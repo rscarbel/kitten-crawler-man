@@ -26,8 +26,11 @@ export interface SavedWorld {
    * floor has none to return to.
    */
   resumeTile: TilePoint | null;
-  /** Frames left on the floor's collapse timer; `null` on a floor that has none. */
-  levelTimerFrames: number | null;
+  /**
+   * Frames the party has spent on this floor, counted on every difficulty so
+   * that a switch to Nightmare mid-floor finds its time limit already running.
+   */
+  floorElapsedFrames: number;
   persisted: PersistedWorldState;
 }
 
@@ -38,14 +41,12 @@ export interface SavedWorld {
  */
 export function parseSavedWorld(value: unknown): SavedWorld | undefined {
   if (!isRecord(value)) return undefined;
-  const { generatorVersion, worldSeed, artSeed, resumeTile, levelTimerFrames, persisted } = value;
+  const { generatorVersion, worldSeed, artSeed, resumeTile, floorElapsedFrames, persisted } = value;
   if (generatorVersion !== WORLD_GENERATOR_VERSION) return undefined;
   if (!isFiniteNumber(worldSeed) || !isFiniteNumber(artSeed)) return undefined;
   const parsedResumeTile = resumeTile === null ? null : parsePoint(resumeTile);
   if (parsedResumeTile === undefined) return undefined;
-  const levelTimerValid =
-    levelTimerFrames === null || (isFiniteNumber(levelTimerFrames) && levelTimerFrames >= 0);
-  if (!levelTimerValid) return undefined;
+  if (!isFiniteNumber(floorElapsedFrames) || floorElapsedFrames < 0) return undefined;
   const parsedPersisted = parsePersistedWorldState(persisted);
   if (parsedPersisted === undefined) return undefined;
   return {
@@ -53,7 +54,7 @@ export function parseSavedWorld(value: unknown): SavedWorld | undefined {
     worldSeed,
     artSeed,
     resumeTile: parsedResumeTile,
-    levelTimerFrames,
+    floorElapsedFrames,
     persisted: parsedPersisted,
   };
 }

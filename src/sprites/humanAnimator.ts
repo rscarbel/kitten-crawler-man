@@ -384,7 +384,7 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
 
 /** What the strike is thrown at, as far as choosing a blow goes. */
 export interface StrikeTargetContext {
-  /** Knee-high: a rat, a grub, a tuskling. Favours punts and stomps. */
+  /** Knee-high: a rat, a grub, a wereboar. Favours punts and stomps. */
   readonly lowProfile: boolean;
   /**
    * Stunned or pinned — on the floor or as good as. Favours punts and stomps,

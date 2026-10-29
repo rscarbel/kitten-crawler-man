@@ -1,7 +1,7 @@
 import type { GameMapCheckpoint } from '../../map/GameMap';
 import type { AttackCowStateCheckpoint } from '../state/AttackCowState';
 import type { BarrierCheckpoint } from '../../systems/BarrierSystem';
-import type { BopcaCheckpoint } from '../../systems/BopcaSystem';
+import type { DoctorCheckpoint } from '../../systems/DoctorSystem';
 import type { BossRoomCheckpoint } from '../../systems/BossRoomSystem';
 import type { BossRoomDressingCheckpoint } from '../../systems/bossRooms/bossRoomDressingCheckpoint';
 import type { BountyCheckpoint } from '../../systems/BountySystem';
@@ -62,7 +62,7 @@ export interface WorldCheckpoint {
    */
   recall: RecallCheckpoint;
   treasureChests: TreasureChestCheckpoint;
-  bopca: BopcaCheckpoint;
+  doctor: DoctorCheckpoint;
   difficultyTelemetry: DifficultyTelemetryCheckpoint;
   mercenary: MercenaryCheckpoint;
   deinonychus: DeinonychusCheckpoint;

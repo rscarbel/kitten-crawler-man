@@ -24,7 +24,7 @@ const FLOOR2 = 2;
 const FLOOR3 = 3;
 /** Floor 1's goblin. */
 const FLOOR1_TYPICAL_HOST_HP = 6;
-/** Floor 2's troglodyte / llama / goblin mix, weighted by its room table. */
+/** Floor 2's lizardman / acid llama / goblin mix, weighted by its room table. */
 const FLOOR2_TYPICAL_HOST_HP = 14;
 /** Floor 3's ruins ghoul. */
 const FLOOR3_TYPICAL_HOST_HP = 16;
@@ -261,14 +261,14 @@ export const SHIELD_BETWEEN_CASTS_MIN_FRAMES = 60;
  */
 export const SHIELD_WARD_LINK_RANGE_TILES = 7;
 /**
- * Gap between any two crushing-ward casts on a vespa. Longer than the ordinary
+ * Gap between any two crushing-ward casts on a gravedigger beetle. Longer than the ordinary
  * ward's cooldown: this cast ends a fight outright rather than merely
  * prolonging one, so it should not be the fairy's default answer to every
- * vespa it sees.
+ * beetle it sees.
  */
 export const SHIELD_CRUSH_COOLDOWN_FRAMES = 600;
 export const SHIELD_CRUSH_MIN_COOLDOWN_FRAMES = 480;
-/** How long the ward bubble takes to snap shut on a vespa once cast: roughly half a second. */
+/** How long the ward bubble takes to snap shut on a gravedigger beetle once cast: roughly half a second. */
 export const SHIELD_CRUSH_IMPLODE_FRAMES = 30;
 /**
  * An ally that struck a crawler this recently counts as in the fight, for
@@ -435,7 +435,7 @@ export const NECRO_SKELETON_LEVELS_BELOW_FAIRY = 3;
 /**
  * Share of a skeleton warrior's authored HP and of every blow's damage that a
  * necro fairy's skeletons rise with. The warrior is authored as a Skeleton
- * Lord's escort and, level for level, out-hits the goblins and troglodytes of
+ * Lord's escort and, level for level, out-hits the goblins and lizardmen of
  * the floors a necro also haunts; a level step alone cannot close that on the
  * shallow floors, where the levels are already near the bottom.
  */

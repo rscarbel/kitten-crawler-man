@@ -1,6 +1,6 @@
 /**
  * `verify:tactics` sections for the ranged creatures — the goblin archer, the
- * skeleton archer, the lava llama and the two bomber goblins — whose kite is "keep a friend between
+ * skeleton archer, the acid llama and the two bomber goblins — whose kite is "keep a friend between
  * me and the player while shooting", plus their regroup.
  *
  * Each check drives the real creature through the real mob loop on the room
@@ -24,7 +24,7 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import type { GroundHazardSource } from '../../src/systems/GroundHazardSource';
-import { LavaBallSystem } from '../../src/systems/LavaBallSystem';
+import { GlobProjectileSystem } from '../../src/systems/GlobProjectileSystem';
 import { TACTICAL_RETREAT_MAX_SPEED, type Mob } from '../../src/creatures/Mob';
 import { SkeletonArcher } from '../../src/creatures/SkeletonArcher';
 import {
@@ -53,7 +53,7 @@ interface RangedCase {
 const RANGED_CASES: readonly RangedCase[] = [
   { type: 'goblin_archer', helperType: 'goblin' },
   { type: 'skeleton_archer', helperType: 'skeleton_sword' },
-  { type: 'llama', helperType: 'llama' },
+  { type: 'acid_llama', helperType: 'acid_llama' },
   { type: 'goblin_dynamiter', helperType: 'goblin' },
   { type: 'goblin_bombardier', helperType: 'goblin' },
 ];
@@ -243,7 +243,7 @@ interface RangedRunOptions {
    */
   readonly chase?: boolean;
   readonly hazard?: GroundHazardSource;
-  /** Systems that run after the mob loop each frame, such as the llama's own lava. */
+  /** Systems that run after the mob loop each frame, such as the llama's own acid. */
   readonly systems?: ReadonlyArray<{ update(ctx: SystemContext): void }>;
   /**
    * Leave the friend free to walk. Pinned by default so every kite is planned
@@ -794,43 +794,43 @@ function checkRangedRegroup(map: GameMap, harness: TacticsHarness, rangedCase: R
 }
 
 /**
- * A llama's own spits lay the fire its tactics treat as marked ground. With the
- * real lava system live, and with fire laid across its way and under its own
- * feet, it must never kite through fire and must never stop spitting.
+ * A llama's own spits lay the acid its tactics treat as marked ground. With the
+ * real glob system live, and with a hazard laid across its way and under its
+ * own feet, it must never kite through a hazard and must never stop spitting.
  */
-function checkLlamaOwnFire(map: GameMap, harness: TacticsHarness): void {
+function checkAcidLlamaOwnPuddles(map: GameMap, harness: TacticsHarness): void {
   const check = (ok: boolean, message: string): void => harness.check(ok, message);
-  const llamaCase = RANGED_CASES.find((entry) => entry.type === 'llama');
+  const llamaCase = RANGED_CASES.find((entry) => entry.type === 'acid_llama');
   if (llamaCase === undefined) {
-    check(false, 'the llama is in the ranged case list');
+    check(false, 'the acid llama is in the ranged case list');
     return;
   }
 
   const untrained = rangedLayout(map, llamaCase, [], true);
   const untrainedTrace = traceRanged(untrained, {
     frames: RANGED_RUN_FRAMES,
-    systems: [new LavaBallSystem(map)],
+    systems: [new GlobProjectileSystem(map)],
   });
   const allowedGap = untrainedTrace.longestShotGapFrames + KITE_MAX_FRAMES + SHOT_GAP_SLACK_FRAMES;
 
   const live = rangedLayout(map, llamaCase, ['kite'], true);
-  const lava = new LavaBallSystem(map);
-  live.arena.loop.registerHazardSource(lava);
+  const globs = new GlobProjectileSystem(map);
+  live.arena.loop.registerHazardSource(globs);
   const liveTrace = traceRanged(live, {
     frames: RANGED_RUN_FRAMES,
-    hazard: lava,
-    systems: [lava],
+    hazard: globs,
+    systems: [globs],
   });
   check(
     liveTrace.kitesStarted > 0 && liveTrace.framesOnHazardWhileKiting === 0,
-    `llama, own lava live: ${liveTrace.kitesStarted} kites, ${liveTrace.framesOnHazardWhileKiting} kite frames on fire`,
+    `acid llama, own acid live: ${liveTrace.kitesStarted} kites, ${liveTrace.framesOnHazardWhileKiting} kite frames on a puddle`,
   );
   check(
     liveTrace.shots > 0 && liveTrace.longestShotGapFrames <= allowedGap,
-    `llama, own lava live: ${liveTrace.shots} spits, longest silence ${liveTrace.longestShotGapFrames} frames (allowed ${allowedGap})`,
+    `acid llama, own acid live: ${liveTrace.shots} spits, longest silence ${liveTrace.longestShotGapFrames} frames (allowed ${allowedGap})`,
   );
 
-  // Fire across the whole way to its friend: the kite is refused, not walked.
+  // A hazard across the whole way to its friend: the kite is refused, not walked.
   const blocked = rangedLayout(map, llamaCase, ['kite'], true);
   const acrossTheWay = new HazardRect(
     SHOOTER_TILE.x + 1,
@@ -842,14 +842,14 @@ function checkLlamaOwnFire(map: GameMap, harness: TacticsHarness): void {
   const blockedTrace = traceRanged(blocked, { frames: RANGED_RUN_FRAMES, hazard: acrossTheWay });
   check(
     blockedTrace.framesOnHazardWhileKiting === 0,
-    `llama, fire across the way: ${blockedTrace.framesOnHazardWhileKiting} kite frames on fire (${blockedTrace.kitesStarted} kites)`,
+    `acid llama, hazard across the way: ${blockedTrace.framesOnHazardWhileKiting} kite frames on it (${blockedTrace.kitesStarted} kites)`,
   );
   check(
     blockedTrace.shots > 0 && blockedTrace.longestShotGapFrames <= allowedGap,
-    `llama, fire across the way: still spits — ${blockedTrace.shots} spits, longest silence ${blockedTrace.longestShotGapFrames} frames (allowed ${allowedGap})`,
+    `acid llama, hazard across the way: still spits — ${blockedTrace.shots} spits, longest silence ${blockedTrace.longestShotGapFrames} frames (allowed ${allowedGap})`,
   );
 
-  // Fire under its own feet, where a fresh patch of its own would put it.
+  // A hazard under its own feet, where a fresh puddle of its own would put it.
   const standing = rangedLayout(map, llamaCase, ['kite'], true);
   const underFoot = new HazardRect(SHOOTER_TILE.x, ROW, SHOOTER_TILE.x, ROW);
   standing.arena.loop.registerHazardSource(underFoot);
@@ -858,7 +858,7 @@ function checkLlamaOwnFire(map: GameMap, harness: TacticsHarness): void {
     standingTrace.framesOnHazardWhileKiting === 0 &&
       standingTrace.shots > 0 &&
       standingTrace.longestShotGapFrames <= allowedGap,
-    `llama, fire underfoot: ${standingTrace.framesOnHazardWhileKiting} kite frames on fire over ${standingTrace.kitesStarted} kites, ${standingTrace.shots} spits, longest silence ${standingTrace.longestShotGapFrames} frames (allowed ${allowedGap})`,
+    `acid llama, hazard underfoot: ${standingTrace.framesOnHazardWhileKiting} kite frames on it over ${standingTrace.kitesStarted} kites, ${standingTrace.shots} spits, longest silence ${standingTrace.longestShotGapFrames} frames (allowed ${allowedGap})`,
   );
 }
 
@@ -920,7 +920,7 @@ function runRangedSections(map: GameMap, harness: TacticsHarness): void {
     checkRangedRegroup(map, harness, rangedCase);
   }
   harness.section(
-    'Ranged kite: a llama never kites through its own fire, and never stops spitting',
+    'Ranged kite: an acid llama never kites through its own acid, and never stops spitting',
   );
-  checkLlamaOwnFire(map, harness);
+  checkAcidLlamaOwnPuddles(map, harness);
 }

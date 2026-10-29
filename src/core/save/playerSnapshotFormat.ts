@@ -6,6 +6,7 @@
 
 import { ALL_STATS, zeroStats, type StatId } from '../party/stats';
 import { STATUS_DEFS, isStatusId, type StatusEffect } from '../combat/StatusEffect';
+import { isGroundHazard } from '../combat/groundHazard';
 import { isSkillId, type CrawlerKind, type SkillId, type SkillState } from '../skills/SkillManager';
 import { isStatTattooId, type StatTattooId } from '../skills/tattoos';
 import { HOTBAR_COUNT, isItemId, mayEquipUnder, type ItemId } from '../items/defs/ItemDefs';
@@ -148,7 +149,7 @@ function parseBaseStats(value: unknown): Record<StatId, number> | undefined {
  */
 function parseStatusEffect(value: unknown): StatusEffect | undefined {
   if (!isRecord(value)) return undefined;
-  const { type, ticksRemaining, totalTicks, absorbRemaining, absorbTotal } = value;
+  const { type, ticksRemaining, totalTicks, absorbRemaining, absorbTotal, groundHazard } = value;
   if (typeof type !== 'string' || !isStatusId(type)) return undefined;
   if (STATUS_DEFS[type].persistence === 'transient') return undefined;
   if (!isNonNegativeFinite(ticksRemaining) || !isNonNegativeFinite(totalTicks)) return undefined;
@@ -160,6 +161,10 @@ function parseStatusEffect(value: unknown): StatusEffect | undefined {
   if (absorbTotal !== undefined) {
     if (!isNonNegativeFinite(absorbTotal)) return undefined;
     effect.absorbTotal = absorbTotal;
+  }
+  if (groundHazard !== undefined) {
+    if (!isGroundHazard(groundHazard)) return undefined;
+    effect.groundHazard = groundHazard;
   }
   return effect;
 }

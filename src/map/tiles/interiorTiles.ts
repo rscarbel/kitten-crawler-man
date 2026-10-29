@@ -11,9 +11,7 @@ import {
   CHAIR,
   SAWDUST_FLOOR,
   TENT_POLE,
-  SAFE_ROOM_COUNTER,
-  SAFE_ROOM_COUNTER_BACK,
-  SAFE_ROOM_GALLEY_FLOOR,
+  SAFE_ROOM_MEDICINE_CABINET,
   SAFE_ROOM_BANNER,
   SAFE_ROOM_HERB_RACK,
   SAFE_ROOM_LANTERN,
@@ -42,11 +40,7 @@ import {
   BROKEN_BOOKSHELF,
   propSpriteState,
 } from '../tileTypes';
-import {
-  counterEdges,
-  drawCounterBackTile,
-  drawCounterFrontFace,
-} from '../../sprites/safeRoomCounter';
+import { drawMedicineCabinetTile } from '../../sprites/safeRoomClinic';
 import {
   drawBannerTile,
   drawHerbRackTile,
@@ -74,7 +68,6 @@ import {
   paintTentPoleBase,
   type PoleCell,
 } from '../../sprites/art/starlightTent/starlightTentShellArt';
-import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
@@ -622,57 +615,27 @@ export function drawInteriorTile(
       return true;
     }
 
-    // Safe-room service counter — front bar, back bench, and the galley strip
-    // between them. All three paint the hearth paving first rather than the
-    // room's own tile: the sliver of ground each one leaves showing is on the
-    // *kitchen* side of the counter, so the three tiles read as one unit instead
-    // of a counter with a stripe of dining-room floor behind it. That is a
-    // property of the map now — `DUNGEON_GROUND` maps all three types to
-    // `bopca_hearth` — so the base is the ordinary ground pass.
-    case SAFE_ROOM_COUNTER: {
-      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
-      drawCounterFrontFace(ctx, sx, sy, ts, counterEdges(structure, SAFE_ROOM_COUNTER, tx, ty));
-      return true;
-    }
-
-    case SAFE_ROOM_COUNTER_BACK: {
-      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
-      drawCounterBackTile(
-        ctx,
-        sx,
-        sy,
-        ts,
-        counterEdges(structure, SAFE_ROOM_COUNTER_BACK, tx, ty),
-        tx,
-      );
-      return true;
-    }
-
-    case SAFE_ROOM_GALLEY_FLOOR: {
-      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
-      return true;
-    }
-
-    // The stove is part of the counter run rather than a piece of loose
-    // furniture: the layout stands it against the galley, and `DUNGEON_GROUND`
-    // maps it to `bopca_hearth` so it continues the station's own paving instead
-    // of cutting a hole of dining-room floor into it.
-    case SAFE_ROOM_STOVE: {
-      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
-      drawSafeRoomDecorProp(ctx, type, sx, sy, ts, tx);
+    // The doctor's medicine cabinet, two tiles wide, drawn in the decoration
+    // overlay over ground the base-only pass already laid. Which half a tile is
+    // comes from its west neighbour, since `stampSafeRoomClinics` always lays
+    // the pair west to east and never two cabinets side by side.
+    case SAFE_ROOM_MEDICINE_CABINET: {
+      const westIsCabinet = structure[ty]?.[tx - 1]?.type === SAFE_ROOM_MEDICINE_CABINET;
+      drawMedicineCabinetTile(ctx, sx, sy, ts, westIsCabinet ? 'east' : 'west');
       return true;
     }
 
     // The safe room's loose furnishings, which paint the floor they were stamped
-    // over. `drawFloorBeneath` rather than the hearth palette because a safe room
-    // is not only a dungeon room: the same furnishings stand on a town interior's
-    // boards or rushes too, and `DUNGEON_GROUND` has no material for those floor
-    // types — used there, it would return without drawing at all, leaving a
-    // black tile.
+    // over. `drawFloorBeneath` rather than the dungeon's ground palette because a
+    // safe room is not only a dungeon room: the same furnishings stand on a town
+    // interior's boards or rushes too, and `DUNGEON_GROUND` has no material for
+    // those floor types — used there, it would return without drawing at all,
+    // leaving a black tile.
     case SAFE_ROOM_MENU_BOARD:
     case SAFE_ROOM_HERB_RACK:
     case SAFE_ROOM_BANNER:
     case SAFE_ROOM_LANTERN:
+    case SAFE_ROOM_STOVE:
     case SAFE_ROOM_TABLE:
     case SAFE_ROOM_STOOL:
     case SAFE_ROOM_LARDER:

@@ -42,3 +42,28 @@ export function verticalCollisionOffset(dy: number): number {
  * learn about the rule.
  */
 export const SOUTHWARD_PROBE_DROP = SOLE_COLLISION_OFFSET - CENTER_COLLISION_OFFSET;
+
+/**
+ * Where a body stands, in world pixels: under the middle of its tile box, at
+ * the soles. A wader's waterline is cut from the bottom of the sprite, so
+ * every question of what ground a body is on (water, a raft, a slam's
+ * footprint) is asked here, where the drawn feet are.
+ */
+export function feetPointPx(
+  body: { readonly x: number; readonly y: number },
+  tileSize: number,
+): { readonly x: number; readonly y: number } {
+  return {
+    x: body.x + tileSize * CENTER_COLLISION_OFFSET,
+    y: body.y + tileSize * SOLE_COLLISION_OFFSET,
+  };
+}
+
+/** The tile under {@link feetPointPx}. */
+export function tileUnderFeet(
+  body: { readonly x: number; readonly y: number },
+  tileSize: number,
+): { readonly x: number; readonly y: number } {
+  const feet = feetPointPx(body, tileSize);
+  return { x: Math.floor(feet.x / tileSize), y: Math.floor(feet.y / tileSize) };
+}

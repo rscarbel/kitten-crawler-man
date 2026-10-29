@@ -63,17 +63,17 @@ export const GROUND_SHEETS: ReadonlyArray<GroundSheetConfig> = [
     ],
     seedSlotBase: 0,
   },
-  // Shared by both dungeon floors: a Bopca station is the same waystation
-  // wherever it is found, so it keeps its own sheet rather than being duplicated
-  // into each floor's. Its slots are the ones it held when the sheet also
-  // carried seven generic dungeon materials, so the station's floor is byte for
-  // byte the art that was reviewed.
+  // Shared by both dungeon floors: a safe room is the same waystation wherever
+  // it is found, so it keeps its own sheet rather than being duplicated into
+  // each floor's. The tile and the two field-station materials sit on the slots
+  // they have always held, so they are byte for byte the art that was reviewed;
+  // the threshold scuff sits on the first free slot after them.
   {
     key: 'ground_dungeon',
     file: 'ground_dungeon.png',
     // Append only: a material's seed slot is its index from `seedSlotBase`.
-    materials: ['bopca_scuff', 'bopca_hearth', 'bopca_tile', 'station_plate', 'station_stripe'],
-    seedSlotBase: 107,
+    materials: ['safe_room_tile', 'station_plate', 'station_stripe', 'safe_room_scuff'],
+    seedSlotBase: 109,
   },
   {
     key: 'ground_floor1',

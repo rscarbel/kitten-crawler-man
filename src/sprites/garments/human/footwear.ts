@@ -53,8 +53,6 @@ export interface BootLook {
   readonly soleBuild: SoleBuild;
   /** Iron studs hammered through the sole, in this colour, for a hobnailed boot. */
   readonly studs?: string;
-  /** A toe cap of hoof, in this colour, split down its middle into two trotters. */
-  readonly trotter?: string;
   /** Laces in this colour up the instep, from the shaft's front to the toe cap. */
   readonly laces?: string;
 }
@@ -151,14 +149,6 @@ const FRONT_STUDS = [-0.55, 0, 0.55] as const;
 const BACK_STUDS = [-0.6, 0, 0.6] as const;
 /** The studs sit on the sole's lower half, where they bite the floor. */
 const STUD_DOWN_SOLE = 0.6;
-
-/** The hoof cap: how far back from the toe it reaches, and its cleft's weight. */
-const PROFILE_TROTTER_BACK = 1.15;
-const FRONT_TROTTER_RISE = 1.9;
-const TROTTER_CLEFT_WIDTH = 0.022;
-const TROTTER_CLEFT_OPACITY = 1;
-/** Edge-on the cleft shows as a notch into the toe, this share of the cap's height. */
-const PROFILE_CLEFT_DEPTH = 0.45;
 
 function paintStud(ctx: Ctx, x: number, y: number, colour: string): void {
   ctx.fillStyle = colour;
@@ -391,34 +381,6 @@ function paintProfileFoot(ctx: Ctx, pitch: number, look: BootLook): void {
         PROFILE_TOE_CAP_SEAM_OPACITY,
         pitch,
       );
-      if (look.trotter !== undefined) {
-        const hoofBack = toeX - toeHalf * PROFILE_TROTTER_BACK;
-        ctx.fillStyle = look.trotter;
-        ctx.fillRect(hoofBack, toeTop, toeTip - hoofBack, sole - toeTop);
-        crease(
-          ctx,
-          () => {
-            ctx.moveTo(hoofBack, toeTop);
-            ctx.lineTo(hoofBack, sole);
-          },
-          CUFF_SEAM_WIDTH,
-          look.leather,
-          PROFILE_TOE_CAP_SEAM_OPACITY,
-          pitch,
-        );
-        const cleftTop = lerp(sole, toeTop, PROFILE_CLEFT_DEPTH);
-        crease(
-          ctx,
-          () => {
-            ctx.moveTo(toeTip, cleftTop);
-            ctx.lineTo(toeX, lerp(cleftTop, soleTop, HALF));
-          },
-          TROTTER_CLEFT_WIDTH,
-          look.leather,
-          TROTTER_CLEFT_OPACITY,
-          pitch,
-        );
-      }
       fillSoleBand(ctx, look, heelBack, toeTip, soleTop, sole);
       fillSoleBand(ctx, look, heelBack, heelBack + length * HEEL_BLOCK_LENGTH, heelTop, sole);
       const studs = look.studs;
@@ -496,21 +458,6 @@ function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number, look: Boo
         look.leather,
         PROFILE_TOE_CAP_SEAM_OPACITY,
       );
-      if (look.trotter !== undefined) {
-        const hoofTop = sole - toeRow * FRONT_TROTTER_RISE;
-        ctx.fillStyle = look.trotter;
-        ctx.fillRect(left, hoofTop, right - left, sole - hoofTop);
-        crease(
-          ctx,
-          () => {
-            ctx.moveTo(toes, hoofTop);
-            ctx.lineTo(toes, sole);
-          },
-          TROTTER_CLEFT_WIDTH,
-          look.leather,
-          TROTTER_CLEFT_OPACITY,
-        );
-      }
       fillSoleBand(ctx, look, left, right, soleTop, sole);
       const studs = look.studs;
       if (studs !== undefined) {

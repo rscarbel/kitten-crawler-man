@@ -6,6 +6,7 @@
  */
 export type CreatureAudioTag =
   | 'silent'
+  | 'acid_llama'
   | 'bear'
   | 'big_rooster'
   | 'clown'
@@ -14,10 +15,12 @@ export type CreatureAudioTag =
   | 'electric_goblin'
   | 'evil_clown'
   | 'fairy'
+  | 'giant_wasp'
   | 'goblin'
   | 'goblin_bombardier'
   | 'goblin_dynamiter'
   | 'grave_bull'
+  | 'gravedigger_beetle'
   | 'grotesque_spider'
   | 'hawkfolk'
   | 'kraken'
@@ -25,7 +28,7 @@ export type CreatureAudioTag =
   | 'krasue'
   | 'lemur'
   | 'lion'
-  | 'llama'
+  | 'lizardman'
   | 'mantid'
   | 'mantis'
   | 'merc_archer'
@@ -43,5 +46,4 @@ export type CreatureAudioTag =
   | 'small_spider'
   | 'the_lich'
   | 'trash_gremlin'
-  | 'troglodyte'
-  | 'tuskling';
+  | 'wereboar';

@@ -2446,7 +2446,7 @@ const PROFILE_SKULL_PATH = [
   [PROFILE_NOSE_OUT, 0.22],
   // The blunt underside of the nose. Without it the spline runs straight from
   // the tip to the lip and the whole face reads as a beak — the reptile trap
-  // from the troglodyte, and it costs a round every time.
+  // from the lizardman, and it costs a round every time.
   [1.12, 0.34],
   [0.8, 0.44],
   [0.9, 0.56],

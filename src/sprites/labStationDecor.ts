@@ -2,7 +2,7 @@
  * The spider lab's field station: what a research team carried in when they
  * fell back from the lab and dug in halfway down the hallway.
  *
- * Everything here reads as *emergency kit* rather than as the Bopca's warm
+ * Everything here reads as *emergency kit* rather than as a safe room's warm
  * provisioning: painted steel, canvas, safety colours and paper, and nothing
  * made of wood but the crate the lantern stands on. Drawn to the game's
  * oblique projection like the safe room's furnishings

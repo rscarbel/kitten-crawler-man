@@ -22,6 +22,8 @@ const CLOCK_FIELD_WIDTH = 2;
  * party has heard the shield-fairy ward explainer is run history too: a
  * one-time hint that a death replayed would no longer be one-time. So is every
  * pet given to Deinonychus or a cow: the player did it, and no rewind takes it back.
+ * The current floor's time played is run history for the same reason as the
+ * total: only taking the stairs to a new floor starts it again.
  */
 export class GameStats {
   private _killsByType = new Map<string, number>();
@@ -30,10 +32,11 @@ export class GameStats {
   private _damageDealt = 0;
   private _damageTaken = 0;
   private _goldEarned = 0;
-  private _hirelingsHired = 0;
-  private _hirelingsLost = 0;
+  private _mercenariesHired = 0;
+  private _mercenariesLost = 0;
   private _deaths = 0;
   private _framesPlayed = 0;
+  private _floorFramesPlayed = 0;
   private _wardExplainerHeard = false;
   private _deinonychusPets = 0;
   private _cowPets = 0;
@@ -84,12 +87,12 @@ export class GameStats {
     if (amount > 0) this._goldEarned += amount;
   }
 
-  recordHirelingHired(): void {
-    this._hirelingsHired++;
+  recordMercenaryHired(): void {
+    this._mercenariesHired++;
   }
 
-  recordHirelingLost(): void {
-    this._hirelingsLost++;
+  recordMercenaryLost(): void {
+    this._mercenariesLost++;
   }
 
   recordDeath(): void {
@@ -113,6 +116,12 @@ export class GameStats {
   /** One fixed update of play the world was not halted for. */
   recordPlayedFrame(): void {
     this._framesPlayed++;
+    this._floorFramesPlayed++;
+  }
+
+  /** The party has arrived on a new floor, so the floor's clock starts from zero. */
+  beginFloor(): void {
+    this._floorFramesPlayed = 0;
   }
 
   get totalKills(): number {
@@ -150,12 +159,12 @@ export class GameStats {
     return this._goldEarned;
   }
 
-  get hirelingsHired(): number {
-    return this._hirelingsHired;
+  get mercenariesHired(): number {
+    return this._mercenariesHired;
   }
 
-  get hirelingsLost(): number {
-    return this._hirelingsLost;
+  get mercenariesLost(): number {
+    return this._mercenariesLost;
   }
 
   get deaths(): number {
@@ -164,6 +173,11 @@ export class GameStats {
 
   get framesPlayed(): number {
     return this._framesPlayed;
+  }
+
+  /** Played frames since the party arrived on the floor it is on. */
+  get floorFramesPlayed(): number {
+    return this._floorFramesPlayed;
   }
 
   get wardExplainerHeard(): boolean {
@@ -191,10 +205,11 @@ export class GameStats {
       damageDealt: this._damageDealt,
       damageTaken: this._damageTaken,
       goldEarned: this._goldEarned,
-      hirelingsHired: this._hirelingsHired,
-      hirelingsLost: this._hirelingsLost,
+      mercenariesHired: this._mercenariesHired,
+      mercenariesLost: this._mercenariesLost,
       deaths: this._deaths,
       framesPlayed: this._framesPlayed,
+      floorFramesPlayed: this._floorFramesPlayed,
       wardExplainerHeard: this._wardExplainerHeard,
       deinonychusPets: this._deinonychusPets,
       cowPets: this._cowPets,
@@ -214,8 +229,8 @@ export class GameStats {
     this._damageDealt = snapshot.damageDealt;
     this._damageTaken = snapshot.damageTaken;
     this._goldEarned = snapshot.goldEarned;
-    this._hirelingsHired = snapshot.hirelingsHired;
-    this._hirelingsLost = snapshot.hirelingsLost;
+    this._mercenariesHired = snapshot.mercenariesHired;
+    this._mercenariesLost = snapshot.mercenariesLost;
   }
 
   /** A run's tallies exactly as saved, deaths and time included — a page reload starts here. */
@@ -224,6 +239,7 @@ export class GameStats {
     stats.restore(snapshot);
     stats._deaths = snapshot.deaths;
     stats._framesPlayed = snapshot.framesPlayed;
+    stats._floorFramesPlayed = snapshot.floorFramesPlayed;
     stats._wardExplainerHeard = snapshot.wardExplainerHeard;
     stats._deinonychusPets = snapshot.deinonychusPets;
     stats._cowPets = snapshot.cowPets;
@@ -232,13 +248,14 @@ export class GameStats {
   }
 
   /**
-   * Takes the deaths, time played, pets and heard hints from the run still in progress — for a
+   * Takes the deaths, time played (total and on this floor), pets and heard hints from the run still in progress — for a
    * death that respawns from a save, whose tallies are older than the death
    * that sent the party back to it.
    */
   carryRunHistoryFrom(live: GameStats): void {
     this._deaths = Math.max(this._deaths, live._deaths);
     this._framesPlayed = Math.max(this._framesPlayed, live._framesPlayed);
+    this._floorFramesPlayed = Math.max(this._floorFramesPlayed, live._floorFramesPlayed);
     this._wardExplainerHeard ||= live._wardExplainerHeard;
     this._deinonychusPets = Math.max(this._deinonychusPets, live._deinonychusPets);
     this._cowPets = Math.max(this._cowPets, live._cowPets);
@@ -254,10 +271,11 @@ export interface GameStatsSnapshot {
   damageDealt: number;
   damageTaken: number;
   goldEarned: number;
-  hirelingsHired: number;
-  hirelingsLost: number;
+  mercenariesHired: number;
+  mercenariesLost: number;
   deaths: number;
   framesPlayed: number;
+  floorFramesPlayed: number;
   wardExplainerHeard: boolean;
   deinonychusPets: number;
   cowPets: number;
@@ -282,10 +300,11 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     damageDealt,
     damageTaken,
     goldEarned,
-    hirelingsHired,
-    hirelingsLost,
+    mercenariesHired,
+    mercenariesLost,
     deaths,
     framesPlayed,
+    floorFramesPlayed,
     wardExplainerHeard,
     deinonychusPets,
     cowPets,
@@ -298,10 +317,11 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     !isNonNegativeFinite(damageDealt) ||
     !isNonNegativeFinite(damageTaken) ||
     !isNonNegativeFinite(goldEarned) ||
-    !isNonNegativeFinite(hirelingsHired) ||
-    !isNonNegativeFinite(hirelingsLost) ||
+    !isNonNegativeFinite(mercenariesHired) ||
+    !isNonNegativeFinite(mercenariesLost) ||
     !isNonNegativeFinite(deaths) ||
     !isNonNegativeFinite(framesPlayed) ||
+    !isNonNegativeFinite(floorFramesPlayed) ||
     typeof wardExplainerHeard !== 'boolean' ||
     !isNonNegativeFinite(deinonychusPets) ||
     !isNonNegativeFinite(cowPets) ||
@@ -316,10 +336,11 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     damageDealt,
     damageTaken,
     goldEarned,
-    hirelingsHired,
-    hirelingsLost,
+    mercenariesHired,
+    mercenariesLost,
     deaths,
     framesPlayed,
+    floorFramesPlayed,
     wardExplainerHeard,
     deinonychusPets,
     cowPets,
@@ -343,7 +364,7 @@ export function formatPlayTime(frames: number): string {
  *
  * A module-level binding rather than a field somebody passes around, because
  * the places that score most of these — a mob's damage door, a crawler's, a
- * coin landing in a purse, a hireling's contract — belong to objects that hold
+ * coin landing in a purse, a mercenary's contract — belong to objects that hold
  * no reference to any scene. Each scene binds its run's `GameStats` as it is
  * entered; every scene of one run holds the same object, so a stale binding
  * between one scene's exit and the next one's entry still points at the run.

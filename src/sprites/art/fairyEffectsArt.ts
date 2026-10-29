@@ -608,7 +608,7 @@ const CRUSH_BUBBLE_FLASH_SHARE = 0.15;
 const CRUSH_BUBBLE_FLASH_ALPHA = 0.85;
 
 /**
- * A shield fairy's crushing ward: a bubble that snaps around a hatched vespa
+ * A shield fairy's crushing ward: a bubble that snaps around an adult gravedigger beetle
  * at full size, then shrinks hard onto it and flashes white on the frame it
  * implodes. `progress` is 0 → 1 across the whole crush.
  */

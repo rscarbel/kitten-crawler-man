@@ -115,7 +115,7 @@ export interface ResolvedMaterial {
  * re-inferred rather than answered from a stale entry.
  *
  * Keyed by palette first because the same tile answers differently for each: a
- * safe-room floor is `bopca_tile` to the dungeon palette and nothing at all to
+ * safe-room floor is `safe_room_tile` to the dungeon palette and nothing at all to
  * the overworld's.
  */
 const inferredMaterials = new WeakMap<
@@ -576,8 +576,8 @@ function layerCoverage(
  * half a tile out — about half a cell's coverage of the harder material on one
  * side where the other draws none. Two places produce it: a dungeon doorway,
  * where a corridor of one material meets a room of another between two wall
- * jambs, and a safe room's threshold band, where `bopca_scuff` sits between
- * jambs with `bopca_tile` at its other corners. It was accepted because the
+ * jambs, and a safe room's threshold band, where `safe_room_scuff` sits between
+ * jambs with `safe_room_tile` at its other corners. It was accepted because the
  * alternative — a wall reporting an inferred material — put a wedge of a floor
  * from an entirely different room along *every* wall on the level. See
  * `materialAt` in `drawGroundTile`.

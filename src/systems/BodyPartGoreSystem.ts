@@ -26,9 +26,9 @@ import {
 } from '../sprites/goblinBomberSprite';
 import { GOBLIN_BOMBER_ARCHETYPES } from '../sprites/art/goblinArt';
 import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../sprites/ratSprite';
-import { LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS } from '../sprites/llamaSprite';
-import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
-import { BRINDLED_VESPA_FIGURE } from '../sprites/art/brindledVespaFigure';
+import { ACID_LLAMA_BODY_PART_KEY, ACID_LLAMA_GORE_PARTS } from '../sprites/acidLlamaSprite';
+import { ACID_LLAMA_FIGURE } from '../sprites/art/acidLlamaFigure';
+import { GIANT_WASP_FIGURE } from '../sprites/art/giantWaspFigure';
 import {
   SKELETON_ARCHER_BODY_PART_KEY,
   SKELETON_GORE_PARTS,
@@ -51,14 +51,16 @@ import {
 } from '../sprites/rockGolemSprite';
 import { DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_GORE_PARTS } from '../sprites/darkKnightSprite';
 import { DARK_KNIGHT_FIGURE } from '../sprites/art/darkKnightFigure';
+import { GIANT_WASP_BODY_PART_KEY, GIANT_WASP_GORE_PARTS } from '../sprites/giantWaspSprite';
 import {
-  BRINDLED_VESPA_BODY_PART_KEY,
-  BRINDLED_VESPA_GORE_PARTS,
-} from '../sprites/brindledVespaSprite';
-import { TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS } from '../sprites/troglodyteSprite';
-import { TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS } from '../sprites/tusklingSprite';
-import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
-import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
+  GRAVEDIGGER_BEETLE_BODY_PART_KEY,
+  GRAVEDIGGER_BEETLE_GORE_PARTS,
+} from '../sprites/gravediggerBeetleSprite';
+import { GRAVEDIGGER_BEETLE_FIGURE } from '../sprites/art/gravediggerBeetleFigure';
+import { LIZARDMAN_BODY_PART_KEY, LIZARDMAN_GORE_PARTS } from '../sprites/lizardmanSprite';
+import { WEREBOAR_BODY_PART_KEY, WEREBOAR_GORE_PARTS } from '../sprites/wereboarSprite';
+import { WEREBOAR_FIGURE } from '../sprites/art/wereboarFigure';
+import { LIZARDMAN_FIGURE } from '../sprites/art/lizardmanFigure';
 import { ROOSTER_BODY_PART_KEYS, ROOSTER_GORE_PARTS } from '../sprites/roosterSprite';
 import { TRASH_GREMLIN_FIGURE } from '../sprites/art/trashGremlinFigure';
 import { ROOSTER_FIGURES } from '../sprites/art/roosterFigure';
@@ -128,9 +130,9 @@ const TRASH_GREMLIN_CONFIG: MobBodyPartConfig = {
 const RAT_CONFIG: MobBodyPartConfig = { art: RAT_FIGURE, parts: RAT_GORE_PARTS };
 
 /** Likewise the llama's eight, painted by the llama's own figure. */
-const LLAMA_CONFIG: MobBodyPartConfig = {
-  art: LLAMA_FIGURE,
-  parts: LLAMA_GORE_PARTS,
+const ACID_LLAMA_CONFIG: MobBodyPartConfig = {
+  art: ACID_LLAMA_FIGURE,
+  parts: ACID_LLAMA_GORE_PARTS,
 };
 
 /**
@@ -200,36 +202,39 @@ const ROCK_GOLEM_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = 
 ];
 
 /**
- * The troglodyte's nine, one painted state apiece. The set
+ * The lizardman's nine, one painted state apiece. The set
  * carries its severed tongue and its shed tail, which are the two pieces a
  * player will recognise as this creature's and no other's.
  */
-const TROGLODYTE_CONFIG: MobBodyPartConfig = {
-  art: TROGLODYTE_FIGURE,
-  parts: TROGLODYTE_GORE_PARTS,
+const LIZARDMAN_CONFIG: MobBodyPartConfig = {
+  art: LIZARDMAN_FIGURE,
+  parts: LIZARDMAN_GORE_PARTS,
+};
+
+/** The Giant Wasp's eight: head, thorax, banded abdomen, stinger, wing, leg, antenna and gut. */
+const GIANT_WASP_CONFIG: MobBodyPartConfig = {
+  art: GIANT_WASP_FIGURE,
+  parts: GIANT_WASP_GORE_PARTS,
 };
 
 /**
- * The Brindled Vespa's eight — the final, flying stage of the Brindle Grub
- * lifecycle. The two earlier grub stages are deliberately absent here: they
- * are squishy bugs whose deaths are covered by the generic gore burst and
- * blood puddle every mob already gets, and only the adult hornet gets real
- * severed parts.
+ * The Gravedigger Beetle's seven. The banded wing case is the piece that names
+ * it: nothing else in the bestiary drops black chitin barred with orange.
  */
-const BRINDLED_VESPA_CONFIG: MobBodyPartConfig = {
-  art: BRINDLED_VESPA_FIGURE,
-  parts: BRINDLED_VESPA_GORE_PARTS,
+const GRAVEDIGGER_BEETLE_CONFIG: MobBodyPartConfig = {
+  art: GRAVEDIGGER_BEETLE_FIGURE,
+  parts: GRAVEDIGGER_BEETLE_GORE_PARTS,
 };
 
 /**
- * The Tuskling's eight. The severed tusk is the piece that names the creature —
+ * The Wereboar's eight. The severed tusk is the piece that names the creature —
  * a long ivory crescent nothing else in the bestiary drops — and the ragged
  * flap of pink hide with the spine bristles still in it is the one that says
  * the rest of the pile came off something with a coat.
  */
-const TUSKLING_CONFIG: MobBodyPartConfig = {
-  art: TUSKLING_FIGURE,
-  parts: TUSKLING_GORE_PARTS,
+const WEREBOAR_CONFIG: MobBodyPartConfig = {
+  art: WEREBOAR_FIGURE,
+  parts: WEREBOAR_GORE_PARTS,
 };
 
 /**
@@ -276,15 +281,16 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ],
   [COCKROACH_BODY_PART_KEY, COCKROACH_CONFIG],
   [RAT_BODY_PART_KEY, RAT_CONFIG],
-  [LLAMA_BODY_PART_KEY, LLAMA_CONFIG],
+  [ACID_LLAMA_BODY_PART_KEY, ACID_LLAMA_CONFIG],
   [MANTID_BODY_PART_KEY, MANTID_CONFIG],
   [MANTIS_BODY_PART_KEY, MANTIS_CONFIG],
   [EVIL_CLOWN_BODY_PART_KEY, EVIL_CLOWN_CONFIG],
   [DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_CONFIG],
-  [TROGLODYTE_BODY_PART_KEY, TROGLODYTE_CONFIG],
-  [TUSKLING_BODY_PART_KEY, TUSKLING_CONFIG],
+  [LIZARDMAN_BODY_PART_KEY, LIZARDMAN_CONFIG],
+  [WEREBOAR_BODY_PART_KEY, WEREBOAR_CONFIG],
   ...ROOSTER_CONFIGS,
-  [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_CONFIG],
+  [GIANT_WASP_BODY_PART_KEY, GIANT_WASP_CONFIG],
+  [GRAVEDIGGER_BEETLE_BODY_PART_KEY, GRAVEDIGGER_BEETLE_CONFIG],
   [KRAKEN_TENTACLE_BODY_PART_KEY, KRAKEN_TENTACLE_CONFIG],
   [KRAKEN_BODY_PART_KEY, KRAKEN_CONFIG],
   ...SKELETON_CONFIGS,

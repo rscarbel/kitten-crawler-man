@@ -68,7 +68,7 @@ import {
   STAIR_GUARD_OFFSETS,
   type InteriorHostileContext,
 } from '../src/systems/interiorHostiles';
-import { CULT_HIDEOUT_CULTIST_LEVEL } from '../src/systems/CultHideoutSystem';
+import { CULT_HIDEOUT_ELF_LEVEL } from '../src/systems/CultHideoutSystem';
 import { createTownMemory } from '../src/core/state/TownMemory';
 import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
 import { MenusKit } from '../src/systems/kits/MenusKit';
@@ -773,7 +773,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
     // dropped guard would otherwise be one FAIL wearing three false greens.
     if (fullGarrison) {
       check(
-        guards.every((guard) => guard.mobLevel === CULT_HIDEOUT_CULTIST_LEVEL),
+        guards.every((guard) => guard.mobLevel === CULT_HIDEOUT_ELF_LEVEL),
         `floor ${floor}'s guards match the congregation the party already fought`,
       );
       check(

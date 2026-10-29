@@ -243,14 +243,14 @@ async function checkScopeDisposal(): Promise<void> {
     SPIDER_WALKING_LOOP.id,
     MACHINERY_LOOP.id,
     'keyboard_hero_music_track_1',
-    'bopca_cooking',
+    'dwarf_cook_cooking',
   ]);
   const scope = audio.createScope();
   const sourcesBefore = harness.sources.length;
   scope.startLoop(WALKING_LOOP);
   scope.startLoop(SPIDER_WALKING_LOOP);
   scope.startLoop(MACHINERY_LOOP);
-  scope.startAmbientLoop('bopca_cooking', BED_VOLUME);
+  scope.startAmbientLoop('dwarf_cook_cooking', BED_VOLUME);
   scope.startAmbientLoop('ambient_fountain', BED_VOLUME);
   scope.startKeyboardHeroMusic();
   let ownedDisposals = 0;
@@ -278,11 +278,11 @@ async function checkScopeDisposal(): Promise<void> {
   check(bed?.paused === true, 'disposing the scope pauses its streamed bed');
   check(ownedDisposals === 1, 'disposing the scope disposes what it owns, once');
   check(
-    !scope.isAmbientLoopRunning('bopca_cooking') && scope.keyboardHeroMusicTimeMs() === null,
+    !scope.isAmbientLoopRunning('dwarf_cook_cooking') && scope.keyboardHeroMusicTimeMs() === null,
     'a disposed scope reports nothing running',
   );
-  scope.startAmbientLoop('bopca_cooking', BED_VOLUME);
-  check(!scope.isAmbientLoopRunning('bopca_cooking'), 'a disposed scope starts nothing');
+  scope.startAmbientLoop('dwarf_cook_cooking', BED_VOLUME);
+  check(!scope.isAmbientLoopRunning('dwarf_cook_cooking'), 'a disposed scope starts nothing');
 
   const backgrounded = audio.createScope();
   const beforeBackground = harness.sources.length;
@@ -770,7 +770,7 @@ async function checkRampedStops(): Promise<void> {
     WADING_LOOP.id,
     SPIDER_WALKING_LOOP.id,
     MACHINERY_LOOP.id,
-    'bopca_cooking',
+    'dwarf_cook_cooking',
     'keyboard_hero_music_track_1',
   ]);
 
@@ -804,9 +804,9 @@ async function checkRampedStops(): Promise<void> {
     });
   }
   await expectRampedStops('stopping a decoded ambient loop', () => {
-    scope.startAmbientLoop('bopca_cooking', BED_VOLUME);
+    scope.startAmbientLoop('dwarf_cook_cooking', BED_VOLUME);
     harness.advance(SETTLE_MS);
-    scope.stopAmbientLoop('bopca_cooking');
+    scope.stopAmbientLoop('dwarf_cook_cooking');
   });
   await expectRampedStops('stopping a streamed ambient bed', () => {
     scope.startAmbientLoop('ambient_fountain', BED_VOLUME);

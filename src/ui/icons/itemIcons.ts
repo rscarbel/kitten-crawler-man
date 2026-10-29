@@ -28,6 +28,7 @@ import { drawFoodIcon, type FoodIconId } from './foodIcons';
 import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
 import { drawCatnipTunaWaterIcon } from '../../sprites/art/itemIcons/catnipTunaWaterIcon';
 import { drawBlackPowderBombIcon } from '../../sprites/art/itemIcons/blackPowderBombIcon';
+import { drawSmokeBombIcon } from '../../sprites/art/itemIcons/smokeBombIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
 import { drawMagistratesWritIcon, drawUnreadableLetterIcon } from './murderMysteryLetterIcons';
 import {
@@ -38,7 +39,7 @@ import {
   drawStatBoostIcon,
 } from './potionIcons';
 import { drawResourceIcon, type ResourceIconId } from './resourceIcons';
-import { drawConfusingFogScrollIcon } from '../../sprites/art/itemIcons/scrollIcons';
+import { drawEntanglementScrollIcon } from '../../sprites/art/itemIcons/scrollIcons';
 import { drawSkillBookIcon } from './skillBookIcon';
 import { drawSoulCrystalIcon } from './soulCrystalIcon';
 import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
@@ -115,9 +116,10 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   cooldown_crisp: drawCooldownCrispIcon,
   stat_boost_potion: drawStatBoostIcon,
   catnip_tuna_water: drawCatnipTunaWaterIcon,
-  scroll_of_confusing_fog: drawConfusingFogScrollIcon,
-  goblin_dynamite: drawDynamiteInventoryIcon,
+  scroll_of_entanglement: drawEntanglementScrollIcon,
+  dynamite: drawDynamiteInventoryIcon,
   black_powder_bomb: drawBlackPowderBombIcon,
+  smoke_bomb: drawSmokeBombIcon,
   hamburger: food('hamburger'),
   hollow_stew: food('hollow_stew'),
 
@@ -187,7 +189,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   seismic_stomp_tome: drawSeismicStompTomeIcon,
   explosives_handling_tome: drawExplosivesTomeIcon,
   skill_book_nine_lives: skillBook('nine_lives'),
-  skill_book_cat_reflexes: skillBook('cat_reflexes'),
+  skill_book_warp_speed: skillBook('warp_speed'),
   skill_book_pugilism: skillBook('pugilism'),
   skill_book_iron_stomach: skillBook('iron_stomach'),
   skill_book_swordsmanship: skillBook('swordsmanship'),

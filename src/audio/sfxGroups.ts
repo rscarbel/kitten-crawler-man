@@ -64,7 +64,8 @@ export type SfxGroup =
   | 'trashGremlinMusic'
   | 'murderMysteryQuest'
   | 'deinonychusMercenary'
-  | 'interiorBopca'
+  | 'interiorDoctor'
+  | 'dwarfCook'
   | 'interiorCasino'
   | 'interiorCommerce'
   | 'interiorInteractions'
@@ -86,6 +87,37 @@ const FLOODED_PUMP_ROOM_SFX_IDS: readonly SoundId[] = decodedCueIds(FLOODED_PUMP
 const ELECTRIC_GOBLIN_SFX_IDS: readonly SoundId[] = [
   ...decodedCueIds(ELECTRIC_GOBLIN_CUES),
   GENERATOR_RIG_HUM_LOOP.id,
+];
+
+/**
+ * The Acid Llama's spit and its glob's splash. Llamas roam floors 1 and 2 and
+ * march in Briar Hollow's siege waves.
+ */
+const ACID_LLAMA_SFX_IDS: readonly SoundId[] = [
+  'acid_glob_spit_1',
+  'acid_glob_spit_2',
+  'acid_glob_spit_3',
+  'acid_glob_splash_1',
+  'acid_glob_splash_2',
+  'acid_glob_splash_3',
+];
+
+/**
+ * The Fuzzy Nightmare's growl and its claws on a grate. It comes up through
+ * the defense quest's grates on floors 1 and 2 and marches in Briar Hollow's
+ * siege waves.
+ */
+const FUZZY_NIGHTMARE_SFX_IDS: readonly SoundId[] = [
+  'fuzzy_nightmare_growl_1',
+  'fuzzy_nightmare_growl_2',
+  'fuzzy_nightmare_growl_3',
+  'fuzzy_nightmare_growl_4',
+  'fuzzy_nightmare_growl_5',
+  'fuzzy_nightmare_grate_claw_1',
+  'fuzzy_nightmare_grate_claw_2',
+  'fuzzy_nightmare_grate_claw_3',
+  'fuzzy_nightmare_grate_claw_4',
+  'fuzzy_nightmare_grate_claw_5',
 ];
 
 /**
@@ -288,9 +320,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'deinonychus_released',
     'deinonychus_slash',
     'achievement_unlocked',
-    // Chewing solid food. The Bopca's diners use it indoors, but a hamburger
-    // is eaten from the bag wherever the party happens to be.
-    'bopca_eating',
+    // Chewing solid food: a hamburger is eaten from the bag wherever the party
+    // happens to be.
+    'eating_chew',
     'boss_defeated',
     'cat_effect_damage_1',
     'cat_effect_damage_2',
@@ -315,13 +347,14 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'dave_teleport_in',
     'dave_teleport_out',
     // The Wayfinder's Anchor's channel start / completion — usable from any
-    // scene the item can be carried into, same reasoning as `confusing_fog`
+    // scene the item can be carried into, same reasoning as `smoke_cloud_billow`
     // and `speed_fizz` just below.
     'charging_up_1',
     'chest_locked',
     'chest_unlocked_in_treasure_room',
     'coin_pouch',
-    'confusing_fog',
+    // A smoke bomb bursts wherever one can be thrown.
+    'smoke_cloud_billow',
     'cooldown_crisp',
     'death_sequence',
     'dynamite_explosion',
@@ -336,7 +369,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     // taken on, so its cue has to be decoded before the first one can play.
     'game_saving',
     'gate_opening',
-    // Goblin and troglodyte spawn on every one of level1/level2/level3 (see
+    // Goblin and lizardman spawn on every one of level1/level2/level3 (see
     // each level's MobSpawnRule table), so their cues live here rather than
     // being duplicated into all three floor groups.
     'goblin_1',
@@ -369,6 +402,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'jugg_juice',
     'level_begins',
     'level_complete',
+    'lizardman_tongue_lash',
     'menu_change_follower',
     'menu_click',
     'menu_drop_item',
@@ -408,8 +442,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'quest_complete',
     'reviving_tone',
     'skillpoint_reminder',
-    // Eating anything brothy with a spoon. A safe room's Bopca serves soups and
-    // stews on every floor, so it can't wait for a floor group.
+    // Eating anything brothy with a spoon. A stew is eaten from the bag
+    // wherever the party happens to be, so it can't wait for a floor group.
     'slurping_soup',
     'speed_fizz',
     'splat_1',
@@ -418,7 +452,6 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'stat_boost',
     'teleport',
     'treasure_chest_reward',
-    'troglodyte_tongue',
     'typing_click',
     'wood_breaking_1',
     'wood_breaking_2',
@@ -562,7 +595,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'deinonychus_chitter',
   ],
 
-  /** The Trash Gremlin and the Kraken, and level1's llama and rat. */
+  /** The Trash Gremlin and the Kraken, and level1's rat. */
   level1: [
     'trash_gremlin_vomit',
     ...FLOODED_PUMP_ROOM_SFX_IDS,
@@ -589,22 +622,26 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'trash_pile_roach_burst_1',
     'trash_pile_roach_burst_2',
     'trash_pile_roach_burst_3',
-    'llama_fireball',
-    'llama_fireball_explosion',
     'rat_squeak_1',
     'rat_squeak_2',
     'rat_squeak_3',
-    'tuskling_grunt_1',
-    'tuskling_grunt_2',
-    'tuskling_grunt_3',
-    'tuskling_grunt_4',
+    'wereboar_grunt_1',
+    'wereboar_grunt_2',
+    'wereboar_grunt_3',
+    'wereboar_grunt_4',
+    ...ACID_LLAMA_SFX_IDS,
+    ...FUZZY_NIGHTMARE_SFX_IDS,
     ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
     ...BOMBER_GOBLIN_SFX_IDS,
   ],
 
-  /** Floor 2's power lab, Big Rooster's gym, the spider lab quest, and level2's llama and rat. */
+  /**
+   * Floor 2's power lab, Big Rooster's gym, the spider lab quest, the
+   * Gravedigger Beetle, the Lizardman's venom, Acid Llamas, the defense
+   * quest's Fuzzy Nightmares, and level2's rat.
+   */
   level2: [
     'dumbbell_throw',
     'kettlebell_heave',
@@ -672,8 +709,20 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'typing_click',
     'glass_break_1',
     'new_unlock',
-    'llama_fireball',
-    'llama_fireball_explosion',
+    'fireball_launch',
+    'gravedigger_wing_drone_loop',
+    'gravedigger_mandible_snap_1',
+    'gravedigger_mandible_snap_2',
+    'gravedigger_mandible_snap_3',
+    'gravedigger_mandible_snap_4',
+    'beetle_pupa_hatch_1',
+    'beetle_pupa_hatch_2',
+    'beetle_pupa_hatch_3',
+    'beetle_pupa_hatch_4',
+    'lizardman_venom_numb',
+    ...ACID_LLAMA_SFX_IDS,
+    ...FUZZY_NIGHTMARE_SFX_IDS,
+    'fireball_burst',
     'powering_off',
     'rat_squeak_1',
     'rat_squeak_2',
@@ -682,10 +731,10 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'scientist_explaining_request',
     'spider_walking',
     'tech_machinery_running',
-    'tuskling_grunt_1',
-    'tuskling_grunt_2',
-    'tuskling_grunt_3',
-    'tuskling_grunt_4',
+    'wereboar_grunt_1',
+    'wereboar_grunt_2',
+    'wereboar_grunt_3',
+    'wereboar_grunt_4',
     ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
@@ -694,7 +743,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * The floor-3 overworld/town itself: Hawkfolk and Krasue in the wilderness,
+   * The floor-3 overworld/town itself: Hawkfolk, Krasue, Giant Wasps and the
+   * Lizardman camps' venom in the wilderness,
    * Deinonychus/mercenary escorts, the Dark Knight's rumble (shared with
    * `murderMysteryQuest`'s tower confrontation), and the paper of the notice
    * boards in the square and in Briar Hollow.
@@ -708,6 +758,15 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'candle_stand_topple_2',
     ...INTERIOR_BREAK_SFX_IDS,
     'krasue_attack',
+    'giant_wasp_buzz_loop',
+    'giant_wasp_sting_1',
+    'giant_wasp_sting_2',
+    'giant_wasp_sting_3',
+    'giant_wasp_sting_4',
+    'giant_wasp_venom_spit_1',
+    'giant_wasp_venom_spit_2',
+    'giant_wasp_venom_spit_3',
+    'lizardman_venom_numb',
     'sword_attack_1',
     'rumble',
     ...FAIRY_SFX_IDS,
@@ -843,13 +902,16 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * The siege of Briar Hollow and the dead it raises: the bell, the militia's
+   * The siege of Briar Hollow and the dead it raises, and the Acid Llamas and
+   * Fuzzy Nightmares its waves bring: the bell, the militia's
    * orders and blows, Vordrick and his raised ratkin and grave bulls, the
    * victory. Every one plays only near the village, during a siege or while
    * its dead still stand, or on Midge's escort (whose ambushers are the same
    * dead), so floor 3 decodes it only then (`FloorSfxGates`).
    */
   briarHollowSiege: [
+    ...ACID_LLAMA_SFX_IDS,
+    ...FUZZY_NIGHTMARE_SFX_IDS,
     'bell_alarm',
     'bell_crack',
     'bell_toll_hit',
@@ -893,9 +955,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     // grave bull's collapse.
     'deep_rumbling',
     'bones_rattling',
-    // The lava llamas, clowns and lemurs the waves send.
-    'llama_fireball',
-    'llama_fireball_explosion',
+    // The clowns and lemurs the waves send.
     'clown_burp',
     'clown_come_here',
     'clown_horn',
@@ -1049,7 +1109,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'dead_hand_wave',
     'magic_ball_launch',
     'magic_ball_impact',
-    'llama_fireball',
+    'fireball_launch',
     'deep_rumbling',
     'powering_off',
     'charging_up_1',
@@ -1073,13 +1133,21 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'rock_golem_frustrated',
   ],
 
-  /** The town safe room's Bopca cook — `BopcaSystem`. */
-  interiorBopca: [
-    'bopca_cooking',
-    'bopca_dish_set_down',
-    'bopca_eating',
-    'bopca_grunt',
-    'bopca_happy_grunt',
+  /**
+   * The town safe room's doctor — `DoctorSystem`. Empty until the doctor's own
+   * recordings land: treatment plays `healing_potion`, which boots with the core.
+   */
+  interiorDoctor: [],
+
+  /**
+   * The dwarf cook figure's voice and kitchen, kept with the figure. Nothing
+   * places the cook yet, so no scene loads this group.
+   */
+  dwarfCook: [
+    'dwarf_cook_cooking',
+    'dwarf_cook_dish_set_down',
+    'dwarf_cook_grunt',
+    'dwarf_cook_happy_grunt',
   ],
 
   /** The Cloak & Dagger's casino games: blackjack, poker, slots and Donald's wheel. */
@@ -1278,7 +1346,7 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
     'interiorInteractions',
     'interiorAmbience',
     'interiorRoutines',
-    ...(entry.hasSafeRoom === true ? (['interiorBopca'] as const) : []),
+    ...(entry.hasSafeRoom === true ? (['interiorDoctor'] as const) : []),
     ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
     ...(sellsSomething ? (['interiorCommerce'] as const) : []),
     ...(entry.type === 'prison' ? (['stealthKeySnatch'] as const) : []),

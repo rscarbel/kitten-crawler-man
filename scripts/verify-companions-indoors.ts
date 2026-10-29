@@ -99,7 +99,7 @@ import { Conversation } from '../src/dialog/Conversation';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
 import type { BuildingId } from '../src/map/buildingIds';
 import { TOWER_FLOOR_COUNT } from '../src/map/GameMap';
-import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
+import { stampSafeRoomClinics } from '../src/map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import { STARLIGHT_TENT_ENTRY_KIND } from '../src/map/OverworldGenerator';
 import {
@@ -1161,7 +1161,7 @@ function buildRoom(name: BuildingId, kind: BuildingKind, storey: number, hasSafe
   // The scene stamps these after the map is built; a room checked without
   // them is not the room anyone walks into.
   if (hasSafeRoom) {
-    stampSafeRoomCounters(map);
+    stampSafeRoomClinics(map);
     stampSafeRoomDecor(map);
   }
   return map;
@@ -1825,7 +1825,7 @@ function checkSceneWiring(): void {
     'this.club.renderObjects(',
     'this.safeRoom.renderUI(',
     'this.dave?.renderUI(',
-    'this.bopca.renderUI(',
+    'this.doctor.renderUI(',
   ]) {
     check(
       inOrder(render, surface, 'this.renderMercenaryPrompt('),

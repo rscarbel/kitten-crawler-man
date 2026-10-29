@@ -68,6 +68,7 @@ const PREVIEW_STATUSES: readonly StatusId[] = [
   'shield',
   'chilled',
   'frozen',
+  'numbed',
   'fairy_ward',
   'fairy_aegis',
   'overheal',

@@ -126,6 +126,17 @@ const LION_MIN_LEVEL = 6;
 const LION_MAX_LEVEL = 9;
 
 /**
+ * Giant wasp swarms at the forest edge: one host and two to four escorts, so a
+ * swarm is three to five. A shade under the bear's weight, because a swarm is
+ * several bodies where the bear is one.
+ */
+const WASP_SWARM_CHANCE = 0.05;
+const WASP_MIN_LEVEL = 5;
+const WASP_MAX_LEVEL = 8;
+const WASP_SWARM_MIN_ESCORTS = 2;
+const WASP_SWARM_MAX_ESCORTS = 4;
+
+/**
  * The camps' residents.
  *
  * Additions to the floor, not a redistribution of it: `hallwayMobs` and its ~150
@@ -140,13 +151,13 @@ const GOBLIN_CAMP_BOMBERS_MAX = 1;
 const GOBLIN_MIN_LEVEL = 5;
 const GOBLIN_MAX_LEVEL = 7;
 /**
- * Kept small: a troglodyte's cost to the party grows with every other one
+ * Kept small: a lizardman's cost to the party grows with every other one
  * alive beside it, and the den's size is what keeps it a hard fight rather
  * than one the party cannot finish.
  */
-const TROGLODYTE_DEN_POPULATION = 3;
-const TROGLODYTE_MIN_LEVEL = 6;
-const TROGLODYTE_MAX_LEVEL = 8;
+const LIZARDMAN_DEN_POPULATION = 3;
+const LIZARDMAN_MIN_LEVEL = 6;
+const LIZARDMAN_MAX_LEVEL = 8;
 
 /**
  * Fairies beside the wilderness's ambient enemies: one per scatter point that
@@ -213,6 +224,22 @@ export const level3: LevelDef = {
       terrain: 'forest_edge',
     },
     {
+      type: 'giant_wasp',
+      chance: WASP_SWARM_CHANCE,
+      minLevel: WASP_MIN_LEVEL,
+      maxLevel: WASP_MAX_LEVEL,
+      terrain: 'forest_edge',
+      escorts: [
+        {
+          type: 'giant_wasp',
+          minCount: WASP_SWARM_MIN_ESCORTS,
+          maxCount: WASP_SWARM_MAX_ESCORTS,
+          minLevel: WASP_MIN_LEVEL,
+          maxLevel: WASP_MAX_LEVEL,
+        },
+      ],
+    },
+    {
       type: 'lion',
       chance: LION_CHANCE,
       minLevel: LION_MIN_LEVEL,
@@ -266,13 +293,13 @@ export const level3: LevelDef = {
         maxLevel: GOBLIN_MAX_LEVEL,
       },
     ],
-    troglodyte: [
+    lizardman: [
       {
-        type: 'troglodyte',
-        minLevel: TROGLODYTE_MIN_LEVEL,
-        maxLevel: TROGLODYTE_MAX_LEVEL,
-        minCount: TROGLODYTE_DEN_POPULATION,
-        maxCount: TROGLODYTE_DEN_POPULATION,
+        type: 'lizardman',
+        minLevel: LIZARDMAN_MIN_LEVEL,
+        maxLevel: LIZARDMAN_MAX_LEVEL,
+        minCount: LIZARDMAN_DEN_POPULATION,
+        maxCount: LIZARDMAN_DEN_POPULATION,
       },
     ],
   },

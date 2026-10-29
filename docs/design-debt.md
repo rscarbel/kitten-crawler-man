@@ -41,7 +41,7 @@ Entry shape:
 
 ### The companion's dodge flag also lifts a mob out of the AI activation radius
 
-- **Where:** `isExemptFromAiRadius` in `src/systems/MobUpdateLoop.ts`, which ORs in `Mob.requiresEvasion`; every override of `requiresEvasion` in `src/creatures/` (`GoblinArcher`, `GoblinBomber`, `EvilClown`, `Mantid`, `Troglodyte`, `DarkKnight`, …).
+- **Where:** `isExemptFromAiRadius` in `src/systems/MobUpdateLoop.ts`, which ORs in `Mob.requiresEvasion`; every override of `requiresEvasion` in `src/creatures/` (`GoblinArcher`, `GoblinBomber`, `EvilClown`, `Mantid`, `Lizardman`, `DarkKnight`, …).
 - **Problem:** `requiresEvasion` says "the companion should sidestep this mob's attacks", but the mob loop reads it as "this mob roams the whole map", so every archer, bomber and clown on a floor ticks every frame wherever it stands. A generated floor 1 holds about 110 goblin archers, all of them active with the party at the far end of the map.
 - **Cost:** about half of the active mobs the perf overlay counts on floor 1 are archers nowhere near the party, paid in update time every frame; and a mob cannot ask for the companion to dodge without also opting out of the radius.
 - **Better shape:** a separate opt-in for a mob that really roams the map (the Grotesque Spider), and `isExemptFromAiRadius` reading that instead of the dodge flag.
@@ -61,8 +61,8 @@ Entry shape:
 
 ### A status effect does not remember whether a spell laid it
 
-- **Where:** `Player.chillGrip` and `Player.magicResistedFrames` (`src/Player.ts`), `applyIceHit`'s `magic` option (`src/core/combat/frostStatus.ts`), `magicResistedBurn` (`src/systems/FairyFireballSystem.ts`), the grasping hands' `makeStuck` in `SkeletonLord` and `TheLich`.
-- **Problem:** magic resistance shortens a magic status where it is applied, but the slow a chill exerts is read live off the status type, so `chillGrip` weakens every chill on a crawler on the grounds that only ice fairies chill one today. A `StatusEffect` carries no record of having come from a spell.
+- **Where:** `CHILL_WEAKENED_BY` and the `moveSlow` entries in `STATUS_DEFS` (`src/core/combat/StatusEffect.ts`), `Player.resistedSlow` and `Player.magicResistedFrames` (`src/Player.ts`), `applyIceHit`'s `magic` option (`src/core/combat/frostStatus.ts`), `magicResistedBurn` (`src/systems/FairyFireballSystem.ts`), the grasping hands' `makeStuck` in `SkeletonLord` and `TheLich`.
+- **Problem:** magic resistance shortens a magic status where it is applied, but the slow a chill exerts is read live off the status type, so `CHILL_WEAKENED_BY` lets magic resistance weaken every chill on a body on the grounds that only ice fairies chill one today. The numbing venom has the same shape with poison resistance. A `StatusEffect` carries no record of having come from a spell.
 - **Cost:** a non-magic chill added later (a frost trap, an ice-mob bite) would be wrongly weakened by magic resistance, and each new magic status site must remember to shorten its own duration.
 - **Better shape:** stamp the share that survived resistance on the `StatusEffect` when it is applied (saved with it), and have every status reader scale its grip by that share.
 - **Until then:** a new chill source on a crawler that is not a spell must not ship without that stamp; a new magic status applier goes through `magicResistedFrames`.
@@ -259,7 +259,7 @@ Entry shape:
 
 ### Figures freeze ink measurements the runtime already measures
 
-- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `DEINONYCHUS_HEAD_CLEARANCE_TILES` (`deinonychusSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
+- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `acidLlamaFigure.ts`, `krakenFigure.ts`, `wereboarFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `giantWaspFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `lizardmanFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `DEINONYCHUS_HEAD_CLEARANCE_TILES` (`deinonychusSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
 - **Problem:** each figure nudges every gore piece by an offset measured offline so its ink sits on the cell's centre, or freezes how far its art stands above its tile, and a gate re-measures the number on every render. But `figureFrameCache.ts` measures both at runtime: `drawFigureCachedRotatedCenter` spins a piece about `figureInkBounds(...)`, so where the ink sits in its cell does not change how it tumbles, and `figureRowInkTop` gives a drawn row's top.
 - **Cost:** every redraw means re-pasting measured numbers to keep gates green, for values the runtime could read itself. Their doc comments say only an offline pass can measure ink, which the runtime contradicts.
 - **Better shape:** paint each gore piece about the cell's centre with clearance from the edges and hang overhead chrome off `figureRowInkTop`; then delete the tables, the constants, their lookups and the gates that re-measure them. The structural gate's edge check is what still matters.
@@ -394,6 +394,16 @@ Entry shape:
 - **Until then:** a new stem set's reduced stems may go in `jingles/` like the Kraken's, but nothing should play a stem except through a `stems` claim.
 - **Size:** S
 - **Found:** 2026-10-28, review of the floor-two bosses work.
+
+### The teleport's sounds are named for Dave
+
+- **Where:** `TELEPORT_SOUNDS` (`src/sprites/teleportEffect.ts`), the ids `dave_teleport_in` and `dave_teleport_out` in `src/audio/sounds.ts` and their files.
+- **Problem:** the teleport is shared — Dave's arrivals and departures and a companion brought into a safe room by `SafeRoomRegroupSystem` — but its sound ids name one character.
+- **Cost:** breaks the rule that ids never name characters, and reads as Dave's cue at every other play site.
+- **Better shape:** rename the ids and files to `teleport_in` / `teleport_out` and re-run the audio measurement.
+- **Until then:** play the teleport through `TELEPORT_SOUNDS`, never by the raw ids.
+- **Size:** S
+- **Found:** 2026-10-29, safe-room companion regroup.
 
 ## Cutscenes
 

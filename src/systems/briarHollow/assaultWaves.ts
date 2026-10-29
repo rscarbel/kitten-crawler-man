@@ -31,7 +31,7 @@ export type AssaultUndeadKind = (typeof UNDEAD_ORDER)[number];
 
 /**
  * The crawl's other hostiles he drives before him: across the four waves,
- * every regular enemy there is but the spiders, the grubs and the cockroaches.
+ * every regular enemy there is but the spiders, the gravedigger beetles and the cockroaches.
  * The rock golems come with the last.
  */
 export const HOSTILE_ORDER = [
@@ -41,17 +41,17 @@ export const HOSTILE_ORDER = [
   'goblin_bombardier',
   'rat',
   'hawkfolk',
-  'troglodyte',
-  'llama',
+  'lizardman',
+  'acid_llama',
   'lemur',
   'fat_clown',
   'tall_clown',
-  'tuskling',
+  'wereboar',
   'lion',
   'krasue',
-  'city_elf_cultist',
+  'elf',
   'mantis',
-  'bugaboo',
+  'fuzzy_nightmare',
   'rock_golem',
 ] as const satisfies readonly MobKind[];
 
@@ -102,12 +102,12 @@ export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
     hostiles: {
       goblin_dynamiter: 1,
       goblin_bombardier: 1,
-      troglodyte: 1,
-      llama: 1,
+      lizardman: 1,
+      acid_llama: 1,
       lemur: 1,
       fat_clown: 1,
       tall_clown: 1,
-      tuskling: 2,
+      wereboar: 2,
     },
     necromancerHealthShare: 0.55,
   },
@@ -119,7 +119,7 @@ export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
       skeleton_archer: 2,
       grave_bull: 1,
     },
-    hostiles: { lion: 1, krasue: 2, city_elf_cultist: 1, mantis: 2, bugaboo: 1 },
+    hostiles: { lion: 1, krasue: 2, elf: 1, mantis: 2, fuzzy_nightmare: 1 },
     necromancerHealthShare: 0.7,
   },
   {
@@ -136,7 +136,7 @@ export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
       goblin_dynamiter: 1,
       goblin_bombardier: 1,
       krasue: 1,
-      troglodyte: 1,
+      lizardman: 1,
       tall_clown: 1,
     },
     necromancerHealthShare: 1,
@@ -158,15 +158,15 @@ type SiegeLadderRow = LadderRow & {
 export const BRIAR_HOLLOW_SIEGE_LADDER = [
   { tier: TRIMMED_VARIETY_TIER, kind: 'rat', standIn: 'goblin' },
   { tier: TRIMMED_VARIETY_TIER, kind: 'hawkfolk', standIn: 'ruins_ghoul' },
-  { tier: TRIMMED_VARIETY_TIER, kind: 'bugaboo', standIn: 'raised_ratkin' },
+  { tier: TRIMMED_VARIETY_TIER, kind: 'fuzzy_nightmare', standIn: 'raised_ratkin' },
   { tier: TRIMMED_VARIETY_TIER, kind: 'tall_clown', standIn: 'raised_ratkin' },
   { tier: TRIMMED_VARIETY_TIER, kind: 'lemur', standIn: 'ruins_ghoul' },
-  { tier: TRIMMED_VARIETY_TIER, kind: 'fat_clown', standIn: 'troglodyte' },
-  { tier: LEAN_VARIETY_TIER, kind: 'tuskling', standIn: 'troglodyte' },
+  { tier: TRIMMED_VARIETY_TIER, kind: 'fat_clown', standIn: 'lizardman' },
+  { tier: LEAN_VARIETY_TIER, kind: 'wereboar', standIn: 'lizardman' },
   { tier: LEAN_VARIETY_TIER, kind: 'krasue', standIn: 'ruins_ghoul' },
   { tier: LEAN_VARIETY_TIER, kind: 'mantis', standIn: 'lion' },
-  { tier: LEAN_VARIETY_TIER, kind: 'city_elf_cultist', standIn: 'troglodyte' },
-  { tier: MINIMAL_VARIETY_TIER, kind: 'llama', standIn: 'goblin_archer' },
-  { tier: MINIMAL_VARIETY_TIER, kind: 'rock_golem', standIn: 'troglodyte' },
-  { tier: MINIMAL_VARIETY_TIER, kind: 'lion', standIn: 'troglodyte' },
+  { tier: LEAN_VARIETY_TIER, kind: 'elf', standIn: 'lizardman' },
+  { tier: MINIMAL_VARIETY_TIER, kind: 'acid_llama', standIn: 'goblin_archer' },
+  { tier: MINIMAL_VARIETY_TIER, kind: 'rock_golem', standIn: 'lizardman' },
+  { tier: MINIMAL_VARIETY_TIER, kind: 'lion', standIn: 'lizardman' },
 ] as const satisfies readonly SiegeLadderRow[];

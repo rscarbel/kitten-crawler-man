@@ -80,14 +80,14 @@ const BOSS_HP = 420;
 const BOSS_MAX_HP = 900;
 const BOSS_ACCENT = palette.meter.boss;
 const BOSS_MIDLINE = 0.5;
-/** Four minutes left on a floor's collapse timer, in frames: its red tier. */
+/** Four minutes left on a floor's Nightmare time limit, in frames: its red tier. */
 const LATE_TIMER_FRAMES = 14_400;
 const DOOMSDAY_MS_LEFT = 200_000;
-/** Most of an hour left on the collapse timer, in frames: its calm tier. */
+/** Most of an hour left on the Nightmare time limit, in frames: its calm tier. */
 const EARLY_TIMER_FRAMES = 212_520;
 const REVIVE_SECONDS_LEFT = 49;
-const BUGABOO_SECONDS_LEFT = 18;
-const BUGABOO_APPROACH_FRACTION = 0.3;
+const FUZZY_NIGHTMARE_SECONDS_LEFT = 18;
+const FUZZY_NIGHTMARE_APPROACH_FRACTION = 0.3;
 const GRATE_COUNT = 4;
 const POTION_STACK = 6;
 const DYNAMITE_STACK = 3;
@@ -133,7 +133,7 @@ function item(id: ItemId, quantity: number): InventoryItem {
 const HOTBAR_ITEMS: readonly (InventoryItem | null)[] = [
   item('seismic_stomp_tome', 1),
   item('health_potion', POTION_STACK),
-  item('goblin_dynamite', DYNAMITE_STACK),
+  item('dynamite', DYNAMITE_STACK),
   null,
   item('magic_missile_tome', 1),
   null,
@@ -350,7 +350,7 @@ interface HudFixtureSpec {
   readonly skillPoints: number;
   readonly dockExtras: readonly DockButtonModel['id'][];
   readonly topBand: () => TopBandEntry[];
-  /** Frames left on the floor's collapse timer; absent on a floor without one. */
+  /** Frames left on the floor's Nightmare time limit; absent where there is none. */
   readonly levelTimerFrames?: number;
   readonly toasts: FixtureToasts;
   readonly expanded: boolean;
@@ -506,16 +506,16 @@ function reviveEntry(): TopBandEntry {
 }
 
 /** The grate-defence quest's approach card, as `DefendQuestSystem` draws it. */
-function bugabooEntry(): TopBandEntry {
+function fuzzyNightmareEntry(): TopBandEntry {
   return stackedBandEntry({
     id: 'defend-status',
     priority: 'encounter',
     accentTone: 'warning',
     rows: [
-      { kind: 'text', text: 'BUGABOOS INCOMING', role: 'title', tone: 'warning' },
+      { kind: 'text', text: 'FUZZY NIGHTMARES INCOMING', role: 'title', tone: 'warning' },
       {
         kind: 'text',
-        text: `Bugaboos in ${BUGABOO_SECONDS_LEFT}s — board up the grates`,
+        text: `Fuzzy Nightmares in ${FUZZY_NIGHTMARE_SECONDS_LEFT}s — board up the grates`,
         role: 'label',
         tabular: true,
         maxLines: 2,
@@ -523,7 +523,7 @@ function bugabooEntry(): TopBandEntry {
       {
         kind: 'meter',
         id: 'defend-status/time',
-        value: BUGABOO_APPROACH_FRACTION,
+        value: FUZZY_NIGHTMARE_APPROACH_FRACTION,
         max: 1,
         meterKind: 'progress',
       },
@@ -847,7 +847,7 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     companionStatus: COMPANION_NINE_LIVES_STATUS,
     skillPoints: 0,
     dockExtras: ['build'],
-    topBand: () => [bugabooEntry(), reviveEntry()],
+    topBand: () => [fuzzyNightmareEntry(), reviveEntry()],
     levelTimerFrames: EARLY_TIMER_FRAMES,
     toasts: 'none',
     expanded: false,

@@ -3,11 +3,12 @@
  * the role system in `townDialog.ts` rather than replacing it. Each entry's
  * `ambient` is everyday chatter in their own voice, `lore` is a multi-page life
  * story told one entry per talk, and `reactive` is a quest-gated pool shown as the
- * lead page when their corner of town has something timelier to say. The lore
- * covers Scolopendra's curse, the Hawkfolk and their watchers, Featherfall's
- * magistracy, the old circus, and Caroline's floating eyes, and the `reactive`
- * hooks read the game's own questlines through the same `TownDialogContext` the
- * street uses.
+ * lead page when their corner of town has something timelier to say. Between
+ * them they tell the Fraying, the Hawkfolk and the Carrying, the old circus and
+ * Caroline's floating eyes, each from where that resident stands (the canon is
+ * the "History and belief" section of `docs/town.md`), and the `reactive` hooks
+ * read the game's own questlines through the same `TownDialogContext` the street
+ * uses.
  */
 
 import type { TownDialogContext } from '../../systems/townDialog';
@@ -41,9 +42,9 @@ export const RESIDENT_LINES = {
     lore: [
       [
         'You want to know why the walls are so thick. Everybody does, eventually.',
-        'This was a city once. Not a village hiding behind stone — a city, ten times over, running right out to where the ruins are now.',
-        'Then the poison came up out of the ground. Scolopendra’s curse, the temple calls it. I just call it the bad year.',
-        'The ones who breathed it did not die. That is the part nobody says out loud. They changed, and they wandered off, and some of them are still out there wearing the faces of my neighbours.',
+        'This was a city once, ten times the size, running right out to where the ruins are now.',
+        'Then one night the ground came apart under it, street after street, like a seam letting go. The temple calls it the Fraying. I just call it the bad year.',
+        'The ones caught inside did not die. That is the part nobody says out loud. They came back wrong, and they wandered off, and some of them are still out there wearing the faces of my neighbours.',
       ],
       [
         'The things in the ruins — you have killed some, I imagine. Did you look at their hands?',
@@ -187,7 +188,7 @@ export const RESIDENT_LINES = {
         'The south field used to run right out to where the ruins start.',
         'You can still see the furrows from the loft, under the rubble. Straight as a ruled line, forty rows of them.',
         'My great-grandmother sowed those. Now I farm a square of dirt inside a wall and call it the South Green.',
-        'The curse did not just take people. It took the acreage, and nobody writes songs about acreage.',
+        'When the ground frayed it took the neighbours first and the acreage after, and nobody writes songs about acreage.',
       ],
     ],
     reactive: (ctx) => {
@@ -225,9 +226,9 @@ export const RESIDENT_LINES = {
       ],
       [
         'You want my theory on the ruins? Everyone else has one, so here is mine.',
-        'The poison is not gone. It settled. It is in the ground water east of the wall, and it comes up when it rains hard.',
-        'That is why the changed things drift toward the low streets in wet weather, and why nobody ever cures one.',
-        'You cannot cure a place. You can only stay upwind of it, which is a poor sort of medicine to sell.',
+        'The seam under the old city never closed. Whatever came apart out there is still a little apart, and on a stormy night the edge of the ruins shifts.',
+        'That is when the changed things drift toward the low streets. They come in with the weather, and nothing on my shelves has ever turned one back.',
+        'I sell remedies for what happens to a body. None of them was ever meant for what happened to a street.',
       ],
       [
         'Bring me anything you find out there in a stoppered jar and I will look at it. I mean that.',
@@ -268,20 +269,15 @@ export const RESIDENT_LINES = {
         'Thirty years under it now. One grows used to a ceiling, the way one grows used to anything that will not move.',
       ],
       [
-        'Thou wilt hear it said in the square: the Hawkfolk are not birds, they are watchers. I wish the phrase were only ornament, but it is doctrine, and doctrine has teeth.',
-        'A watcher does not guard. A watcher observes and sets it down, and does not step in, and does not apologise for the not stepping in.',
-        'I built this dome for one regardless, the same as every deacon before me — a room for someone who will only ever take notes on it.',
-      ],
-      [
-        'Magistrate Featherfall has not come to the dome in six weeks. Thirty years he came every seventh day; it was habit, not devotion, and a Hawkfolk’s habits do not simply lapse.',
-        'I sent word twice. What returned was courteous, and was not in his hand.',
-        'I am a deacon. I am not at liberty to say what I make of that. Thou art not a deacon.',
+        'Thou wilt hear it said in the square that a wing is owed. When the Fraying came, my people flew this city over the seam to the hill, and every one of us who can fly owes carries still to those who cannot.',
+        'Nest-debt, the street calls it. One who refuses a carry is clipped, and the roost does not speak that name again.',
+        'I preach it every seventh day and I believe it. Some nights I wonder at a faith whose first word is a debt. Debt keeps a people honest; it seldom keeps them kind.',
       ],
     ],
     reactive: (ctx) => {
       if (ctx.doomsday === 'complete') {
         return [
-          'The watchers watched, as is their nature, and thou didst act, which is not. I shall be some while composing a sermon around that.',
+          'The roost kept to its perches, and thou didst not. I shall be some while composing a sermon around that.',
           'The dome held, and half this parish sheltered beneath it. Whatever passed at the tower, it reached down to us.',
         ];
       }
@@ -294,7 +290,7 @@ export const RESIDENT_LINES = {
       ) {
         return [
           'So it was the elves after all, and graver than I feared. Three years I preached against it, to the wrong ears, in the wrong tone.',
-          'Find whoever taught them a watcher hungers for blood, and end that one. The rest are but parishioners who believed their teacher.',
+          'Find whoever taught them that Caroline can be made to listen with blood, and end that one. The rest are but parishioners who believed their teacher.',
         ];
       }
       if (murderResolved(ctx)) {
@@ -524,7 +520,7 @@ export const RESIDENT_LINES = {
       'Lodge is garrison ground. Be useful or be brief.',
       'Two of us, one alley, no relief. You do the arithmetic.',
       'I do not want your name. I want to know which way you came in.',
-      'The high watch filed my report as resolved. Nobody the high watch sent has ever once walked down here to check.',
+      'I took my report up to the High Roost and they called it settled. Not one of them has flown down this alley since to see whether it is.',
       'Watch rotation is eleven hours. Ask me again about morale.',
       'If you hear a whistle from this alley, go the other way and send someone.',
     ],
@@ -595,9 +591,9 @@ export const RESIDENT_LINES = {
         'Sleep there. Train here. I am not confusing the two and neither are you.',
       ],
       [
-        'Watch the timer, crawler. Everyone forgets the timer because the town has a market and a pub and it feels like a place.',
-        'Twenty days, they say. It was twenty days on the last floor too, and then it was eight.',
-        'Caroline cuts it when she sees fit, and nobody down here has ever worked out her schedule.',
+        'Do not settle in, crawler. Everyone settles in, because the town has a market and a pub and it feels like a place.',
+        'It is a stop on the way down. The stairs are still there, whether or not you feel ready for them.',
+        'Caroline moves crawlers along when she sees fit, and nobody down here has ever worked out her schedule.',
         'Do the thing you are putting off. Whatever it is. Do it this week.',
       ],
     ],

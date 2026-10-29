@@ -2,7 +2,7 @@ import type { Mob } from '../Mob';
 import type { Player } from '../../Player';
 import type { GameStats } from '../../core/progression/GameStats';
 import { isInPublishedRoster } from '../packAlert';
-import { BrindleGrub } from '../BrindleGrub';
+import { GravediggerBeetle } from '../GravediggerBeetle';
 import { drawWardCrushBubble, drawWardGlyph } from '../../sprites/art/fairyEffectsArt';
 import {
   Fairy,
@@ -47,7 +47,7 @@ export const WARD_CAST: FairyCast = {
 
 /**
  * The fairy's other spell: a ward that never protects, laid on a hatched
- * vespa instead of an ally, and crushed shut around it a moment later. Reuses
+ * gravedigger beetle instead of an ally, and crushed shut around it a moment later. Reuses
  * the ward's own cast row — the hands motion of laying one on a body is the
  * same whichever kind of ward it turns out to be.
  */
@@ -135,15 +135,15 @@ export class ShieldFairy extends Fairy {
 
   private readonly glyphSeed = Math.floor(Math.random() * GLYPH_SEED_RANGE);
 
-  /** The vespa a crushing ward is currently closing on, or null between casts. */
-  private crushTarget: BrindleGrub | null = null;
+  /** The gravedigger beetle a crushing ward is currently closing on, or null between casts. */
+  private crushTarget: GravediggerBeetle | null = null;
   /** Frames left before {@link crushTarget} implodes; counts down from {@link SHIELD_CRUSH_IMPLODE_FRAMES}. */
   private crushFramesLeft = 0;
 
   /** Set on the frame the ward finishes closing; the audio pass reads and clears it. */
   crushImplodeSoundPending = false;
 
-  /** Whether a crushing ward is currently closing on a vespa. Read by `FairySystem` and gates. */
+  /** Whether a crushing ward is currently closing on a gravedigger beetle. Read by `FairySystem` and gates. */
   get hasInFlightCrush(): boolean {
     return this.crushTarget !== null;
   }
@@ -180,8 +180,8 @@ export class ShieldFairy extends Fairy {
 
   /**
    * Counts an in-flight crush down and resolves it on the frame it reaches
-   * zero, killing the vespa outright. `killOutright` rather than a damage
-   * number: a vespa the fairy's own death aegis (`FAIRY_AEGIS_STATUS`) is
+   * zero, killing the gravedigger beetle outright. `killOutright` rather than a damage
+   * number: a gravedigger beetle the fairy's own death aegis (`FAIRY_AEGIS_STATUS`) is
    * shielding would otherwise take this "hit" at half value through
    * `scaleIncomingDamage` and survive the implosion at half HP. This also
    * keeps the crash a verdict, not a blow, so it still earns the player no XP
@@ -203,7 +203,7 @@ export class ShieldFairy extends Fairy {
   /**
    * Drops an in-flight crush without finishing it — called when this fairy
    * dies, alongside stripping the wards it holds, so a crush already snapped
-   * around a vespa does not go on to kill it after the fairy that cast it is
+   * around a gravedigger beetle does not go on to kill it after the fairy that cast it is
    * gone.
    */
   cancelCrush(): void {
@@ -276,12 +276,12 @@ export class ShieldFairy extends Fairy {
     return best?.mob ?? null;
   }
 
-  /** The nearest hatched vespa in reach to crush, or null when none qualifies. */
-  private bestCrushTarget(): BrindleGrub | null {
-    let best: BrindleGrub | null = null;
+  /** The nearest hatched beetle in reach to crush, or null when none qualifies. */
+  private bestCrushTarget(): GravediggerBeetle | null {
+    let best: GravediggerBeetle | null = null;
     let bestDistance = Infinity;
     for (const ally of this.allies) {
-      if (!(ally instanceof BrindleGrub) || !ally.isVespa || !this.canReach(ally)) continue;
+      if (!(ally instanceof GravediggerBeetle) || !ally.isAdult || !this.canReach(ally)) continue;
       const distance = this.distanceTo(ally);
       if (distance < bestDistance) {
         best = ally;
@@ -294,12 +294,17 @@ export class ShieldFairy extends Fairy {
   protected override chooseCast(_crawler: Player | null): FairyCastIntent | null {
     if (!this.isWatched) return null;
     // The crush is checked first: it is the rarer, longer-cooldown cast, and a
-    // vespa in reach is worth interrupting the ordinary ward rotation for.
+    // hatched beetle in reach is worth interrupting the ordinary ward rotation for.
     if (this.crushTarget === null && this.isCastReady(CRUSH_CAST)) {
-      const vespa = this.bestCrushTarget();
-      if (vespa !== null) {
+      const beetle = this.bestCrushTarget();
+      if (beetle !== null) {
         const ts = this.tileSize;
-        return { cast: CRUSH_CAST, target: vespa, aimX: vespa.x + ts / 2, aimY: vespa.y + ts / 2 };
+        return {
+          cast: CRUSH_CAST,
+          target: beetle,
+          aimX: beetle.x + ts / 2,
+          aimY: beetle.y + ts / 2,
+        };
       }
     }
     if (!this.isCastReady(WARD_CAST)) return null;
@@ -311,11 +316,11 @@ export class ShieldFairy extends Fairy {
 
   protected override onCastReleased(cast: ActiveFairyCast): void {
     if (cast.cast === CRUSH_CAST) {
-      const vespa = cast.target;
-      if (!(vespa instanceof BrindleGrub) || !vespa.isVespa || !vespa.isAlive) return;
-      this.crushTarget = vespa;
+      const beetle = cast.target;
+      if (!(beetle instanceof GravediggerBeetle) || !beetle.isAdult || !beetle.isAlive) return;
+      this.crushTarget = beetle;
       this.crushFramesLeft = SHIELD_CRUSH_IMPLODE_FRAMES;
-      this.glyphTarget = vespa;
+      this.glyphTarget = beetle;
       return;
     }
     const target = cast.target;

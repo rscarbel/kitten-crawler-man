@@ -4,14 +4,14 @@
  * The room is the same encounter on floors 1 and 2, but floor 2's party meets
  * it with a floor's worth more gear and levels, so the second visit widens the
  * front (more grates to board) and quickens it (more bodies, harder blows on
- * the boards) rather than only inflating the bugaboos' stats.
+ * the boards) rather than only inflating the Fuzzy Nightmares' stats.
  */
 export interface DefendQuestIntensity {
   /** Grates cut into the nursery floor; split evenly across two of its walls, so keep it even. */
   readonly grateCount: number;
   /** How many times faster than the base cadence the wave spawns. */
   readonly spawnRateMultiplier: number;
-  /** Multiplies every blow a bugaboo lands on a boarded grate. */
+  /** Multiplies every blow a Fuzzy Nightmare lands on a boarded grate. */
   readonly barrierDamageMultiplier: number;
 }
 

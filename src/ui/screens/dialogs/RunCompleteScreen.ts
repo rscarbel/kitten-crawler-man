@@ -66,8 +66,8 @@ export interface RunSummary {
   readonly deinonychusWords: PetWords;
   readonly totalKills: number;
   readonly bossesDefeated: number;
-  readonly hirelingsHired: number;
-  readonly hirelingsLost: number;
+  readonly mercenariesHired: number;
+  readonly mercenariesLost: number;
   readonly deinonychusPets: number;
   readonly cowPets: number;
   readonly midgePets: number;
@@ -115,8 +115,8 @@ export function buildRunSummary(input: {
     deinonychusWords: petWords(input.petNames, 'deinonychus'),
     totalKills: stats.totalKills,
     bossesDefeated: stats.bossesDefeated,
-    hirelingsHired: stats.hirelingsHired,
-    hirelingsLost: stats.hirelingsLost,
+    mercenariesHired: stats.mercenariesHired,
+    mercenariesLost: stats.mercenariesLost,
     deinonychusPets: stats.deinonychusPets,
     cowPets: stats.cowPets,
     midgePets: stats.midgePets,
@@ -292,9 +292,18 @@ function partyRows(summary: RunSummary): StatRow[] {
   rows.push(
     { label: 'Total kills', value: summary.totalKills, format: 'count', tone: 'warning' },
     { label: 'Bosses slain', value: summary.bossesDefeated, format: 'count', tone: 'boss' },
-    { label: 'Hirelings hired', value: summary.hirelingsHired, format: 'count', tone: 'plain' },
-    { label: 'Hirelings lost', value: summary.hirelingsLost, format: 'count', tone: 'muted' },
   );
+  if (summary.mercenariesHired > 0) {
+    rows.push(
+      {
+        label: 'Mercenaries Hired',
+        value: summary.mercenariesHired,
+        format: 'count',
+        tone: 'plain',
+      },
+      { label: 'Mercenaries Lost', value: summary.mercenariesLost, format: 'count', tone: 'muted' },
+    );
+  }
   const petRows: StatRow[] = [
     {
       label: `${summary.deinonychusWords.opening} petted`,

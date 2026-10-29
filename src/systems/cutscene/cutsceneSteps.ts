@@ -21,6 +21,13 @@ export interface CutsceneTile {
  */
 export type CutsceneTalk = Pick<ConversationRequest, 'lines' | 'reward' | 'questRelated'>;
 
+/**
+ * Whether the world goes on under one of Caroline's messages. She usually
+ * speaks over play still running; a message that must freeze everyone where
+ * they stand, mobs included, says so.
+ */
+export type CarolineMessageWorld = 'runs' | 'halts';
+
 /** Walk the active crawler to `tile` by the pathfinder, then turn them to `face`. */
 export interface WalkToStep {
   readonly kind: 'walkTo';
@@ -48,7 +55,11 @@ export type CutsceneSoundCue = Pick<CueSlot<string>, 'takes'>;
 export type CutsceneStep<Action extends CutsceneWorldAction = never> =
   | WalkToStep
   | { readonly kind: 'conversation'; readonly request: CutsceneTalk }
-  | { readonly kind: 'carolineMessage'; readonly message: CarolineMessage }
+  | {
+      readonly kind: 'carolineMessage';
+      readonly message: CarolineMessage;
+      readonly world: CarolineMessageWorld;
+    }
   | { readonly kind: 'daveTeleportOut' }
   | { readonly kind: 'wait'; readonly frames: number }
   /** Lerps the camera from wherever it is now to `to`, then holds it there. */

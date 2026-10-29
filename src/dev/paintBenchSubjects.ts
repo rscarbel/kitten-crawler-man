@@ -46,14 +46,18 @@ import {
   ROCK_GOLEM_FIGURE,
 } from '../sprites/art/rockGolemFigure';
 import { LICH_FIGURE } from '../sprites/art/lichFigure';
-import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
-import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
+import { WEREBOAR_FIGURE } from '../sprites/art/wereboarFigure';
+import { ACID_LLAMA_FIGURE } from '../sprites/art/acidLlamaFigure';
 import { cowFigure } from '../sprites/art/cowFigure';
-import { BRINDLE_GRUB_FIGURE, COW_TAILED_GRUB_FIGURE } from '../sprites/art/grubFigure';
-import { BRINDLED_VESPA_FIGURE } from '../sprites/art/brindledVespaFigure';
+import {
+  GRAVEDIGGER_BEETLE_FIGURE,
+  GRAVEDIGGER_LARVA_FIGURE,
+  GRAVEDIGGER_PUPA_FIGURE,
+} from '../sprites/art/gravediggerBeetleFigure';
+import { GIANT_WASP_FIGURE } from '../sprites/art/giantWaspFigure';
 import { GOBLIN_FIGURES } from '../sprites/art/goblinFigure';
 import { ELECTRIC_GOBLIN_FIGURE } from '../sprites/art/electricGoblinFigure';
-import { TROGLODYTE_FIGURE, TROGLODYTE_TONGUE_FIGURE } from '../sprites/art/troglodyteFigure';
+import { LIZARDMAN_FIGURE, LIZARDMAN_TONGUE_FIGURE } from '../sprites/art/lizardmanFigure';
 import { COCKROACH_FIGURE } from '../sprites/art/cockroachFigure';
 import { RAT_FIGURE } from '../sprites/art/ratFigure';
 import {
@@ -78,7 +82,7 @@ import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMa
 import { SPIDER_FIGURE } from '../sprites/art/spiderFigure';
 import { fairyFigureOf, fairyStateName } from '../sprites/art/fairyFigure';
 import { FAIRY_KINDS } from '../sprites/art/fairyTiming';
-import { BUGABOO_FIGURE } from '../sprites/art/bugabooFigure';
+import { FUZZY_NIGHTMARE_FIGURE } from '../sprites/art/fuzzyNightmareFigure';
 import {
   KRAKEN_FIGURE,
   KRAKEN_SLAM_FIGURE,
@@ -100,15 +104,20 @@ import {
   SKELETON_SOUL_BURST_FIGURE,
 } from '../sprites/art/skeletonEffectsFigure';
 import {
-  LLAMA_LAVA_BOLT_FIGURE,
-  LLAMA_LAVA_BURST_FIGURE,
-  LLAMA_LAVA_FLAME_FIGURE,
-} from '../sprites/art/lavaBallFigure';
+  FIREBALL_BOLT_FIGURE,
+  FIREBALL_BURST_FIGURE,
+  FIREBALL_FLAME_FIGURE,
+} from '../sprites/art/fireballFigure';
+import {
+  ACID_GLOB_BOLT_FIGURE,
+  ACID_GLOB_BURST_FIGURE,
+  ACID_GLOB_PUDDLE_FIGURE,
+} from '../sprites/art/acidGlobFigure';
 import {
   SPIT_STATE,
-  VESPA_ACID_SPIT_IMPACT_FIGURE,
-  VESPA_ACID_SPIT_PROJECTILE_FIGURE,
-} from '../sprites/art/vespaSpitFigure';
+  WASP_ACID_SPIT_IMPACT_FIGURE,
+  WASP_ACID_SPIT_PROJECTILE_FIGURE,
+} from '../sprites/art/waspSpitFigure';
 
 export interface PaintBenchSubject {
   readonly def: FigureDef;
@@ -149,21 +158,22 @@ const FIXED_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: ROCK_GOLEM_BOSS_FIGURE, state: 'idle' },
   { def: GOLEM_ROCK_FIGURE, state: 'spin' },
   { def: GOLEM_ROCK_BURST_FIGURE, state: 'spin' },
-  { def: TUSKLING_FIGURE, state: 'walk_side' },
-  { def: LLAMA_FIGURE, state: 'walk_side' },
+  { def: WEREBOAR_FIGURE, state: 'walk_side' },
+  { def: ACID_LLAMA_FIGURE, state: 'walk_side' },
   // The highland's shag makes it the costliest of the six cattle figures.
   { def: cowFigure('dun', 'adult'), state: 'walk_side' },
   { def: cowFigure('holstein', 'adult'), state: 'graze_side' },
-  { def: BRINDLE_GRUB_FIGURE, state: 'walk_side' },
-  { def: COW_TAILED_GRUB_FIGURE, state: 'walk_side' },
-  { def: BRINDLED_VESPA_FIGURE, state: 'hover_side' },
+  { def: GRAVEDIGGER_LARVA_FIGURE, state: 'walk_side' },
+  { def: GRAVEDIGGER_PUPA_FIGURE, state: 'pupa' },
+  { def: GRAVEDIGGER_BEETLE_FIGURE, state: 'fly_side' },
+  { def: GIANT_WASP_FIGURE, state: 'hover_side' },
   { def: GOBLIN_FIGURES.sword, state: 'walk' },
   { def: GOBLIN_FIGURES.axe, state: 'walk' },
   { def: GOBLIN_FIGURES.mace, state: 'walk' },
   { def: GOBLIN_FIGURES.warhammer, state: 'walk' },
   { def: GOBLIN_FIGURES.bow, state: 'walk' },
-  { def: TROGLODYTE_FIGURE, state: 'walk_side' },
-  { def: TROGLODYTE_TONGUE_FIGURE, state: 'extend' },
+  { def: LIZARDMAN_FIGURE, state: 'walk_side' },
+  { def: LIZARDMAN_TONGUE_FIGURE, state: 'extend' },
   { def: COCKROACH_FIGURE, state: 'skitter_side' },
   { def: RAT_FIGURE, state: 'walk_side' },
   { def: LICH_FIGURE, state: 'idle' },
@@ -181,7 +191,7 @@ const FIXED_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, state: 'idle' },
   { def: LIFE_MACHINE_FIGURE, state: lifeMachineStateName('printing') },
   { def: SPIDER_FIGURE, state: 'walk' },
-  { def: BUGABOO_FIGURE, state: 'walk_side' },
+  { def: FUZZY_NIGHTMARE_FIGURE, state: 'walk_side' },
   { def: ENERGY_SHIELD_FIGURE, state: 'active' },
   { def: ENERGY_SHIELD_MINI_FIGURE, state: 'active' },
   { def: ENERGY_SHIELD_SHOCKWAVE_FIGURE, state: 'expand' },
@@ -194,11 +204,14 @@ const FIXED_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: SKELETON_SOUL_BURST_FIGURE, state: 'burst' },
   { def: SKELETON_BONE_ARROW_FIGURE, state: 'fly' },
   { def: SKELETON_GRASPING_HANDS_FIGURE, state: 'erupt' },
-  { def: LLAMA_LAVA_BOLT_FIGURE, state: 'fly' },
-  { def: LLAMA_LAVA_BURST_FIGURE, state: 'burst' },
-  { def: LLAMA_LAVA_FLAME_FIGURE, state: 'burn' },
-  { def: VESPA_ACID_SPIT_PROJECTILE_FIGURE, state: SPIT_STATE },
-  { def: VESPA_ACID_SPIT_IMPACT_FIGURE, state: SPIT_STATE },
+  { def: FIREBALL_BOLT_FIGURE, state: 'fly' },
+  { def: FIREBALL_BURST_FIGURE, state: 'burst' },
+  { def: FIREBALL_FLAME_FIGURE, state: 'burn' },
+  { def: ACID_GLOB_BOLT_FIGURE, state: 'fly' },
+  { def: ACID_GLOB_BURST_FIGURE, state: 'burst' },
+  { def: ACID_GLOB_PUDDLE_FIGURE, state: 'puddle' },
+  { def: WASP_ACID_SPIT_PROJECTILE_FIGURE, state: SPIT_STATE },
+  { def: WASP_ACID_SPIT_IMPACT_FIGURE, state: SPIT_STATE },
   ...FAIRY_KINDS.map((kind) => ({
     def: fairyFigureOf(kind),
     state: fairyStateName('hover', 'side'),

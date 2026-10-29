@@ -24,6 +24,7 @@ import { crateReach, drawCrate } from './props/crate';
 import { wrenchReach, drawWrench } from './props/wrench';
 import { dynamiteReach, drawDynamite } from './props/dynamite';
 import { blackPowderBombReach, drawBlackPowderBomb } from './props/blackPowderBomb';
+import { smokeBombReach, drawSmokeBomb } from './props/smokeBomb';
 import { zippoReach, drawZippo } from './props/zippo';
 import { bottleReach, drawBottle } from './props/bottle';
 import { slingshotReach, drawSlingshot } from './props/slingshot';
@@ -36,6 +37,7 @@ type BipedPropKind =
   | 'hammer'
   | 'dynamite'
   | 'blackPowderBomb'
+  | 'smokeBomb'
   | 'zippo'
   | 'bottle'
   | 'slingshot'
@@ -131,6 +133,7 @@ export const PROP_ART: Record<BipedPropKind, PropArt> = {
   hammer: { paint: drawHammer, reach: hammerReach },
   dynamite: { paint: drawDynamite, reach: dynamiteReach },
   blackPowderBomb: { paint: drawBlackPowderBomb, reach: blackPowderBombReach },
+  smokeBomb: { paint: drawSmokeBomb, reach: smokeBombReach },
   zippo: { paint: drawZippo, reach: zippoReach },
   bottle: { paint: drawBottle, reach: bottleReach },
   slingshot: { paint: drawSlingshot, reach: slingshotReach },

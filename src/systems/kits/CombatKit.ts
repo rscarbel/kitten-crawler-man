@@ -47,6 +47,7 @@ import { SeismicStompEffectSystem } from '../SeismicStompEffectSystem';
 import { StatusChangeWatcher } from '../statusChangeEvents';
 import { StormcallerStrikeSystem } from '../StormcallerStrikeSystem';
 import type { SpellSystem } from '../SpellSystem';
+import type { SmokeCloudSystem } from '../SmokeCloudSystem';
 import type { DestructiblePropSystem } from '../DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from '../TownInteriorPropDestructionSystem';
 import type { TreeSystem } from '../TreeSystem';
@@ -119,6 +120,8 @@ export class CombatKit {
    * by the party and a mob's read of it can never be two different systems.
    */
   readonly spells: SpellSystem;
+  /** The roster's smoke clouds, ticked and drawn here with the rest of the fighting. */
+  readonly smokeClouds: SmokeCloudSystem;
   readonly mobLoop = new MobUpdateLoop();
   readonly gore = new GoreSystem();
   readonly bodyPartGore: BodyPartGoreSystem;
@@ -157,6 +160,7 @@ export class CombatKit {
     this.abilityManager = deps.abilityManager;
     this.statusChanges = deps.statusChanges ?? new StatusChangeWatcher();
     this.spells = deps.world.roster.spells;
+    this.smokeClouds = deps.world.roster.smokeClouds;
     this.bodyPartGore = new BodyPartGoreSystem(deps.world.gameMap);
     this.gear = new GearSystem(deps.world);
     this.deathScreen.audio = deps.world.audio;
@@ -219,14 +223,15 @@ export class CombatKit {
   }
 
   /**
-   * Spells, then mob AI — in that order, because a shield raised this frame has
-   * to exist before the mobs that would walk into it choose a step. The
-   * active crawler is placed as the listener first, so every sound the frame
-   * places in the world is heard from where the player now stands.
+   * Spells and smoke, then mob AI — in that order, because a shield raised or a
+   * cloud burst this frame has to exist before the mobs it reaches choose a
+   * step. The active crawler is placed as the listener first, so every sound
+   * the frame places in the world is heard from where the player now stands.
    */
   updateMobs(ctx: SystemContext): void {
     this.world.audio?.setListenerToCrawler(ctx.active);
     this.spells.update(ctx);
+    this.smokeClouds.update(this.world.roster.grid);
     this.worldStepTaken = this.gear.takeWorldStep();
     if (this.worldStepTaken) this.mobLoop.update(ctx);
   }
@@ -411,7 +416,7 @@ export class CombatKit {
     this.seismicStompFx.renderGround(ctx, camX, camY);
   }
 
-  /** The layer over the entities: airborne gore, shields, lightning, ripples, fog. */
+  /** The layer over the entities: airborne gore, shields, lightning, ripples, roots, smoke. */
   renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number, cat: CatPlayer): void {
     this.gore.renderParticles(ctx, camX, camY);
     this.bodyPartGore.renderFlying(ctx, camX, camY);
@@ -420,7 +425,8 @@ export class CombatKit {
     this.spells.renderChainLightning(ctx, camX, camY);
     this.stormcaller.render(ctx, camX, camY);
     this.spells.renderShockwaveRipples(ctx, camX, camY);
-    this.spells.renderFogs(ctx, camX, camY);
+    this.spells.renderEntanglements(ctx, camX, camY);
+    this.smokeClouds.render(ctx, camX, camY);
     this.gear.render(ctx, camX, camY);
     this.seismicStompFx.render(ctx, camX, camY);
     this.meleeFx.render(ctx, camX, camY);
@@ -429,12 +435,13 @@ export class CombatKit {
 
   /**
    * Drops what this floor has standing in the world, for a scene that is walking
-   * away from the map rather than rewinding it: the shield and the fogs cast on a
+   * away from the map rather than rewinding it: the shield and the smoke clouds on a
    * storey stop existing when it stops being drawn, but nothing the party spent
    * is refunded.
    */
   leaveFloor(): void {
     this.spells.dropWorldEffects();
+    this.smokeClouds.reset();
     this.stormcaller.reset();
     this.gear.reset();
     this.seismicStompFx.resetForCheckpoint();
@@ -457,6 +464,7 @@ export class CombatKit {
   /** Drops everything in flight, so a rewound world has no leftovers mid-air. */
   resetForCheckpoint(): void {
     this.spells.resetForCheckpoint();
+    this.smokeClouds.reset();
     this.stormcaller.reset();
     this.gear.reset();
     this.seismicStompFx.resetForCheckpoint();

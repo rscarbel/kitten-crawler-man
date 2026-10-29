@@ -3,7 +3,7 @@
  * The clogged bathroom, played: the real `DungeonScene` on floor 2, headless,
  * driven through the same calls the game's own input reaches.
  *
- *  - The pipe board and its explainer hold the collapse timer for as long as
+ *  - The pipe board and its explainer hold the floor clock for as long as
  *    they are up, and closing the board starts it again.
  *  - Every weapon the party has (melee, seismic stomp, missile, slingshot, dynamite,
  *    the shield), fired through its own system, reaches a queue goblin and the
@@ -389,10 +389,11 @@ function tickPinned(scene: Scene, frames: number, onFrame?: () => void): void {
   }
 }
 
+/** Frames the floor clock counted over `frames` ticks: the time they cost the party. */
 function framesLost(scene: Scene, frames: number): number {
-  const before = scene.levelTimerRemainingFrames;
+  const before = scene.floorClockElapsedFrames;
   tickPinned(scene, frames);
-  return before - scene.levelTimerRemainingFrames;
+  return scene.floorClockElapsedFrames - before;
 }
 
 /** Everything walkable from `start` by the map's own walkability, block flags included. */
@@ -586,7 +587,12 @@ function progressSnapshot(rig: Rig): string {
   const [human, cat] = scene.pm.players();
   const destruction = scene['destruction'];
   const loot = destruction.loot.captureCheckpoint();
-  const { framesPlayed: _framesPlayed, damageTaken: _damageTaken, ...stats } = rig.stats.snapshot();
+  const {
+    framesPlayed: _framesPlayed,
+    floorFramesPlayed: _floorFramesPlayed,
+    damageTaken: _damageTaken,
+    ...stats
+  } = rig.stats.snapshot();
   return JSON.stringify({
     humanXp: [human.level, human.xp, human.coins],
     catXp: [cat.level, cat.xp, cat.coins],
@@ -661,11 +667,11 @@ function throwBlow(rig: Rig, kind: DamageKind, goblin: Goblin, stand: Tile): voi
       return;
     case 'explosion': {
       const dynamite = scene['destruction'].dynamite;
-      human.inventory.addItem('goblin_dynamite', 1);
+      human.inventory.addItem('dynamite', 1);
       // The blast is meant to catch the crawlers too; what it does to them is not under test here.
       human.godMode = true;
       cat.godMode = true;
-      dynamite.beginCharge(0, human, 'goblin_dynamite');
+      dynamite.beginCharge(0, human, 'dynamite');
       dynamite.release();
       tickPinned(scene, DYNAMITE_FRAMES);
       human.godMode = false;

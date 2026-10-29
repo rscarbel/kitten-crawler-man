@@ -267,7 +267,7 @@ Four decisions carry that, and each is load-bearing:
   all work on one animation row of one figure, because a fight is a walk row and an
   attack row, not a sheet.
 - **Cells are shared across instances.** Mobs animate on discrete frame indices, so
-  eight tusklings blit the same eight cells; a pack costs what one of it costs. A figure
+  eight wereboars blit the same eight cells; a pack costs what one of it costs. A figure
   whose appearance varies per instance cannot key on `(state, frame)` alone — where the
   variation is a closed set, each variant takes its own `FigureId`. The town's whole
   cast is the case: every citizen wears one of a closed set of human or Hawkfolk looks,

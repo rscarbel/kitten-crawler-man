@@ -1497,7 +1497,7 @@ async function checkQuestFreeSpin(): Promise<void> {
 const STEADY_MOB_BLOW: DamageSource = { kind: 'mob', mobType: 'goblin', undodgeable: true };
 const STATUS_TICK: DamageSource = { kind: 'status', effectType: 'poison', applier: null };
 /** Unscaled by difficulty, so the HP a blow leaves is exactly HP minus the blow. */
-const FLAT_HAZARD: DamageSource = { kind: 'environmental', hazard: 'lavaFlames' };
+const FLAT_HAZARD: DamageSource = { kind: 'environmental', hazard: 'fireballFlames' };
 /** Small enough that a doubled blow still fits inside a fresh crawler's HP. */
 const SCALE_TEST_BLOW = 4;
 const SCALE_TOLERANCE = 1e-9;

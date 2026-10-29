@@ -29,7 +29,7 @@ import { SpatialGrid } from '../src/core/world/SpatialGrid';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
-import { BrindleGrub } from '../src/creatures/BrindleGrub';
+import { GravediggerBeetle } from '../src/creatures/GravediggerBeetle';
 import { Mercenary } from '../src/creatures/Mercenary';
 import {
   getMercenaryTemplate,
@@ -94,8 +94,8 @@ const THROWER_OFFSET_TILES = 6;
 const ROLL_THAT_NEVER_DODGES = 1 - Number.EPSILON;
 /** Any hireling serves for the party-side victim. */
 const BLAST_HIRELING = 'crush' as const satisfies MercenaryTemplateId;
-/** Far more frames than a grub's two evolutions can take. */
-const GRUB_EVOLUTION_FRAME_LIMIT = 60 * 60 * 5;
+/** Far more frames than a larva's growth to an adult can take. */
+const BEETLE_GROWTH_FRAME_LIMIT = 60 * 60 * 5;
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -309,13 +309,13 @@ console.log(
   };
 
   const owner = new HumanPlayer(start.x, start.y, TILE_SIZE);
-  const makeVespa = (): Mob => {
-    const grub = new BrindleGrub(BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, TILE_SIZE);
-    grub.setMap(room);
-    for (let frame = 0; frame < GRUB_EVOLUTION_FRAME_LIMIT && !grub.isVespa; frame++) {
-      grub.tickEvolve();
+  const makeAdultBeetle = (): Mob => {
+    const beetle = new GravediggerBeetle(BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, TILE_SIZE);
+    beetle.setMap(room);
+    for (let frame = 0; frame < BEETLE_GROWTH_FRAME_LIMIT && !beetle.isAdult; frame++) {
+      beetle.tickEvolve();
     }
-    return grub;
+    return beetle;
   };
   const makeHireling = (): Mob => {
     const hireling = new Mercenary(
@@ -346,14 +346,14 @@ console.log(
     { name: 'a rat', make: spawned('rat'), fullBlast: false, pushed: true },
     { name: 'a goblin', make: spawned('goblin'), fullBlast: false, pushed: true },
     { name: 'Big Rooster', make: spawned('big_rooster'), fullBlast: false, pushed: false },
-    { name: 'a Brindled Vespa', make: makeVespa, fullBlast: true, pushed: true },
+    { name: 'a Gravedigger Beetle', make: makeAdultBeetle, fullBlast: true, pushed: true },
     { name: 'a hireling', make: makeHireling, fullBlast: true, pushed: true },
   ];
 
-  const vespaProbe = makeVespa();
+  const beetleProbe = makeAdultBeetle();
   check(
-    vespaProbe instanceof BrindleGrub && vespaProbe.isVespa && vespaProbe.huntsOtherMobs,
-    'the grub under test has hatched into a Vespa that hunts other mobs',
+    beetleProbe instanceof GravediggerBeetle && beetleProbe.isAdult && beetleProbe.huntsOtherMobs,
+    'the larva under test has grown into an adult beetle that hunts other mobs',
   );
   const bigRoosterProbe = spawned('big_rooster')();
   check(bigRoosterProbe.isBoss, 'Big Rooster under test is a boss');

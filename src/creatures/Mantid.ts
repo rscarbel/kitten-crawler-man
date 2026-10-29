@@ -173,7 +173,7 @@ type MantidState = 'idle' | 'pursuing' | 'slash' | 'rage_pause' | 'flurry' | 'co
  *
  * Listed rather than expressed as "not idle and not pursuing": a Mantid *is*
  * meant to keep pursuing while confused, and cancelling out of pursuit every
- * frame would re-roll his rage cooldown for as long as the fog held.
+ * frame would re-roll his rage cooldown for as long as the smoke held.
  */
 const COMMITTED_STATES: ReadonlySet<MantidState> = new Set<MantidState>([
   'slash',
@@ -294,10 +294,10 @@ export class Mantid extends Mob {
    * Cancels a rage cycle that confusion has frozen.
    *
    * `MobUpdateLoop` skips `updateAI` entirely for a confused mob, and the rage
-   * cycle's timers only advance inside it. A Mantid fogged mid-pause would
+   * cycle's timers only advance inside it. A Mantid smoke-blinded mid-pause would
    * otherwise sit in `rage_pause` — motionless and *invincible* — for as long as
-   * the fog held him, then flurry the instant it lifted. A bounty-spawned Mantid
-   * is immune to the fog and never sees this, but the class is registered as an
+   * the smoke held him, then flurry the instant it lifted. A bounty-spawned Mantid
+   * is immune to the smoke and never sees this, but the class is registered as an
    * ordinary spawn type too, and a boss that becomes unkillable by drinking one
    * scroll is not a thing to leave to who spawned him.
    *
@@ -307,7 +307,7 @@ export class Mantid extends Mob {
   override tickTimers(): void {
     super.tickTimers();
     // Ticked here rather than in `updateAI` for the same reason: labels left on a
-    // confused Mantid would hang in the air until the fog lifted.
+    // confused Mantid would hang in the air until the smoke lifted.
     this.tickImmuneLabels();
     if (!this.isConfused || !COMMITTED_STATES.has(this.state)) return;
     // Any committed pose — the pause, the flurry, a strike mid-swing — is dropped
@@ -320,8 +320,8 @@ export class Mantid extends Mob {
     this.flurryTickTimer = 0;
     this.rageCooldown = randomInt(RAGE_COOLDOWN_MIN_FRAMES, RAGE_COOLDOWN_MAX_FRAMES);
     // The cancelled swing still costs him its cooldown. Without this a Mantid
-    // fogged mid-strike pays 40 frames instead of the usual 100 and comes out of
-    // the fog swinging *faster* than one that was left alone.
+    // smoke-blinded mid-strike pays 40 frames instead of the usual 100 and comes out of
+    // the smoke swinging *faster* than one that was left alone.
     this.slashCooldown = SLASH_COOLDOWN_FRAMES;
   }
 

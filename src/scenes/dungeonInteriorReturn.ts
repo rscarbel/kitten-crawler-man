@@ -38,10 +38,10 @@ export interface DungeonInteriorReturn {
   /** Every system's durable state at the door. */
   readonly world: WorldCheckpoint;
   /**
-   * The collapse clock at the door. No frame is spent indoors, so this is
+   * The floor clock at the door. No frame is spent indoors, so this is
    * exactly what the clock reads again on the way out.
    */
-  readonly levelTimerFrames: number;
+  readonly floorElapsedFrames: number;
   /** Where the party stands on the way out: the tile in front of the door. */
   readonly returnTile: TilePoint;
   /**

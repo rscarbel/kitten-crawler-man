@@ -52,10 +52,11 @@ const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
   await import('../src/core/party/mercenaryTemplates.js');
 const { SOLDIER_IDS } = await import('../src/core/quests/villagerIds.js');
-const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
-const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
+const { GravediggerBeetle } = await import('../src/creatures/GravediggerBeetle.js');
+const { GiantWasp } = await import('../src/creatures/GiantWasp.js');
+const { FuzzyNightmare } = await import('../src/creatures/FuzzyNightmare.js');
 const { Lemur } = await import('../src/creatures/Lemur.js');
-const { CityElfCultist } = await import('../src/creatures/CityElfCultist.js');
+const { Elf } = await import('../src/creatures/Elf.js');
 const { Cockroach } = await import('../src/creatures/Cockroach.js');
 const { Cow } = await import('../src/creatures/Cow.js');
 const { AttackCow } = await import('../src/creatures/AttackCow.js');
@@ -85,7 +86,7 @@ const { ElectricGoblin } = await import('../src/creatures/ElectricGoblin.js');
 const { KrakenTentacle } = await import('../src/creatures/KrakenTentacle.js');
 const { Krasue } = await import('../src/creatures/Krasue.js');
 const { LittleRooster } = await import('../src/creatures/LittleRooster.js');
-const { Llama } = await import('../src/creatures/Llama.js');
+const { AcidLlama } = await import('../src/creatures/AcidLlama.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
 const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
 const { MazeBellTarget } = await import('../src/creatures/MazeBellTarget.js');
@@ -117,8 +118,8 @@ const { TallClown } = await import('../src/creatures/TallClown.js');
 const { MassiveClown } = await import('../src/creatures/MassiveClown.js');
 const { TrashGremlin } = await import('../src/creatures/TrashGremlin.js');
 const { TheLich } = await import('../src/creatures/TheLich.js');
-const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
-const { Tuskling } = await import('../src/creatures/Tuskling.js');
+const { Lizardman } = await import('../src/creatures/Lizardman.js');
+const { Wereboar } = await import('../src/creatures/Wereboar.js');
 const { TutorialGoblin } = await import('../src/creatures/TutorialGoblin.js');
 const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
 useDevPlayerIdentity();
@@ -138,8 +139,12 @@ type MobInstance = InstanceType<typeof Mob>;
  * - `faceMidBody`: a pillar with its face set halfway up, under a crown.
  * - `turnsToFace`: drawn from above and turned to any facing, head always on
  *   show at the end it faces.
+ * - `headBelowBack`: a hunched or hovering body whose hump or raised wing
+ *   cases stand above its head, so the top of the drawing is its back: in
+ *   profile the head leads the way it faces, and face-on it sits under them.
  */
-type HeadEnd = 'upright' | 'fromAbove' | 'profileOnly' | 'faceMidBody' | 'turnsToFace';
+type HeadEnd =
+  'upright' | 'fromAbove' | 'profileOnly' | 'faceMidBody' | 'turnsToFace' | 'headBelowBack';
 
 /** One creature in one state, and whether it should show eyes at all. */
 interface Subject {
@@ -175,17 +180,20 @@ const DEINONYCHUS_STAGE_LEVELS = [
 const MERCENARY_IDS = MERCENARY_TEMPLATE_IDS;
 const MAZE_BLOCK_KINDS = ['sandbag', 'brace', 'release_ring', 'capstan'] as const;
 const MAZE_MIRROR_KINDS = ['pivot_mirror', 'swivel_mirror'] as const;
-const BRINDLED_VESPA_STAGE = 3;
 const BROOD_BOUNDS_TILES = 8;
 const NECROMANCER_FACE_HEIGHT = -1.3;
 const NEGATIVE_EYE_SPACING = 0.08;
 const NEGATIVE_FRONT_ACROSS = -0.07;
 const TILE_MIDDLE = 0.5;
+/** Behind the tile's centre, out along the beetle's abdomen to its tail. */
+const NEGATIVE_TAIL_FORWARD = -0.3;
+/** Down at a hovering beetle's dangling legs, below where its face-on head can sit. */
+const NEGATIVE_LEG_HEIGHT = 0.6;
 
-function grubAt(stage: InstanceType<typeof BrindleGrub>['stage']): MobInstance {
-  const grub = new BrindleGrub(...at);
-  grub.stage = stage;
-  return grub;
+function beetleAt(stage: InstanceType<typeof GravediggerBeetle>['stage']): MobInstance {
+  const beetle = new GravediggerBeetle(...at);
+  beetle.stage = stage;
+  return beetle;
 }
 
 function risingSkeleton(): MobInstance {
@@ -194,10 +202,10 @@ function risingSkeleton(): MobInstance {
   return skeleton;
 }
 
-function bugabooBreakingIn(): MobInstance {
-  const bugaboo = new Bugaboo(...at);
-  bugaboo.isBreakingIn = true;
-  return bugaboo;
+function fuzzyNightmareBreakingIn(): MobInstance {
+  const fuzzyNightmare = new FuzzyNightmare(...at);
+  fuzzyNightmare.isBreakingIn = true;
+  return fuzzyNightmare;
 }
 
 /** A tentacle is built underground, where it draws only the floor breaking. */
@@ -230,17 +238,18 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyed('attack cow', new AttackCow(...at, new CatPlayer(...at), ATTACK_COW_EYE_FLOOR, null)),
   ],
   Baggi: () => [eyed('Baggi', new Baggi(...at))],
-  BrindleGrub: () => [
-    eyeless('brindle grub', grubAt(1)),
-    eyeless('cow-tailed grub', grubAt(2)),
-    eyed('brindled vespa', grubAt(BRINDLED_VESPA_STAGE)),
+  GravediggerBeetle: () => [
+    eyeless('gravedigger larva', beetleAt('larva')),
+    eyeless('gravedigger pupa', beetleAt('pupa')),
+    eyed('gravedigger beetle', beetleAt('adult'), 'headBelowBack'),
   ],
-  Bugaboo: () => [
-    eyed('bugaboo', new Bugaboo(...at)),
-    eyeless('bugaboo breaking in', bugabooBreakingIn()),
+  GiantWasp: () => [eyed('giant wasp', new GiantWasp(...at))],
+  FuzzyNightmare: () => [
+    eyed('fuzzy nightmare', new FuzzyNightmare(...at), 'headBelowBack'),
+    eyeless('fuzzy nightmare breaking in', fuzzyNightmareBreakingIn()),
   ],
   Lemur: () => [eyed('lemur', new Lemur(...at), 'profileOnly')],
-  CityElfCultist: () => [eyed('elf cultist', new CityElfCultist(...at))],
+  Elf: () => [eyed('elf', new Elf(...at))],
   Cockroach: () => [eyed('cockroach', new Cockroach(...at), 'fromAbove')],
   Cow: () => COW_AGES.map((age) => eyed(`cow ${age}`, new Cow(...at, 'holstein', age, () => 0))),
   DarkKnight: () => [eyed('dark knight', new DarkKnight(...at))],
@@ -278,7 +287,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   ],
   Krasue: () => [eyed('krasue', new Krasue(...at))],
   LittleRooster: () => [eyed('Little Rooster', new LittleRooster(...at))],
-  Llama: () => [eyed('llama', new Llama(...at))],
+  AcidLlama: () => [eyed('acid llama', new AcidLlama(...at))],
   Mantid: () => [eyed('mantid', new Mantid(...at))],
   MantisCrony: () => [eyed('mantis crony', new MantisCrony(...at))],
   MazeBellTarget: () => [eyeless('maze bell', new MazeBellTarget(...at, 'bell'))],
@@ -341,8 +350,8 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   MassiveClown: () => [eyed('Massive Clown', new MassiveClown(...at))],
   TrashGremlin: () => [eyed('the Trash Gremlin', new TrashGremlin(...at))],
   TheLich: () => [eyed('the Lich', new TheLich(...at))],
-  Troglodyte: () => [eyed('troglodyte', new Troglodyte(...at))],
-  Tuskling: () => [eyed('tuskling', new Tuskling(...at))],
+  Lizardman: () => [eyed('lizardman', new Lizardman(...at))],
+  Wereboar: () => [eyed('wereboar', new Wereboar(...at))],
   TutorialGoblin: () => [eyed('tutorial goblin', new TutorialGoblin(...at))],
 };
 
@@ -449,6 +458,11 @@ const HEAD_SHARE_OF_LENGTH = 0.45;
 const FROM_ABOVE_HEAD_SHARE = 0.55;
 /** How far down a `faceMidBody` pillar its face may sit, as a share of its height. */
 const MID_BODY_FACE_SHARE = 0.55;
+/**
+ * How far down a `headBelowBack` body its face may sit face-on: raised wing
+ * cases above and dangling legs below leave the head halfway down the box.
+ */
+const BELOW_BACK_FACE_SHARE = 0.6;
 /**
  * The top share of the drawn body whose width a profile's eyes are judged
  * against: the head end, above a weapon or a bow held out in front.
@@ -563,6 +577,7 @@ function headDepthShare(headEnd: HeadEnd, box: BodyBox, glints: Glints, facing: 
   if (headEnd === 'upright' || headEnd === 'faceMidBody') return fromTop;
   if (headEnd === 'turnsToFace') return leadingDepthShare(box, glints, facing);
   if (isSideView(facing) || headEnd === 'profileOnly') return facing.x < 0 ? fromLeft : fromRight;
+  if (headEnd === 'headBelowBack') return fromTop;
   return (box.bottom - glints.y) / height;
 }
 
@@ -581,8 +596,9 @@ function leadingDepthShare(box: BodyBox, glints: Glints, facing: Facing): number
   return (lead - along(glints.x, glints.y)) / (lead - trail);
 }
 
-function headShareAllowed(headEnd: HeadEnd): number {
+function headShareAllowed(headEnd: HeadEnd, facing: Facing): number {
   if (headEnd === 'faceMidBody') return MID_BODY_FACE_SHARE;
+  if (headEnd === 'headBelowBack' && !isSideView(facing)) return BELOW_BACK_FACE_SHARE;
   if (headEnd === 'fromAbove' || headEnd === 'turnsToFace') return FROM_ABOVE_HEAD_SHARE;
   return HEAD_SHARE_OF_LENGTH;
 }
@@ -603,7 +619,9 @@ function glintError(
   if (glints.x < box.left || glints.x > box.right || glints.y < box.top || glints.y > box.bottom) {
     return 'eyes off the body';
   }
-  if (headDepthShare(subject.headEnd, box, glints, facing) > headShareAllowed(subject.headEnd)) {
+  if (
+    headDepthShare(subject.headEnd, box, glints, facing) > headShareAllowed(subject.headEnd, facing)
+  ) {
     return 'eyes far from the head end of the body';
   }
   if (subject.headEnd === 'upright' && isSideView(facing)) {
@@ -804,6 +822,36 @@ class FixedViewSpider extends SmallSpider {
   }
 }
 
+/** A beetle whose eyes sit on its tail: its back is on top, but its head still leads. */
+class TailEyedBeetle extends GravediggerBeetle {
+  protected override get eyePlacement(): EyePlacement {
+    return {
+      sideForward: NEGATIVE_TAIL_FORWARD,
+      sideHeight: TILE_MIDDLE,
+      sideSpacing: NEGATIVE_EYE_SPACING,
+      frontMirrors: false,
+      frontAcross: 0,
+      frontHeight: TILE_MIDDLE,
+      frontSpacing: NEGATIVE_EYE_SPACING,
+    };
+  }
+}
+
+/** A beetle whose face-on eyes hang at its dangling legs, under the head between its wing cases. */
+class LegEyedBeetle extends GravediggerBeetle {
+  protected override get eyePlacement(): EyePlacement {
+    return {
+      sideForward: 0,
+      sideHeight: TILE_MIDDLE,
+      sideSpacing: NEGATIVE_EYE_SPACING,
+      frontMirrors: false,
+      frontAcross: 0,
+      frontHeight: NEGATIVE_LEG_HEIGHT,
+      frontSpacing: NEGATIVE_EYE_SPACING,
+    };
+  }
+}
+
 function negativeTests(): void {
   const mirrored = eyed(
     'negative: mirrored necromancer',
@@ -834,6 +882,23 @@ function negativeTests(): void {
     )
   ) {
     failures.push("negative test: eyes by a skeleton's shins went unnoticed");
+  }
+  const tailBeetle = new TailEyedBeetle(...at);
+  tailBeetle.stage = 'adult';
+  const tailEyed = eyed('negative: tail-eyed beetle', tailBeetle, 'headBelowBack');
+  const right = FACINGS[0];
+  const tailDrawn = draw(tailEyed.mob, right);
+  if (glintError(tailEyed, tailDrawn, glintsOn(tailDrawn, tailEyed.mob), right) === null) {
+    failures.push("negative test: eyes on a beetle's tail went unnoticed");
+  }
+  const legBeetle = new LegEyedBeetle(...at);
+  legBeetle.stage = 'adult';
+  const legEyed = eyed('negative: leg-eyed beetle', legBeetle, 'headBelowBack');
+  const faceOn = FACINGS[2];
+  const legDrawn = draw(legEyed.mob, faceOn);
+  const legGlints = glintsOn(legDrawn, legEyed.mob);
+  if (glintError(legEyed, legDrawn, legGlints, faceOn) === null) {
+    failures.push("negative test: face-on eyes at a beetle's dangling legs went unnoticed");
   }
   const goblin = eyeless('negative: goblin declared eyeless', new Goblin(...at, 'mace'));
   const toward = FACINGS[2];

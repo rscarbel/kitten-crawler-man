@@ -160,7 +160,7 @@ export interface HotbarModel {
   readonly arrange?: HotbarArranger | null;
 }
 
-/** A floor's collapse timer. */
+/** A floor's Nightmare time limit. */
 export interface LevelTimerModel {
   /** Frames left on the clock. */
   readonly frames: number;
@@ -182,9 +182,9 @@ export interface HudModel {
   readonly hotbar: HotbarModel | null;
   readonly topBand: readonly TopBandEntry[];
   /**
-   * The floor's collapse timer, null where there is none. The HUD draws it as
-   * a top-band card on a roomy screen and a chip by the coin pill on a
-   * compact one.
+   * The floor's Nightmare time limit, null where there is none (an untimed
+   * floor, or any difficulty but Nightmare). The HUD draws it as a top-band
+   * card on a roomy screen and a chip by the coin pill on a compact one.
    */
   readonly levelTimer: LevelTimerModel | null;
 }

@@ -93,7 +93,7 @@ const SAMPLE_KILLS: Readonly<Record<string, number>> = {
   Rat: 288,
   Cockroach: 176,
   'Skeleton Warrior': 94,
-  'Brindled Vespa': 61,
+  'Gravedigger Beetle': 61,
 };
 
 const POTIONS_GIVEN = 3;
@@ -122,8 +122,8 @@ const SAMPLE_SUMMARY: RunSummary = {
   deinonychusWords: petWords(namedRun(), 'deinonychus'),
   totalKills: 1_342,
   bossesDefeated: 9,
-  hirelingsHired: 5,
-  hirelingsLost: 2,
+  mercenariesHired: 5,
+  mercenariesLost: 2,
   deinonychusPets: 48,
   cowPets: 37,
   midgePets: 12,
@@ -148,7 +148,7 @@ function runCompleteFixture(name: string, frameCount: number): DialogFixture {
 function defendSpec(): QuestRewardSpec {
   return {
     questTitle: 'Defend the Goblin Mother',
-    renderQuestIcon: rewardIconPainter('goblin_dynamite'),
+    renderQuestIcon: rewardIconPainter('dynamite'),
     quote: {
       text: 'You kept my babies breathing. That is worth more than coin. Take the coin anyway.',
       speaker: 'The Goblin Mother',
@@ -166,7 +166,7 @@ function defendSpec(): QuestRewardSpec {
             note: 'One for each crawler.',
           },
           bagItemRewardLine('health_potion', POTIONS_GIVEN),
-          bagItemRewardLine('skill_book_cat_reflexes', 1, {
+          bagItemRewardLine('skill_book_warp_speed', 1, {
             describe: true,
             note: `In ${crawlerDisplayName('cat')}'s bag.`,
           }),

@@ -457,7 +457,7 @@ Three more that are not about vacuity but bite the same way:
 - **One `FigureDef` cannot carry an individual trait.** Cells are keyed on
   `(figure, state, frame)` and shared across every instance, so a painter reading
   a per-instance colour serves the first instance's clothes to every creature
-  after it. "Some females pierce their tusks" painted into the Tuskling turns a
+  after it. "Some females pierce their tusks" painted into the Wereboar turns a
   personal choice into a species marking. Where the variation is a _closed set_,
   give each variant its own `FigureId` (the Hawkfolk's eight clothing palettes);
   otherwise it gets cut.

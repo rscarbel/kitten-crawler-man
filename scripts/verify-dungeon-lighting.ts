@@ -461,7 +461,7 @@ function checkBreaking(gameMap: GameMap, label: string): void {
     .staticLightTiles()
     .find(
       (light) =>
-        light.kind !== 'hearth' &&
+        light.kind !== 'clinic_lamp' &&
         STATIC_LIGHT_FIXTURES.has(gameMap.structure[light.y][light.x].type),
     );
   if (torch === undefined) {

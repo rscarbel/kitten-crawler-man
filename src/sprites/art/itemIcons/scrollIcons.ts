@@ -3,7 +3,6 @@ import {
   bandedFill,
   disc,
   FULL_TURN,
-  BOLD_DETAIL,
   glint,
   MEDIUM_DETAIL,
   hairlineWidth,
@@ -22,9 +21,9 @@ import {
 const PARCHMENT = '#e6cf9c';
 const PARCHMENT_ROLL = '#d8bb80';
 const INK = '#5a4128';
-const FOG = '#9a92c4';
-const FOG_DARK = '#4c4478';
-const FOG_WISP = '#c4bcec';
+const ROOT = '#7d5532';
+/** Root hairs are pale, the way a freshly pulled root's are. */
+const ROOTLET = '#d9c49a';
 const WAX = '#a31f2e';
 const RIBBON = '#3d5f8f';
 
@@ -67,19 +66,120 @@ const SPIRAL_TURNS = 1.6;
 const SPIRAL_STEPS = 14;
 const SPIRAL_INNER_FRACTION = 0.15;
 
-const CLOUD_PUFFS: readonly (readonly [number, number, number])[] = [
-  [0.38, 0.47, 0.085],
-  [0.5, 0.41, 0.105],
-  [0.62, 0.47, 0.085],
-  [0.5, 0.51, 0.09],
+/** A root as a centreline and its half-width at the base and at the tip, in icon units. */
+interface RootStroke {
+  readonly points: readonly IconPoint[];
+  readonly baseHalfWidth: number;
+  readonly tipHalfWidth: number;
+}
+
+/** The roots inked on the sheet: a gnarled trunk splitting into two twisting arms over a spread of feeder roots. */
+const SHEET_ROOTS: readonly RootStroke[] = [
+  {
+    points: [
+      [0.5, 0.61],
+      [0.47, 0.54],
+      [0.52, 0.46],
+      [0.47, 0.38],
+      [0.51, 0.3],
+    ],
+    baseHalfWidth: 0.045,
+    tipHalfWidth: 0.01,
+  },
+  {
+    points: [
+      [0.49, 0.56],
+      [0.41, 0.53],
+      [0.35, 0.46],
+      [0.4, 0.39],
+      [0.34, 0.32],
+    ],
+    baseHalfWidth: 0.03,
+    tipHalfWidth: 0.008,
+  },
+  {
+    points: [
+      [0.51, 0.51],
+      [0.59, 0.49],
+      [0.65, 0.42],
+      [0.6, 0.36],
+      [0.66, 0.3],
+    ],
+    baseHalfWidth: 0.03,
+    tipHalfWidth: 0.008,
+  },
+  {
+    points: [
+      [0.5, 0.61],
+      [0.43, 0.62],
+      [0.36, 0.6],
+    ],
+    baseHalfWidth: 0.025,
+    tipHalfWidth: 0.008,
+  },
+  {
+    points: [
+      [0.5, 0.61],
+      [0.57, 0.63],
+      [0.64, 0.6],
+    ],
+    baseHalfWidth: 0.025,
+    tipHalfWidth: 0.008,
+  },
 ];
-const CLOUD_LIGHT_FROM: readonly [number, number] = [0.36, 0.33];
-const CLOUD_LIGHT_TO: readonly [number, number] = [0.62, 0.58];
-const SWIRL_CX = 0.5;
-const SWIRL_CY = 0.46;
-const SWIRL_RADIUS = 0.07;
-const SWIRL_TURNS = 1.75;
-const SWIRL_STEPS = 24;
+
+/** Roots creeping out from behind the sheet's edges, the one cue that this scroll does something. */
+const ESCAPING_ROOTS: readonly RootStroke[] = [
+  {
+    points: [
+      [0.72, 0.44],
+      [0.8, 0.39],
+      [0.88, 0.41],
+      [0.93, 0.34],
+      [0.88, 0.28],
+    ],
+    baseHalfWidth: 0.04,
+    tipHalfWidth: 0.01,
+  },
+  {
+    points: [
+      [0.28, 0.58],
+      [0.2, 0.62],
+      [0.12, 0.6],
+      [0.07, 0.67],
+      [0.12, 0.72],
+    ],
+    baseHalfWidth: 0.04,
+    tipHalfWidth: 0.01,
+  },
+];
+const ROOT_LIGHT_FROM: readonly [number, number] = [0.3, 0.28];
+const ROOT_LIGHT_TO: readonly [number, number] = [0.7, 0.66];
+/** Each span of a root is split this many times, so its bends read as curves rather than corners. */
+const ROOT_SUBSTEPS = 4;
+const CATMULL_ROM_TENSION = 0.5;
+const ROOTLETS: readonly (readonly IconPoint[])[] = [
+  [
+    [0.46, 0.44],
+    [0.42, 0.42],
+  ],
+  [
+    [0.62, 0.45],
+    [0.67, 0.47],
+  ],
+  [
+    [0.37, 0.43],
+    [0.33, 0.45],
+  ],
+  [
+    [0.85, 0.41],
+    [0.86, 0.46],
+  ],
+  [
+    [0.15, 0.6],
+    [0.14, 0.55],
+  ],
+];
 
 const INK_LINES: readonly (readonly IconPoint[])[] = [
   [
@@ -118,19 +218,6 @@ const RIBBON_TAILS: readonly (readonly IconPoint[])[] = [
   ],
 ];
 
-/** Fog puffing out from behind the sheet's edges, the one cue that this scroll does something. */
-const FOG_PUFFS: readonly (readonly (readonly [number, number, number])[])[] = [
-  [
-    [0.83, 0.36, 0.06],
-    [0.91, 0.43, 0.055],
-    [0.84, 0.47, 0.05],
-  ],
-  [
-    [0.16, 0.56, 0.055],
-    [0.09, 0.63, 0.05],
-    [0.17, 0.67, 0.06],
-  ],
-];
 const GLINT_X = 0.26;
 const GLINT_Y = 0.13;
 const GLINT_R = 0.05;
@@ -182,32 +269,62 @@ function paintRoll(ctx: CanvasRenderingContext2D, px: number, roll: Roll): void 
   }
 }
 
-function traceCloud(ctx: CanvasRenderingContext2D): void {
-  ctx.beginPath();
-  for (const [cx, cy, r] of CLOUD_PUFFS) {
-    ctx.moveTo(cx + r, cy);
-    ctx.arc(cx, cy, r, 0, FULL_TURN);
-  }
+function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const m1 = (p2 - p0) * CATMULL_ROM_TENSION;
+  const m2 = (p3 - p1) * CATMULL_ROM_TENSION;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (
+    (2 * t3 - 3 * t2 + 1) * p1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * p2 + (t3 - t2) * m2
+  );
 }
 
-function paintFogMotif(ctx: CanvasRenderingContext2D, px: number): void {
-  traceCloud(ctx);
-  ctx.strokeStyle = FOG_DARK;
-  ctx.lineWidth = outlineWidth(px) * 2;
-  ctx.stroke();
-  ctx.fillStyle = litFill(ctx, FOG, CLOUD_LIGHT_FROM, CLOUD_LIGHT_TO);
-  ctx.fill();
-
-  const swirl: IconPoint[] = [];
-  for (let step = 0; step <= SWIRL_STEPS; step++) {
-    const t = step / SWIRL_STEPS;
-    const angle = t * SWIRL_TURNS * FULL_TURN;
-    swirl.push([
-      SWIRL_CX + Math.cos(angle) * SWIRL_RADIUS * t,
-      SWIRL_CY + Math.sin(angle) * SWIRL_RADIUS * t,
-    ]);
+/** The root's centreline, smoothed through its control points. */
+function smoothRoot(points: readonly IconPoint[]): IconPoint[] {
+  const smooth: IconPoint[] = [];
+  const last = points.length - 1;
+  for (let span = 0; span < last; span++) {
+    const p0 = points[Math.max(0, span - 1)];
+    const p1 = points[span];
+    const p2 = points[span + 1];
+    const p3 = points[Math.min(last, span + 2)];
+    for (let step = 0; step < ROOT_SUBSTEPS; step++) {
+      const t = step / ROOT_SUBSTEPS;
+      smooth.push([
+        catmullRom(p0[0], p1[0], p2[0], p3[0], t),
+        catmullRom(p0[1], p1[1], p2[1], p3[1], t),
+      ]);
+    }
   }
-  strokeDetail(ctx, px, swirl, FOG_DARK, BOLD_DETAIL);
+  smooth.push(points[last]);
+  return smooth;
+}
+
+/** A closed outline of the root, tapering from its base to its tip. */
+function traceRoot(ctx: CanvasRenderingContext2D, root: RootStroke): void {
+  const line = smoothRoot(root.points);
+  const last = line.length - 1;
+  const left: IconPoint[] = [];
+  const right: IconPoint[] = [];
+  line.forEach((point, index) => {
+    const before = line[Math.max(0, index - 1)];
+    const after = line[Math.min(last, index + 1)];
+    const dx = after[0] - before[0];
+    const dy = after[1] - before[1];
+    const length = Math.hypot(dx, dy);
+    const nx = length === 0 ? 0 : -dy / length;
+    const ny = length === 0 ? 0 : dx / length;
+    const along = index / last;
+    const halfWidth = root.baseHalfWidth + (root.tipHalfWidth - root.baseHalfWidth) * along;
+    left.push([point[0] + nx * halfWidth, point[1] + ny * halfWidth]);
+    right.push([point[0] - nx * halfWidth, point[1] - ny * halfWidth]);
+  });
+  tracePoints(ctx, [...left, ...right.reverse()]);
+}
+
+function paintRoots(ctx: CanvasRenderingContext2D, px: number, roots: readonly RootStroke[]): void {
+  const fill = litFill(ctx, ROOT, ROOT_LIGHT_FROM, ROOT_LIGHT_TO);
+  for (const root of roots) paintForm(ctx, px, () => traceRoot(ctx, root), fill);
 }
 
 function paintSeal(ctx: CanvasRenderingContext2D, px: number): void {
@@ -249,21 +366,10 @@ function paintSeal(ctx: CanvasRenderingContext2D, px: number): void {
   );
 }
 
-/** Scroll of Confusing Fog: a parchment open between two rolls, a fog cloud inked on it and fog leaking off its edges. */
-export function drawConfusingFogScrollIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+/** Scroll of Entanglement: a parchment open between two rolls, roots inked on it and roots creeping off its edges. */
+export function drawEntanglementScrollIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
   paintIconArt(ctx, rect, (art, px) => {
-    for (const puff of FOG_PUFFS) {
-      art.beginPath();
-      for (const [cx, cy, r] of puff) {
-        art.moveTo(cx + r, cy);
-        art.arc(cx, cy, r, 0, FULL_TURN);
-      }
-      art.strokeStyle = FOG_DARK;
-      art.lineWidth = outlineWidth(px) * 2;
-      art.stroke();
-      art.fillStyle = FOG_WISP;
-      art.fill();
-    }
+    paintRoots(art, px, ESCAPING_ROOTS);
     paintForm(
       art,
       px,
@@ -282,7 +388,8 @@ export function drawConfusingFogScrollIcon(ctx: CanvasRenderingContext2D, rect: 
         art.fillRect(0, ROLL_SHADOW_TOP, 1, ROLL_SHADOW_HEIGHT);
       },
     );
-    paintFogMotif(art, px);
+    paintRoots(art, px, SHEET_ROOTS);
+    for (const hair of ROOTLETS) strokeDetail(art, px, hair, ROOTLET, MEDIUM_DETAIL);
     for (const line of INK_LINES) strokeDetail(art, px, line, INK, MEDIUM_DETAIL);
     paintRoll(art, px, BOTTOM_ROLL);
     paintRoll(art, px, TOP_ROLL);

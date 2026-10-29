@@ -1,11 +1,16 @@
 /**
- * The wet, sickening statuses: `poison` and `spit_venom`.
+ * The wet, sickening statuses: `poison`, `spit_venom` and `numbed`.
  *
- * Both read as "something is inside you and it is getting worse", and the
- * cue that carries that is the body tint. A green cloud drawn *beside* a
- * character is weather; the same green multiplied *into* the character's own
- * art is illness. The particles on top only say which illness it is — bubbles
- * boiling out of the skin for poison, acid running off and eating the floor for venom.
+ * Poison and spit venom read as "something is inside you and it is getting
+ * worse", and the cue that carries that is the body tint. A green cloud drawn
+ * *beside* a character is weather; the same green multiplied *into* the
+ * character's own art is illness. The particles on top only say which illness
+ * it is — bubbles boiling out of the skin for poison, acid running off and
+ * eating the floor for venom.
+ *
+ * Numbing venom only takes the legs, so its coat stops at the hips: a dull
+ * green-grey creeping up from the feet, a wet sheen crawling slowly down it,
+ * and thick drops that take their time letting go.
  */
 
 import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
@@ -49,6 +54,14 @@ const VENOM: OozePalette = {
   haze: [124, 152, 12],
   fluid: [168, 208, 8],
   sheen: [232, 255, 120],
+};
+
+/** Duller and greyer than poison: flesh going dead rather than flesh going bad. */
+const NUMB: OozePalette = {
+  tint: [132, 172, 100],
+  haze: [96, 120, 78],
+  fluid: [124, 168, 76],
+  sheen: [214, 238, 176],
 };
 
 /**
@@ -120,6 +133,37 @@ const SIZZLE_SPREAD = 0.9;
 const SIZZLE_RADIUS = 0.16;
 const SIZZLE_ALPHA = 0.55;
 
+/** Where the numb coat fades out, as a share of the figure's height above its feet: the hips. */
+const NUMB_COAT_TOP_UP = 0.5;
+/** Where the coat reaches full strength, so it deepens toward the feet instead of ending in a hard band. */
+const NUMB_COAT_FULL_UP = 0.15;
+const NUMB_COAT_ALPHA = 0.55;
+/**
+ * The wet band crawling down the legs. Slow on purpose: its pace is the
+ * sluggishness the status is about.
+ */
+const NUMB_SHEEN_RATE_PER_MS = 0.0004;
+/** Half the sheen band's height, as a share of the figure's height. */
+const NUMB_SHEEN_HALF_BAND = 0.08;
+const NUMB_SHEEN_ALPHA = 0.6;
+/** Offsets the sheen's clock per character so a numbed pack does not shine in step. */
+const NUMB_SHEEN_SEED_KEY = 5;
+
+const NUMB_DRIP_COUNT = 4;
+const NUMB_DRIP_RATE_PER_MS = 0.0003;
+/** Share of a drop's life spent hanging off the knee and stretching before it lets go. */
+const NUMB_DRIP_HANG = 0.65;
+/** The drops form at the knees, the top of the part the venom has taken. */
+const NUMB_DRIP_START_UP = 0.3;
+const NUMB_DRIP_ACROSS_SPREAD = 0.2;
+const NUMB_DRIP_RADIUS = 0.07;
+const NUMB_DRIP_NECK_START = 0.05;
+/** How long the neck has drawn out by the moment the drop lets go: thick fluid, slow to part. */
+const NUMB_DRIP_NECK_END = 0.32;
+const NUMB_POOL_RADIUS_X = 0.85;
+const NUMB_POOL_RADIUS_Y = 0.1;
+const NUMB_POOL_ALPHA = 0.45;
+
 function tintLayer(f: StatusVisualFrame, palette: OozePalette, strength: number): SilhouetteLayer {
   const pulse = 1 - TINT_PULSE_DEPTH * (HALF + HALF * Math.sin(f.timeMs * TINT_PULSE_SPEED));
   return {
@@ -140,6 +184,111 @@ export function poisonBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
 
 export function venomBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
   return tintLayer(f, VENOM, VENOM_TINT_ALPHA);
+}
+
+/**
+ * The numbed legs: a coat laid over the art, opaque enough to read on dark
+ * trousers, that fades out at the hips, then a wet sheen sliding down through it.
+ */
+export function numbedBodyLayers(f: StatusVisualFrame): readonly SilhouetteLayer[] {
+  const coat: SilhouetteLayer = {
+    paint: (target, box) => {
+      const feetY = box.y + box.height;
+      const legGradient = target.createLinearGradient(
+        0,
+        feetY,
+        0,
+        feetY - box.height * NUMB_COAT_TOP_UP,
+      );
+      const fullStop = NUMB_COAT_FULL_UP / NUMB_COAT_TOP_UP;
+      legGradient.addColorStop(0, rgba(NUMB.tint, 1));
+      legGradient.addColorStop(fullStop, rgba(NUMB.tint, 1));
+      legGradient.addColorStop(1, rgba(NUMB.tint, 0));
+      target.fillStyle = legGradient;
+      target.fillRect(box.x, box.y, box.width, box.height);
+    },
+    alpha: NUMB_COAT_ALPHA * f.fade,
+  };
+
+  const sheenPhase = particlePhase(f, NUMB_SHEEN_SEED_KEY, NUMB_SHEEN_RATE_PER_MS);
+  const sheenUp = NUMB_COAT_TOP_UP * (1 - sheenPhase);
+  const sheen: SilhouetteLayer = {
+    paint: (target, box) => {
+      const feetY = box.y + box.height;
+      const centreY = feetY - box.height * sheenUp;
+      const halfBand = box.height * NUMB_SHEEN_HALF_BAND;
+      const band = target.createLinearGradient(0, centreY - halfBand, 0, centreY + halfBand);
+      band.addColorStop(0, rgba(NUMB.sheen, 0));
+      band.addColorStop(HALF, rgba(NUMB.sheen, 1));
+      band.addColorStop(1, rgba(NUMB.sheen, 0));
+      target.fillStyle = band;
+      target.fillRect(box.x, centreY - halfBand, box.width, halfBand * 2);
+    },
+    blend: 'screen',
+    alpha: NUMB_SHEEN_ALPHA * f.fade,
+  };
+
+  return [coat, sheen];
+}
+
+/** Thick drops gathering at the knees, hanging, and letting go into a dull pool at the feet. */
+export function drawNumbed(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  drawGroundPool(
+    ctx,
+    NUMB.fluid,
+    f.centerX,
+    f.footY,
+    f.width * NUMB_POOL_RADIUS_X,
+    f.height * NUMB_POOL_RADIUS_Y,
+    NUMB_POOL_ALPHA * f.fade,
+  );
+
+  for (let i = 0; i < NUMB_DRIP_COUNT; i++) {
+    const key = f.seed + i * PARTICLE_KEY_STRIDE;
+    const phase = particlePhase(f, i, NUMB_DRIP_RATE_PER_MS);
+    const x = bodyX(
+      f,
+      hashRange(key, HALF - NUMB_DRIP_ACROSS_SPREAD, HALF + NUMB_DRIP_ACROSS_SPREAD),
+    );
+    const maxRadius = f.width * NUMB_DRIP_RADIUS;
+
+    let y: number;
+    let radius: number;
+    let neck: number;
+    let alpha: number;
+    if (phase < NUMB_DRIP_HANG) {
+      const hang = phase / NUMB_DRIP_HANG;
+      radius = maxRadius * hang;
+      neck = f.width * (NUMB_DRIP_NECK_START + (NUMB_DRIP_NECK_END - NUMB_DRIP_NECK_START) * hang);
+      // The belly sags as the neck draws out, so the drop is seen to stretch.
+      y = bodyY(f, NUMB_DRIP_START_UP) + neck;
+      alpha = 1;
+    } else {
+      const fall = (phase - NUMB_DRIP_HANG) / (1 - NUMB_DRIP_HANG);
+      const releaseY = bodyY(f, NUMB_DRIP_START_UP) + f.width * NUMB_DRIP_NECK_END;
+      // Squared so the drop accelerates once it has let go.
+      y = releaseY + (f.footY - releaseY) * fall * fall;
+      radius = maxRadius;
+      neck = f.width * NUMB_DRIP_NECK_START;
+      alpha = 1 - fall;
+    }
+    alpha *= f.fade;
+    if (alpha <= 0 || radius <= 0) continue;
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = rgba(NUMB.fluid, 1);
+    drawDroplet(ctx, x, y, radius, neck);
+    ctx.fillStyle = rgba(NUMB.sheen, 1);
+    ctx.beginPath();
+    ctx.arc(
+      x - radius * BUBBLE_SHEEN_OFFSET,
+      y - radius * BUBBLE_SHEEN_OFFSET,
+      radius * BUBBLE_SHEEN_SCALE,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
 }
 
 export function drawPoison(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {

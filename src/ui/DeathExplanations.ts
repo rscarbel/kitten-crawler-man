@@ -18,7 +18,7 @@ export type DeathCause =
   | 'bigRoosterExerciseBall'
   | 'roosterPeck'
   | 'roosterPunch'
-  | 'bugaboo'
+  | 'fuzzyNightmare'
   | 'burnedStatus'
   | 'poisonStatus'
   | 'electrifiedStatus'
@@ -34,16 +34,15 @@ export type DeathCause =
   | 'electricGoblinSwipe'
   | 'electricGoblinWave'
   | 'electricGoblinElectrified'
-  | 'tuskling'
-  | 'troglodyte'
+  | 'wereboar'
+  | 'lizardman'
   | 'smallSpider'
   | 'spiderHatchling'
   | 'hawkfolk'
-  | 'llama'
+  | 'acidLlama'
   | 'rat'
-  | 'brindleGrub'
-  | 'cowTailedGrub'
-  | 'brindledVespa'
+  | 'gravediggerBeetle'
+  | 'giantWasp'
   | 'ruinsGhoul'
   | 'krasue'
   | 'lemur'
@@ -69,7 +68,7 @@ export type DeathCause =
   | 'rockGolemRock'
   | 'mantis'
   | 'lion'
-  | 'cityElfCultist'
+  | 'elf'
   | 'direBear'
   | 'missQuill'
   | 'shieldFairy'
@@ -84,7 +83,8 @@ export type DeathCause =
   | 'goblinBlackPowder'
   | 'frozenSolid'
   | 'burningTree'
-  | 'lavaFlames'
+  | 'fireballFlames'
+  | 'acidPuddle'
   | 'burningOil'
   | 'clownGas'
   | 'lichFirewall'
@@ -106,8 +106,8 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Next time, revive your companion faster.',
   ],
   levelTimerRanOut: [
-    'You stayed on the floor too long. The level collapse took its toll.',
-    'The level collapse got you. You need to find the stairs faster.',
+    'Caroline ran out of patience before you ran out of floor.',
+    'You took too long, and Caroline does not wait. Find the stairs faster.',
   ],
   goblin: [
     'You were clubbed to death by a goblin. Gruesome.',
@@ -163,10 +163,10 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Small bird, big arms, one clean punch. Do not tell anyone.',
     'He leads with the fist, not the beak. You learned that last.',
   ],
-  bugaboo: [
-    'A Bugaboo swarmed you to death. Hard to dodge what you cannot see.',
-    'The Bugaboo overwhelmed you. Watch for the swarm.',
-    'You were killed by a Bugaboo. Maybe avoid the dark corners next time.',
+  fuzzyNightmare: [
+    'The thing under the bed got you. You never did check under there.',
+    'Those arms reach a lot further than they look. Stay clear of the long rake.',
+    'A Fuzzy Nightmare came up through the floor and raked you open. Board the grates sooner.',
   ],
   burningTree: [
     'You stood against a burning tree until it finished the job.',
@@ -178,10 +178,15 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Someone set the oil alight. You stayed to watch it burn, from the inside.',
     'The spill was on fire. So, then, were you.',
   ],
-  lavaFlames: [
-    'You stood in a pool of burning llama spit until it burned through you.',
-    'The lava the llama spat was still there. So, briefly, were you.',
-    'Killed by the puddle rather than the shot. The floor was the trap.',
+  fireballFlames: [
+    'You stood in the fire a fireball left behind until it burned through you.',
+    'The fireball missed. The patch of fire it left did not.',
+    'Killed by the flames on the floor rather than the shot. The floor was the trap.',
+  ],
+  acidPuddle: [
+    'You stood in a puddle of acid until there was not enough of you left to stand.',
+    'The glob missed. The puddle it left ate through your boots, then the rest of you.',
+    'Killed by the puddle rather than the shot. Acid on the floor is still acid.',
   ],
   evilClown: [
     'The Evil Clown backhanded you across the wilderness. He did not stop grinning.',
@@ -324,7 +329,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   poisonStatus: [
     'The poison in your veins finally claimed you.',
     'Slow, ugly, and green. Poison got you.',
-    'You died of poisoning. Troglodytes will do that to you.',
+    "You died of poisoning. A Lizardman's tongue will do that to you.",
   ],
   electrifiedStatus: [
     'The electricity finally arced through your heart.',
@@ -366,15 +371,15 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You died to the small tentacle beside you, not the boss in front of you. Cut them down first.',
     'The guard tentacle whipped down where you were standing. It reared for half a second before it did.',
   ],
-  tuskling: [
-    'A Tuskling gored you. Step aside from the charge and it runs out of room.',
-    'Killed by a piglet with tusks. Embarrassing.',
-    'A pig monster killed you. Let that sink in.',
+  wereboar: [
+    'A Wereboar gored you. Step aside from the charge and it runs out of room.',
+    'Steel only half bit it, and the blast never touched it. Magic would have.',
+    "A man with a boar's head killed you. Let that sink in.",
   ],
-  troglodyte: [
-    "A Troglodyte's tongue lashed you to death.",
-    "Poisoned and speared by a cave lizard's tongue. Watch the windup next time.",
-    "The Troglodyte's tongue struck true. Keep moving to avoid it.",
+  lizardman: [
+    "A Lizardman's barbed tongue lashed you to death from three tiles out.",
+    'The Lizardman gaped, aimed and struck. Step off its line while the mouth is opening.',
+    'Speared by a venomous tongue. A Lizardman commits to its aim before it strikes, so keep moving.',
   ],
   smallSpider: [
     "A spider killed you. That's not anyone's preferred way to go.",
@@ -387,30 +392,25 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You were killed by a dungeon bird.',
     "The Hawkfolk's talons found you at the worst possible moment.",
   ],
-  llama: [
-    'A Llama spat a lava ball right into your face.',
-    'You were killed by a llama. A llama.',
-    "The llama's lava wore through your defenses. You had it coming.",
+  acidLlama: [
+    'An Acid Llama hawked a glob of acid right into your face.',
+    'You were killed by a llama. A llama that spits acid, but still a llama.',
+    "The llama's acid ate through your defenses. You had it coming.",
   ],
   rat: [
     'A rat gnawed through your ankles until you dropped.',
     "You were killed by a rat. That's the dungeon for you.",
     "Rats. Just... rats. That's what killed you.",
   ],
-  brindleGrub: [
-    'A harmless-looking worm bit through your ankle. Embarrassing.',
-    'Stage one. A stage-one grub. That is what got you.',
-    'The larva finished you off before it even evolved. Brutal.',
+  gravediggerBeetle: [
+    'A Gravedigger Beetle sheared through you. It was a larva a minute ago.',
+    'Fire from range, mandibles up close. The beetle had an answer for everything.',
+    'You let the pupa hatch. Next time, crack it while it is still a sac.',
   ],
-  cowTailedGrub: [
-    'A Cow-Tailed Grub bit you to death. Slow and shameful.',
-    "The grub's mandibles found every gap in your armor.",
-    'You were killed by a larva. A literal larva.',
-  ],
-  brindledVespa: [
-    "Brindled Vespa acid burned through you. Don't let the hornets swarm.",
-    'A giant dungeon hornet dissolved you with acid spit.',
-    "The Vespa's acid found you at full stack. Pop those spits early next time.",
+  giantWasp: [
+    'A Giant Wasp stung you one time too many. They come in swarms near the trees.',
+    'Wasp venom from the branches, then a stinger up close. You got both.',
+    'You walked under the forest edge and the wasps took it personally.',
   ],
   ruinsGhoul: [
     'A Ruins Ghoul tore you apart. It used to be a person, if that helps.',
@@ -447,10 +447,10 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You were killed by a lion. It covered the open ground faster than you did.',
     'The lion got its teeth in. Out in the open there is nowhere to hide from one.',
   ],
-  cityElfCultist: [
-    'A soul bolt from a City Elf Cultist burned a hole through you.',
-    'The cultist offered you to the angels above. They accepted.',
-    'You were killed by harvested soul-stuff. Break line of sight on those casters.',
+  elf: [
+    'A bolt of cold fire from an elf burned a hole through you.',
+    'An elf burned you as an offering, hoping Caroline would finally notice.',
+    "You were killed by an elf's cold fire. Break line of sight on those casters.",
   ],
   direBear: [
     'A Dire Bear opened you up with one paw swipe.',
@@ -505,7 +505,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   goblinDynamite: [
     'A goblin threw a lit stick at your feet. The red circle filled up. So did you, with shrapnel.',
     'The stick bounced, settled and fizzed. You had two whole seconds and spent them standing there.',
-    'Goblin dynamite has a short fuse. Shorter than your attention span, apparently.',
+    'Dynamite has a short fuse. Shorter than your attention span, apparently.',
   ],
   goblinBlackPowder: [
     'The goblin held the bomb up and drew a red circle on you. Then it stopped drawing and threw.',

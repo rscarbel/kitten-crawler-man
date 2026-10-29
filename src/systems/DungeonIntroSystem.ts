@@ -45,7 +45,7 @@ export const ARRIVAL_BANNER_SURFACE_ID = 'arrival-banner';
  * Until the arrival has settled (the banner is mostly faded, or was skipped)
  * its surface halts the world, so nothing a floor's frame runs can begin
  * early: the player cannot move or act, and Dave's arrival, the story's
- * opening, the arrival save, the collapse clock, spawns and aggro all wait,
+ * opening, the arrival save, the floor clock, spawns and aggro all wait,
  * because every one of them runs only on a live world frame. A new arrival
  * trigger needs nothing of its own to wait its turn.
  */

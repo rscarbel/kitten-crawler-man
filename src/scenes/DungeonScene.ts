@@ -19,6 +19,7 @@ import type {
   DockButtonModel,
   HudModel,
   HudViewState,
+  LevelTimerModel,
   MinimapModel,
   SkillPointsModel,
 } from '../ui/hud/hudModel';
@@ -105,6 +106,7 @@ import {
 } from '../core/progression/AchievementManager';
 import { presentationAwardId, type RewardPresentation } from '../loot/rewardChest';
 import { partyOwnsGear, rollKillGear, withGearLoot, type GearId } from '../loot/gearPools';
+import { rollTacticalConsumable } from '../loot/tacticalConsumables';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import { AchievementAwards } from '../systems/AchievementAwards';
 import {
@@ -160,10 +162,11 @@ import { WORK_ORDERS } from '../dialog/scripts/workOrders';
 import { isVillageUnderSiege } from '../core/quests/villageQuestPhase';
 import { playInteriorCue } from '../systems/interiorInteractionSoundCues';
 import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
+import { SafeRoomRegroupSystem } from '../systems/SafeRoomRegroupSystem';
 import { DaveGuideSystem, DaveWhereabouts } from '../systems/DaveGuideSystem';
 import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
-import { BopcaSystem } from '../systems/BopcaSystem';
+import { DoctorSystem } from '../systems/DoctorSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
@@ -171,10 +174,10 @@ import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { crawlerDisplayName } from '../characters/characters';
 import { humanVocalSounds } from '../characters/humanVocalSounds';
 import { CRAWLER_KINDS } from '../core/skills/SkillManager';
-import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import { stampSafeRoomClinics } from '../map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
-import { LavaBallSystem } from '../systems/LavaBallSystem';
+import { GlobProjectileSystem, globBurstSounds } from '../systems/GlobProjectileSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingShotSystem } from '../systems/HirelingShotSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
@@ -187,6 +190,7 @@ import { ExplosionShake } from '../systems/ExplosionShake';
 import { BOMBER_GOBLIN_CUES, FuseSizzleLoops } from '../systems/bomberGoblinSoundCues';
 import { KettlebellWind } from '../systems/bossRooms/gymKettlebellWind';
 import { silenceGeneratorRigHum, updateGeneratorRigHum } from '../systems/generatorRigHum';
+import { silenceCreatureWingLoops, updateCreatureWingLoops } from '../systems/creatureWingLoops';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { ClownGasSystem } from '../systems/ClownGasSystem';
 import { FairySystem } from '../systems/FairySystem';
@@ -354,9 +358,12 @@ import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import type { LevelCheckpoint } from '../core/save/LevelCheckpoint';
 import {
   carriedSaveRegeneratesFloor,
+  FLOOR_RESTART_DEATH_CAUSE,
   owesArrivalSave,
   respawnModeFor,
   respawnRouteFor,
+  withFloorClockAtStart,
+  type FloorRestartReason,
   savePointAfterWrite,
   type SavePoint,
 } from '../core/save/SavePoint';
@@ -459,7 +466,17 @@ import {
   type TileFilter,
 } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
-import { pickDeathMessage } from '../ui/DeathExplanations';
+import { pickDeathMessage, type DeathCause } from '../ui/DeathExplanations';
+import {
+  holdDifficultyForTimeLimit,
+  nightmareTimeRemaining,
+  type FloorClock,
+} from '../core/difficulty/nightmareTimeLimit';
+import {
+  clearDifficultyChangeGuard,
+  type DifficultyGuardHandle,
+} from '../core/difficulty/difficultyChangeGuard';
+import { CAROLINE_TIME_LIMIT_VERDICT } from '../dialog/scripts/caroline';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { DeinonychusSystem, deinonychusXpFraction } from '../systems/DeinonychusSystem';
 import {
@@ -603,7 +620,7 @@ import { TutorialController, type TutorialRenderContext } from '../systems/Tutor
 import { TUTORIAL_CUES, tutorialCueSource } from '../systems/tutorialSoundCues';
 import { TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
-import { BrindleGrub } from '../creatures/BrindleGrub';
+import { GravediggerBeetle } from '../creatures/GravediggerBeetle';
 import { SmallSpider } from '../creatures/SmallSpider';
 import {
   GrotesqueSpider,
@@ -755,8 +772,8 @@ export interface DungeonSceneOptions {
   existingMap?: GameMap;
   /** Regenerates the floor a save was written on. Unused when `existingMap` is given. */
   worldSeed?: number;
-  /** Collapse-timer frames remaining, so a resume does not hand back a full clock. */
-  levelTimerFrames?: number;
+  /** Time already spent on the floor, so a resume does not hand back a fresh clock. */
+  floorElapsedFrames?: number;
   /** The art seed that floor was painted with, so a resume looks like the run it resumes. */
   artSeed?: number;
   /**
@@ -977,13 +994,22 @@ export interface DungeonSceneOptions {
   skipIntro?: boolean;
   /**
    * The first frame takes no save: neither the floor-arrival save nor, for a
-   * party that starts inside the town wall, a town entry. Set by a floor
-   * restart, which rewinds the party to how it stood when the floor began.
-   * The restart only runs when the run has no save to return to, but writing
-   * that older party over one would lose it, so the arrival never writes. The
-   * next real save point saves as usual.
+   * party that starts inside the town wall, a town entry. Set by the floor
+   * restart a death takes when the run holds no save a death can return to
+   * (`noSaveToReturnTo`): storage may still hold a save this scene never
+   * adopted, and writing the floor's entry party over it would lose it. The
+   * time-limit restart leaves it unset, because its whole point is to replace
+   * the floor's mid-floor saves. The next real save point saves as usual.
    */
   suppressArrivalSave?: boolean;
+  /**
+   * The save this floor took the moment the party arrived on it, carried
+   * through every rebuild of the same floor like the `floorEntry*` snapshots.
+   * Nightmare's time limit running out puts the floor back to it, quests and
+   * shops included. Absent when no scene on this floor saw the arrival: a
+   * reload or Continue, or a no-save floor restart.
+   */
+  floorArrivalSave?: SaveProgressInput;
   /**
    * The last save the run wrote, for a scene rebuilt without writing a new one
    * — a building exit, or a respawn from the save itself. A death before this
@@ -995,6 +1021,14 @@ export interface DungeonSceneOptions {
    * Absent on a new floor, which takes its own save on arrival.
    */
   lastSave?: GameProgressInput;
+  /**
+   * Whether `lastSave` holds less of the run than the scene built from it, so
+   * the first frame writes the scene's own save over it in storage. A
+   * time-limit forfeit rebuilds the floor from its arrival save but keeps the
+   * run state the arrival save predates — deaths, time played, story beats
+   * heard, songs unlocked, pet names — which a reload must not lose.
+   */
+  rewriteCarriedSave?: boolean;
   /** Floor and run state from a resumed save; absent on a fresh game. */
   persistedWorldState?: PersistedWorldState;
   /**
@@ -1141,9 +1175,9 @@ const SPIT_PLACEMENT_RANDOMNESS = 0.5;
  * Ceiling on how many mobs of one `onMobKilledSpawns` rule may be alive within
  * {@link ON_KILL_SPAWN_CAP_RADIUS} of a death.
  *
- * Floor 2's rule turns *every* death into one to five brindle grubs, so the
+ * Floor 2's rule turns *every* death into one to five gravedigger larvae, so the
  * denser rooms this difficulty pass introduced would otherwise compound into a
- * swarm that outnumbers the encounter it came out of — and each of those grubs
+ * swarm that outnumbers the encounter it came out of — and each of those larvae
  * dying is not itself a trigger, so nothing else bounds the total.
  */
 const MAX_CONCURRENT_ON_KILL_SPAWNS = 12;
@@ -1151,7 +1185,7 @@ const MAX_CONCURRENT_ON_KILL_SPAWNS = 12;
 /**
  * How far the cap above looks. Wide enough to cover the room a fight is in plus
  * the corridor mouths feeding it, so a single encounter can't stack bursts, and
- * short enough that grubs abandoned elsewhere on the floor stop counting.
+ * short enough that larvae abandoned elsewhere on the floor stop counting.
  */
 const ON_KILL_SPAWN_CAP_RADIUS_TILES = 12;
 const ON_KILL_SPAWN_CAP_RADIUS = ON_KILL_SPAWN_CAP_RADIUS_TILES * TILE_SIZE;
@@ -1258,7 +1292,6 @@ const DEINONYCHUS_JUVENILE_HAPPY_SQUAWKS = [
 ] as const;
 /** The five-minute alarm is the ten-minute one pitched up, so the escalation is audible. */
 const FIVE_MINUTE_WARNING_PLAYBACK_RATE = 1.3;
-
 /**
  * Mob-attack and hazard one-shots long enough to still be sounding when a
  * death interrupts them — a bottle's gas hiss, a spider's slam or screech
@@ -1387,7 +1420,7 @@ export class DungeonScene extends GameplayScene {
   private safeRoom: SafeRoomSystem;
   private dave: DaveGuideSystem;
   private readonly daveWhereabouts: DaveWhereabouts;
-  private bopca: BopcaSystem;
+  private doctor: DoctorSystem;
   // Only ever called from `update`, by which point the constructor has assigned
   // every boss system the check reads.
   protected readonly skillPointReminder = new SkillPointReminderSystem((ctx) =>
@@ -1415,7 +1448,7 @@ export class DungeonScene extends GameplayScene {
    * `journalProgress`, so a trait met indoors is still met on the way back out.
    */
   private readonly tacticsNoticesSeen: Set<TacticsTrait>;
-  private lavaBalls: LavaBallSystem;
+  private globs: GlobProjectileSystem;
   private rockThrows: RockThrowSystem;
   private hirelingShots: HirelingShotSystem;
   private skeletonShots: SkeletonProjectileSystem;
@@ -1430,6 +1463,8 @@ export class DungeonScene extends GameplayScene {
   private readonly fairyFireballs: FairyFireballSystem;
   private knightMissiles: KnightMissileSystem;
   private companion: CompanionSystem;
+  /** Brings a straggling companion into the safe room the player walks into. */
+  private readonly safeRoomRegroup: SafeRoomRegroupSystem;
   private trees: TreeSystem | null;
   /** Null on every map but the overworld, which is the only one with rivers. */
   private readonly water: WaterAnimationSystem;
@@ -1488,6 +1523,9 @@ export class DungeonScene extends GameplayScene {
   /** Floor 2's clogged bathrooms, their queue, their plumber and the floor's one pipe board; inert on every other floor. */
   readonly cloggedBathroom: CloggedBathroomSystem;
   private readonly isCrawlerHidden = (crawler: HumanPlayer | CatPlayer): boolean =>
+    this.isCrawlerHeldOutOfSight(crawler) || this.safeRoomRegroup.hides(crawler);
+  /** A crawler a floor system has taken out of the world for a while: in a stall, or dying on a script. */
+  private readonly isCrawlerHeldOutOfSight = (crawler: HumanPlayer | CatPlayer): boolean =>
     this.cloggedBathroom.isCrawlerHidden(crawler) || this.scriptedDeaths.hides(crawler);
   /** Floor 2's stealth gate, its guard and the prison key quest; inert on every other floor. */
   readonly stealthKeySnatch: StealthKeySnatchSystem;
@@ -1655,21 +1693,25 @@ export class DungeonScene extends GameplayScene {
 
   private gameOver = false;
   protected readonly notifPulse = { value: 0 };
-  private levelTimerFrames = 0;
   /**
-   * The tutorial has no `LevelDef` collapse timer of its own — it isn't built
-   * from one — so it runs on a flat hour, named
-   * here rather than repeating the literal. Also the fallback clamp for a
-   * timed `LevelDef` that omits `collapseTimeLimitFrames`.
+   * Time spent on this floor, counted on every difficulty so that switching
+   * to Nightmare mid-floor finds its time limit already partly spent. Read
+   * through {@link nightmareTimeRemaining} for the limit.
    */
-  private readonly TUTORIAL_TIME_LIMIT_FRAMES = 216_000; // 1 hour @ 60 fps
+  private floorElapsedFrames = 0;
+  /** Whether Nightmare's time limit has already been answered in this run of the floor. */
+  private timeLimitDetonated = false;
+  /** What the death on the death screen was, which decides where it sends the party. */
+  private deathCause: DeathCause | null = null;
+  /** Holds a switch to Nightmare that would end the floor at once; null on an untimed floor. */
+  private timeLimitGuard: DifficultyGuardHandle | null = null;
   private wasInSafeRoom = false;
   /**
    * Whether the active crawler stood inside the town wall last frame. Starts
    * false so that a scene built with the party already inside the wall — a
    * building exit, the floor-3 arrival, a loaded save — counts as entering town
-   * on its first frame and takes a save. A death restart opts out through
-   * `suppressArrivalSave`.
+   * on its first frame and takes a save. A no-save floor restart opts out
+   * through `suppressArrivalSave`.
    */
   private wasInTown = false;
   /**
@@ -1695,8 +1737,13 @@ export class DungeonScene extends GameplayScene {
    */
   private arrivalSavePending = false;
   /**
+   * See {@link DungeonSceneOptions.floorArrivalSave}; recorded by the first
+   * frame's save on a fresh floor.
+   */
+  private floorArrivalSave: SaveProgressInput | null = null;
+  /**
    * Room indices (into `gameMap.roomBounds`) that have already taken their
-   * one-time stairwell save, so clearing a room that keeps producing grub
+   * one-time stairwell save, so clearing a room that keeps producing larva
    * spawns doesn't resave it every kill. Never cleared: it is scoped to this
    * floor's `DungeonScene` instance, same as `lastSave`.
    */
@@ -1741,10 +1788,10 @@ export class DungeonScene extends GameplayScene {
    */
   private lastActiveRoomIndexForStairwellSave: number | null = null;
   /**
-   * The carried save when this floor could not be rebuilt from it — it has no
-   * world, or one from an older generator — and was generated fresh in its
-   * place; null otherwise. While it is still the last save, the arrival save
-   * replaces it.
+   * The carried save when it must not stay in storage: this floor could not be
+   * rebuilt from it — it has no world, or one from an older generator — and was
+   * generated fresh in its place, or it was marked `rewriteCarriedSave`; null
+   * otherwise. While it is still the last save, the arrival save replaces it.
    */
   private staleCarriedSave: GameProgressInput | null = null;
   private speechBubblePulse = 0;
@@ -1882,7 +1929,10 @@ export class DungeonScene extends GameplayScene {
         return rect === undefined ? null : { rect, press: () => this.openPauseFromButton() };
       },
     });
-    this.scriptedDeaths = new ScriptedDeathSystem(this.cutscenes.director);
+    this.scriptedDeaths = new ScriptedDeathSystem({
+      cutscenes: this.cutscenes.director,
+      spawnGore: (x, y, dx, dy) => this.combat.spawnGore(x, y, dx, dy),
+    });
     this.questSwitchConfirm = new ConfirmDialog(this.audio);
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
@@ -1925,7 +1975,6 @@ export class DungeonScene extends GameplayScene {
       const tutMap = tutorialController.map;
       this.gameMap = tutMap;
       this.tutorial = tutorialController;
-      this.levelTimerFrames = this.TUTORIAL_TIME_LIMIT_FRAMES;
 
       spawnTileX = tutMap.humanStartTile.x;
       spawnTileY = tutMap.humanStartTile.y;
@@ -1960,18 +2009,7 @@ export class DungeonScene extends GameplayScene {
           worldSeed: options?.worldSeed,
           artSeed: options?.artSeed,
         });
-      if (levelDef.hasCollapseTimer === true) {
-        const floorTimeLimit = levelDef.collapseTimeLimitFrames ?? this.TUTORIAL_TIME_LIMIT_FRAMES;
-        // Clamped to this floor's own limit even for a resumed save: a save
-        // written on a floor with a longer limit must not hand a shorter one
-        // more time than it is supposed to have.
-        this.levelTimerFrames = Math.min(
-          options?.levelTimerFrames ?? floorTimeLimit,
-          floorTimeLimit,
-        );
-      } else {
-        this.levelTimerFrames = 0;
-      }
+      this.floorElapsedFrames = options?.floorElapsedFrames ?? 0;
 
       // Dev bootstrap: spawn on the southern circus grounds so quest stages
       // can be exercised without the walk from town.
@@ -2263,21 +2301,20 @@ export class DungeonScene extends GameplayScene {
       }
     };
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
-    // The safe-room counter is stamped here rather than in the generators: it
-    // belongs to every safe room on every map, and this and BuildingInteriorScene
+    // The safe room's medicine cabinet is stamped here rather than in the
+    // generators: it belongs to every safe room on every map, and this and BuildingInteriorScene
     // are the only two places a safe room is ever brought to life. Idempotent,
     // because a reused map instance passes through here again on every scene
     // reconstruction.
-    this.bopca = new BopcaSystem(
-      this.gameMap,
-      stampSafeRoomCounters(this.gameMap),
+    this.doctor = new DoctorSystem(
+      stampSafeRoomClinics(this.gameMap),
+      { kind: 'floor', level: this.levelDef.id },
       this.bus,
       this.conversation,
-      this.audioScope,
       false,
     );
-    // After the counter, because the furnishings keep clear of every tile it
-    // owns and cannot know them until it is planned.
+    // After the doctor's corner, because the furnishings keep clear of every
+    // tile it owns and cannot know them until it is planned.
     stampSafeRoomDecor(this.gameMap);
     const bossTypes = levelDef.bossRooms?.map((b) => b.type) ?? [];
     this.bossRoom = new BossRoomSystem(
@@ -2469,7 +2506,7 @@ export class DungeonScene extends GameplayScene {
     // On every floor: a dungeon floor can be flooded by its own rooms after it
     // is generated, and the per-frame scan is one viewport of tile compares.
     this.water = new WaterAnimationSystem(this.gameMap, () => renderQuality.fullDetail);
-    this.lavaBalls = new LavaBallSystem(this.gameMap);
+    this.globs = new GlobProjectileSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
     this.hirelingShots = new HirelingShotSystem(this.gameMap, (point) =>
       this.safeRoom.isEntityInSafeRoom(point),
@@ -2513,6 +2550,15 @@ export class DungeonScene extends GameplayScene {
       spawnTileY,
       this.companionStance,
     );
+    this.safeRoomRegroup = new SafeRoomRegroupSystem({
+      safeRooms: this.safeRoom,
+      companions: this.companion,
+      audio: this.audio,
+      partyIsHeld: (human, cat) =>
+        this.cutscenes.isActive ||
+        this.isCrawlerHeldOutOfSight(human) ||
+        this.isCrawlerHeldOutOfSight(cat),
+    });
     this.companion.registerHazardSource(this.bossRoom);
     this.companion.registerHazardSource(this.clownGas);
     this.companion.registerHazardSource(this.fairyFireballs);
@@ -2523,7 +2569,7 @@ export class DungeonScene extends GameplayScene {
     this.combat.mobLoop.registerHazardSource(this.clownGas);
     this.combat.mobLoop.registerHazardSource(this.fairyFireballs);
     this.combat.mobLoop.registerHazardSource(this.goblinBombs);
-    this.combat.mobLoop.registerHazardSource(this.lavaBalls);
+    this.combat.mobLoop.registerHazardSource(this.globs);
     // Burning oil is floor anyone can step out of, so both sides steer clear of it.
     this.companion.registerHazardSource(this.destruction.destructibles);
     this.combat.mobLoop.registerHazardSource(this.destruction.destructibles);
@@ -2531,7 +2577,7 @@ export class DungeonScene extends GameplayScene {
     this.destruction.destructibles.setFlameSources([
       this.destruction.dynamite,
       this.fairyFireballs,
-      this.lavaBalls,
+      this.globs,
       this.combat.spells,
     ]);
     if (this.trees !== null) this.combat.mobLoop.registerHazardSource(this.trees);
@@ -2694,6 +2740,7 @@ export class DungeonScene extends GameplayScene {
           // for the same reason: whatever the next floor still shows is
           // repainted lazily, and nothing else is carried down the stairs.
           flushFigureFrameCache();
+          this.gameStats.beginFloor();
           this.sceneManager.replace(
             new DungeonScene(nextDef, this.input, this.sceneManager, {
               arrivedOnFloor: true,
@@ -3042,13 +3089,18 @@ export class DungeonScene extends GameplayScene {
     // rooms, and a save of a tutorial just begun would resume without the script.
     // A carried save this floor could not be rebuilt from — see
     // `carriedSaveRegeneratesFloor` — is replaced by the arrival save, so a
-    // death returns to this floor rather than drawing another.
-    this.staleCarriedSave = carriedSaveRegeneratesFloor(carriedSave) ? (carriedSave ?? null) : null;
+    // death returns to this floor rather than drawing another; so is one marked
+    // `rewriteCarriedSave`, so storage holds the run as this scene has it.
+    const carriedSaveIsStale =
+      carriedSaveRegeneratesFloor(carriedSave) || options?.rewriteCarriedSave === true;
+    this.staleCarriedSave = carriedSaveIsStale ? (carriedSave ?? null) : null;
     this.arrivalSavePending = owesArrivalSave(
       carriedSave,
+      carriedSaveIsStale,
       options?.suppressArrivalSave === true,
       this.tutorial !== null,
     );
+    this.floorArrivalSave = options?.floorArrivalSave ?? null;
     if (interiorReturn !== null) {
       this.lastSave = interiorReturn.lastSave;
       this.lastSavePointTile = interiorReturn.lastSavePointTile;
@@ -3177,7 +3229,7 @@ export class DungeonScene extends GameplayScene {
       if (roll < LOW_HP_LOOT_CHANCE) {
         items.push({ id: 'health_potion', quantity: randomInt(1, 2) });
       } else if (roll < MED_HP_LOOT_CHANCE) {
-        items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+        items.push({ id: rollTacticalConsumable(), quantity: 1 });
       }
       items.push({ id: rollChestPotion(), quantity: 1 });
       this.treasureChests.addWoodenChest(
@@ -3215,6 +3267,8 @@ export class DungeonScene extends GameplayScene {
     // From where every arrival path has set the party down, so only what is
     // within reach of it is held and queued.
     this.residency.settleNow(this.residencyOutlook());
+    const arrivalCamera = this.camera();
+    this.doctor.prewarmInView(arrivalCamera.x, arrivalCamera.y);
     // Last, so every system that queues art or figures on construction — the
     // residency's arrival decision, the residents, the party — has queued it
     // before the loader measures what is owed. Checked on every construction rather than at the
@@ -3253,7 +3307,7 @@ export class DungeonScene extends GameplayScene {
    */
   private checkFloorEntryAchievements(): void {
     if (this.tutorial !== null) return;
-    if (this.levelDef.id === FIRST_DUNGEON_LEVEL_ID) this.awards.unlockParty('down_the_hatch');
+    if (this.levelDef.id === FIRST_DUNGEON_LEVEL_ID) this.awards.unlockParty('entered_dungeon');
     if (this.abilityManager.getRealLevel('magic_missile') >= MAGIC_MISSILE_SPARK_LEVEL) {
       this.unlockSparkToFlame();
     }
@@ -3468,7 +3522,7 @@ export class DungeonScene extends GameplayScene {
     });
     barkWhenBlueprintsItemEvicted(bus, { human: this.human, cat: this.cat }, this.crawlerBarks);
 
-    // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
+    // ── mobKilled: corpse marker, achievements, loot, larva spawns ──
     bus.on('mobKilled', (e) => {
       const { mob, killer, topDamageDealer } = e;
       const cx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET;
@@ -3551,21 +3605,21 @@ export class DungeonScene extends GameplayScene {
 
       if (this.levelDef.onMobKilledSpawns) {
         for (const rule of this.levelDef.onMobKilledSpawns) {
-          if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
+          if (mob instanceof GravediggerBeetle && rule.type === 'gravedigger_beetle') continue;
           if (mob instanceof SmallSpider) continue;
-          // A boss's own staged add (a guard tentacle, a roach, a tuskling) is not
+          // A boss's own staged add (a guard tentacle, a roach, a wereboar) is not
           // a kill the party earned against the floor's population.
           if (mob.isBossAdd) continue;
           if (!mob.seedsOnKillSpawns) continue;
           // A body an enemy conjured is not a kill the party earned, so it
           // does not seed a swarm either — a necro fairy's skeletons would
-          // otherwise turn every raise into free grubs.
+          // otherwise turn every raise into free larvae.
           if (mob.paysNoRewards) continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
           // Bounded against what is alive *here*, not against the floor. The
           // rule fires on any mob dying, so an unbounded version compounds into
-          // a swarm — but grubs left behind in rooms the party has already
+          // a swarm — but larvae left behind in rooms the party has already
           // cleared are neither a threat nor a cost, and counting them starved
           // every later encounter of the burst that makes the rule interesting.
           const alreadyAliveNearby = this.countLivingMobsOfKindsNear(
@@ -3595,7 +3649,7 @@ export class DungeonScene extends GameplayScene {
               if (!this.gameMap.isMobSpawnTile(gtx, gty)) continue;
               const spawned = spawnMob(rule.type, { x: gtx, y: gty }, this.gameMap, onKillContext);
               // Inherited rather than left at 1: these burst out of a mob the
-              // party has just fought, and a level-1 grub swarm on floor 2 was
+              // party has just fought, and a level-1 larva swarm on floor 2 was
               // free XP that arrived exactly when the fight should be hardest.
               spawned.applyMobLevel(mob.mobLevel, mob.levelledCurve);
               applySpawnDifficulty(spawned);
@@ -3749,6 +3803,7 @@ export class DungeonScene extends GameplayScene {
 
   onEnter(): void {
     bindRunStats(this.gameStats);
+    this.timeLimitGuard = holdDifficultyForTimeLimit(() => this.floorClock);
     // Ahead of any claim, so the floor's own music is part of the silent backfill.
     if (this.musicBackfillPending) {
       this.musicBackfillPending = false;
@@ -3964,6 +4019,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.releaseDifficultyForTimeLimit();
     // A conversation cut off by the scene changing never closes on its own,
     // and its talk row would stay pinned.
     this.releaseCitizenDialogTarget();
@@ -3986,7 +4042,6 @@ export class DungeonScene extends GameplayScene {
     this.ambientSound?.dispose();
     this.dungeonAmbience?.dispose();
     this.labHallway?.dispose();
-    this.bopca.dispose();
     this.cloggedBathroom.dispose();
     this.stealthKeySnatch.dispose();
     returnUnreadMusicNotices(this.menus, this.musicLibrary);
@@ -4016,11 +4071,13 @@ export class DungeonScene extends GameplayScene {
     this.explosionShake.dispose();
     this.fuseSizzle.stopAll(this.audioScope);
     silenceGeneratorRigHum(this.audioScope);
+    silenceCreatureWingLoops(this.audioScope);
     this.kettlebellWind.silence(this.audioScope);
     this.dungeonLighting?.dispose();
     // Drops any standing order along with the hazard sources that were meant to
     // steer around it. Both name systems this scene is taking with it.
     this.companion.dispose();
+    this.safeRoomRegroup.dispose();
     // Drops the pack-alert grid among other things. It is a module-level handle,
     // so a scene that exited without this leaves its whole mob roster — and
     // through it its `GameMap` — reachable for the rest of the page's life.
@@ -4906,7 +4963,7 @@ export class DungeonScene extends GameplayScene {
 
   /** Where a checkpoint restore would put the party, or null when the death screen leads elsewhere. */
   private checkpointRespawnFocus(): ResidencyFocus | null {
-    const route = respawnRouteFor(this.lastSave);
+    const route = respawnRouteFor(this.lastSave, this.deathCause);
     if (route.kind !== 'checkpoint') return null;
     return { x: route.checkpoint.respawnX, y: route.checkpoint.respawnY };
   }
@@ -5261,16 +5318,17 @@ export class DungeonScene extends GameplayScene {
     if (!this.summonDeinonychus()) this.deinonychusSystem.onAutoSummonRefused();
   }
 
-  /**
-   * Routes a death-screen exit to the last save: rewound in place when this
-   * scene took it, rebuilt from it when the scene was built after it, and the
-   * floor restart only when the run has never saved.
-   */
   /** The safe room either crawler stands in, or null. */
   private partySafeRoom(): SafeRoomId | null {
     return this.safeRoom.safeRoomAt(this.human) ?? this.safeRoom.safeRoomAt(this.cat);
   }
 
+  /**
+   * Routes a death-screen exit to the last save: rewound in place when this
+   * scene took it, rebuilt from it when the scene was built after it, and the
+   * floor restart when the run has never saved or when Nightmare's time limit
+   * ran out, which forfeits the floor whatever save stands behind it.
+   */
   private respawnAfterDeath(): void {
     // Before the branch, so it runs on every route: a checkpoint restore keeps
     // the world (and so would keep the mark standing where the party fell) while
@@ -5279,7 +5337,7 @@ export class DungeonScene extends GameplayScene {
     this.bounty?.abandonBounty(this.world.roster.mobs, this.world.roster.grid);
     rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
 
-    const route = respawnRouteFor(this.lastSave);
+    const route = respawnRouteFor(this.lastSave, this.deathCause);
     switch (route.kind) {
       case 'checkpoint':
         this.restoreFromCheckpoint(route.checkpoint);
@@ -5289,9 +5347,26 @@ export class DungeonScene extends GameplayScene {
         this.respawnFromSave(route.progress);
         break;
       case 'floorRestart':
-        this.restartAtFloorEntry();
+        this.restartFloor(route.reason);
         break;
     }
+  }
+
+  /**
+   * Sends the party back to this floor's entry. A time-limit forfeit returns
+   * to the floor's arrival save when this scene knows it, which puts back
+   * everything the floor changed, quests and shop shelves included. The scene
+   * rebuilt from it writes its own save on its first frame, so that a reload
+   * lands there too with the run state the arrival save predates. Otherwise
+   * the floor is generated afresh around the floor-entry party.
+   */
+  private restartFloor(reason: FloorRestartReason): void {
+    const arrival = this.floorArrivalSave;
+    if (reason === 'timeLimitForfeit' && arrival !== null) {
+      this.respawnFromSave(withFloorClockAtStart(arrival), 'rewriteSave');
+      return;
+    }
+    this.restartAtFloorEntry(reason);
   }
 
   /**
@@ -5367,7 +5442,7 @@ export class DungeonScene extends GameplayScene {
             const outside = new DungeonScene(levelDef, this.input, this.sceneManager, {
               ...this.buildingExitOptions(hudView, hSnap, cSnap, departureFor(companionDeparture)),
               spawnAt: heldFloor.returnTile,
-              levelTimerFrames: heldFloor.levelTimerFrames,
+              floorElapsedFrames: heldFloor.floorElapsedFrames,
               interiorReturn: this.withVisitOutcome(heldFloor),
               companionsWaitAtPrisonDoor: companionsWaitOutside,
             });
@@ -5437,7 +5512,7 @@ export class DungeonScene extends GameplayScene {
         this.anchorQuestProgress,
         this.gameMap.artSeed,
         this.tacticsNoticesSeen,
-        respawnModeFor(respawnRouteFor(this.lastSave)),
+        respawnModeFor(respawnRouteFor(this.lastSave, null)),
         companionsWaitOutside ? NO_INTERIOR_COMPANIONS : companionArrival,
         this.partyCrafts,
         this.briarHollowState,
@@ -5489,7 +5564,7 @@ export class DungeonScene extends GameplayScene {
       mobs: this.world.roster.mobs.filter((mob) => !this.systemSpawnedMobs.has(mob)),
       fairyLedger: this.fairies.ledger,
       world: this.captureWorldCheckpoint(),
-      levelTimerFrames: this.levelTimerFrames,
+      floorElapsedFrames: this.floorElapsedFrames,
       returnTile,
       lastSave: this.lastSave,
       lastSavePointTile: this.lastSavePointTile,
@@ -5513,7 +5588,10 @@ export class DungeonScene extends GameplayScene {
       ...interiorArt(levelDef.spriteGroups, levelDef),
       sightRadiusPx: VISIBILITY_RADIUS_PX,
       ownsMusic: false,
-      heldLevelTimerFrames: levelDef.hasCollapseTimer === true ? heldFloor.levelTimerFrames : null,
+      heldFloorClock: {
+        elapsedFrames: heldFloor.floorElapsedFrames,
+        nightmareTimeLimitFrames: levelDef.nightmareTimeLimitFrames,
+      },
       aiFloorKey: this.aiFloorKey(),
     };
   }
@@ -5563,6 +5641,7 @@ export class DungeonScene extends GameplayScene {
       floorEntryAbilityManager: this.floorEntryAbilityManager,
       floorEntryGameStats: this.floorEntryGameStats,
       floorEntryMercenaryRoster: this.floorEntryMercenaryRoster,
+      floorArrivalSave: this.floorArrivalSave ?? undefined,
       devPrisonLayout: this.devPrisonLayout ?? undefined,
       existingMap: this.gameMap,
       existingMiniMap: this.miniMap,
@@ -5611,7 +5690,7 @@ export class DungeonScene extends GameplayScene {
    * The party and the population were already handed to the constructor.
    */
   private applyInteriorReturn(heldFloor: DungeonInteriorReturn): void {
-    this.applyWorldCheckpoint(heldFloor.world, heldFloor.levelTimerFrames, 'keep');
+    this.applyWorldCheckpoint(heldFloor.world, heldFloor.floorElapsedFrames, 'keep');
     // Every carried creature joined through `MobRoster.add`, corpses included,
     // and only the living belong in the index.
     this.world.roster.rebuildGrid();
@@ -5643,8 +5722,14 @@ export class DungeonScene extends GameplayScene {
    * way to buy back time. The run's tallies rewind to the save's copy, but keep
    * the deaths and time played of the run in progress. Achievements are the
    * save's copy.
+   *
+   * `rewriteSave` has the rebuilt scene write its own save over `progress` on
+   * its first frame, for a `progress` storage does not hold or must not keep.
    */
-  private respawnFromSave(progress: GameProgressInput): void {
+  private respawnFromSave(
+    progress: GameProgressInput,
+    storage: 'keepSave' | 'rewriteSave' = 'keepSave',
+  ): void {
     // His HP only reaches the shared state through a despawn, and the instance
     // holding it is about to be discarded.
     this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
@@ -5669,6 +5754,8 @@ export class DungeonScene extends GameplayScene {
         floorEntryAbilityManager: sameFloor ? this.floorEntryAbilityManager : undefined,
         floorEntryGameStats: sameFloor ? this.floorEntryGameStats : undefined,
         floorEntryMercenaryRoster: sameFloor ? this.floorEntryMercenaryRoster : undefined,
+        floorArrivalSave: sameFloor ? (this.floorArrivalSave ?? undefined) : undefined,
+        rewriteCarriedSave: storage === 'rewriteSave',
         devPrisonLayout: sameFloor ? (this.devPrisonLayout ?? undefined) : undefined,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         godModeState: this.godModeState,
@@ -5703,6 +5790,7 @@ export class DungeonScene extends GameplayScene {
     this.stopHazardSoundsForRespawn();
     this.combat.deathScreen.reset();
     this.gameOver = false;
+    this.deathCause = null;
     // Whatever is on the shared box belongs to a world that is about to be
     // rewound out from under it — a citizen or sign chat's target may no
     // longer exist on the other side, and a quest beat's closures still
@@ -5747,6 +5835,7 @@ export class DungeonScene extends GameplayScene {
     this.placePartyAtTile(respawnTile);
     // After the placement, so the companion's fresh anchors name the save point.
     this.companion.resetForRespawn(this.human, this.cat);
+    this.safeRoomRegroup.reset();
 
     // The pet goes home rather than being healed where he stands: his HP is the
     // whole cost of using him, and a free full heal on every safe-room restore
@@ -5769,7 +5858,7 @@ export class DungeonScene extends GameplayScene {
     setWorldZoom(this.cameraZoom.zoom);
     this.scriptedDeaths.reset();
     this.cutscenes.resetForCheckpoint();
-    this.lavaBalls.resetForCheckpoint();
+    this.globs.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
     this.hirelingShots.resetForCheckpoint();
     this.skeletonShots.resetForCheckpoint();
@@ -5785,7 +5874,7 @@ export class DungeonScene extends GameplayScene {
     // Last, so the snapshot has the final word. The two resets above clear the
     // same room locks and entry windows the snapshot describes, and they clear
     // them to "no fight in progress" rather than to what was actually captured.
-    this.applyWorldCheckpoint(cp.world, cp.levelTimerFrames, 'rewind');
+    this.applyWorldCheckpoint(cp.world, cp.floorElapsedFrames, 'rewind');
     if (this.briarHollowKitCheckpoint !== null) {
       this.briarHollowKit?.restoreCheckpoint(this.briarHollowKitCheckpoint);
     }
@@ -5831,10 +5920,12 @@ export class DungeonScene extends GameplayScene {
    */
   private applyWorldCheckpoint(
     world: WorldCheckpoint,
-    levelTimerFrames: number,
+    floorElapsedFrames: number,
     runProgress: 'rewind' | 'keep',
   ): void {
-    this.levelTimerFrames = levelTimerFrames;
+    this.floorElapsedFrames = floorElapsedFrames;
+    // A clock put back under the limit can run out again.
+    this.timeLimitDetonated = false;
     this.restoreFloorCheckpoint(world);
     if (runProgress === 'rewind') this.restoreRunProgress(world);
     this.fairies.resetForCheckpoint(this.world.roster.mobs, this.bossRoom.defeatedBossTypes);
@@ -5861,7 +5952,7 @@ export class DungeonScene extends GameplayScene {
       recall: this.recall.captureCheckpoint(),
       treasureChests: this.treasureChests.captureCheckpoint(),
       destruction: this.destruction.captureCheckpoint(),
-      bopca: this.bopca.captureCheckpoint(),
+      doctor: this.doctor.captureCheckpoint(),
       difficultyTelemetry: this.difficultyTelemetry.captureCheckpoint(),
       mercenary: this.mercenarySystem.captureCheckpoint(),
       deinonychus: this.deinonychusSystem.captureCheckpoint(),
@@ -5922,7 +6013,7 @@ export class DungeonScene extends GameplayScene {
     this.dungeonAmbience?.markDirty();
     this.dungeonLife?.clearSurprises();
     this.dungeonLife?.rescan();
-    this.bopca.restoreCheckpoint(world.bopca);
+    this.doctor.restoreCheckpoint(world.doctor);
     this.difficultyTelemetry.restoreCheckpoint(world.difficultyTelemetry);
 
     this.defendQuest.restoreCheckpoint(world.defendQuest);
@@ -6148,6 +6239,7 @@ export class DungeonScene extends GameplayScene {
       ...this.deinonychusPetSaveState(),
     });
     this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
+    if (this.arrivalSavePending && this.floorArrivalSave === null) this.floorArrivalSave = progress;
     void this.dispatchSaveProgress(progress);
   }
 
@@ -6276,8 +6368,7 @@ export class DungeonScene extends GameplayScene {
               worldSeed: this.gameMap.worldSeed,
               artSeed: this.gameMap.artSeed,
               resumeTile,
-              levelTimerFrames:
-                this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
+              floorElapsedFrames: this.floorElapsedFrames,
               persisted: this.persistedWorldStateFor(party),
             }
           : undefined,
@@ -6417,7 +6508,7 @@ export class DungeonScene extends GameplayScene {
       catAchievements: this.catAchievements.clone(),
       respawnX: respawnTile.x * TILE_SIZE,
       respawnY: respawnTile.y * TILE_SIZE,
-      levelTimerFrames: this.levelTimerFrames,
+      floorElapsedFrames: this.floorElapsedFrames,
     };
   }
 
@@ -6777,7 +6868,20 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
-  private restartAtFloorEntry(): void {
+  /**
+   * Generates this floor afresh around the party as it stood at floor entry.
+   * Taken by a death when the run holds no save it can return to, and by a
+   * time-limit forfeit when this scene never saw the floor's arrival save (the
+   * floor was reached by a reload or Continue). Only the first writes nothing:
+   * the forfeit's new floor takes its arrival save, clock at zero, over the
+   * mid-floor saves the limit has just overruled.
+   *
+   * The run's threaded progress — quests, journal, bounties, shop stock,
+   * crafts — is carried over live: no record of it at floor entry exists. For
+   * the no-save restart that record is the one nothing has saved yet; for a
+   * forfeit after a reload it is the progress the reloaded save held.
+   */
+  private restartAtFloorEntry(reason: FloorRestartReason): void {
     // Before the scene is replaced: his HP only reaches the shared state through
     // a despawn, and the instance holding it is about to be discarded.
     this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
@@ -6840,9 +6944,8 @@ export class DungeonScene extends GameplayScene {
         casinoState: this.casinoState,
         townMemory: this.townMemory,
         partyCrafts: this.partyCrafts,
-        // No `briarHollowState`: the village is per-floor and this restart can
-        // only fire before this floor's first save, so the live state holds
-        // nothing a save has ever recorded — the constructor's fresh state is
+        // No `briarHollowState`: the village is per-floor and belongs to the
+        // floor this restart throws away, so the constructor's fresh state is
         // the correct rewind, the same as taking the stairs down.
         shopStock: this.shopStock,
         mercenaryRoster: this.mercenaryRoster,
@@ -6851,7 +6954,7 @@ export class DungeonScene extends GameplayScene {
         tacticsNoticesSeen: this.tacticsNoticesSeen,
         // The deaths and time the restart cost are the run's; it keeps them.
         gameStats: this.gameStats,
-        suppressArrivalSave: true,
+        suppressArrivalSave: reason === 'noSaveToReturnTo',
       }),
     );
   }
@@ -7331,7 +7434,7 @@ export class DungeonScene extends GameplayScene {
    * pause key's instead (the pause key then closes the conversation for the
    * menu). Only the speakers listed here take it, in this order: the defend
    * offer, the lab's scientist, the bounty man, the murder and the
-   * Anchor questlines, Dave, the Bopca, and, while nothing else has halted
+   * Anchor questlines, Dave, the doctor, and, while nothing else has halted
    * the floor, a citizen, a villager or the recruiter, and a sign. A request
    * that must be read to its end still spends the press on its speaker.
    */
@@ -7353,7 +7456,7 @@ export class DungeonScene extends GameplayScene {
     ) {
       return dismiss;
     }
-    if (this.bopca.isDialogOpen) return () => void this.bopca.dismissDialog();
+    if (this.doctor.isDialogOpen) return () => void this.doctor.dismissDialog();
     // A street chat floats over a running world: while something else has
     // halted the floor, Escape is meant for that and passes the chat by.
     if (this.gameplayHalted) return null;
@@ -7394,6 +7497,7 @@ export class DungeonScene extends GameplayScene {
       humanAchievements: this.humanAchievements,
       catAchievements: this.catAchievements,
       gameStats: this.gameStats,
+      floorNumber: this.levelDef.floorNumber,
     };
   }
 
@@ -7475,6 +7579,7 @@ export class DungeonScene extends GameplayScene {
     this.silenceMovementLoops();
     this.fuseSizzle.stopAll(this.audioScope);
     silenceGeneratorRigHum(this.audioScope);
+    silenceCreatureWingLoops(this.audioScope);
     this.kettlebellWind.silence(this.audioScope);
   }
 
@@ -8166,7 +8271,7 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const inSafeRoom = this.safeRoom.isEntityInSafeRoom(active);
     const pressIsForSomeoneElse =
-      inSafeRoom && safeRoomPressLeavesSpeaker(this.bopca, this.dave, active);
+      inSafeRoom && safeRoomPressLeavesSpeaker(this.doctor, this.dave, active);
     return this.conversation.handOff(active, pressIsForSomeoneElse, () =>
       inSafeRoom ? this.trySafeRoomPress(active) : this.tryHandOffToWorld(active),
     );
@@ -8184,10 +8289,10 @@ export class DungeonScene extends GameplayScene {
     return this.tryWalkedUpToInteraction(active, false);
   }
 
-  /** The safe room's half of the interact chain: whichever of the Bopca and Dave is nearer. Returns whether either took the press. */
+  /** The safe room's half of the interact chain: whichever of the doctor and Dave is nearer. Returns whether either took the press. */
   private trySafeRoomPress(active: HumanPlayer | CatPlayer): boolean {
-    const speaker = safeRoomSpeakerFor(this.bopca, this.dave, active);
-    if (speaker === 'bopca') return this.bopca.tryInteract(active);
+    const speaker = safeRoomSpeakerFor(this.doctor, this.dave, active);
+    if (speaker === 'doctor') return this.doctor.tryInteract(active);
     if (speaker === 'dave') {
       this.talkToDave(active);
       return true;
@@ -8381,11 +8486,14 @@ export class DungeonScene extends GameplayScene {
         arrange: this.menus.inventoryScreen.hotbarArranger(),
       },
       topBand: this.topBandEntries(),
-      levelTimer:
-        this.levelDef.hasCollapseTimer === true && this.tutorial === null
-          ? { frames: this.levelTimerFrames, paused: this.isLevelTimerPaused() }
-          : null,
+      levelTimer: this.hudLevelTimer(),
     };
+  }
+
+  /** Nightmare's time limit on the HUD; null, and so not drawn, wherever there is no limit. */
+  private hudLevelTimer(): LevelTimerModel | null {
+    const remaining = this.nightmareTimeRemaining();
+    return remaining === null ? null : { frames: remaining, paused: this.isFloorClockPaused() };
   }
 
   /** Puts away the pause menu and panels once a tutorial step finished inside them asks to. */
@@ -8904,7 +9012,7 @@ export class DungeonScene extends GameplayScene {
     lighting.addDynamicLightSource(this.destruction.dynamite);
     lighting.addDynamicLightSource(this.fairyFireballs);
     lighting.addDynamicLightSource(this.goblinBombs);
-    lighting.addDynamicLightSource(this.lavaBalls);
+    lighting.addDynamicLightSource(this.globs);
     lighting.addDynamicLightSource(this.knightMissiles);
     lighting.addDynamicLightSource(this.skeletonShots);
     lighting.addDynamicLightSource(this.combat.spells);
@@ -8913,7 +9021,7 @@ export class DungeonScene extends GameplayScene {
     lighting.addDynamicLightSource({
       collectLights: (sink) => {
         for (const mob of this.world.roster.mobs) {
-          if (mob instanceof BrindleGrub) mob.collectLights(sink);
+          mob.collectLights(sink);
         }
       },
     });
@@ -9147,19 +9255,21 @@ export class DungeonScene extends GameplayScene {
       bodyPartGore: this.combat.bodyPartGore,
       safeRoom: this.safeRoom,
       dave: this.dave,
+      doctor: this.doctor,
       bossRoom: this.bossRoom,
       bossRoomDressings: this.bossRoomDressings,
       stairwell: this.stairwell,
       building: this.building,
       barriers: this.barriers,
       spells: this.combat.spells,
+      smokeClouds: this.combat.smokeClouds,
       dynamite: this.destruction.dynamite,
       seismicStompFx: this.combat.seismicStompFx,
       meleeFx: this.combat.meleeFx,
       stormcallerFx: this.combat.stormcaller,
       gearFx: this.combat.gear,
       missileFx: this.combat.missileFx,
-      lavaBalls: this.lavaBalls,
+      globs: this.globs,
       rockThrows: this.rockThrows,
       hirelingShots: this.hirelingShots,
       skeletonShots: this.skeletonShots,
@@ -9190,6 +9300,7 @@ export class DungeonScene extends GameplayScene {
       scriptedDeaths: this.scriptedDeaths,
       sortedFixtures: [
         ...this.cloggedBathroom.sortedFixtures(),
+        ...this.safeRoomRegroup.sortedFigures(),
         ...(this.tutorial?.gateRenderables() ?? []),
         ...(this.labHallway?.sortedRenderables() ?? []),
       ],
@@ -9203,7 +9314,6 @@ export class DungeonScene extends GameplayScene {
     this.renderQuestRouteTrail(ctx, camX, camY);
     this.briarHollowKit?.renderGround(ctx, camX, camY);
     this.gathering?.renderGround(ctx, camX, camY);
-    this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
     const activeCrawler = this.active();
     this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler);
     this.cloggedBathroom.renderGround(
@@ -9377,10 +9487,10 @@ export class DungeonScene extends GameplayScene {
       this.menus.inventoryScreen.isOpen ||
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
-      const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
+      const safeRoomSpeaker = safeRoomSpeakerFor(this.doctor, this.dave, this.active());
       drawUnzoomed(ctx, zoom, () => this.safeRoom.renderUI(ctx, this.active()));
-      this.dave.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
-      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
+      this.dave.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'doctor');
+      this.doctor.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
       // Once no overlay owns the press, `claimPress` takes it at the striker
       // ahead of everything else, so its lock-in prompt is drawn ahead of
       // every check that could hide or replace it, and no other prompt offers
@@ -9730,6 +9840,9 @@ export class DungeonScene extends GameplayScene {
       this.silenceMovementLoops();
     }
 
+    // Ahead of the protection pass, so a companion brought in is protected,
+    // and counted as in the room, on the frame it lands.
+    this.safeRoomRegroup.update(this.human, this.cat, this.gameMap);
     this.pm.updateProtection(this.safeRoom);
 
     const nowInSafeRoom = this.pm.isAnySafe(this.safeRoom);
@@ -9765,12 +9878,15 @@ export class DungeonScene extends GameplayScene {
 
     // After the safe-room and town checks, so an arrival that already stands
     // in one is saved once, by that check, rather than twice.
+    // Cleared only after the capture: `saveProgress` records whatever this
+    // first frame writes, here or at the town or safe-room check above, as
+    // the floor's arrival save.
     if (this.arrivalSavePending) {
-      this.arrivalSavePending = false;
       const onlyStaleSave =
         this.lastSave !== null && this.lastSave.progress === this.staleCarriedSave;
       if (this.lastSave === null || onlyStaleSave)
         this.captureSavePoint(this.saveTileUnder(player));
+      this.arrivalSavePending = false;
     }
 
     const ctx = this.buildSystemContext();
@@ -9787,7 +9903,7 @@ export class DungeonScene extends GameplayScene {
       this.stairwell.wayfinderAnnouncePending = false;
       this.menus.announce(DungeonScene.WAYFINDER_ANNOUNCEMENT);
     }
-    this.bopca.update(ctx);
+    this.doctor.update(ctx);
     this.combat.floatingText.update(ctx);
     // Before `systemNotices`, so a notice queued this frame drains on this
     // same frame's toast pass rather than sitting a frame behind.
@@ -9940,10 +10056,10 @@ export class DungeonScene extends GameplayScene {
 
     this.bounty?.update(ctx);
     setVisibleWorldView(cameraWorldView(this.camera(), clearSightOf(this.active())));
-    this.combat.updateMobs(ctx);
+    if (!this.timeLimitIsTakingParty) this.combat.updateMobs(ctx);
     this.spiderQuest.updateImpactFeedback();
-    for (const name of this.combat.spells.takeFogResistedNames()) {
-      this.menus.announce(`${name} sees you through the fog`);
+    for (const name of this.combat.smokeClouds.takeFogResistedNames()) {
+      this.menus.announce(`${name} sees you through the smoke`);
     }
 
     this.combat.drainMobAudioCues(this.audio);
@@ -10064,7 +10180,7 @@ export class DungeonScene extends GameplayScene {
     // The hostile world's own step: skipped together on the frames a last
     // stand holds it back (`CombatKit.worldStepTaken`).
     if (this.combat.worldStepTaken) {
-      this.lavaBalls.update(ctx);
+      this.globs.update(ctx);
       this.rockThrows.update(ctx);
       // Summons first, so a skeleton raised this frame is already in `ctx.roster.mobs`
       // when the projectile system walks it. Neither ordering can strand a shot —
@@ -10095,19 +10211,22 @@ export class DungeonScene extends GameplayScene {
     playFairyFireballCues(this.fairyFireballs.takeCues(), this.audio);
     playFrostCues([this.human, this.cat], this.audio);
 
-    // The llama's own impact cue. It is drained here rather than from
-    // `playMobAudioCues` because the ball outlives its llama, and a shot that
-    // lands after the animal died has no mob left to carry the flag.
-    const lavaBurst = this.lavaBalls.burstSoundAt;
-    if (lavaBurst !== null) {
-      this.lavaBalls.burstSoundAt = null;
-      this.audio?.playAt('llama_fireball_explosion', lavaBurst.x, lavaBurst.y);
+    // A glob's own impact cue. It is drained here rather than from
+    // `playMobAudioCues` because the glob outlives its thrower, and a shot that
+    // lands after the creature died has no mob left to carry the flag.
+    const globBurst = this.globs.burstSoundAt;
+    if (globBurst !== null) {
+      this.globs.burstSoundAt = null;
+      const burstSounds = globBurstSounds(globBurst.kind);
+      if (burstSounds.length > 0) {
+        this.audio?.playRandomAt(burstSounds, globBurst.x, globBurst.y);
+      }
     }
 
     playHirelingProjectileCues(this.rockThrows, this.hirelingShots, this.audio);
 
-    // Drained here rather than from `playMobAudioCues` for the same reason the
-    // llama's is: a soul bolt outlives its caster, and one that lands after the
+    // Drained here rather than from `playMobAudioCues` for the same reason a
+    // glob's is: a soul bolt outlives its caster, and one that lands after the
     // lord died has no mob left to carry the flag.
     const soulBurst = this.skeletonShots.burstSoundAt;
     if (soulBurst !== null) {
@@ -10140,6 +10259,7 @@ export class DungeonScene extends GameplayScene {
     };
     this.fuseSizzle.update(this.audioScope, this.goblinBombs.liveSticks, listener);
     updateGeneratorRigHum(this.audioScope, this.world.roster.mobs, listener);
+    updateCreatureWingLoops(this.audioScope, this.world.roster.mobs, listener);
     this.kettlebellWind.update(this.audioScope, this.gymRoom.fallingKettlebells.length);
 
     // Likewise the rise: the mob that made it happen is the lord, but the sound
@@ -10168,15 +10288,7 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    if (
-      this.levelDef.hasCollapseTimer === true &&
-      this.levelTimerFrames > 0 &&
-      !this.isLevelTimerPaused()
-    ) {
-      const framesBefore = this.levelTimerFrames;
-      this.levelTimerFrames--;
-      this.playLevelTimerCue(levelTimerCue(framesBefore, this.levelTimerFrames));
-    }
+    this.tickFloorClock();
 
     revealMinimap(player, this.miniMap);
 
@@ -10190,23 +10302,17 @@ export class DungeonScene extends GameplayScene {
     }
     this.building?.detect(this.active());
 
-    updateKnockoutState({
-      active: this.active(),
-      inactive: this.inactive(),
-      inactiveIsHuman: this.inactive() === this.human,
-      audio: this.audio,
-      bus: this.bus,
-    });
+    if (!this.timeLimitIsTakingParty) {
+      updateKnockoutState({
+        active: this.active(),
+        inactive: this.inactive(),
+        inactiveIsHuman: this.inactive() === this.human,
+        audio: this.audio,
+        bus: this.bus,
+      });
+    }
 
-    if (
-      !this.gameOver &&
-      checkDeath(
-        this.human,
-        this.cat,
-        this.levelDef.hasCollapseTimer === true,
-        this.levelTimerFrames,
-      )
-    ) {
+    if (!this.gameOver && checkDeath(this.human, this.cat)) {
       this.gameOver = true;
       // Nothing at the striker may land under the death screen or carry into the respawn.
       this.highStriker?.abandonAll();
@@ -10215,39 +10321,104 @@ export class DungeonScene extends GameplayScene {
       this.barriers.cancelConstruct();
       // The death screen stops the village's ticks, so a contract's work loop would play on under it.
       this.briarHollowKit?.contracts?.cancelWork();
-      const deathCause = resolveDeathCause(
-        this.human,
-        this.cat,
-        this.levelDef.hasCollapseTimer === true,
-        this.levelTimerFrames,
-      );
+      const deathCause = this.timeLimitIsTakingParty
+        ? FLOOR_RESTART_DEATH_CAUSE
+        : resolveDeathCause(this.human, this.cat);
+      this.deathCause = deathCause;
       this.bus.emit('playerDied', { fallen: this.fallenCrawler(), cause: deathCause });
       this.combat.deathScreen.activate(
         pickDeathMessage(deathCause),
-        respawnModeFor(respawnRouteFor(this.lastSave)),
+        respawnModeFor(respawnRouteFor(this.lastSave, deathCause)),
       );
     }
   }
 
   /**
-   * A safe room is a refuge from the floor's collapse as well as from its
+   * Counts a frame of time on the floor, sounds the time limit's warnings as
+   * they come due, and answers the limit running out. Runs only once the
+   * floor's intro has handed the party over, so the arrival costs nothing.
+   */
+  private tickFloorClock(): void {
+    if (!this.isFloorClockPaused()) {
+      const remainingBefore = this.nightmareTimeRemaining();
+      this.floorElapsedFrames++;
+      const remainingAfter = this.nightmareTimeRemaining();
+      if (remainingBefore !== null && remainingAfter !== null) {
+        this.playLevelTimerCue(levelTimerCue(remainingBefore, remainingAfter));
+      }
+    }
+    // Checked paused or not: a switch to Nightmare made in a safe room can put
+    // the floor past its limit without a frame of the clock running.
+    if (!this.gameOver && !this.timeLimitDetonated && this.nightmareTimeRemaining() === 0) {
+      this.detonateForTimeLimit();
+    }
+  }
+
+  /**
+   * Nightmare's time limit has run out: everyone is held where they stand,
+   * Caroline gives her verdict over a halted world, and both crawlers burst
+   * together. The death screen that follows restarts the floor rather than
+   * returning to the last save (`respawnRouteFor`).
+   */
+  private detonateForTimeLimit(): void {
+    this.timeLimitDetonated = true;
+    this.scriptedDeaths.playTogether(
+      'time_limit_detonation',
+      [
+        { victim: this.human, at: crawlerGroundPoint(this.human) },
+        { victim: this.cat, at: crawlerGroundPoint(this.cat) },
+      ],
+      [{ kind: 'carolineMessage', message: CAROLINE_TIME_LIMIT_VERDICT, world: 'halts' }],
+    );
+  }
+
+  /**
+   * Whether Nightmare's time limit is taking the party. While it is, the floor
+   * is already forfeit: mobs stand still so nothing moves in on the bodies, a
+   * downed companion's bleed-out stops so it cannot end the run first, and
+   * whatever death follows is the time limit's.
+   */
+  private get timeLimitIsTakingParty(): boolean {
+    return this.scriptedDeaths.isPlaying('time_limit_detonation');
+  }
+
+  /** This floor's clock, as {@link nightmareTimeRemaining} reads it. */
+  private get floorClock(): FloorClock {
+    return {
+      elapsedFrames: this.floorElapsedFrames,
+      nightmareTimeLimitFrames: this.levelDef.nightmareTimeLimitFrames,
+    };
+  }
+
+  /** Frames left on Nightmare's time limit; null on an untimed floor or another difficulty. */
+  private nightmareTimeRemaining(): number | null {
+    return nightmareTimeRemaining(this.floorClock);
+  }
+
+  /**
+   * A safe room is a refuge from the floor's time limit as well as from its
    * mobs: standing in one to cook, craft or sort a bag must not cost the run
    * its clock. Keyed on the controlled character only, so parking the other
-   * one inside while the active one explores does not stop the countdown.
+   * one inside while the active one explores does not stop the clock.
    *
    * A visit to one of the floor's buildings stops the clock too, for all of
    * it: this scene is not updated while the party is indoors, and the scene
    * rebuilt at the door resumes from the frame the party walked in on. A
-   * building under a dungeon floor is a puzzle, and the floor's collapse must
-   * not punish taking one slowly.
+   * building under a dungeon floor is a puzzle, and the floor's time limit
+   * must not punish taking one slowly.
    */
-  private isLevelTimerPaused(): boolean {
+  private isFloorClockPaused(): boolean {
     return this.safeRoom.isEntityInSafeRoom(this.active());
   }
 
-  /** Frames left on this floor's collapse timer; 0 on floors without one. */
-  get levelTimerRemainingFrames(): number {
-    return this.levelTimerFrames;
+  /** Frames the party has spent on this floor, on any difficulty. */
+  get floorClockElapsedFrames(): number {
+    return this.floorElapsedFrames;
+  }
+
+  private releaseDifficultyForTimeLimit(): void {
+    if (this.timeLimitGuard !== null) clearDifficultyChangeGuard(this.timeLimitGuard);
+    this.timeLimitGuard = null;
   }
 
   private playLevelTimerCue(cue: LevelTimerCue | null): void {
@@ -10511,14 +10682,21 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  /** The collapse clock as the AI's timer action reads and moves it; null on an untimed floor. */
+  /**
+   * Nightmare's time limit as the AI's timer action reads and moves it; null
+   * on an untimed floor or another difficulty. Moving the time left shifts the
+   * elapsed clock, so the limit itself never changes.
+   */
   private aiLevelTimer(): AILevelTimer | null {
-    if (this.levelDef.hasCollapseTimer !== true) return null;
+    const remainingFrames = this.nightmareTimeRemaining();
+    const limitFrames = this.levelDef.nightmareTimeLimitFrames;
+    if (remainingFrames === null || limitFrames === undefined) return null;
     return {
-      remainingFrames: this.levelTimerFrames,
-      limitFrames: this.levelDef.collapseTimeLimitFrames ?? this.TUTORIAL_TIME_LIMIT_FRAMES,
+      remainingFrames,
+      limitFrames,
       setRemainingFrames: (frames) => {
-        this.levelTimerFrames = Math.max(0, Math.round(frames));
+        const remaining = Math.min(limitFrames, Math.max(0, Math.round(frames)));
+        this.floorElapsedFrames = limitFrames - remaining;
       },
     };
   }
@@ -10561,11 +10739,14 @@ export class DungeonScene extends GameplayScene {
         this.safeRoom.isEntityInSafeRoom(crawler === 'human' ? this.human : this.cat),
       readSession: () => {
         const levelDef = this.levelDef;
+        const remainingFrames = this.nightmareTimeRemaining();
+        const timeLimitSeconds =
+          remainingFrames === null ? null : Math.ceil(remainingFrames / FRAMES_PER_SECOND);
         const session: SessionInput = {
           floorNumber: levelDef.floorNumber,
           levelId: levelDef.id,
           floorName: levelDef.name,
-          levelTimerRunning: levelDef.hasCollapseTimer === true && !this.isLevelTimerPaused(),
+          levelTimerRunning: timeLimitSeconds !== null && !this.isFloorClockPaused(),
           difficulty: DIFFICULTY_LABELS[settings.difficulty],
           secondsPlayed: Math.floor(this.gameStats.framesPlayed / FRAMES_PER_SECOND),
           deaths: this.gameStats.deaths,
@@ -10573,9 +10754,7 @@ export class DungeonScene extends GameplayScene {
           companions: this.aiCompanionNames(),
           indoors: false,
         };
-        if (levelDef.hasCollapseTimer === true) {
-          session.levelTimerSeconds = Math.ceil(this.levelTimerFrames / FRAMES_PER_SECOND);
-        }
+        if (timeLimitSeconds !== null) session.levelTimerSeconds = timeLimitSeconds;
         const roomCount = this.gameMap.roomBounds.length;
         if (roomCount > 0) session.roomCount = roomCount;
         return session;

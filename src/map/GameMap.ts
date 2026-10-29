@@ -30,6 +30,7 @@ import {
   TOWER_STAIR_SPAN,
   TABLE,
   BOOKSHELF,
+  SAFE_ROOM_MEDICINE_CABINET,
   CRAWLER_SIGN,
   BED,
   BARREL,
@@ -149,7 +150,12 @@ import type { CampSite } from './overworld/camps';
 import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
 import { rectContains } from './overworld/briarHollowSite';
 import type { CircusGroundsSite } from './overworld/circusGroundsLayout';
-import { NO_SPAWN_TERRAIN, type HallwaySpawnPoint } from './overworld/spawnTerrain';
+import {
+  NO_SPAWN_TERRAIN,
+  standsOnSpawnTerrain,
+  type HallwaySpawnPoint,
+  type SpawnTerrain,
+} from './overworld/spawnTerrain';
 import { registerBriarHollowSite } from './tiles/hollowSiteRegistry';
 import { registerCircusGroundsSite } from './tiles/circusSiteRegistry';
 import { registerOverworldTerrain } from './tiles/overworldTerrainRegistry';
@@ -387,7 +393,7 @@ const SAFE_ROOM_BOUNDS_BY_BUILDING: ReadonlyMap<
   /*
    * The inn's taproom, and none of its guest wing. A rented room is somewhere a
    * crawler pays to be alone; a safe room's protection belongs to the public room
-   * downstairs, where the Bopca cooks and Dave sits.
+   * downstairs, where the doctor keeps a corner and Dave sits.
    */
   [
     'taloncrest_inn',
@@ -450,6 +456,8 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   CRAWLER_SIGN,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  // The doctor's medicine cabinet: most of a tile taller than its row.
+  SAFE_ROOM_MEDICINE_CABINET,
   // Both registries, or the tile renders as bare floor: `DECORATION_TYPES` in
   // `TileRenderer` decides what the chunk bake skips, and this one decides what
   // the Y-sorted overlay draws.
@@ -678,6 +686,13 @@ function manhattanDistance(x1: number, y1: number, x2: number, y2: number): numb
  * its target tile rather than on the iteration guard.
  */
 const LOS_CROSSING_SLACK = 2;
+/**
+ * How far short of a blocking tile's edge {@link GameMap.clearLaunchPoint} stops,
+ * in pixels. A point exactly on a tile boundary floors into the tile beyond it
+ * when the ray runs toward positive x or y, which would put the launch point
+ * back inside the wall it was pulled out of.
+ */
+const LAUNCH_POINT_WALL_CLEARANCE_PX = 1;
 
 /** An axis-aligned rectangle in world pixels; a point on its right or bottom edge is outside. */
 export interface PixelRect {
@@ -2629,6 +2644,14 @@ export class GameMap {
   }
 
   /**
+   * Whether (tileX, tileY) is `terrain` ground, by the same test that
+   * classified the overworld's spawn points.
+   */
+  isSpawnTerrainTile(tileX: number, tileY: number, terrain: SpawnTerrain): boolean {
+    return standsOnSpawnTerrain(this.structure, tileX, tileY, terrain);
+  }
+
+  /**
    * Returns true if there is a clear line of sight between two pixel-space
    * points — i.e. no sight-blocking tile (`blocksSight`) crosses the segment.
    *
@@ -2757,6 +2780,67 @@ export class GameMap {
       if (blocks(tileX, tileY)) return false;
     }
     return true;
+  }
+
+  /**
+   * Where a projectile drawn leaving `(toX, toY)` — a mouth, a hand, a bow held
+   * out from a body centred on `(fromX, fromY)` — can actually be launched from.
+   *
+   * The drawn point is an art offset and knows nothing of the map: a thrower
+   * standing with its head against a wall holds its mouth inside the wall, and
+   * a shot spawned there meets solid ground on its first step and is gone
+   * before it has moved. So the launch point is the drawn point when the walk
+   * from the body out to it stays on walkable tiles, and otherwise the farthest
+   * point along that walk that does — the body centre itself at worst. Pulled
+   * back along the thrower's own reach rather than nudged sideways, the shot
+   * still leaves from the thrower and flies the heading it was aimed on.
+   */
+  clearLaunchPoint(
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+  ): { readonly x: number; readonly y: number } {
+    const origin = { x: fromX, y: fromY };
+    const ts = this.tileHeight;
+    let tileX = Math.floor(fromX / ts);
+    let tileY = Math.floor(fromY / ts);
+    if (!this.isWalkable(tileX, tileY)) return origin;
+    const endTileX = Math.floor(toX / ts);
+    const endTileY = Math.floor(toY / ts);
+    const drawnPoint = { x: toX, y: toY };
+    if (tileX === endTileX && tileY === endTileY) return drawnPoint;
+
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const length = Math.hypot(dx, dy);
+    const stepX = Math.sign(dx);
+    const stepY = Math.sign(dy);
+    const tPerTileX = stepX === 0 ? Infinity : ts / Math.abs(dx);
+    const tPerTileY = stepY === 0 ? Infinity : ts / Math.abs(dy);
+    let tNextX = stepX === 0 ? Infinity : ((stepX > 0 ? tileX + 1 : tileX) * ts - fromX) / dx;
+    let tNextY = stepY === 0 ? Infinity : ((stepY > 0 ? tileY + 1 : tileY) * ts - fromY) / dy;
+    const maxCrossings =
+      Math.abs(endTileX - tileX) + Math.abs(endTileY - tileY) + LOS_CROSSING_SLACK;
+
+    for (let crossing = 0; crossing < maxCrossings; crossing++) {
+      let tCrossing: number;
+      if (tNextX < tNextY) {
+        tCrossing = tNextX;
+        tileX += stepX;
+        tNextX += tPerTileX;
+      } else {
+        tCrossing = tNextY;
+        tileY += stepY;
+        tNextY += tPerTileY;
+      }
+      if (!this.isWalkable(tileX, tileY)) {
+        const tClear = Math.max(0, tCrossing - LAUNCH_POINT_WALL_CLEARANCE_PX / length);
+        return { x: fromX + dx * tClear, y: fromY + dy * tClear };
+      }
+      if (tileX === endTileX && tileY === endTileY) return drawnPoint;
+    }
+    return drawnPoint;
   }
 
   /**

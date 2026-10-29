@@ -253,6 +253,11 @@ export abstract class Fairy extends Mob {
   override isFlying = true;
   override readonly audioTag = 'fairy';
 
+  /** A fairy hovers clear of the ground a stomp shakes. */
+  override get evadesSeismicStomp(): boolean {
+    return true;
+  }
+
   /**
    * The body plays its death row where it fell, so kill resolution keeps it in
    * the world until the row has run. Everything a death sets off still hangs

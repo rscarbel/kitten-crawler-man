@@ -1254,10 +1254,10 @@ export function makePipeWrenchProp(palette: GoblinPalette): GoblinProp {
   };
 }
 
-// ── Goblin dynamite ──────────────────────────────────────────────────────────
+// ── A goblin's dynamite ────────────────────────────────────────────────────
 //
 // A stick of red paper-wrapped dynamite held round its middle, with a tied fuse
-// out of the front end. The same red the player's own goblin dynamite is, so a
+// out of the front end. The same red the player's own dynamite is, so a
 // stick in a goblin's fist reads as the thing it is about to throw.
 
 /** The paper wrap: a saturated red, so a stick 3 px wide still reads by hue. */

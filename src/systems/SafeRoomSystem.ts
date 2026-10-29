@@ -1,7 +1,7 @@
 import type { GameMap } from '../map/GameMap';
 import type { TilePoint } from '../map/town/townPlan';
 import type { SafeRoomService } from '../map/DungeonGenerator';
-import { planSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import { clinicCornerTiles, planSafeRoomClinics } from '../map/safeRoomClinicLayout';
 import {
   planSafeRoomDecor,
   safeRoomDecorTiles,
@@ -62,24 +62,24 @@ interface SafeRoomEntry {
 
 /**
  * Every tile a safe room reserves for its own fixtures: Dave's arrival tile,
- * the sleeping bed, and the whole Bopca counter run including the galley strip
- * behind it.
+ * the sleeping bed, and the whole doctor's corner — the cabinet, the doctor's
+ * tile and the bag's.
  *
  * Exported so interior layouts and occupant placement can keep clear of them
- * instead of duplicating the offset maths. The counter tiles are already
- * non-walkable, but the galley strip is not — it is sealed by geometry rather
- * than walkability — so an occupant placer working from walkability alone would
- * happily stand a townsperson inside the Bopca's kitchen.
+ * instead of duplicating the offset maths. The cabinet is already non-walkable,
+ * but the doctor and the bag stand on ordinary floor, so an occupant placer
+ * working from walkability alone would happily stand a townsperson on the
+ * doctor.
  */
 export function safeRoomAnchorTiles(map: GameMap): Array<{ x: number; y: number }> {
   const tiles: Array<{ x: number; y: number }> = [];
   for (const sr of map.safeRooms) {
     tiles.push(...guideAndBedTiles(sr));
   }
-  for (const layout of planSafeRoomCounters(map)) {
-    tiles.push(...layout.counterTiles, ...layout.backTiles, ...layout.galleyTiles);
+  for (const layout of planSafeRoomClinics(map)) {
+    tiles.push(...clinicCornerTiles(layout));
   }
-  // The furnishings too: the stove and the table are as solid as the counter, and
+  // The furnishings too: the stove and the table are as solid as the cabinet, and
   // an occupant placer working from walkability alone would happily stand a
   // townsperson inside the firebox.
   tiles.push(...safeRoomDecorTiles(map));
@@ -121,7 +121,7 @@ export class SafeRoomSystem implements GameSystem {
 
     const decorPlans = planSafeRoomDecor(gameMap);
     // Everything the room has already spoken for. Dave may amble across his own
-    // home tile, but not into the bed, the counter, the galley or the stove.
+    // home tile, but not into the bed, the doctor's corner or the stove.
     const reserved = new Set(
       safeRoomAnchorTiles(gameMap).map((tile) => SafeRoomSystem.tileKey(tile.x, tile.y)),
     );

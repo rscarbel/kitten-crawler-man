@@ -251,7 +251,7 @@ function canCarryLedge(
   ty: number,
 ): boolean {
   if (!isOpenUpland(grid, tx, ty)) return false;
-  // A camp is cleared ground, and a troglodyte den's disc is cleared *to*
+  // A camp is cleared ground, and a lizardman den's disc is cleared *to*
   // `SCREE` — which `isOpenUpland` accepts — so nothing about the tile itself
   // says a ledge does not belong there.
   if (isWithinCamp(camps, tx, ty, CLIFF_CAMP_CLEARANCE_TILES)) return false;

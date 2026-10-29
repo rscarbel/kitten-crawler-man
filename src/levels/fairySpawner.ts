@@ -23,7 +23,6 @@ import {
 } from '../core/difficulty/difficultyProfiles';
 import { settings } from '../core/input/Settings';
 import { hasRoomToMove } from '../map/findWalkableTile';
-import { RUINS_CIRCUS_BUFFER } from '../map/OverworldGenerator';
 import { pastSafeRoomTest } from '../map/pastSafeRoom';
 import {
   findWalkableSpawnTile,
@@ -39,6 +38,7 @@ import type { MobKind } from './mobKinds';
 import { NO_SPAWN_TERRAIN } from '../map/overworld/spawnTerrain';
 import { liveSpawnContext, spawnMob, type SpawnContext } from './spawnFunnel';
 import { floorEncounter } from './encounters';
+import { isOverworldSpawnTileAllowed } from './overworldSpawnTiles';
 
 /**
  * The most non-healer fairies one room may hold, however generous a table's
@@ -479,26 +479,6 @@ export function applyFairyRateUpgrade(
 const SCATTER_MIN_OFFSET_TILES = 1;
 const SCATTER_MAX_OFFSET_TILES = 2;
 
-/**
- * Whether a fairy may be placed on this overworld tile: open ground with room
- * to move, outside the town wall and its safe radius, and clear of the circus
- * grounds. Re-asserted here because a scatter point already clear of all
- * three can have a neighbour that is not.
- */
-export function isOverworldFairyTileAllowed(map: GameMap, tileX: number, tileY: number): boolean {
-  if (!map.isWalkable(tileX, tileY) || !hasRoomToMove(map, tileX, tileY)) return false;
-  if (map.isTileInsideTownWall(tileX, tileY)) return false;
-  if (map.isInTownSafeZone(tileX * TILE_SIZE, tileY * TILE_SIZE)) return false;
-  if (map.isTileInBriarHollowSpawnExclusion(tileX, tileY)) return false;
-  const circus = map.circusCentre;
-  const circusRadius = map.circusRadiusTiles;
-  if (circus !== undefined && circusRadius !== undefined) {
-    const reach = circusRadius + RUINS_CIRCUS_BUFFER;
-    if (Math.hypot(tileX - circus.x, tileY - circus.y) <= reach) return false;
-  }
-  return true;
-}
-
 function findScatterTile(
   map: GameMap,
   origin: { readonly x: number; readonly y: number },
@@ -512,7 +492,7 @@ function findScatterTile(
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
         const tile = { x: origin.x + dx, y: origin.y + dy };
         if (taken.has(`${tile.x},${tile.y}`)) continue;
-        if (isOverworldFairyTileAllowed(map, tile.x, tile.y)) ring.push(tile);
+        if (isOverworldSpawnTileAllowed(map, tile.x, tile.y)) ring.push(tile);
       }
     }
     if (ring.length > 0) return ring[Math.min(Math.floor(rng() * ring.length), ring.length - 1)];

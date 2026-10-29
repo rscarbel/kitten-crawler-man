@@ -1,14 +1,5 @@
-/**
- * Icons for Briar Hollow's two prepared meals.
- *
- * The hamburger is painted here; the stew reuses the bopca counter's bowl
- * painter (`drawDishIcon` in `safeRoomCounter.ts`) with the moss-broth-stew
- * recipe, so the stew's inventory icon and the bowl Pipkin actually serves
- * never drift apart.
- */
+/** Icons for Briar Hollow's two prepared meals: the hamburger and the stew. */
 
-import { DISH_DEF } from '../../systems/bopcaDialog';
-import { drawDishIcon } from '../../sprites/safeRoomCounter';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
 
@@ -86,6 +77,20 @@ const CHEESE_COLOR = '#f4c430';
 const CHEESE_SHADE = '#d9a418';
 const PATTY_COLOR = '#6b4226';
 const PATTY_SHADE = '#4a2c18';
+
+/** The stew's bowl, as fractions of the icon square. */
+const STEW_CX = 0.5;
+const STEW_BASE_Y = 0.63;
+const STEW_BOWL_WIDTH = 0.8;
+const STEW_BOWL_DEPTH = 0.31;
+/** The rim is drawn as an ellipse this fraction of the bowl's depth tall, seen from just above. */
+const STEW_RIM_DEPTH_FRACTION = 0.33;
+/** How much of the rim's width the stew's surface fills. */
+const STEW_SURFACE_INSET = 0.78;
+const STEW_GARNISH_RADIUS = 0.062;
+const STEW_BOWL_COLOR = '#e0d7c0';
+const STEW_COLOR = '#5f7a3c';
+const STEW_GARNISH_COLOR = '#9fc46a';
 
 /**
  * The burger's colours, shared with the burger lying on the ground so the
@@ -234,6 +239,39 @@ function drawHamburgerIcon(
   }
 }
 
+/** A bowl of moss-broth stew with a sprig on top, seen from just above the rim. */
+function drawStewIcon(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const cx = x + size * STEW_CX;
+  const baseY = y + size * STEW_BASE_Y;
+  const width = size * STEW_BOWL_WIDTH;
+  const depth = size * STEW_BOWL_DEPTH;
+  const rimHalfHeight = depth * STEW_RIM_DEPTH_FRACTION;
+  const rimTop = baseY - depth;
+
+  ctx.fillStyle = STEW_BOWL_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(cx - width / 2, rimTop);
+  ctx.quadraticCurveTo(cx, baseY + depth / 2, cx + width / 2, rimTop);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = STEW_COLOR;
+  ctx.beginPath();
+  ctx.ellipse(cx, rimTop, (width * STEW_SURFACE_INSET) / 2, rimHalfHeight, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  ctx.strokeStyle = STEW_BOWL_COLOR;
+  ctx.lineWidth = THIN_LINE_WIDTH;
+  ctx.beginPath();
+  ctx.ellipse(cx, rimTop, width / 2, rimHalfHeight, 0, 0, FULL_CIRCLE);
+  ctx.stroke();
+
+  ctx.fillStyle = STEW_GARNISH_COLOR;
+  ctx.beginPath();
+  ctx.arc(cx, rimTop, size * STEW_GARNISH_RADIUS, 0, FULL_CIRCLE);
+  ctx.fill();
+}
+
 /** Draws one food item's icon into the largest square centred in `rect`. */
 export function drawFoodIcon(ctx: CanvasRenderingContext2D, rect: Rect, id: FoodIconId): void {
   const { x, y, size } = iconSquare(rect);
@@ -245,7 +283,7 @@ export function drawFoodIcon(ctx: CanvasRenderingContext2D, rect: Rect, id: Food
   if (id === 'hamburger') {
     drawHamburgerIcon(ctx, x, y, size);
   } else {
-    drawDishIcon(ctx, DISH_DEF.moss_broth_stew.visual, x, y, size);
+    drawStewIcon(ctx, x, y, size);
   }
 
   ctx.restore();

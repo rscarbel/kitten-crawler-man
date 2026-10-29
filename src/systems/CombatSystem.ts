@@ -4,8 +4,7 @@ import { HumanPlayer } from '../creatures/HumanPlayer';
 import { Deinonychus } from '../creatures/Deinonychus';
 import { DEINONYCHUS_ASSIST_XP } from '../abilities/deinonychus';
 import { CatPlayer } from '../creatures/CatPlayer';
-import type { Mob } from '../creatures/Mob';
-import { Fairy } from '../creatures/fairies/Fairy';
+import { DAMAGE_IMMUNE_LABEL, type Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
@@ -187,16 +186,8 @@ const SEISMIC_STOMP_HEAL_CHANCE = 0.2;
 const SEISMIC_STOMP_HEAL_FRACTION = 0.5;
 /** Stun duration in frames for seismic stomp non-boss stun. */
 const SEISMIC_STOMP_STUN_FRAMES = 150;
-/** Shown over a fairy the stomp passes under. */
-export const SEISMIC_STOMP_IMMUNE_LABEL = 'Immune';
-
-/**
- * A stomp is a shock through the ground, and a fairy hovers clear of it: the
- * blast deals it nothing and lands nothing on it, and says so over its head.
- */
-function dodgesSeismicStomp(mob: Mob): boolean {
-  return mob instanceof Fairy;
-}
+/** Shown over a creature the stomp passes under. */
+export const SEISMIC_STOMP_IMMUNE_LABEL = DAMAGE_IMMUNE_LABEL;
 
 /** Anything a crawler's melee swing can knock down besides mobs, props and trees. */
 export interface MeleeStructureTarget {
@@ -614,7 +605,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       const mc = centerOf(mob);
       const dist = Math.hypot(mc.x - hc.x, mc.y - hc.y);
       if (dist > outerRadius) continue;
-      if (dodgesSeismicStomp(mob)) {
+      if (mob.evadesSeismicStomp) {
         mob.queueFloatingText(SEISMIC_STOMP_IMMUNE_LABEL, 'immune');
         continue;
       }
@@ -993,7 +984,7 @@ export function resolveKills(ctx: CombatContext): void {
     const paysRewards = mob.paysRewards;
 
     // Non-players stay in the running for top dealer without being able to win
-    // it: a mob that out-damages both crawlers — friendly fire, confusion fog —
+    // it: a mob that out-damages both crawlers — through friendly fire, say —
     // leaves the top dealer's share unclaimed rather than handing it to
     // whichever crawler came second, which would reward them for being out-hit.
     let topPlayer: HumanPlayer | CatPlayer | null = null;

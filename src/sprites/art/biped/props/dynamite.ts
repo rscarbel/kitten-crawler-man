@@ -1,5 +1,5 @@
 /**
- * A stick of red goblin dynamite, gripped round its middle, with a short fuse
+ * A stick of red dynamite, gripped round its middle, with a short fuse
  * off one end and — once lit — a spark at the fuse's tip.
  *
  * The spark is drawn in figure space rather than in the grip's rotated frame:

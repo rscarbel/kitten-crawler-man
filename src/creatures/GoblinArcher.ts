@@ -60,7 +60,7 @@ const BAND_MAX_TILES = 6;
  * How far it will give ground in one continuous retreat, in frames, and how
  * long before it may do so again.
  *
- * Both exist for the same reason the llama's do: an archer that can always open
+ * Both exist for the same reason the acid llama's do: an archer that can always open
  * the gap can never be caught, which is the frustrating version of this rather
  * than the pressuring one. Backed into a wall it simply stops, which is the
  * correct outcome — cornering the archer is how the player beats it.

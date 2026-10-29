@@ -9,7 +9,10 @@
 
 import type { AbilityManager } from '../../../core/skills/AbilityManager';
 import type { AchievementManager } from '../../../core/progression/AchievementManager';
-import { activeDifficultyChangeGuard } from '../../../core/difficulty/difficultyChangeGuard';
+import {
+  activeDifficultyChangeGuard,
+  type DifficultyChangeConfirmation,
+} from '../../../core/difficulty/difficultyChangeGuard';
 import type { Difficulty } from '../../../core/difficulty/difficultyProfiles';
 import type { GameStats } from '../../../core/progression/GameStats';
 import { keybindings } from '../../../core/input/Keybindings';
@@ -58,6 +61,7 @@ export interface PauseFrame {
   readonly humanAchievements: AchievementManager;
   readonly catAchievements: AchievementManager;
   readonly gameStats: GameStats;
+  readonly floorNumber: number;
 }
 
 /**
@@ -110,9 +114,14 @@ const RESTRICTED_REASON = 'Finish the tutorial step first';
 /** Buildings have no way to restart the run; the dungeon outside does. */
 const RESET_UNAVAILABLE_REASON = 'Leave the building to reset the game';
 
-const DIFFICULTY_CONFIRM_TITLE = 'Restart the Starlight Tent?';
-const DIFFICULTY_CONFIRM_BODY =
-  'Changing the difficulty changes the hall of mirrors. The show will start over from Act I.';
+/**
+ * The difficulty confirm's words should it ever be drawn with nothing pending;
+ * it is only opened alongside a guard's own confirmation.
+ */
+const UNEXPLAINED_DIFFICULTY_CONFIRM: DifficultyChangeConfirmation = {
+  title: 'Change the difficulty?',
+  body: 'Something in progress will start over on the new difficulty.',
+};
 
 /** Overlap tolerated before a control stops counting as below (or above) another, in UI units. */
 const EDGE_TOLERANCE = 1;
@@ -189,7 +198,10 @@ export class PauseScreen {
   /** The page shown. On a phone, null is the menu list. */
   private selected: PauseSectionId | null = null;
   private confirm: ConfirmKind | null = null;
-  private pendingDifficulty: Difficulty | null = null;
+  private pendingDifficulty: {
+    readonly next: Difficulty;
+    readonly confirmation: DifficultyChangeConfirmation;
+  } | null = null;
   private didPauseAudio = false;
   /** The menu's music pause is let go while a page that plays music is showing. */
   private musicReleased = false;
@@ -319,13 +331,17 @@ export class PauseScreen {
   }
 
   /**
-   * A running guard means the change would restart something, so the pick
-   * waits on a confirm; picking the tier already in play never does.
+   * A running guard with something to say about the new tier means the change
+   * would disturb what it protects, so the pick waits on a confirm; picking
+   * the tier already in play never does.
    */
   private requestDifficulty(difficulty: Difficulty): void {
-    const guarded = activeDifficultyChangeGuard() !== null;
-    if (guarded && difficulty !== settings.difficulty) {
-      this.pendingDifficulty = difficulty;
+    const confirmation =
+      difficulty === settings.difficulty
+        ? null
+        : (activeDifficultyChangeGuard()?.confirmation(difficulty) ?? null);
+    if (confirmation !== null) {
+      this.pendingDifficulty = { next: difficulty, confirmation };
       this.confirm = 'difficulty';
       return;
     }
@@ -333,10 +349,11 @@ export class PauseScreen {
   }
 
   private confirmDifficulty(): void {
-    const next = this.pendingDifficulty;
+    const pending = this.pendingDifficulty;
     this.pendingDifficulty = null;
     this.confirm = null;
-    if (next === null) return;
+    if (pending === null) return;
+    const next = pending.next;
     // The guard can have been released while the confirm was up; with nothing
     // left to restart, the change is an ordinary one.
     const guard = activeDifficultyChangeGuard();
@@ -358,6 +375,7 @@ export class PauseScreen {
       abilities: this.deps.abilities,
       achievements: { human: frame.humanAchievements, cat: frame.catAchievements },
       gameStats: frame.gameStats,
+      floorNumber: frame.floorNumber,
       journal: this.journalContext,
       audio: this.deps.audio,
       musicLibrary: (this.deps.musicLibrary ?? activeMusicLibrary)(),
@@ -448,8 +466,8 @@ export class PauseScreen {
         escape: { kind: 'close', onEscape: () => this.cancelConfirm() },
         content: () => ({
           id: 'difficulty',
-          title: DIFFICULTY_CONFIRM_TITLE,
-          body: DIFFICULTY_CONFIRM_BODY,
+          title: this.pendingDifficulty?.confirmation.title ?? UNEXPLAINED_DIFFICULTY_CONFIRM.title,
+          body: this.pendingDifficulty?.confirmation.body ?? UNEXPLAINED_DIFFICULTY_CONFIRM.body,
           icon: 'alert',
           tone: 'accent',
           // Wide enough that "Change and restart" fits beside its partner on a phone.

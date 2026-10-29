@@ -258,8 +258,8 @@ export class FairySystem implements GameSystem {
     if (!(mob instanceof Fairy)) return;
     // Stripped on the kill itself rather than on the next update: a blow landing
     // later this frame on a mob the fairy was warding must already hit bare HP.
-    // A crush already snapped around a vespa is cancelled the same way, so it
-    // cannot go on to kill the vespa after the fairy that cast it is gone.
+    // A crush already snapped around a beetle is cancelled the same way, so it
+    // cannot go on to kill the beetle after the fairy that cast it is gone.
     if (mob instanceof ShieldFairy) {
       stripWardsHeldBy(mob, this.deps.getMobs());
       mob.cancelCrush();

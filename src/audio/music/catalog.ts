@@ -51,7 +51,7 @@ export const MUSIC_CATALOG = {
   welcome_to_the_dungeon: {
     title: 'Welcome to the Dungeon',
     area: 'title_screen',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Welcome to the Dungeon' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Welcome to the Dungeon' },
   },
   tutorial_island: {
     title: 'Tutorial Island',
@@ -80,7 +80,7 @@ export const MUSIC_CATALOG = {
   spider_lab: {
     title: 'The Spider Lab',
     area: 'dungeon',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Spider Lab' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Spider Lab' },
   },
   town_music_1: {
     title: 'Cobblestones and Coin Purses',
@@ -104,7 +104,7 @@ export const MUSIC_CATALOG = {
   riverside_welcome: {
     title: 'Riverside Welcome',
     area: 'taloncrest',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Riverside Welcome' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Riverside Welcome' },
   },
   forest_path: {
     title: 'Where the Path Forgets You',
@@ -119,12 +119,15 @@ export const MUSIC_CATALOG = {
   terrifying_woods: {
     title: 'Terrifying Woods',
     area: 'wilds',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Terrifying Woods' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Terrifying Woods' },
   },
   old_quarter_evening_ending: {
     title: 'Old Quarter Evening',
     area: 'wilds',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Old Quarter Evening (Ending)' },
+    attribution: {
+      authorName: 'Nine Lives Orchestra',
+      originalTitle: 'Old Quarter Evening (Ending)',
+    },
   },
   briar_hollow_theme: {
     title: 'Hearthsmoke Over Briar Hollow',
@@ -139,12 +142,12 @@ export const MUSIC_CATALOG = {
   under_the_willows: {
     title: 'Under the Willows',
     area: 'briar_hollow',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Under the Willows' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Under the Willows' },
   },
   hayfield_afternoon: {
     title: 'Hayfield Afternoon',
     area: 'briar_hollow',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Hayfield Afternoon' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Hayfield Afternoon' },
   },
   siege_theme: {
     title: 'Hold the Palisade',
@@ -301,7 +304,7 @@ export const MUSIC_CATALOG = {
   guildhall_waltz: {
     title: 'Guildhall Waltz',
     area: 'interiors',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Guildhall Waltz' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Guildhall Waltz' },
   },
   big_tower_1: {
     title: 'The Tower Keeps Climbing',
@@ -354,7 +357,7 @@ export const MUSIC_CATALOG = {
   brace_for_the_horde: {
     title: 'Brace for the Horde',
     area: 'battles',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Prepare to Defend' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'Prepare to Defend' },
   },
   fix_the_plumbing_music: {
     title: 'Plunger Ballet',
@@ -389,17 +392,17 @@ export const MUSIC_CATALOG = {
   the_kraken_flooded: {
     title: 'The Kraken: Flooded',
     area: 'battles',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'The Kraken: Flooded' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'The Kraken: Flooded' },
   },
   the_kraken_battle: {
     title: 'The Kraken: Battle',
     area: 'battles',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'The Kraken: Battle' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'The Kraken: Battle' },
   },
   king_of_the_heap: {
     title: 'King of the Heap',
     area: 'battles',
-    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'King of the Heap' },
+    attribution: { authorName: 'Nine Lives Orchestra', originalTitle: 'King of the Heap' },
   },
 } as const satisfies Record<MusicTrackId, MusicTrackDef>;
 

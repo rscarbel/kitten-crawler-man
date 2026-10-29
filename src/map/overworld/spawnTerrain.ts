@@ -11,9 +11,26 @@
  * planted.
  */
 
-import { FloorTypeValue, HIGHLAND_GRASS, RUBBLE, SCREE, TREE } from '../tileTypes';
-import type { TileGrid } from '../town/tileGrid';
+import {
+  FloorTypeValue,
+  HIGHLAND_GRASS,
+  RUBBLE,
+  SCREE,
+  TREE,
+  type TileContent,
+} from '../tileTypes';
 import type { TilePoint } from '../town/townPlan';
+
+/** The finished overworld's cells, row-major: the generator's grid and the map's structure alike. */
+type TerrainCells = readonly (readonly TileContent[])[];
+
+function cellAt(cells: TerrainCells, x: number, y: number): TileContent | undefined {
+  return cells[y]?.[x];
+}
+
+function typeAt(cells: TerrainCells, x: number, y: number): number | undefined {
+  return cellAt(cells, x, y)?.type;
+}
 
 /** Every terrain a spawn point can be classified as. A point may satisfy several, or none. */
 export const SPAWN_TERRAINS = ['forest_edge', 'open_field'] as const;
@@ -61,8 +78,8 @@ function isGrass(type: number | undefined): boolean {
 }
 
 /** Whether (x, y) is a road or rubble tile, which no open field has underfoot. */
-function isBrokenOrPavedGround(grid: TileGrid, x: number, y: number): boolean {
-  const type = grid.typeAt(x, y);
+function isBrokenOrPavedGround(cells: TerrainCells, x: number, y: number): boolean {
+  const type = typeAt(cells, x, y);
   return type === FloorTypeValue.road || type === RUBBLE;
 }
 
@@ -70,37 +87,42 @@ function isBrokenOrPavedGround(grid: TileGrid, x: number, y: number): boolean {
  * The surface beneath whatever stands on (x, y): a wildflower clump or a
  * boulder stands on grass, and a field is still a field under them.
  */
-function groundAt(grid: TileGrid, x: number, y: number): number | undefined {
-  if (!grid.inBounds(x, y)) return undefined;
-  const cell = grid.cells[y][x];
-  return cell.groundType ?? cell.type;
+function groundAt(cells: TerrainCells, x: number, y: number): number | undefined {
+  const cell = cellAt(cells, x, y);
+  return cell === undefined ? undefined : (cell.groundType ?? cell.type);
 }
 
-function treesWithin(grid: TileGrid, x: number, y: number, radius: number): number {
+function treesWithin(cells: TerrainCells, x: number, y: number, radius: number): number {
   const radiusSq = radius * radius;
   let trees = 0;
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
       if (dx * dx + dy * dy > radiusSq) continue;
-      if (grid.typeAt(x + dx, y + dy) === TREE) trees++;
+      if (typeAt(cells, x + dx, y + dy) === TREE) trees++;
     }
   }
   return trees;
 }
 
-function satisfiesTerrain(grid: TileGrid, x: number, y: number, terrain: SpawnTerrain): boolean {
+/** Whether (x, y) of `cells` is `terrain` ground. A pure function of the cells. */
+export function standsOnSpawnTerrain(
+  cells: TerrainCells,
+  x: number,
+  y: number,
+  terrain: SpawnTerrain,
+): boolean {
   switch (terrain) {
     case 'forest_edge':
       return (
-        isOpenWildernessGround(groundAt(grid, x, y)) &&
-        !isBrokenOrPavedGround(grid, x, y) &&
-        treesWithin(grid, x, y, FOREST_EDGE_RADIUS_TILES) >= FOREST_EDGE_MIN_TREES
+        isOpenWildernessGround(groundAt(cells, x, y)) &&
+        !isBrokenOrPavedGround(cells, x, y) &&
+        treesWithin(cells, x, y, FOREST_EDGE_RADIUS_TILES) >= FOREST_EDGE_MIN_TREES
       );
     case 'open_field':
       return (
-        isGrass(groundAt(grid, x, y)) &&
-        !isBrokenOrPavedGround(grid, x, y) &&
-        treesWithin(grid, x, y, OPEN_FIELD_TREE_CLEARANCE_TILES) === 0
+        isGrass(groundAt(cells, x, y)) &&
+        !isBrokenOrPavedGround(cells, x, y) &&
+        treesWithin(cells, x, y, OPEN_FIELD_TREE_CLEARANCE_TILES) === 0
       );
     default: {
       const unhandled: never = terrain;
@@ -109,11 +131,11 @@ function satisfiesTerrain(grid: TileGrid, x: number, y: number, terrain: SpawnTe
   }
 }
 
-/** Every terrain (x, y) satisfies on `grid`. A pure function of the grid. */
+/** Every terrain (x, y) satisfies on `cells`. A pure function of the cells. */
 export function classifySpawnTerrain(
-  grid: TileGrid,
+  cells: TerrainCells,
   x: number,
   y: number,
 ): ReadonlySet<SpawnTerrain> {
-  return new Set(SPAWN_TERRAINS.filter((terrain) => satisfiesTerrain(grid, x, y, terrain)));
+  return new Set(SPAWN_TERRAINS.filter((terrain) => standsOnSpawnTerrain(cells, x, y, terrain)));
 }

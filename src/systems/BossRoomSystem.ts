@@ -34,7 +34,7 @@ import type { MobRoster } from './kits/SceneWorld';
 import type { EventBus } from '../core/EventBus';
 import { worldText } from '../ui/world/worldText';
 import { drawGremlinAcidPool, drawGremlinBile } from '../sprites/gremlinBileSprite';
-import { bileLobHeight, drawBileGroundMark, stopsBile } from './bossRooms/gremlinBile';
+import { bileLobHeight, drawBileShadow, stopsBile } from './bossRooms/gremlinBile';
 import {
   Kraken,
   MAX_GUARD_TENTACLES,
@@ -270,6 +270,7 @@ const ACID_PUDDLE_DAMAGE_SOURCE: DamageSource = {
   mobType: 'TrashGremlin',
   attackType: 'acid_puddle',
   undodgeable: true,
+  groundHazard: 'acid',
 };
 
 /** A direct hit is dodgeable; standing in the pool it leaves is not. */
@@ -1885,7 +1886,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
     this.renderAcidPuddles(ctx, camX, camY);
     for (const proj of this.vomitProjectiles) {
-      drawBileGroundMark(ctx, proj.x - camX, proj.y - camY, PROJECTILE_HIT_RADIUS);
+      drawBileShadow(ctx, proj.x - camX, proj.y - camY);
     }
     this.renderKrakenSlams(ctx, camX, camY);
   }

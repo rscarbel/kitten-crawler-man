@@ -3,7 +3,7 @@
  * the Lich's soul bolts, and the archers' bone arrows.
  *
  * It is a system rather than state on the creatures for one reason, the same one
- * `LavaBallSystem` exists for. A mob stops being updated and stops being drawn
+ * `GlobProjectileSystem` exists for. A mob stops being updated and stops being drawn
  * the frame it dies — `MobUpdateLoop` skips the dead, and kill resolution drops
  * them out of the spatial grid the renderer queries — so a projectile owned by
  * the caster vanishes in mid-air the instant the player lands the killing blow,
@@ -193,10 +193,16 @@ export class SkeletonProjectileSystem implements GameSystem {
   private launch(shot: SkeletonShot, caster: Mob): void {
     const heading = normalize(shot.dirX, shot.dirY);
     const speed = shotSpeed(shot.kind);
+    const launch = this.gameMap.clearLaunchPoint(
+      caster.x + TILE_SIZE * CENTER_OFFSET,
+      caster.y + TILE_SIZE * CENTER_OFFSET,
+      shot.x,
+      shot.y,
+    );
     this.projectiles.push({
       kind: shot.kind,
-      x: shot.x,
-      y: shot.y,
+      x: launch.x,
+      y: launch.y,
       vx: heading.x * speed,
       vy: heading.y * speed,
       age: 0,

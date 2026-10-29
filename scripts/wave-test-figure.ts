@@ -8,8 +8,8 @@
  * that moment: a lead-in during which the spawn is only *scheduled*, then the
  * frame the bodies appear, then the seconds of fighting after it.
  *
- *   npm run wave:figure -- --module=src/sprites/art/tusklingFigure.ts \
- *     --export=TUSKLING_FIGURE --states=idle_side,walk_side --instances=8
+ *   npm run wave:figure -- --module=src/sprites/art/wereboarFigure.ts \
+ *     --export=WEREBOAR_FIGURE --states=idle_side,walk_side --instances=8
  *
  * `--no-prewarm` runs the same wave with the scheduling hook removed, which is
  * the control: the difference between the two runs is what wiring prewarm at
@@ -51,7 +51,7 @@ const PERCENT = 100;
 /**
  * Frames between the spawn being scheduled and the bodies appearing.
  *
- * Two thirds of a second at 60 Hz, which is less lead than any of the Tuskling's
+ * Two thirds of a second at 60 Hz, which is less lead than any of the Wereboar's
  * own spawn sites give: a floor's spawner runs a whole level generation ahead
  * of the first render. A
  * shorter default is the harder test.

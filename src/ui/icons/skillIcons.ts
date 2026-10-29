@@ -31,7 +31,7 @@ const SKILL_PALETTES = {
     mark: '#cffafe',
     accent: '#ffffff',
   },
-  cat_reflexes: {
+  warp_speed: {
     glow: '#4c1d95',
     field: '#1c0b3a',
     rim: '#a78bfa',
@@ -171,7 +171,7 @@ function drawNineLivesEmblem(
   }
 }
 
-// ── Cat-like Reflexes: a paw already gone, trailing its own afterimages ──────
+// ── Warp Speed: a paw already gone, trailing its own afterimages ──────
 
 const PAW_PAD_RX = 0.13;
 const PAW_PAD_RY = 0.11;
@@ -208,7 +208,7 @@ function drawPawShape(ctx: CanvasRenderingContext2D, cx: number, cy: number, siz
   }
 }
 
-function drawCatReflexesEmblem(
+function drawWarpSpeedEmblem(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -480,7 +480,7 @@ function drawPowerfulStrikeEmblem(
 
 const SKILL_EMBLEMS = {
   nine_lives: drawNineLivesEmblem,
-  cat_reflexes: drawCatReflexesEmblem,
+  warp_speed: drawWarpSpeedEmblem,
   pugilism: drawPugilismEmblem,
   iron_stomach: drawIronStomachEmblem,
   mechanical_fist: drawMechanicalFistEmblem,

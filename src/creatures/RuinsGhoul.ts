@@ -47,7 +47,7 @@ const RUINS_GHOUL_EYES: EyePlacement = {
 };
 
 /**
- * A former Taloncrest citizen twisted by Scolopendra's poison catastrophe into
+ * A former Taloncrest citizen made by the Fraying into
  * a shambling ruins ghoul — the bread-and-butter hostile of the ruined city
  * outside the safety of town.
  */

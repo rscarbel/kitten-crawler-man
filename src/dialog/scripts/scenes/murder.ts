@@ -90,7 +90,7 @@ export const MURDER_HOME_CLUE: NonEmpty<DialogLine> = [
 
 export const MURDER_ROOST_CLUE: NonEmpty<DialogLine> = [
   theTowerPlaza.line(
-    'Beneath the magistrate’s tower, moulted Hawkfolk feathers lie arranged in a careful ring. A shrine: elf-made candles, fresh wax. Something burst through it since. The feathers are flung wide, and blood is thrown in an arc up the tower stone. Whatever took the victim went up.',
+    'Chalked on the flagstones at the foot of the wall: an open eye over a cupped hand, ringed with elf-made candles. A shrine, and the wax is fresh. Something burst through it since. The candles are flung wide, and blood is thrown in an arc up the stone above. Whatever took the victim went up.',
   ),
   humanCrawler.line(
     'So the cult prays down here, and the blood goes up there. Featherfall’s roost is at the top of this tower. His paperwork was on the body, and now there’s blood on his walls. Everything keeps pointing at the magistrate.',

@@ -6,12 +6,15 @@ import { itemAIName, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
 import { unnamedPetWords } from '../../core/party/petNames';
 import type { DamageSource, Player } from '../../Player';
+import type { ScriptedDeathKind } from '../../systems/scriptedDeath/scriptedDeathKinds';
+import { FLOOR_RESTART_DEATH_CAUSE } from '../../core/save/SavePoint';
 import { CRAWLER_KINDS, type CrawlerKind } from '../../core/skills/SkillManager';
 import { EVENT_IMPORTANCE, IMPORTANCE } from './eventImportance';
 import type { EventDraft, GameEventStream } from './gameEventStream';
 import type { JsonObject } from './json';
 import type { PlayerProfileTracker } from './playerProfile';
 import type { AIContextSource } from './types';
+import type { ThrownItemId } from '../../systems/DynamiteSystem';
 
 /** `playerIdle` fires every few seconds of idling; only these marks are worth telling the AI about. */
 const IDLE_FIRST_MARK_MS = 30_000;
@@ -89,6 +92,12 @@ export function mobLabel(mob: Mob): string {
   return mob.constructor.name;
 }
 
+/** What each scripted death is called when the AI is told who died of it. */
+const SCRIPTED_DEATH_PHRASES: Readonly<Record<ScriptedDeathKind, string>> = {
+  shark_attack: 'a shark attack',
+  time_limit_detonation: "Caroline's time limit",
+};
+
 /** A short phrase naming what dealt a blow, for knockouts and deaths. */
 export function describeDamageSource(source: DamageSource | null): string {
   if (source === null) return 'unknown causes';
@@ -110,9 +119,16 @@ export function describeDamageSource(source: DamageSource | null): string {
     case 'wheelPenalty':
       return 'the Wheel of Fortune';
     case 'scripted':
-      return humanize(source.death);
+      return SCRIPTED_DEATH_PHRASES[source.death];
   }
 }
+
+/** How a crawler's use of each thrown item reads in the AI's event log. */
+const THROWN_ITEM_ACTION = {
+  dynamite: 'lit a stick of dynamite',
+  black_powder_bomb: 'lobbed a black powder bomb',
+  smoke_bomb: 'threw a smoke bomb',
+} as const satisfies Record<ThrownItemId, string>;
 
 function itemName(id: ItemId | null): string | null {
   return id === null ? null : itemAIName(id);
@@ -172,10 +188,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       emit({
         type: 'dynamiteUsed',
         data: { crawler: sideName(e.player) },
-        summary:
-          e.item === 'black_powder_bomb'
-            ? `${sideName(e.player)} lobbed a black powder bomb.`
-            : `${sideName(e.player)} lit a stick of goblin dynamite.`,
+        summary: `${sideName(e.player)} ${THROWN_ITEM_ACTION[e.item]}.`,
         importance: EVENT_IMPORTANCE.dynamiteUsed,
         witness: 'inSafeRoom',
         subject: sideKind(e.player),
@@ -314,10 +327,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
     }),
     bus.on('playerDied', (e) => {
       const crawler = e.fallen === null ? null : nameOf(e.fallen);
-      const killedBy =
-        e.fallen === null
-          ? 'the floor collapsing'
-          : describeDamageSource(e.fallen.lastDamageSource);
+      const killedBy = describeDamageSource(e.fallen?.lastDamageSource ?? null);
+      const respawn =
+        e.cause === FLOOR_RESTART_DEATH_CAUSE
+          ? 'The party starts the floor over from its entrance.'
+          : 'The party respawns at the last save.';
       const data: JsonObject = { cause: e.cause, killedBy };
       if (crawler !== null) data.crawler = crawler;
       emit({
@@ -326,7 +340,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary:
           crawler === null
             ? `The run ended: ${killedBy}.`
-            : `${crawler} died, killed by ${killedBy}. The party respawns at the last save.`,
+            : `${crawler} died, killed by ${killedBy}. ${respawn}`,
         importance: EVENT_IMPORTANCE.playerDied,
         witness: 'always',
       });
@@ -611,22 +625,21 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         witness: 'always',
       });
     }),
-    bus.on('bopcaGreeted', (e) => {
-      const crawler = kindName(e.tone === 'toHuman' ? 'human' : 'cat');
+    bus.on('doctorGreeted', () => {
       emit({
-        type: 'bopcaGreeted',
-        data: { crawler },
-        summary: `The safe room's Bopca greeted ${crawler}.`,
-        importance: EVENT_IMPORTANCE.bopcaGreeted,
+        type: 'doctorGreeted',
+        data: {},
+        summary: "The crawlers spoke to the safe room's doctor.",
+        importance: EVENT_IMPORTANCE.doctorGreeted,
         witness: 'inSafeRoom',
       });
     }),
-    bus.on('bopcaFoodEaten', (e) => {
+    bus.on('doctorTreated', (e) => {
       emit({
-        type: 'bopcaFoodEaten',
-        data: { dish: humanize(e.dishId), healed: Math.round(e.healed) },
-        summary: `A crawler ate a Bopca's ${humanize(e.dishId)}.`,
-        importance: EVENT_IMPORTANCE.bopcaFoodEaten,
+        type: 'doctorTreated',
+        data: { healed: Math.round(e.healed), cured: e.cured },
+        summary: "The safe room's doctor patched up the party.",
+        importance: EVENT_IMPORTANCE.doctorTreated,
         witness: 'inSafeRoom',
       });
     }),

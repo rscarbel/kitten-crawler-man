@@ -466,14 +466,14 @@ export class Deinonychus extends Mob {
   }
 
   /**
-   * The cat's own Scroll of Confusing Fog does not apply to her pet.
+   * The party's own Smoke Bomb does not apply to the pet.
    *
-   * `SpellSystem` fogs every mob in the radius with no hostility filter, and a
+   * `SmokeCloudSystem` confuses every mob in a cloud with no hostility filter, and a
    * confused mob has its whole `updateAI` replaced with `doWander()`. For Deinonychus
    * that stops the animator, the pending blow, the pounce lunge and the recall —
-   * so a pet caught in his owner's fog while retreating stands in the fight at
+   * so a pet caught in his owners' smoke while retreating stands in the fight at
    * the one hit point the interception pins him to, unable to leave and unable
-   * to be re-summoned, until the fog expires.
+   * to be re-summoned, until the smoke clears.
    */
   override immuneToConfusion = true;
 

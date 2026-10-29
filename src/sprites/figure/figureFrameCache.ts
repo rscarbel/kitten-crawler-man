@@ -16,7 +16,7 @@
  *  - **Rows, not sheets, are the unit of memory.** Admission, eviction and the
  *    idle sweep all work on one animation row of one figure, because a fight is
  *    a walk row and an attack row, not a sheet.
- *  - **Cells are shared across instances.** Eight tusklings play the same
+ *  - **Cells are shared across instances.** Eight wereboars play the same
  *    quantized frame indices, so they blit the same eight cells; a pack costs
  *    what one of it costs.
  *  - **A refusal paints rather than blanks.** The painter is present at

@@ -41,6 +41,9 @@ export interface LevelCheckpoint {
   /** Pixel position the party respawns at — a safe room's centre, or the tile where it entered town. */
   respawnX: number;
   respawnY: number;
-  /** Frames left on the floor clock — restoring it is what stops a respawn into an expired timer. */
-  levelTimerFrames: number;
+  /**
+   * Time spent on the floor at the save. Restoring it gives a respawn the
+   * time the save had, not the time the death left.
+   */
+  floorElapsedFrames: number;
 }

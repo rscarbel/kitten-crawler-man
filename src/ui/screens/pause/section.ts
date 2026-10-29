@@ -91,6 +91,8 @@ export interface PauseContext {
   readonly abilities: AbilityManager;
   readonly achievements: Readonly<Record<CrawlerKind, AchievementManager>>;
   readonly gameStats: GameStats;
+  /** The dungeon floor the party is on, or the one a building it is inside stands on. */
+  readonly floorNumber: number;
   /** Null on floors without a Journal, which hides it. */
   readonly journal: JournalContext | null;
   readonly audio: PauseAudio | null;

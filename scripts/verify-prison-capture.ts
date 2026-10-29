@@ -388,9 +388,9 @@ const shield = (harness: PrisonHarness): void => {
 const dynamite = (harness: PrisonHarness, inCell = true): void => {
   if (inCell) standAtCellDoor(harness, true);
   const { scene, human } = harness;
-  human.inventory.addItem('goblin_dynamite', 1);
+  human.inventory.addItem('dynamite', 1);
   const sticks = scene['destruction'].dynamite;
-  sticks.beginCharge(0, human, 'goblin_dynamite');
+  sticks.beginCharge(0, human, 'dynamite');
   sticks.release();
 };
 

@@ -39,6 +39,10 @@ when it is shown.
 - She chooses some people to talk to. That is how anyone knows the truth.
 - She is the only power. There is no corporation, audience or show behind
   her.
+- On Nightmare she holds the party to a time limit on floors 1 and 2. When
+  it runs out she ends them herself: everything stops, she gives her verdict
+  (`CAROLINE_TIME_LIMIT_VERDICT`), both crawlers burst, and they start the
+  floor over. No floor falls apart; the limit is hers.
 
 ## Dave
 
@@ -48,7 +52,7 @@ when it is shown.
 - Now he spends his skill and knowledge helping others.
 - Caroline chose to talk to him once, which is how he knows the history.
 - Good at practical advice: red ground means move, step away from the
-  troglodyte's tongue. Survival tactics are his.
+  lizardman's tongue. Survival tactics are his.
 - He does **not** know exactly which bosses are ahead or where. That is
   Caroline's.
 - He never changes form.
@@ -96,7 +100,7 @@ holds only `<text>`; never type either into a line.
   news about gear left unworn behind a boss, then his tactics for the
   current objective, then the AI chat.
 - **The world halts for the talk.** While a cutscene's conversation is open,
-  the floor's collapse timer and mobs stop. The walk-up runs with the world
+  the floor clock and mobs stop. The walk-up runs with the world
   ticking; safe rooms already keep hostiles out.
 - **Caroline's messages** come at calm moments: arrival on a floor (by the
   stairs, or at the start of a run), after a boss dies, after a safe-room

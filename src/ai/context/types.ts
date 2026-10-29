@@ -74,7 +74,10 @@ export interface SessionInput {
   floorNumber: number;
   levelId: LevelId;
   floorName: string;
-  /** Seconds left on the floor's collapse clock; absent on a floor without one. */
+  /**
+   * Seconds left before Nightmare's time limit on the floor runs out; absent
+   * on an untimed floor or on any other difficulty.
+   */
   levelTimerSeconds?: number;
   levelTimerRunning: boolean;
   difficulty: string;

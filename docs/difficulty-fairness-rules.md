@@ -176,6 +176,29 @@ Gate: `npm run verify:difficulty`.
 Checkpoint restore, no XP or coin loss, full-HP respawn. Cheap retries are the
 counterweight that lets the fights themselves be hard.
 
+**The one exception: Nightmare's time limit.** Floors 1 and 2 carry a time limit
+(`LevelDef.nightmareTimeLimitFrames`) that holds only on Nightmare (`'hard'`). The time
+on a floor is counted on every difficulty (the floor clock, which stops in a safe room
+and indoors), and `nightmareTimeRemaining` is the one place that turns it into time left,
+so the HUD timer, its warning cues and the AI's timer action exist only on Nightmare.
+When it runs out, the world halts, Caroline gives her verdict, both crawlers burst
+(`time_limit_detonation`), and the death screen restarts the floor from its entry
+(`respawnRouteFor` with `FLOOR_RESTART_DEATH_CAUSE`) instead of returning to the last
+save. The limit is a promise about the whole floor, and a save taken part-way through
+would let a party dodge it by dying back to that save with time still on the clock.
+For the same reason the restart rebuilds the floor from its arrival save, clock at zero,
+and the rebuilt floor saves over the mid-floor saves on its first frame, so a reload or
+Continue lands at the floor's entry too; quests, shops and the rest of the floor's
+progress go back to how they stood on arrival, while what the run keeps through any
+death (deaths and time played, story heard, songs unlocked, pet names) does not. A floor
+reached by a reload has no arrival save in memory; its restart generates the floor
+afresh around the party as the reload left it, keeps that progress, and saves there. Once
+the detonation has begun, the death it ends in is the time limit's whatever else
+happens: a crawler frozen solid still forfeits the floor, and a downed companion's
+bleed-out stops so it cannot end the run first.
+Switching to Nightmare when the floor is already past its limit is confirmed first,
+because it ends the floor at once.
+
 ## P4 — Tune with data
 
 `?difficulty` boots the run-scoped counters in `src/core/difficulty/DifficultyStats.ts`. They are
@@ -301,7 +324,7 @@ regen is one formula for both (`crawlerRegenHpPerSecond`), saturating in health.
   soft limits of 0.45 for the human and 0.65 for Belle. The scale puts 100 evasiveness (100
   points for the human, 50 for Belle) at 95% of the limit; points past that return very
   little. Gear evasiveness feeds the curve.
-- Flat bonuses add after the curve: gear dodge chance, Cat-like Reflexes and `!lucky`'s
+- Flat bonuses add after the curve: gear dodge chance, Warp Speed and `!lucky`'s
   `LUCKY_DODGE_CHANCE_BONUS`. They can carry a crawler past her soft limit.
 - `DODGE_CHANCE_CAP` (0.75) is the hard ceiling over everything, so some blows always
   land. It sits above Belle's soft limit so her gear still counts.
@@ -336,12 +359,14 @@ raises or lowers a payout.
 ## Story talks halt the world
 
 While a cutscene's conversation is open (Dave's story talk, his debrief, a tutorial
-talk), the world halts: the floor's collapse timer and every mob stop. A talk opened by
+talk), the world halts: the floor clock and every mob stop. A talk opened by
 a cutscene can neither be dismissed nor walked away from, so the halt never strands the
 party mid-fight. The walk-up before it runs with the world ticking, which is safe
-because a safe room already keeps hostiles out. Caroline's messages do not halt the
-world; they wait until no hostile is fighting a crawler outside a safe room
-(`CutsceneDirector`, `StoryDelivery`).
+because a safe room already keeps hostiles out. Caroline's story messages do not halt
+the world; they wait until no hostile is fighting a crawler outside a safe room
+(`CutsceneDirector`, `StoryDelivery`). Her verdict when Nightmare's time limit runs out
+does halt it, since the party is about to die where it stands and nothing may reach it
+first.
 
 ## Fairies
 
@@ -439,9 +464,10 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   floor per crawler. A fairy holds at most
   `shieldWardCount` wards — its potency plus `SHIELD_EXTRA_WARDS`, the potency ceiling
   included — one fairy ward per mob, and lays a new one on another ally every
-  `SHIELD_BETWEEN_CASTS_FRAMES` when a warded ally dies or leaves. No grub of any stage
-  ever takes this ward (`BrindleGrub.acceptsWards` is false): a shield fairy instead
-  turns its rarer, longer-cooldown crushing ward on a hatched Brindled Vespa in reach,
+  `SHIELD_BETWEEN_CASTS_FRAMES` when a warded ally dies or leaves. No gravedigger beetle of
+  any stage ever takes this ward (`GravediggerBeetle.acceptsWards` is false): a shield
+  fairy instead turns its rarer, longer-cooldown crushing ward on an adult Gravedigger
+  Beetle in reach,
   which snaps shut over `SHIELD_CRUSH_IMPLODE_FRAMES` and kills it outright, crediting
   no player kill. It lays no ordinary ward
   before it is seen, and none while it is off screen: every cast waits until the fairy
@@ -490,7 +516,8 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   room guarding his gym (`onlyPastItsSafeRoom`, `pastSafeRoomTest`). Every earlier room
   keeps its base rate for good, and the rooms past him keep their base rates until he
   dies.
-- **The Seismic Stomp never hurts a fairy.** A fairy inside the blast takes no damage, stun,
+- **The Seismic Stomp never hurts a flyer that opts out of it** (`Mob.evadesSeismicStomp`: a
+  fairy, a Giant Wasp, an adult Gravedigger Beetle). One inside the blast takes no damage, stun,
   knockback or status, and shows "Dodge" instead.
 - **Freeze never guarantees a fireball.** `FROZEN_FRAMES + ceil(blast radius px /
 (PLAYER_SPEED × CHILLED_MOVE_SPEED_FACTOR)) < FIREBALL_FUSE_FRAMES` (blast radius
@@ -621,7 +648,7 @@ blackPowderFlightFrames` (`blackPowderDodgeMarginFrames`): under a third of a
 - **Who the blast hurts.** Both crawlers take the full blast, as do party-side
   mobs (the Deinonychus, hirelings, soldiers, thralls, converted mobs, attack cows), each the
   same share of its own max HP. A hostile that attacks other mobs on its own
-  (`Mob.huntsOtherMobs`, today the Brindled Vespa) is the goblins' enemy too and
+  (`Mob.huntsOtherMobs`, today the adult Gravedigger Beetle) is the goblins' enemy too and
   takes the full blast. Every other
   mob, bosses and the thrower's own pack included, loses exactly
   `GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS` (1 HP), credited to nobody, so a goblin

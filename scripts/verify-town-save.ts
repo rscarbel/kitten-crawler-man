@@ -49,10 +49,12 @@ import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { snapPlayer } from '../src/core/save/PlayerSnapshot.js';
 import {
   carriedSaveRegeneratesFloor,
+  FLOOR_RESTART_DEATH_CAUSE,
   owesArrivalSave,
   respawnModeFor,
   respawnRouteFor,
   savePointAfterWrite,
+  withFloorClockAtStart,
   type SavePoint,
 } from '../src/core/save/SavePoint.js';
 import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../src/core/save/SavedWorld.js';
@@ -93,8 +95,8 @@ const RESPAWN_CHECK_ART_SEED = 99;
 /** A saved party worth telling apart from a fresh one. */
 const SAVED_PARTY_LEVEL = 7;
 const SAVED_PARTY_COINS = 321;
-/** Frames left on the saved floor clock. */
-const SAVED_LEVEL_TIMER_FRAMES = 5000;
+/** Frames the saved floor clock had counted. */
+const SAVED_FLOOR_ELAPSED_FRAMES = 5000;
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
@@ -308,7 +310,7 @@ function townSave(base: GameProgressInput, tile: { x: number; y: number }): Game
     world: {
       ...structuredClone(baseWorld),
       resumeTile: { ...tile },
-      levelTimerFrames: SAVED_LEVEL_TIMER_FRAMES,
+      floorElapsedFrames: SAVED_FLOOR_ELAPSED_FRAMES,
     },
   };
 }
@@ -319,18 +321,19 @@ function checkRespawnRoutes(base: GameProgressInput): void {
   const save = townSave(base, saveTile);
   const savedJson = JSON.stringify(save);
 
+  const noSaveRoute = respawnRouteFor(null, null);
   check(
-    respawnRouteFor(null).kind === 'floorRestart',
-    'a run with no save does not fall back to the floor restart',
+    noSaveRoute.kind === 'floorRestart' && noSaveRoute.reason === 'noSaveToReturnTo',
+    'a run with no save does not fall back to the floor restart that writes nothing',
   );
   check(
-    respawnModeFor(respawnRouteFor(null)) === 'floorRestart',
+    respawnModeFor(respawnRouteFor(null, null)) === 'floorRestart',
     'a run with no save does not promise a floor restart',
   );
 
   // The route never looks inside a checkpoint, so a marker stands in for one.
   const checkpointMarker = { capturedWith: 'this save' };
-  const pairedRoute = respawnRouteFor({ progress: save, checkpoint: checkpointMarker });
+  const pairedRoute = respawnRouteFor({ progress: save, checkpoint: checkpointMarker }, null);
   check(
     pairedRoute.kind === 'checkpoint' && pairedRoute.checkpoint === checkpointMarker,
     'a save with its checkpoint does not rewind in place to that checkpoint',
@@ -338,20 +341,40 @@ function checkRespawnRoutes(base: GameProgressInput): void {
 
   // A tutorial save resumes at the start of a restarted script, so a death
   // there must take, and promise, the floor restart instead.
-  const tutorialRoute = respawnRouteFor(savePointAfterWrite(save, checkpointMarker, true));
+  const tutorialRoute = respawnRouteFor(savePointAfterWrite(save, checkpointMarker, true), null);
   check(
     tutorialRoute.kind === 'floorRestart' && respawnModeFor(tutorialRoute) === 'floorRestart',
     `a tutorial death routes to ${tutorialRoute.kind} rather than the floor restart`,
   );
-  const floorRoute = respawnRouteFor(savePointAfterWrite(save, checkpointMarker, false));
+  const floorRoute = respawnRouteFor(savePointAfterWrite(save, checkpointMarker, false), null);
   check(
     floorRoute.kind === 'checkpoint' && floorRoute.checkpoint === checkpointMarker,
     'a save written outside the tutorial does not keep its checkpoint',
   );
 
+  // Nightmare's time limit forfeits the floor, whatever save stands behind it.
+  const timeLimitRoute = respawnRouteFor(
+    { progress: save, checkpoint: checkpointMarker },
+    FLOOR_RESTART_DEATH_CAUSE,
+  );
+  check(
+    timeLimitRoute.kind === 'floorRestart' &&
+      timeLimitRoute.reason === 'timeLimitForfeit' &&
+      respawnModeFor(timeLimitRoute) === 'floorRestart',
+    `a time-limit death routes to ${timeLimitRoute.kind} rather than the forfeit restart`,
+  );
+  // The forfeit rebuilds the floor from its arrival save, which must hand the
+  // party the whole limit again.
+  const restartedSave = withFloorClockAtStart(save);
+  check(
+    restartedSave.world?.floorElapsedFrames === 0 &&
+      save.world?.floorElapsedFrames === SAVED_FLOOR_ELAPSED_FRAMES,
+    'the time-limit restart save keeps time on the clock, or edits the save it was built from',
+  );
+
   // What a building exit carries across: the save, never its checkpoint.
   const carried: SavePoint<typeof checkpointMarker> = { progress: save, checkpoint: null };
-  const carriedRoute = respawnRouteFor(carried);
+  const carriedRoute = respawnRouteFor(carried, null);
   check(
     carriedRoute.kind === 'resumeSave' && carriedRoute.progress === save,
     `a carried save routes a death to ${carriedRoute.kind}, not back to that save`,
@@ -377,7 +400,7 @@ function checkRespawnRoutes(base: GameProgressInput): void {
     'the rebuilt scene does not regenerate the saved floor',
   );
   check(
-    options.levelTimerFrames === SAVED_LEVEL_TIMER_FRAMES,
+    options.floorElapsedFrames === SAVED_FLOOR_ELAPSED_FRAMES,
     'the rebuilt scene does not restore the saved floor clock',
   );
   check(
@@ -433,23 +456,27 @@ function checkArrivalSaves(base: GameProgressInput): void {
   );
 
   check(
-    owesArrivalSave(withoutWorld, false, false),
-    'a resume from a save with no world owes no arrival save',
+    owesArrivalSave(withoutWorld, true, false, false),
+    'a resume from a stale save owes no arrival save',
   );
   check(
-    owesArrivalSave(withoutWorld, true, false),
-    'a death restart from a save with no world owes no arrival save',
+    owesArrivalSave(withoutWorld, true, true, false),
+    'a death restart from a stale save owes no arrival save',
   );
   check(
-    !owesArrivalSave(withWorld, false, false),
+    !owesArrivalSave(withWorld, false, false, false),
     'a resume that rebuilds its saved floor still owes an arrival save',
   );
-  check(owesArrivalSave(undefined, false, false), 'a fresh floor owes no arrival save');
   check(
-    !owesArrivalSave(undefined, true, false),
+    owesArrivalSave(withWorld, true, false, false),
+    'a floor rebuilt from a save it must write over owes no arrival save',
+  );
+  check(owesArrivalSave(undefined, false, false, false), 'a fresh floor owes no arrival save');
+  check(
+    !owesArrivalSave(undefined, false, true, false),
     'a fresh floor that opted out still owes an arrival save',
   );
-  check(!owesArrivalSave(withoutWorld, false, true), 'the tutorial owes an arrival save');
+  check(!owesArrivalSave(withoutWorld, true, false, true), 'the tutorial owes an arrival save');
 
   const { options } = sceneSetupFromSave({ skipIntro: true }, withoutWorld);
   check(

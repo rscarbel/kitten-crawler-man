@@ -96,6 +96,7 @@ const PROP_KIND_BY_ID: Partial<Record<HeldVisualId, keyof typeof PROP_ART>> = {
   prop_wrench: 'wrench',
   prop_dynamite: 'dynamite',
   prop_black_powder_bomb: 'blackPowderBomb',
+  prop_smoke_bomb: 'smokeBomb',
   prop_zippo: 'zippo',
   prop_bottle: 'bottle',
   prop_longbow: 'longbow',
@@ -103,12 +104,14 @@ const PROP_KIND_BY_ID: Partial<Record<HeldVisualId, keyof typeof PROP_ART>> = {
 const PROP_SOURCE_VARIANT: Partial<Record<HeldVisualId, string>> = {
   prop_dynamite: burningDynamite(0),
   prop_black_powder_bomb: burningDynamite(0),
+  prop_smoke_bomb: burningDynamite(0),
   prop_zippo: 'lit',
 };
 /** The phase of each held visual that matches its own painter's variant. */
 const PROP_NEW_PHASE: Partial<Record<HeldVisualId, number>> = {
   prop_dynamite: 2,
   prop_black_powder_bomb: 2,
+  prop_smoke_bomb: 2,
   prop_zippo: 2,
 };
 

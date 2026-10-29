@@ -15,7 +15,7 @@
  */
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-// Oiled oak matching the Bopca counter's frame, linen, and the station's own
+// Oiled oak matching the room's furnishings, linen, and the station's own
 // mossy green for the quilt band.
 const FRAME_WOOD = '#6b452a';
 const FRAME_WOOD_LIT = '#8a5c3a';

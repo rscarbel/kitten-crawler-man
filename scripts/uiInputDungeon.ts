@@ -398,7 +398,7 @@ function stockHotbar(scene: Scene): Point {
 function stockBag(scene: Scene): Point {
   const menus = scene['menus'];
   const inventory = menus.inventoryPlayer().inventory;
-  inventory.addItem('scroll_of_confusing_fog', 1);
+  inventory.addItem('scroll_of_entanglement', 1);
   const index = inventory.bag.slots.findIndex((item) => item !== null);
   if (index < 0) throw new Error('the bag stayed empty');
   if (!menus.inventoryScreen.isOpen) menus.toggleInventory();
@@ -532,7 +532,7 @@ if (!onPhone) {
   const human = street['human'];
   if (!human.isActive) street['triggerSwitchCharacter'](true);
   const index = 0;
-  human.inventory.actionBar.slots[index] = { ...ITEM_DEF.goblin_dynamite, quantity: 1 };
+  human.inventory.actionBar.slots[index] = { ...ITEM_DEF.dynamite, quantity: 1 };
   frame(street);
   const dynamite = street['destruction'].dynamite;
   const slot = hudHotbarPoint(street, index);
@@ -555,13 +555,13 @@ if (!onPhone) {
   if (!human.isActive) street['triggerSwitchCharacter'](true);
   const index = 0;
   human.inventory.actionBar.slots[index] = {
-    ...ITEM_DEF.goblin_dynamite,
+    ...ITEM_DEF.dynamite,
     quantity: DYNAMITE_STICKS,
   };
   frame(street);
   const dynamite = street['destruction'].dynamite;
   const slot = hudHotbarPoint(street, index);
-  const sticksLeft = (): number => human.inventory.countOf('goblin_dynamite');
+  const sticksLeft = (): number => human.inventory.countOf('dynamite');
   let thrown = 0;
   const unsubscribe = street['bus'].on('dynamiteUsed', () => thrown++);
 

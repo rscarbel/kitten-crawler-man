@@ -451,7 +451,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   const world = await buildWorld(
     'dynamite-incident',
     'The dynamite incident',
-    `Floor 1: a goblin fight ${HUMAN} ends with goblin dynamite that also knocks ${CAT} out, a revive, ` +
+    `Floor 1: a goblin fight ${HUMAN} ends with dynamite that also knocks ${CAT} out, a revive, ` +
       'the Trash Gremlin boss kill, then in a safe room the player asks Caroline whether she remembers the dynamite.',
   );
   const { bus, human, cat, live } = world;
@@ -459,7 +459,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   world.mobs.push(...goblins);
   const first = goblins[0];
   const rest = goblins.slice(1);
-  live.crawlers.human.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD };
+  live.crawlers.human.notableItems = { Dynamite: DYNAMITE_HELD };
 
   await world.step(BEAT_MS, () => {
     live.location = GOBLIN_ROOM;
@@ -479,8 +479,8 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     live.crawlers.human.xp = XP_AFTER_FIRST_KILL;
   });
   await world.step(QUICK_BEAT_MS, () => {
-    live.crawlers.human.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD - 1 };
-    bus.emit('dynamiteUsed', { player: 'Human', item: 'goblin_dynamite' });
+    live.crawlers.human.notableItems = { Dynamite: DYNAMITE_HELD - 1 };
+    bus.emit('dynamiteUsed', { player: 'Human', item: 'dynamite' });
   });
   await world.step(QUICK_BEAT_MS, () => {
     for (const goblin of rest) kill(world, goblin, human);
@@ -554,7 +554,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
         'blast',
         'blew up',
       ],
-      description: `Caroline should bring up ${HUMAN} lighting goblin dynamite that killed three goblins and knocked ${CAT} out.`,
+      description: `Caroline should bring up ${HUMAN} lighting dynamite that killed three goblins and knocked ${CAT} out.`,
     });
   });
   await world.step(LONG_BEAT_MS);

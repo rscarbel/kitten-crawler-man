@@ -39,9 +39,10 @@ export type ItemId =
   | 'cooldown_crisp'
   | 'stat_boost_potion'
   | 'catnip_tuna_water'
-  | 'scroll_of_confusing_fog'
-  | 'goblin_dynamite'
+  | 'scroll_of_entanglement'
+  | 'dynamite'
   | 'black_powder_bomb'
+  | 'smoke_bomb'
   | 'gym_dumbbell'
   | 'gym_bench_press'
   | 'gym_treadmill'
@@ -54,7 +55,7 @@ export type ItemId =
   | 'quest_blueprints'
   | 'quest_prison_key'
   | 'skill_book_nine_lives'
-  | 'skill_book_cat_reflexes'
+  | 'skill_book_warp_speed'
   | 'skill_book_pugilism'
   | 'skill_book_iron_stomach'
   | 'skill_book_swordsmanship'
@@ -228,7 +229,9 @@ export const ALL_RESISTANCE_TYPES = [
 /**
  * The fairy magics a ring can make its wearer immune to. Separate from
  * {@link ResistanceType} because the immunity is to the fairy, not the
- * element: a fairy ring stops a fire fairy's fireball but not a lava llama's.
+ * element: a fairy ring stops a fire fairy's fireball but not a gravedigger
+ * beetle's, and an acid llama's glob is neither ice nor fire, so no ring
+ * touches it.
  */
 export type FairyElement = 'ice' | 'fire';
 
@@ -431,16 +434,16 @@ interface UnwornItemFields {
  * each entry keeps its own shape, which {@link GearItemId} reads.
  */
 const ITEM_DEFS = defineItemDefs({
-  scroll_of_confusing_fog: {
-    id: 'scroll_of_confusing_fog',
-    delivery: 'spell',
+  scroll_of_entanglement: {
+    id: 'scroll_of_entanglement',
     category: 'consumable',
-    name: 'Scroll of Confusing Fog',
+    name: 'Scroll of Entanglement',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
     description:
-      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Size and duration grow with Magic, tapering off at higher values.',
+      'Roots tear up out of the ground around you and bind every enemy in reach for five seconds. ' +
+      'Bosses are too strong to hold, and anything flying is out of reach.',
   },
   catnip_tuna_water: {
     id: 'catnip_tuna_water',
@@ -508,16 +511,16 @@ const ITEM_DEFS = defineItemDefs({
     drinkable: true,
     description: "Permanently raises one randomly chosen stat by 2 to 4 level-up points' worth.",
   },
-  goblin_dynamite: {
-    id: 'goblin_dynamite',
+  dynamite: {
+    id: 'dynamite',
     delivery: 'thrownExplosive',
     category: 'consumable',
-    name: 'Goblin Dynamite',
+    name: 'Dynamite',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
     description:
-      'A hissing stick of goblin-made dynamite. ' +
+      'A hissing stick of dynamite. ' +
       'Hold the hotbar key to charge your throw — release to hurl it. ' +
       'Tap it to drop it at your feet. Warning: holding too long has consequences.',
   },
@@ -533,6 +536,17 @@ const ITEM_DEFS = defineItemDefs({
       'A round cast-iron bomb packed with goblin black powder. ' +
       'Thrown like dynamite — hold the hotbar key to charge, release to hurl — ' +
       'but it explodes the moment it lands. A tap lobs it a short way clear of you.',
+  },
+  smoke_bomb: {
+    id: 'smoke_bomb',
+    category: 'consumable',
+    name: 'Smoke Bomb',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'A clay shell packed with choking smoke. Throw it like a bomb: it bursts where it lands into a ' +
+      'thick cloud for six seconds, and enemies inside it lose all sense of where you are.',
   },
   gym_dumbbell: {
     id: 'gym_dumbbell',
@@ -588,7 +602,7 @@ const ITEM_DEFS = defineItemDefs({
     isQuestItem: true,
     description:
       'Wooden boards scavenged from the wood pile. Place near floor grates to build ' +
-      'barriers against Bugaboos. Only the Human can build or repair. Costs 4 boards. ' +
+      'barriers against Fuzzy Nightmares. Only the Human can build or repair. Costs 4 boards. ' +
       'Old Lori takes the same boards for her broken furniture, at 2 a mend.',
   },
   wayfinders_anchor: {
@@ -709,16 +723,17 @@ const ITEM_DEFS = defineItemDefs({
       "Once in a while, a blow that should have killed you doesn't. You're left standing on 1 HP, " +
       "and you can't be hurt for a moment. Takes a while to come back. Faster with practice.",
   },
-  skill_book_cat_reflexes: {
-    id: 'skill_book_cat_reflexes',
+  skill_book_warp_speed: {
+    id: 'skill_book_warp_speed',
     category: 'book',
-    name: 'Skill Book: Cat-like Reflexes',
+    name: 'Skill Book: Warp Speed',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
-    skillId: 'cat_reflexes',
+    skillId: 'warp_speed',
     description:
-      'Written by something that was very fast right up until it was not. ' +
+      'A slim manual whose every page is slightly blurred, ' +
+      'as if it moved while it was being printed. ' +
       'Improves your chance to be somewhere else when the hit lands.',
   },
   skill_book_pugilism: {

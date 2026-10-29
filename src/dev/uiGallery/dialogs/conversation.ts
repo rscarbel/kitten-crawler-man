@@ -205,8 +205,8 @@ export const FIXTURES: readonly DialogFixture[] = [
     'conversation-reward-button',
     request([dave.button('Take it', 'Here is your cut, and do not spend it all on hats.')], {
       reward: {
-        itemId: 'goblin_dynamite',
-        displayName: 'Goblin Dynamite ×2',
+        itemId: 'dynamite',
+        displayName: 'Dynamite ×2',
         lines: ['Throw it. Then run.'],
         xp: 80,
       },

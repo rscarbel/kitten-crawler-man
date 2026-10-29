@@ -7,7 +7,7 @@ import { TutorialGoblin } from '../creatures/TutorialGoblin';
 import { GoblinArcher } from '../creatures/GoblinArcher';
 import { GoblinDynamiter } from '../creatures/GoblinDynamiter';
 import { GoblinBombardier } from '../creatures/GoblinBombardier';
-import { Llama } from '../creatures/Llama';
+import { AcidLlama } from '../creatures/AcidLlama';
 import { RockGolem } from '../creatures/RockGolem';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
@@ -20,8 +20,8 @@ import { BigRooster, prewarmBigRoosterArrival } from '../creatures/BigRooster';
 import { LittleRooster } from '../creatures/LittleRooster';
 import { prewarmRoosterMinionArrival } from '../creatures/RoosterMinion';
 import { SlightlyBentRooster } from '../creatures/SlightlyBentRooster';
-import { Troglodyte } from '../creatures/Troglodyte';
-import { Tuskling } from '../creatures/Tuskling';
+import { Lizardman } from '../creatures/Lizardman';
+import { Wereboar } from '../creatures/Wereboar';
 import { Hawkfolk, HAWKFOLK_TOUGH_FAMILY } from '../creatures/Hawkfolk';
 import { Necromancer } from '../creatures/Necromancer';
 import { RaisedRatkin, RAISED_RATKIN_FAMILY } from '../creatures/RaisedRatkin';
@@ -30,8 +30,9 @@ import { Kraken } from '../creatures/Kraken';
 import { ElectricGoblin } from '../creatures/ElectricGoblin';
 import { prewarmElectricGoblin, prewarmElectricGoblinGore } from '../sprites/electricGoblinSprite';
 import { KrakenTentacle, type KrakenTentacleRole } from '../creatures/KrakenTentacle';
-import { BrindleGrub } from '../creatures/BrindleGrub';
-import { Bugaboo } from '../creatures/Bugaboo';
+import { GravediggerBeetle } from '../creatures/GravediggerBeetle';
+import { GiantWasp } from '../creatures/GiantWasp';
+import { FuzzyNightmare } from '../creatures/FuzzyNightmare';
 import { GrotesqueSpider, type SpiderBroodBounds } from '../creatures/GrotesqueSpider';
 import { SmallSpider } from '../creatures/SmallSpider';
 import { SpiderHatchling } from '../creatures/SpiderHatchling';
@@ -45,7 +46,7 @@ import { EvilClown } from '../creatures/EvilClown';
 import { Lion } from '../creatures/Lion';
 import { MassiveClown } from '../creatures/MassiveClown';
 import { DireBear } from '../creatures/DireBear';
-import { CityElfCultist } from '../creatures/CityElfCultist';
+import { Elf } from '../creatures/Elf';
 import { MissQuill } from '../creatures/MissQuill';
 import { Remex } from '../creatures/Remex';
 import { TheLich } from '../creatures/TheLich';
@@ -60,16 +61,17 @@ import { FireFairy } from '../creatures/fairies/FireFairy';
 import { NecroFairy } from '../creatures/fairies/NecroFairy';
 import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
 import { prewarmGoblinBomber } from '../sprites/goblinBomberSprite';
-import { prewarmTuskling } from '../sprites/tusklingSprite';
+import { prewarmWereboar } from '../sprites/wereboarSprite';
 import { prewarmHawkfolkCastMember } from '../sprites/hawkfolkCastSprite';
-import { prewarmLlama } from '../sprites/llamaSprite';
+import { prewarmAcidLlama } from '../sprites/acidLlamaSprite';
 import { prewarmLion } from '../sprites/lionSprite';
-import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
+import { prewarmGravediggerLarva } from '../sprites/gravediggerBeetleSprite';
+import { prewarmGiantWasp } from '../sprites/giantWaspSprite';
 import { prewarmSmallSpider } from '../sprites/spiderSprite';
-import { prewarmBugaboo } from '../sprites/bugabooSprite';
+import { prewarmFuzzyNightmare } from '../sprites/fuzzyNightmareSprite';
 import { prewarmCockroach } from '../sprites/cockroachSprite';
 import { prewarmRat } from '../sprites/ratSprite';
-import { prewarmTroglodyte } from '../sprites/troglodyteSprite';
+import { prewarmLizardman } from '../sprites/lizardmanSprite';
 import { prewarmGraveBull } from '../sprites/graveBullSprite';
 import { prewarmFairy } from '../sprites/fairySprite';
 import type { HawkfolkLookId } from '../sprites/art/hawkfolk/cast';
@@ -88,20 +90,20 @@ import { GOBLIN_BOMBER_FIGURES } from '../sprites/art/goblinBomberFigure';
 import { RAT_FIGURE } from '../sprites/art/ratFigure';
 import { COCKROACH_FIGURE } from '../sprites/art/cockroachFigure';
 import { hawkfolkCastFigure } from '../sprites/art/hawkfolkCastFigure';
-import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
+import { LIZARDMAN_FIGURE } from '../sprites/art/lizardmanFigure';
 import {
   BENT_ROOSTER_FIGURE,
   BIG_ROOSTER_FIGURE,
   LITTLE_ROOSTER_FIGURE,
 } from '../sprites/art/roosterFigure';
-import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
+import { ACID_LLAMA_FIGURE } from '../sprites/art/acidLlamaFigure';
 import { LEMUR_FIGURE } from '../sprites/art/lemurFigure';
 import { FAT_CLOWN_FIGURE, TALL_CLOWN_FIGURE } from '../sprites/art/clownFigure';
-import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
+import { WEREBOAR_FIGURE } from '../sprites/art/wereboarFigure';
 import { LION_FIGURE } from '../sprites/art/lionFigure';
-import { CITY_ELF_CULTIST_FIGURE } from '../sprites/art/cityElfCultistFigure';
+import { ELF_FIGURE } from '../sprites/art/elfFigure';
 import { MANTIS_FIGURE } from '../sprites/art/mantidFigure';
-import { BUGABOO_FIGURE } from '../sprites/art/bugabooFigure';
+import { FUZZY_NIGHTMARE_FIGURE } from '../sprites/art/fuzzyNightmareFigure';
 import { ROCK_GOLEM_FIGURE } from '../sprites/art/rockGolemFigure';
 import { SKELETON_ARCHER_FIGURE, SKELETON_SWORD_FIGURE } from '../sprites/art/skeletonFigure';
 import type { RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
@@ -319,16 +321,16 @@ const MOB_KIND_DEFS = {
     },
     prewarm: () => prewarmGoblinBomber('black_powder'),
   }),
-  llama: kind({
-    create: (tile) => new Llama(tile.x, tile.y, TILE_SIZE),
+  acid_llama: kind({
+    create: (tile) => new AcidLlama(tile.x, tile.y, TILE_SIZE),
     threat: 2.8,
     role: 'ranged',
     protected: null,
     approach: {
-      figure: oneFigure(LLAMA_FIGURE),
+      figure: oneFigure(ACID_LLAMA_FIGURE),
       rows: { walk: 'walk', attacks: ['spit'], views: THREE_VIEW_SUFFIXES },
     },
-    prewarm: prewarmLlama,
+    prewarm: prewarmAcidLlama,
   }),
   rock_golem: kind({
     create: (tile) => new RockGolem(tile.x, tile.y, TILE_SIZE),
@@ -435,27 +437,27 @@ const MOB_KIND_DEFS = {
     },
     prewarm: () => prewarmRoosterMinionArrival('bent'),
   }),
-  troglodyte: kind({
-    create: (tile) => new Troglodyte(tile.x, tile.y, TILE_SIZE),
+  lizardman: kind({
+    create: (tile) => new Lizardman(tile.x, tile.y, TILE_SIZE),
     threat: 9.2,
     role: 'ranged',
     protected: null,
     approach: {
-      figure: oneFigure(TROGLODYTE_FIGURE),
+      figure: oneFigure(LIZARDMAN_FIGURE),
       rows: { walk: 'walk', attacks: ['gape', 'lash'], views: THREE_VIEW_SUFFIXES },
     },
-    prewarm: prewarmTroglodyte,
+    prewarm: prewarmLizardman,
   }),
-  tuskling: kind({
-    create: (tile) => new Tuskling(tile.x, tile.y, TILE_SIZE),
+  wereboar: kind({
+    create: (tile) => new Wereboar(tile.x, tile.y, TILE_SIZE),
     threat: 13,
     role: 'charger',
     protected: null,
     approach: {
-      figure: oneFigure(TUSKLING_FIGURE),
+      figure: oneFigure(WEREBOAR_FIGURE),
       rows: { walk: 'walk', attacks: ['hook'], views: THREE_VIEW_SUFFIXES },
     },
-    prewarm: prewarmTuskling,
+    prewarm: prewarmWereboar,
   }),
   hawkfolk: lookKind({
     create: (tile, look: HawkfolkLookId) => new Hawkfolk(tile.x, tile.y, TILE_SIZE, look),
@@ -523,23 +525,30 @@ const MOB_KIND_DEFS = {
     protected: 'boss-add',
     prewarm: null,
   }),
-  brindle_grub: kind({
-    create: (tile) => new BrindleGrub(tile.x, tile.y, TILE_SIZE),
+  gravedigger_beetle: kind({
+    create: (tile) => new GravediggerBeetle(tile.x, tile.y, TILE_SIZE),
     threat: 6.7,
     role: 'ranged',
     protected: null,
-    prewarm: prewarmBrindleGrub,
+    prewarm: prewarmGravediggerLarva,
   }),
-  bugaboo: kind({
-    create: (tile) => new Bugaboo(tile.x, tile.y, TILE_SIZE),
+  giant_wasp: kind({
+    create: (tile) => new GiantWasp(tile.x, tile.y, TILE_SIZE),
+    threat: 8.3,
+    role: 'ranged',
+    protected: null,
+    prewarm: prewarmGiantWasp,
+  }),
+  fuzzy_nightmare: kind({
+    create: (tile) => new FuzzyNightmare(tile.x, tile.y, TILE_SIZE),
     threat: 3,
     role: 'melee',
     protected: null,
     approach: {
-      figure: oneFigure(BUGABOO_FIGURE),
+      figure: oneFigure(FUZZY_NIGHTMARE_FIGURE),
       rows: { walk: 'walk', attacks: ['swipe'], views: THREE_VIEW_SUFFIXES },
     },
-    prewarm: prewarmBugaboo,
+    prewarm: prewarmFuzzyNightmare,
   }),
   grotesque_spider: kind({
     create: (tile) => new GrotesqueSpider(tile.x, tile.y, TILE_SIZE),
@@ -649,13 +658,13 @@ const MOB_KIND_DEFS = {
     protected: null,
     prewarm: null,
   }),
-  city_elf_cultist: kind({
-    create: (tile) => new CityElfCultist(tile.x, tile.y, TILE_SIZE),
+  elf: kind({
+    create: (tile) => new Elf(tile.x, tile.y, TILE_SIZE),
     threat: 13,
     role: 'caster',
     protected: null,
     approach: {
-      figure: oneFigure(CITY_ELF_CULTIST_FIGURE),
+      figure: oneFigure(ELF_FIGURE),
       rows: { walk: 'walk', attacks: ['cast'], views: THREE_VIEW_SUFFIXES },
     },
     prewarm: null,

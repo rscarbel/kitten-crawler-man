@@ -96,7 +96,7 @@ const GUARD_POST_LEASH_TILES = 1.5;
  * The Lich's spawn level — far below its own guards', deliberately.
  *
  * Levelling multiplies health in place along `hpScaleForLevel`, so the level
- * that reads as "a serious boss" on a cultist is a far bigger health bar on
+ * that reads as "a serious boss" on an elf is a far bigger health bar on
  * something that already has one. Its base health is tuned for this fight and
  * the level is here for the damage and the coins: three lands it beside Miss
  * Quill's own bar rather than well past it, and what makes the second half of
@@ -356,7 +356,7 @@ export class QuillConfrontationSystem implements GameSystem {
     for (const { dx, dy } of GUARD_OFFSETS) {
       const tile = this.findSpawnTile(centreX + dx, centreY + dy);
       if (!tile) continue;
-      const guard = spawnMob('city_elf_cultist', tile, this.map, QUILL_CONFRONTATION_SPAWNS);
+      const guard = spawnMob('elf', tile, this.map, QUILL_CONFRONTATION_SPAWNS);
       guard.applyMobLevel(questMobLevel(GUARD_LEVEL, this.partyLevel));
       applySpawnDifficulty(guard);
       guard.homePoint = { x: guard.x, y: guard.y };
@@ -685,7 +685,7 @@ export class QuillConfrontationSystem implements GameSystem {
     // on the frame the fight ends would keep the fire crackling under the
     // victory card.
     this.audio?.stopSound('magic_ball_impact');
-    this.audio?.stopSound('llama_fireball');
+    this.audio?.stopSound('fireball_launch');
     this.audio?.stopSound('deep_rumbling');
     this.audio?.stopSound('powering_off');
     this.audio?.stopSound('charging_up_1');

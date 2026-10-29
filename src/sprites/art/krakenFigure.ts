@@ -9,7 +9,7 @@
  * the one place the runtime and the painter agree about when a tentacle
  * connects.
  *
- * Three figures rather than one for the reason the troglodyte's tongue is its
+ * Three figures rather than one for the reason the lizardman's tongue is its
  * own figure: the slam tentacle rises two and a half tiles and the guard
  * tentacle erupts wherever the player is standing, so folding either into the
  * body's cells would inflate all ninety of them.

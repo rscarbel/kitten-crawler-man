@@ -16,7 +16,7 @@
  *
  * Drawn in PIXEL space (unlike the tile-unit creature art) because effects are
  * baked at a fixed pixel size rather than scaled by a tile grid — the same
- * convention `vespaSpitArt.ts` and `magicMissileArt.ts` use.
+ * convention `waspSpitArt.ts` and `magicMissileArt.ts` use.
  */
 
 type Ctx = CanvasRenderingContext2D;

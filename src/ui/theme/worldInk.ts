@@ -95,11 +95,11 @@ export const worldPalette = {
     partnerLabel: '#93c5fd',
     plateFill: 'rgba(15,23,42,0.85)',
   },
-  /** Countdowns hanging over a cast spell, and the barrier taking shape. */
+  /** Countdowns hanging over a cast spell or a smoke cloud, and the barrier taking shape. */
   spell: {
     energyShieldTimerFull: '#fbbf24',
     energyShieldTimer: '#93c5fd',
-    fogTimer: '#d0d0e0',
+    smokeCloudTimer: '#d0d0e0',
     barrierPlacing: '#60a5fa',
     barrierTrack: '#4b5563',
     /** The pulsing ring round a placed gym barrier, marking where it slows mobs. */
@@ -303,12 +303,13 @@ export const worldPalette = {
     structureTrack: 'rgba(0,0,0,0.55)',
   },
   /**
-   * The world re-rendering Dave as he teleports in or out: Caroline's own cyan
-   * (`palette.caroline` in `tokens.ts`), so the player reads the light that
-   * builds him as the same machine that speaks in her frame.
+   * The world re-rendering someone as they teleport in or out — Dave, or a
+   * crawler brought into a safe room: Caroline's own cyan (`palette.caroline`
+   * in `tokens.ts`), so the player reads the light that builds them as the
+   * same machine that speaks in her frame.
    */
-  daveTeleport: {
-    /** The white-hot heart of the scan column and the last flash round his edge. */
+  teleport: {
+    /** The white-hot heart of the scan column and the last flash round the figure's edge. */
     core: '#e8f6fa',
     /** The column's body and the brighter data motes. */
     beam: '#8fe6fa',

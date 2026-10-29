@@ -88,7 +88,7 @@ import { checkRangedTactics } from './tacticsSections/ranged';
 import { checkSpecialCaseTactics } from './tacticsSections/special';
 import { checkMeleeTactics } from './tacticsSections/melee';
 import { checkTierTableFitsFloors } from './tacticsSections/tierTable';
-import { checkGrubTactics } from './tacticsSections/grub';
+import { checkGravediggerBeetleTactics } from './tacticsSections/gravediggerBeetle';
 import { checkFallBackSandwich } from './tacticsSections/sandwich';
 import { chasedKitesRunOn, describeKiteLengths } from './tacticsSections/chasedKites';
 
@@ -2234,7 +2234,7 @@ const SECTIONS: ReadonlyArray<(map: GameMap) => void> = [
   (map) => checkSpecialCaseTactics(map, { check, section }),
   (map) => checkMeleeTactics(map, { check, section }),
   (map) => checkTierTableFitsFloors(map, { check, section }),
-  (map) => checkGrubTactics(map, { check, section }),
+  (map) => checkGravediggerBeetleTactics(map, { check, section }),
   (map) => checkFallBackSandwich(map, { check, section }),
 ];
 

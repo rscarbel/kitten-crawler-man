@@ -204,10 +204,13 @@ export class StoryDelivery {
       }
       const beat = storyBeat(beatId);
       if (beat.speaker === 'caroline') {
-        this.deps.cutscenes.play([{ kind: 'carolineMessage', message: beat.message }], () => {
-          this.complete(beatId);
-          playNext();
-        });
+        this.deps.cutscenes.play(
+          [{ kind: 'carolineMessage', message: beat.message, world: 'runs' }],
+          () => {
+            this.complete(beatId);
+            playNext();
+          },
+        );
         return;
       }
       daveBeatsPlayed++;
@@ -260,7 +263,7 @@ export class StoryDelivery {
     this.queue.shift();
     const message = next.message();
     if (message === null) return;
-    this.deps.cutscenes.play([{ kind: 'carolineMessage', message }], () => {
+    this.deps.cutscenes.play([{ kind: 'carolineMessage', message, world: 'runs' }], () => {
       this.framesSinceTalk = 0;
       next.onShown();
     });

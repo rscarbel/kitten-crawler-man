@@ -60,6 +60,11 @@ const PLAYED_FRAMES = FRAMES_PER_SECOND * PLAYED_SECONDS;
 const DEINONYCHUS_PETS = 48;
 const OTHER_COW_PETS = 25;
 const MIDGE_PETS = 12;
+/** Deep enough that the Stats tab shows the floor's clock beside the run's. */
+const FIXTURE_FLOOR = 2;
+const PLAYED_FLOOR_SECONDS = 305;
+const PLAYED_FLOOR_FRAMES = FRAMES_PER_SECOND * PLAYED_FLOOR_SECONDS;
+const MERCENARIES_HIRED = 2;
 /** The key chip the keyboard-focus fixture walks to: well below the first screenful of rows. */
 const FOCUS_TARGET = 30;
 /** Most PageDown presses a fixture needs to bring a control on a phone page into view. */
@@ -68,6 +73,11 @@ const MAX_PAGES = 6;
 const MUSIC_LIST_MAX_PAGES = 30;
 /** A cap on its Tab presses, past the sidebar and the header. */
 const KEYBOARD_FOCUS_MAX_PRESSES = 80;
+/** What the stand-in guard asks: the tent's own question, the longest the confirm shows. */
+const GALLERY_GUARD_CONFIRMATION = {
+  title: 'Restart the Starlight Tent?',
+  body: 'Changing the difficulty changes the hall of mirrors. The show will start over from Act I.',
+} as const;
 /** A tier other than the one in play, so the guarded pick needs confirming. */
 const GUARDED_PICK = settings.difficulty === 'hard' ? 'easy' : 'hard';
 const GOBLIN_KILLS = 14;
@@ -171,6 +181,10 @@ export function pauseFixtureData(): PauseFixtureData {
   for (let pet = 0; pet < DEINONYCHUS_PETS; pet++) gameStats.recordDeinonychusPetted();
   for (let pet = 0; pet < OTHER_COW_PETS; pet++) gameStats.recordCowPetted(false);
   for (let pet = 0; pet < MIDGE_PETS; pet++) gameStats.recordCowPetted(true);
+  gameStats.beginFloor();
+  for (let frame = 0; frame < PLAYED_FLOOR_FRAMES; frame++) gameStats.recordPlayedFrame();
+  for (let hire = 0; hire < MERCENARIES_HIRED; hire++) gameStats.recordMercenaryHired();
+  gameStats.recordMercenaryLost();
 
   return {
     human,
@@ -180,6 +194,7 @@ export function pauseFixtureData(): PauseFixtureData {
       humanAchievements,
       catAchievements,
       gameStats,
+      floorNumber: FIXTURE_FLOOR,
     },
   };
 }
@@ -428,9 +443,9 @@ export const PAUSE_FIXTURES: readonly DialogFixture[] = [
     interact: (rig, id) => rig.tap(rig.need(`${id}/character-tab/skills`)),
   }),
   pauseFixture({
-    name: 'character-run',
+    name: 'character-stats',
     section: 'character',
-    interact: (rig, id) => rig.tap(rig.need(`${id}/character-tab/run`)),
+    interact: (rig, id) => rig.tap(rig.need(`${id}/character-tab/stats`)),
   }),
   pauseFixture({ name: 'abilities', section: 'abilities' }),
   pauseFixture({
@@ -501,7 +516,10 @@ export const PAUSE_FIXTURES: readonly DialogFixture[] = [
     section: 'settings',
     interact: (rig, id) => {
       // A guard stands in for the Starlight Tent, so the pick asks before restarting.
-      const handle = registerDifficultyChangeGuard({ restartWithDifficulty: () => undefined });
+      const handle = registerDifficultyChangeGuard({
+        confirmation: () => GALLERY_GUARD_CONFIRMATION,
+        restartWithDifficulty: () => undefined,
+      });
       const pick = `${id}/difficulty/${GUARDED_PICK}`;
       // A phone has the difficulty row below the fold; page down to it.
       for (let page = 0; page < MAX_PAGES && rig.region(pick) === null; page++) {

@@ -31,9 +31,8 @@ export type AssetGroup =
  * Every creature/effect/environment sheet a group covers.
  *
  * Roughly half of `src/sprites/*` (Krasue, Lemur, Lion,
- * MissQuill, Remex, Baggi, DireBear, RuinsGhoul,
- * CityElfCultist, all
- * townsfolk) is procedural canvas drawing with no manifest entry at all — those
+ * MissQuill, Remex, Baggi, DireBear, RuinsGhoul, Elf,
+ * all townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
  * this file. See `MOB_SPRITE_KEYS` below for the canonical "does this mob type
  * need a sheet" answer that `verify:assets` actually checks against.
@@ -127,7 +126,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   ],
 
   // Drawn only inside the town's buildings: the rooms' floors and walls, the
-  // inn's safe-room counter and galley (laid on dungeon ground), and the
+  // inn's safe-room surfaces (laid on dungeon ground), and the
   // Cloak & Dagger's furniture. Level 3 names it in `interiorSpriteGroups`, so
   // it is painted behind a building's loading card rather than on arrival.
   town_interior: [
@@ -342,7 +341,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   goblin_archer: [],
   goblin_dynamiter: [],
   goblin_bombardier: [],
-  llama: [],
+  acid_llama: [],
   rock_golem: [],
   rock_golem_boss: [],
   mantid: [],
@@ -353,12 +352,13 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   big_rooster: [],
   little_rooster: [],
   slightly_bent_rooster: [],
-  troglodyte: [],
-  tuskling: [],
+  lizardman: [],
+  wereboar: [],
   kraken: [],
   electric_goblin: [],
-  brindle_grub: [],
-  bugaboo: [],
+  gravedigger_beetle: [],
+  giant_wasp: [],
+  fuzzy_nightmare: [],
   grotesque_spider: [],
   small_spider: [],
   ruins_ghoul: [],
@@ -369,7 +369,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   evil_clown: [],
   lion: [],
   massive_clown: [],
-  city_elf_cultist: [],
+  elf: [],
   skeleton_sword: [],
   skeleton_archer: [],
   skeleton_lord: [],

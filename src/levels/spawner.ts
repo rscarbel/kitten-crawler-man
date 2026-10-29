@@ -10,6 +10,7 @@ import { spawnMob, type SpawnContext } from './spawnFunnel';
 import { floorEncounter } from './encounters';
 import { type StandaloneMobKind } from './mobKinds';
 import { hasRoomToMove } from '../map/findWalkableTile';
+import { isOverworldSpawnTileAllowed } from './overworldSpawnTiles';
 import { TILE_SIZE } from '../core/constants';
 import {
   applySpawnDifficulty,
@@ -114,9 +115,9 @@ export function roomSpawnBounds(room: {
 
 /**
  * Random probes come first so mobs still scatter through the room. The
- * exhaustive scan behind them exists because the old fallback was the room
- * centre chosen sight-unseen — which is exactly where a treasure chest sits, so
- * an unlucky room reliably spawned its guards inside the chest.
+ * exhaustive scan behind them stands in for any sight-unseen fallback such as
+ * the room centre, which is exactly where a treasure chest sits and would put
+ * an unlucky room's guards inside the chest.
  */
 function probeSpawnTile(
   map: GameMap,
@@ -496,7 +497,7 @@ const CAMP_SPAWN_ATTEMPTS = 40;
  *
  * Residents are leashed to their camp. `BountySystem` is the only other writer
  * of `homePoint`/`leashRadiusTiles` and it writes them on floor 3 only, so this
- * remains provably invisible to the goblins and troglodytes on floors 1 and 2.
+ * remains provably invisible to the goblins and lizardmen on floors 1 and 2.
  *
  * A camp in `clearedCamps` is skipped outright: its ground and props are part
  * of the map and still stand, but nobody lives there any more.
@@ -628,10 +629,23 @@ export function rollRoomPopulation(
   return { hostCount, escorts };
 }
 
-/** How far from a hallway spawn point its escorts may be dropped, in tiles each way. */
-const HALLWAY_ESCORT_SPREAD_TILES = 2;
+/** How far from its host's spawn point an escort may be dropped, in tiles each way. */
+const ESCORT_SPREAD_TILES = 2;
 /** Offset from a tile's origin to its centre, as a share of a tile. */
 const TILE_CENTRE_SHARE = 0.5;
+
+function tileCentre(tile: number): number {
+  return (tile + TILE_CENTRE_SHARE) * TILE_SIZE;
+}
+
+function escortBounds(x: number, y: number): SpawnBounds {
+  return {
+    minTX: x - ESCORT_SPREAD_TILES,
+    minTY: y - ESCORT_SPREAD_TILES,
+    maxTX: x + ESCORT_SPREAD_TILES,
+    maxTY: y + ESCORT_SPREAD_TILES,
+  };
+}
 
 /**
  * A tile near the hallway spawn point (`x`, `y`) for one of its escorts, held
@@ -646,13 +660,6 @@ function findHallwayEscortTile(
   y: number,
   random: () => number,
 ): { x: number; y: number } | null {
-  const bounds: SpawnBounds = {
-    minTX: x - HALLWAY_ESCORT_SPREAD_TILES,
-    minTY: y - HALLWAY_ESCORT_SPREAD_TILES,
-    maxTX: x + HALLWAY_ESCORT_SPREAD_TILES,
-    maxTY: y + HALLWAY_ESCORT_SPREAD_TILES,
-  };
-  const tileCentre = (tile: number): number => (tile + TILE_CENTRE_SHARE) * TILE_SIZE;
   const segment = map.regionAt(x, y);
   if (map.regionKind(segment) !== 'hallway') return null;
   // A map with hallway segments has rooms, and the first placed is the start room.
@@ -666,7 +673,7 @@ function findHallwayEscortTile(
   const keepClear = map.stealthGateRoom?.keepClearTiles ?? [];
   return probeSpawnTile(
     map,
-    bounds,
+    escortBounds(x, y),
     (tileX, tileY) =>
       map.isMobSpawnTile(tileX, tileY) &&
       map.regionAt(tileX, tileY) === segment &&
@@ -675,6 +682,49 @@ function findHallwayEscortTile(
       map.hasWalkableLine(tileCentre(x), tileCentre(y), tileCentre(tileX), tileCentre(tileY)),
     random,
   );
+}
+
+/**
+ * A tile near an overworld spawn point (`x`, `y`) for one of its escorts. The
+ * overworld has no region map to keep a group inside, so the escort only has
+ * to stand where any overworld mob may, on its rule's `terrain` when it has
+ * one (a forest-edge swarm stays at the forest edge), and be in a straight
+ * walk of the point. Null when there is none.
+ */
+function findOverworldEscortTile(
+  map: GameMap,
+  x: number,
+  y: number,
+  terrain: SpawnTerrain | undefined,
+  random: () => number,
+): { x: number; y: number } | null {
+  return probeSpawnTile(
+    map,
+    escortBounds(x, y),
+    (tileX, tileY) =>
+      map.isMobSpawnTile(tileX, tileY) &&
+      isOverworldSpawnTileAllowed(map, tileX, tileY) &&
+      (terrain === undefined || map.isSpawnTerrainTile(tileX, tileY, terrain)) &&
+      map.hasWalkableLine(tileCentre(x), tileCentre(y), tileCentre(tileX), tileCentre(tileY)),
+    random,
+  );
+}
+
+/**
+ * Where an escort of `rule`'s spawn point (`x`, `y`) stands on this floor, or
+ * null when nowhere fits.
+ */
+function findEscortTileNear(
+  def: LevelDef,
+  map: GameMap,
+  rule: MobSpawnRule,
+  x: number,
+  y: number,
+  random: () => number,
+): { x: number; y: number } | null {
+  return def.isOverworld === true
+    ? findOverworldEscortTile(map, x, y, rule.terrain, random)
+    : findHallwayEscortTile(map, x, y, random);
 }
 
 /**
@@ -757,7 +807,7 @@ export function spawnForLevel(
       const escorts = rollEscorts(rule, null, random);
       if (escorts.length === 0) continue;
       for (const escort of escorts) {
-        const tile = findHallwayEscortTile(map, x, y, random);
+        const tile = findEscortTileNear(def, map, rule, x, y, random);
         if (tile !== null) spawnAt(escort, escort.type, tile.x, tile.y);
       }
     }

@@ -1,5 +1,5 @@
 /**
- * The floor-3 wilderness's two enemy camps: a goblin camp and a troglodyte den.
+ * The floor-3 wilderness's two enemy camps: a goblin camp and a lizardman den.
  *
  * These are **landmarks, not a population change.** Ruins ghouls and krasues
  * stay the dominant force on the floor — the ambient spawn table is untouched —
@@ -31,7 +31,7 @@ import type { KeepOut } from './keepOut';
 import { worldRandom } from '../../core/world/WorldRandom';
 
 /** Which kind of camp a site is. Consumed by `LevelDef.campSpawns`. */
-export type CampKind = 'goblin' | 'troglodyte';
+export type CampKind = 'goblin' | 'lizardman';
 
 /** A camp site, as the generator hands it out. */
 export interface CampSite {
@@ -57,7 +57,7 @@ export function campSiteKey(camp: Pick<CampSite, 'kind' | 'centre'>): string {
  * Whether a tile lies within any camp's disc, widened by `clearanceTiles`.
  *
  * Every natural pass that runs after the camps asks this: a camp is ground
- * somebody has cleared, and a troglodyte den's disc is cleared to `SCREE`,
+ * somebody has cleared, and a lizardman den's disc is cleared to `SCREE`,
  * which those passes would otherwise take for open upland.
  */
 export function isWithinCamp(
@@ -99,7 +99,7 @@ const CAMP_MAX_DISTANCE_FRACTION = 0.82;
 /**
  * How strongly a site prefers the band its camp belongs in.
  *
- * A preference, not a rule: goblins want open low country near a route, trogs
+ * A preference, not a rule: goblins want open low country near a route, lizardmen
  * want high broken ground. On a map whose elevation field happens to offer
  * neither, a camp placed in the wrong band is much better than no camp — so the
  * search takes the best-scoring site it saw rather than insisting on a perfect
@@ -116,7 +116,7 @@ const TENT_RING_RADIUS_TILES = 4;
 const GOBLIN_BONES_COUNT = 6;
 const GOBLIN_CRATE_COUNT = 3;
 
-/** Troglodyte den dressing. */
+/** Lizardman den dressing. */
 const DEN_BOULDER_COUNT = 9;
 const DEN_BOULDER_RING_RADIUS_TILES = 5;
 const DEN_LARGE_BOULDER_SHARE = 0.7;
@@ -150,7 +150,7 @@ export function hasWaterWithin(grid: TileGrid, centre: TilePoint, radiusTiles: n
  * How well a site suits a camp of this kind, by the band it stands in.
  *
  * `bandAt` is the same field the whole wilderness is derived from, so a
- * troglodyte den scored on it lands where the scree and the boulders already
+ * lizardman den scored on it lands where the scree and the boulders already
  * are — which is the entire reason there is one shared field rather than one
  * noise source per feature.
  */
@@ -277,12 +277,12 @@ function paintGoblinCamp(grid: TileGrid, centre: TilePoint): void {
 }
 
 /**
- * A troglodyte den: a scree hollow ringed with boulders, thick with bones.
+ * A lizardman den: a scree hollow ringed with boulders, thick with bones.
  *
  * No structures — the rock family does all the work, which is the point. A
- * troglodyte does not build; it moves into somewhere.
+ * lizardman does not build; it moves into somewhere.
  */
-function paintTroglodyteDen(grid: TileGrid, centre: TilePoint): void {
+function paintLizardmanDen(grid: TileGrid, centre: TilePoint): void {
   clearDisc(grid, centre, CAMP_RADIUS_TILES, SCREE);
   grid.setStanding(centre.x, centre.y, DEN_HOLLOW);
   for (let dy = -DEN_HOLLOW_RADIUS_TILES; dy <= DEN_HOLLOW_RADIUS_TILES; dy++) {
@@ -334,12 +334,12 @@ export function paintCamps(
   ];
 
   const camps: CampSite[] = [];
-  const kinds: ReadonlyArray<CampKind> = ['goblin', 'troglodyte'];
+  const kinds: ReadonlyArray<CampKind> = ['goblin', 'lizardman'];
   for (const kind of kinds) {
     const centre = pickCampSite(grid, kind, elevation, exclusions, plan.centre, border, landmarks);
     if (centre === null) continue;
     if (kind === 'goblin') paintGoblinCamp(grid, centre);
-    else paintTroglodyteDen(grid, centre);
+    else paintLizardmanDen(grid, centre);
     camps.push({ kind, centre, radiusTiles: CAMP_RADIUS_TILES });
     // The camp just placed becomes an exclusion for the next one, so the two
     // never read as one settlement with two halves.

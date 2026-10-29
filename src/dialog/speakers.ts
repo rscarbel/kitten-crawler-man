@@ -558,8 +558,8 @@ export const TRANSIENT_STYLES = {
     textCase: 'as-written',
     revealIntervalMs: SIGN_REVEAL_INTERVAL_MS,
   },
-  /** A room's cook — the name changes with the room, the voice does not. */
-  bopca: {
+  /** A safe room's doctor — the name changes with the room, the voice does not. */
+  doctor: {
     voice: { kind: 'typing' },
     reveal: 'sentence',
     textCase: 'as-written',

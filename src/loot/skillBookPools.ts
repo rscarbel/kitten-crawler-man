@@ -51,24 +51,24 @@ export const SKILL_BOOK_POOLS = {
   ],
   archer: [
     { book: 'skill_book_archery', weight: 2 },
-    { book: 'skill_book_cat_reflexes', weight: 1 },
+    { book: 'skill_book_warp_speed', weight: 1 },
   ],
   bomber: [
     { book: 'skill_book_demolitionist', weight: 2 },
     { book: 'skill_book_pyros_touch', weight: 1 },
-    { book: 'skill_book_cat_reflexes', weight: 1 },
+    { book: 'skill_book_warp_speed', weight: 1 },
   ],
   hawkfolk: [
-    { book: 'skill_book_cat_reflexes', weight: 2 },
+    { book: 'skill_book_warp_speed', weight: 2 },
     { book: 'skill_book_archery', weight: 1 },
     { book: 'skill_book_magic_eye', weight: 1 },
   ],
   mantid: [
-    { book: 'skill_book_cat_reflexes', weight: 2 },
+    { book: 'skill_book_warp_speed', weight: 2 },
     { book: 'skill_book_clawmanship', weight: 2 },
   ],
   skitterer: [
-    { book: 'skill_book_cat_reflexes', weight: 2 },
+    { book: 'skill_book_warp_speed', weight: 2 },
     { book: 'skill_book_clawmanship', weight: 1 },
   ],
 } as const satisfies Record<SkillBookPoolId, readonly WeightedSkillBook[]>;

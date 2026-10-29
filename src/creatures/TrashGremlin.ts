@@ -314,18 +314,18 @@ export class TrashGremlin extends Mob {
   }
 
   /**
-   * A wind-up caught by a fog is dropped rather than frozen. `updateAI` is
+   * A wind-up caught by a smoke cloud is dropped rather than frozen. `updateAI` is
    * skipped entirely for a confused mob, so a twelve-frame row would hold one
-   * cell for as long as the fog lasted and then resume from the middle — and
-   * if the fog landed after the event frame it would keep the pose without the
+   * cell for as long as the smoke lasted and then resume from the middle — and
+   * if the smoke landed after the event frame it would keep the pose without the
    * attack ever having happened. The attack is cancelled, not refunded: a
    * cancelled spit restarts its interval, and a cancelled summon keeps the
    * interval it set when it began.
    */
   override tickTimers(): void {
-    // Here rather than in `updateAI`, which a fogged, held or reviving mob
+    // Here rather than in `updateAI`, which a smoke-blinded, held or reviving mob
     // skips: its wander still moves it and its legs have to keep pace, and a
-    // fight beaten down past the enrage line inside a fog still has to enrage
+    // fight beaten down past the enrage line inside a smoke cloud still has to enrage
     // and still owes its rows their warmth.
     this.syncGaitToDistanceCovered();
     if (this.isAlive) {

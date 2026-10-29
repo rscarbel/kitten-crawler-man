@@ -125,7 +125,7 @@ export function sceneSetupFromSave(
     options.worldSeed = savedWorld.worldSeed;
     options.artSeed = savedWorld.artSeed;
     options.spawnAt = savedWorld.resumeTile ?? undefined;
-    options.levelTimerFrames = savedWorld.levelTimerFrames ?? undefined;
+    options.floorElapsedFrames = savedWorld.floorElapsedFrames;
     options.persistedWorldState = savedWorld.persisted;
   }
   const stats = GameStats.fromSnapshot(progress.gameStats);

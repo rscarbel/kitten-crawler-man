@@ -40,7 +40,7 @@ const CONTRACT_THANKS = {
   ],
   sgt_kessler: [
     ({ coins }) =>
-      `You were useful. That puts you ahead of everyone the high watch ever sent down this alley. Pay is ${coins}.`,
+      `You were useful. The High Roost has never once flown somebody down this alley who could say the same. Pay is ${coins}.`,
     ({ coins }) =>
       `Stove draws, wall stands, floor does not give under a boot. I will put that in a report nobody reads. You get ${coins}, which is better.`,
   ],

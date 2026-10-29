@@ -261,7 +261,7 @@ section('A thrown stick of dynamite counts once, and not on an ally');
   const stage = makeStage();
   const { human, cat } = stage.pm;
   human.inventory.actionBar.slots[DYNAMITE_HOTBAR_SLOT] = {
-    ...ITEM_DEF.goblin_dynamite,
+    ...ITEM_DEF.dynamite,
     quantity: DYNAMITE_STICKS,
   };
   const hostile = new Dummy(PARTY_TILE_X + 1, ROOM_MIDDLE_ROW);
@@ -273,7 +273,7 @@ section('A thrown stick of dynamite counts once, and not on an ally');
   const dynamite = new DynamiteSystem(stage.map);
   const stats = freshStats();
   // A tap drops the stick at his feet, which is where both targets stand.
-  check(dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'goblin_dynamite'), 'he lights a stick');
+  check(dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'dynamite'), 'he lights a stick');
   dynamite.release();
   for (let frame = 0; frame < DYNAMITE_FRAMES && hpLost(hostile) === 0; frame++) {
     dynamite.update(stage.ctx);
@@ -439,8 +439,8 @@ section('The tallies survive a save, and a rewind keeps deaths and time');
   live.recordKill('A boss', true);
   live.recordDamageDealt(CRAWLER_HIT);
   live.recordGoldEarned(COINS_EARNED);
-  live.recordHirelingHired();
-  live.recordHirelingLost();
+  live.recordMercenaryHired();
+  live.recordMercenaryLost();
   for (let i = 0; i < SAVED_DEATHS; i++) live.recordDeath();
   for (let i = 0; i < TIME_PLAYED_FRAMES; i++) live.recordPlayedFrame();
 
@@ -464,11 +464,21 @@ section('The tallies survive a save, and a rewind keeps deaths and time');
     live.restore(checkpoint);
     check(live.totalKills === 3, 'a rewind takes back the kills made since the checkpoint');
     check(live.deaths === LIVE_DEATHS, `but not the deaths (${live.deaths})`);
+    check(
+      live.floorFramesPlayed === TIME_PLAYED_FRAMES,
+      `nor the floor's time played (${formatPlayTime(live.floorFramesPlayed)})`,
+    );
 
     const fromSave = GameStats.fromSnapshot(reloaded);
     fromSave.carryRunHistoryFrom(live);
     check(fromSave.deaths === LIVE_DEATHS, 'a respawn from a save keeps the live run’s deaths');
   }
+  live.beginFloor();
+  live.recordPlayedFrame();
+  check(
+    live.floorFramesPlayed === 1 && live.framesPlayed === TIME_PLAYED_FRAMES + 1,
+    'a new floor starts its own clock and leaves the run’s running',
+  );
   const written = live.snapshot();
   check(
     parseGameStatsSnapshot({ ...written, deaths: -3 }) === undefined,

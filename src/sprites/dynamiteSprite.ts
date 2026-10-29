@@ -8,7 +8,7 @@ import {
 } from './fuseEffects';
 
 /**
- * All procedural drawing functions for Goblin Dynamite:
+ * All procedural drawing functions for Dynamite:
  *  - In-world floor sprite (with fuse countdown)
  *  - Inventory icon
  *

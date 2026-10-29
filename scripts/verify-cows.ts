@@ -951,11 +951,11 @@ function blastSection(seeds: number): void {
       roster.rebuildGrid();
     }
     human.inventory.actionBar.slots[DYNAMITE_HOTBAR_SLOT] = {
-      ...ITEM_DEF.goblin_dynamite,
+      ...ITEM_DEF.dynamite,
       quantity: 1,
     };
     const dynamite = new DynamiteSystem(world.map, null, () => null, bus);
-    dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'goblin_dynamite');
+    dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'dynamite');
     dynamite.release();
     const abilities = new AbilityManager();
     for (let frame = 0; frame < DYNAMITE_WAIT_FRAMES; frame++) {

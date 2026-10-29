@@ -36,10 +36,11 @@ import { TILE_SIZE } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer';
 import {
-  planSafeRoomCounters,
-  stampSafeRoomCounters,
+  clinicCornerTiles,
+  planSafeRoomClinics,
+  stampSafeRoomClinics,
   widestFreeSpan,
-} from '../src/map/safeRoomCounterLayout';
+} from '../src/map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import {
   ANCHOR_KINDS,
@@ -86,7 +87,7 @@ import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgres
 import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
 import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
 import { MISS_QUILL_CAST_RANGE_TILES } from '../src/creatures/MissQuill';
-import { CITY_ELF_CULTIST_AGGRO_RANGE_TILES } from '../src/creatures/CityElfCultist';
+import { ELF_AGGRO_RANGE_TILES } from '../src/creatures/Elf';
 import { QUEST_BANNER_FRAMES } from '../src/ui/QuestBanners';
 import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
@@ -310,7 +311,7 @@ function buildInterior(name: BuildingId | null, kind: BuildingKind, floor: numbe
   const hasSafeRoom = name !== null && safeRoomBuildings.has(name);
   map.generateInterior(kind, floor, name, hasSafeRoom);
   if (hasSafeRoom) {
-    stampSafeRoomCounters(map);
+    stampSafeRoomClinics(map);
     stampSafeRoomDecor(map);
   }
   return map;
@@ -335,19 +336,9 @@ const CARDINAL_STEPS: ReadonlyArray<{ dx: number; dy: number }> = [
 
 /**
  * Every walkable tile the player cannot walk to from where they spawn, as
- * `x,y` strings.
- *
- * The Bopca's galley strip is excluded, and only the galley strip: it is
- * walkable floor deliberately sealed by the counter's own side returns, which is
- * how the game keeps townsfolk and mobs out of the kitchen without special-casing
- * them anywhere. Everything else that is walkable is meant to be walked to.
+ * `x,y` strings. Everything that is walkable is meant to be walked to.
  */
 function unreachableWalkableTiles(map: GameMap): string[] {
-  const sealedByCounter = new Set<string>();
-  for (const layout of planSafeRoomCounters(map)) {
-    for (const tile of layout.galleyTiles) sealedByCounter.add(tileKey(tile.x, tile.y));
-  }
-
   const height = map.structure.length;
   const width = map.structure[0].length;
   const reached = new Set<string>();
@@ -375,7 +366,7 @@ function unreachableWalkableTiles(map: GameMap): string[] {
     for (let x = 0; x < width; x++) {
       if (!map.isWalkable(x, y)) continue;
       const key = tileKey(x, y);
-      if (reached.has(key) || sealedByCounter.has(key)) continue;
+      if (reached.has(key)) continue;
       stranded.push(key);
     }
   }
@@ -1226,19 +1217,19 @@ check(
   'a generic house crackles from its hearth',
 );
 
-console.log('\nCounter door avoidance');
+console.log('\nCabinet door avoidance');
 // The archway-seal check below is an outcome assertion: it only ever inspects
-// the run `planSafeRoomCounters` actually lays on the inn's current geometry,
+// the corner `planSafeRoomClinics` actually lays on the inn's current geometry,
 // so a regression in the avoidance logic itself would pass silently as long as
-// that one building's doors happen to sit away from where a naive centring
-// would put the run anyway. This exercises `widestFreeSpan` — the function
-// that excludes door columns from the candidate span — directly, with bounds
-// built so a naive centre-of-the-room run would land squarely on a "door".
+// that one building's doors happen to sit away from where the cabinet would go
+// anyway. This exercises `widestFreeSpan` — the function that excludes door
+// columns from the candidate span — directly, with bounds built so a naive
+// centre-of-the-room placement would land squarely on a "door".
 {
   const ADVERSARIAL_BOUNDS = { x: 0, y: 0, w: 12, h: 5 };
   // The room's usable span (after the wall margin) is columns 1..10: a naive
-  // centring with no door logic at all would put a run across the middle of
-  // that span, which is exactly where this column sits.
+  // centring with no door logic at all would put the cabinet across the middle
+  // of that span, which is exactly where this column sits.
   const DOOR_COLUMN_AT_NAIVE_CENTRE = 5;
   const WIDER_SPAN_WIDTH = 5;
   const span = widestFreeSpan(ADVERSARIAL_BOUNDS, new Set([DOOR_COLUMN_AT_NAIVE_CENTRE]));
@@ -1266,12 +1257,11 @@ for (const name of safeRoomBuildings) {
   const map = buildInterior(name, kind, TOWER_GROUND_FLOOR);
   check(map.safeRooms.length > 0, `"${name}" registers a safe room in its interior`);
 
-  const layouts = planSafeRoomCounters(map);
-  check(layouts.length > 0, `"${name}"'s safe room is wide enough for the Bopca's counter`);
+  const layouts = planSafeRoomClinics(map);
+  check(layouts.length > 0, `"${name}"'s safe room is wide enough for the doctor's corner`);
   for (const layout of layouts) {
     const bounds = layout.roomBounds;
-    const runTiles = [...layout.backTiles, ...layout.counterTiles, ...layout.galleyTiles];
-    const escapes = runTiles.filter(
+    const escapes = clinicCornerTiles(layout).filter(
       (tile) =>
         tile.x < bounds.x ||
         tile.x >= bounds.x + bounds.w ||
@@ -1279,20 +1269,17 @@ for (const name of safeRoomBuildings) {
         tile.y >= bounds.y + bounds.h,
     );
     // The wall row carrying the archways is the row immediately north of the
-    // bounds, so a run that reaches outside them is standing in the doorway.
+    // bounds, so a corner that reaches outside them is standing in the doorway.
     check(
       escapes.length === 0,
-      `"${name}"'s counter run stays inside its safe room — ${escapes.map((t) => tileKey(t.x, t.y)).join(' ')}`,
+      `"${name}"'s doctor's corner stays inside its safe room — ${escapes.map((t) => tileKey(t.x, t.y)).join(' ')}`,
     );
 
-    // The run is solid apart from its galley strip, and it is laid against the
-    // bounds' north wall — the same wall the archways to the rest of the
-    // building are cut through. A run laid across one of them walls off
-    // everything on the far side, and the only symptom is an upstairs the
-    // player can never reach.
-    const solidRunTiles = new Set(
-      [...layout.backTiles, ...layout.counterTiles].map((tile) => tileKey(tile.x, tile.y)),
-    );
+    // The cabinet is solid, and it is laid against the bounds' north wall —
+    // the same wall the archways to the rest of the building are cut through.
+    // A cabinet laid across one of them walls off everything on the far side,
+    // and the only symptom is an upstairs the player can never reach.
+    const solidRunTiles = new Set(layout.cabinetTiles.map((tile) => tileKey(tile.x, tile.y)));
     const sealedArchways: string[] = [];
     const archwayRow = bounds.y - 1;
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
@@ -1301,7 +1288,7 @@ for (const name of safeRoomBuildings) {
     }
     check(
       sealedArchways.length === 0,
-      `"${name}"'s counter run seals no archway into the safe room — ${sealedArchways.join(' ')}`,
+      `"${name}"'s medicine cabinet seals no archway into the safe room — ${sealedArchways.join(' ')}`,
     );
   }
 }
@@ -1497,7 +1484,7 @@ const EXPECTED_CONFRONTATION_MOBS: ReadonlyArray<string> = [
   'Miss Quill',
   'Remex, the Living Capacitor',
 ];
-const CITY_ELF_CULTIST_NAME = 'City Elf Cultist';
+const ELF_NAME = 'Elf';
 /** Quill, Remex and two guards. */
 const EXPECTED_CONFRONTATION_MOB_COUNT = 4;
 /**
@@ -1570,7 +1557,7 @@ console.log('\nThe tower confrontation opens on safe ground');
   // wander that would carry them off is random — so the posts are asserted
   // directly rather than left to a health check downstream of 1200 frames of
   // RNG, which caught a removed leash on barely half its runs.
-  const guards = spawned.filter((mob) => mob.displayName === CITY_ELF_CULTIST_NAME);
+  const guards = spawned.filter((mob) => mob.displayName === ELF_NAME);
   for (const guard of guards) {
     // Present *and* on the guard's own tile: a guard that was never posted has
     // no home point at all, and must fail here rather than pass unmeasured.
@@ -1586,10 +1573,7 @@ console.log('\nThe tower confrontation opens on safe ground');
     );
   }
 
-  const threatRangeTiles = Math.max(
-    MISS_QUILL_CAST_RANGE_TILES,
-    CITY_ELF_CULTIST_AGGRO_RANGE_TILES,
-  );
+  const threatRangeTiles = Math.max(MISS_QUILL_CAST_RANGE_TILES, ELF_AGGRO_RANGE_TILES);
   const requiredTiles = threatRangeTiles + ARRIVAL_SAFETY_MARGIN_TILES;
   for (const mob of spawned) {
     const nearestCrawlerTiles =
@@ -1755,10 +1739,10 @@ console.log('\nA cleared camp stays cleared');
 
   const floor = buildFloor(CAMP_WORLD_SEED);
   const clearedCamp = floor.camps.find((camp) => camp.kind === 'goblin');
-  const standingCamp = floor.camps.find((camp) => camp.kind === 'troglodyte');
+  const standingCamp = floor.camps.find((camp) => camp.kind === 'lizardman');
   check(
     clearedCamp !== undefined && standingCamp !== undefined,
-    'the overworld sites a goblin camp and a troglodyte den to test against',
+    'the overworld sites a goblin camp and a lizardman den to test against',
   );
   if (clearedCamp !== undefined && standingCamp !== undefined) {
     const clearedKey = campSiteKey(clearedCamp);

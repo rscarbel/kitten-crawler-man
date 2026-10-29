@@ -1,5 +1,5 @@
 /**
- * Tuning for the frost and ward statuses. Kept apart from `StatusEffect.ts`
+ * Tuning for the frost, venom-slow and ward statuses. Kept apart from `StatusEffect.ts`
  * because `Player` reads the speed factors every frame and the fairy casters
  * read the durations, and neither should have to pull in the other's module to
  * get a number.
@@ -48,6 +48,12 @@ export const CHILLED_MOVE_SPEED_FACTOR = 0.6;
  * than stopped, so the crawler can still fight back through it.
  */
 export const CHILLED_ACTION_SPEED_FACTOR = 0.7;
+
+/** Three seconds of a lizardman's numbing venom at 60 fps. */
+export const NUMBED_FRAMES = 180;
+
+/** Walking pace while numbed. Only the legs go slow; swings and casts keep their pace. */
+export const NUMBED_MOVE_SPEED_FACTOR = 0.6;
 
 /** Share of each blow a mob under the aegis actually takes. */
 export const AEGIS_DAMAGE_SCALE = 0.5;

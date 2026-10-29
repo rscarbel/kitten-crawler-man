@@ -220,7 +220,7 @@ function choiceConfig(ui: Ui, model: GalleryModel): ChoiceModalConfig {
 const ILLUSTRATION_HEIGHT = 120;
 const ILLUSTRATION_ITEMS: readonly ItemId[] = [
   'health_potion',
-  'goblin_dynamite',
+  'dynamite',
   'magic_missile_tome',
   'wood_board',
 ];

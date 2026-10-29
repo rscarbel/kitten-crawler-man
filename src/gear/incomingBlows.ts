@@ -6,8 +6,8 @@
  * Asked by every single-target blow and shot a hostile lands on a crawler:
  * `Mob.deliverBlow` for blows a mob lands through it, the bosses' own landed
  * blows (a gauntlet punch, a boulder, a trample) before they land, and every
- * projectile system's direct hit — arrows, bolts, missiles, fireballs, lava
- * balls, thrown rocks, the Trash Gremlin's vomit. Area harm — bursts, flames,
+ * projectile system's direct hit — arrows, bolts, missiles, fireballs, acid
+ * globs, thrown rocks, the Trash Gremlin's vomit. Area harm — bursts, flames,
  * gas, a stench, a pulse band, standing ground — is neither a blow nor a shot,
  * and passes both untouched.
  */

@@ -2,7 +2,7 @@
  * The goblin nursery's building rules, checked headless against a real floor-1
  * `GameMap` and the live `DefendQuestSystem`:
  *
- * - a boardless tap on a grate with a bugaboo on or beside it is left for the
+ * - a boardless tap on a grate with a Fuzzy Nightmare on or beside it is left for the
  *   attack, while the same tap on a quiet grate is refused for want of wood;
  * - only the crawler the player is driving takes boards off the pile, so a
  *   companion standing on it neither pockets the stock nor sends it to restock;
@@ -21,7 +21,7 @@ import { DefendQuestSystem } from '../src/systems/DefendQuestSystem.js';
 import { Conversation } from '../src/dialog/Conversation.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
-import { Bugaboo } from '../src/creatures/Bugaboo.js';
+import { FuzzyNightmare } from '../src/creatures/FuzzyNightmare.js';
 import { MobRoster } from '../src/systems/kits/SceneWorld.js';
 import { SpellSystem } from '../src/systems/SpellSystem.js';
 import type { SystemContext } from '../src/systems/GameSystem.js';
@@ -140,15 +140,18 @@ console.log('── a boardless tap on a grate ──');
 }
 {
   const { quest, human, roster, ctx } = freshQuest();
-  const bug = new Bugaboo(grate.x + 1, grate.y, TILE_SIZE);
-  bug.setMap(gameMap);
-  roster.add(bug);
+  const nightmare = new FuzzyNightmare(grate.x + 1, grate.y, TILE_SIZE);
+  nightmare.setMap(gameMap);
+  roster.add(nightmare);
   quest.update(ctx);
   check(
     !quest.tryMobileTapOnGrate(grateScreenX, grateScreenY, 0, 0, human),
-    'a boardless tap beside a bugaboo was taken for "need wood" instead of left for the attack',
+    'a boardless tap beside a Fuzzy Nightmare was taken for "need wood" instead of left for the attack',
   );
-  check(!quest.noWoodSoundPending, 'the boardless tap beside a bugaboo still played the refusal');
+  check(
+    !quest.noWoodSoundPending,
+    'the boardless tap beside a Fuzzy Nightmare still played the refusal',
+  );
 }
 
 console.log('── who takes the wood ──');

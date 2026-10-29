@@ -268,9 +268,9 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 ### Three Levels
 
-**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and lava-spitting llamas roam the corridors. Two boss rooms await: the Trash Gremlin and the Kraken, whose huge flooded pump room you cross by raft while a shark patrols the water.
+**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and acid-spitting llamas roam the corridors. Two boss rooms await: the Trash Gremlin and the Kraken, whose huge flooded pump room you cross by raft while a shark patrols the water.
 
-**Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins, brindle grubs). Two boss rooms await: the Current Goblin in his power lab and Big Rooster in his gym, where Little Rooster and Slightly Bent Rooster peck and punch at the door. Also features the Grotesque Spider and Bugaboos that spawn from floor grates.
+**Level 2: Safe Haven** — A larger dungeon with tougher enemies (lizardmen, acid llamas, goblins, gravedigger beetles that hatch from the dead). Two boss rooms await: the Current Goblin in his power lab and Big Rooster in his gym, where Little Rooster and Slightly Bent Rooster peck and punch at the door. Also features the Grotesque Spider and Fuzzy Nightmares that spawn from floor grates.
 
 **Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and a restaurant whose kitchen is a safe room). Hawkfolk roam the outskirts.
 
@@ -290,7 +290,7 @@ Kill 200 monsters in the dungeon to earn a pet Deinonychus, a green-feathered di
 
 Four stats — Health (+2 max HP per point), Melee (melee damage), Magic (missile damage), Evasiveness (dodge chance). Kill enemies for XP (85% to top damage dealer, 15% to the other). Level up to earn skill points, allocated in the pause menu.
 
-**Status effects:** Burn, Poison (troglodyte tongue lash — 30s, 1 dmg/2 sec), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (a zap every 3 s, each seizing movement and attacks for 1 s), Stun (no moving or attacking), Stuck (immobilized).
+**Status effects:** Burn, Poison (lizardman tongue lash — 30s, 1 dmg/2 sec), Numbed (a lizardman's tongue lash on Nightmare — 3s, slower movement), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (a zap every 3 s, each seizing movement and attacks for 1 s), Stun (no moving or attacking), Stuck (immobilized).
 
 **Revive:** If a character goes down, the other can revive them by staying close for 90 seconds.
 
@@ -312,24 +312,25 @@ Every piece of gear has a **rarity** on one ladder: Common → Uncommon → Rare
 - **Relics** — a small object that floats at the wearer's shoulder and acts on its own: the Ember Wisp throws burning bolts, the Ward Stone stops an arrow, the Sproutling Seed roots enemies in brambles.
 - **Traits** — pieces carry mechanics beyond stats: poison, chill, web or ink on hit, lifesteal, thorns, a riposte, a combo stun, a once-a-floor second wind, a link between two lockets worn by both crawlers, a cursed mask that cannot come off until the next safe room, and a blade that awakens after enough kills.
 - **Sets** — Hearthguard, Bareknuckle, Demolition Crew, Prowler and Gilded Showman pieces grant extra bonuses when worn together.
-- **Goblin Dynamite** — Throwable AoE (3-tile radius, 8 dmg, friendly fire). Hold to charge throw distance, tap to drop at feet, hold too long and it explodes in hand
+- **Dynamite** — Throwable AoE (3-tile radius, 16 damage before levels and Explosives Handling, friendly fire). Hold to charge throw distance, tap to drop at feet, hold too long and it explodes in hand
 - **Gym Equipment** — Dumbbells, bench presses, treadmills. Place them to create barrier zones that slow enemies to 35% speed
-- **Scroll of Confusing Fog** — Blinds nearby enemies for MAG × 5 seconds
+- **Smoke Bomb** — Thrown like a bomb; bursts where it lands into a six-second smoke cloud with a four-tile radius, and enemies inside lose track of the crawlers
+- **Scroll of Entanglement** — Roots burst up around the reader and hold every non-boss, non-flying enemy within four tiles for five seconds
 - **Health Potions** — Restore HP
 
 ### Buildings & Interiors
 
-Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Dave, the guide, and a shop (potions, dynamite, fog scrolls).
+Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Dave, the guide, and a shop (potions, dynamite, smoke bombs, scrolls of entanglement).
 
 ### Quests
 
-Quest system with NPC interactions. Includes the Defend Quest — protect a goblin mother from waves of Bugaboos. Build barriers from gym equipment to hold them off. Completing it earns the Guardian Angel achievement.
+Quest system with NPC interactions. Includes the Defend Quest — protect a goblin mother from waves of Fuzzy Nightmares. Build barriers from gym equipment to hold them off. Completing it earns the Guardian Angel achievement.
 
 ### Achievements & Reward Chests
 
-Each crawler earns their own achievements, from a first kill (Off the Mark) and a first trip downstairs (Down the Hatch) to the dungeon kill milestones (Warming Up, Something Hatched, Body Count, A Thousand Cuts) and a boss killed without a scratch (Not a Scratch). Every achievement pays a **reward chest** of its rarity, and so do Caroline's gifts, challenge wins, repeat boss kills and some wheel prizes.
+Each crawler earns their own achievements, from a first kill (First Kill) and a first trip downstairs (The chosen one) to the dungeon kill milestones (Warming Up, Something Hatched, Body Count, A Thousand Cuts) and a boss killed without a scratch (Not a Scratch). Every achievement pays a **reward chest** of its rarity, and so do Caroline's gifts, challenge wins, repeat boss kills and some wheel prizes.
 
-A chest's contents are rolled and paid the moment it is earned: coins, potions and, often, a piece of gear the crawler can wear, plus any fixed reward the achievement names (Down the Hatch hands out each crawler's starter piece, Something Hatched brings your Deinonychus). Earned chests wait behind a "Rewards waiting" chip on the HUD and can be opened anywhere, whenever you like. The pause menu's Achievements page shows progress toward the counted ones.
+A chest's contents are rolled and paid the moment it is earned: coins, potions and, often, a piece of gear the crawler can wear, plus any fixed reward the achievement names (The chosen one hands out each crawler's starter piece, Something Hatched brings your Deinonychus). Earned chests wait behind a "Rewards waiting" chip on the HUD and can be opened anywhere, whenever you like. The pause menu's Achievements page shows progress toward the counted ones.
 
 ### Minimap
 
@@ -384,8 +385,9 @@ src/
 │   ├── MiniMapSystem.ts       ← fog of war, corpse markers
 │   ├── SafeRoomSystem.ts      ← save point, Dave NPC
 │   ├── BossRoomSystem.ts      ← boss room state, cockroach spawning
-│   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode
-│   ├── SpellSystem.ts         ← energy shield, confusing fog
+│   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode, smoke bombs
+│   ├── SpellSystem.ts         ← energy shield, entanglement roots
+│   ├── SmokeCloudSystem.ts    ← smoke bomb clouds, confusion
 │   ├── DestructiblePropSystem.ts ← smashable barrels/crates, splinters, coin drops
 │   ├── BarrierSystem.ts       ← gym item placement, mob slow zones
 │   ├── GymRoomSystem.ts       ← gym equipment spawns + Big Rooster coordination
@@ -404,8 +406,8 @@ src/
 │   └── ...
 ├── levels/
 │   ├── types.ts               ← LevelDef and MobSpawnRule interfaces
-│   ├── level1.ts              ← "The Dungeon" (goblins, llamas, rats, Trash Gremlin, Kraken)
-│   ├── level2.ts              ← "Safe Haven" (troglodytes, Current Goblin, Big Rooster)
+│   ├── level1.ts              ← "The Dungeon" (goblins, acid llamas, rats, Trash Gremlin, Kraken)
+│   ├── level2.ts              ← "Safe Haven" (lizardmen, Current Goblin, Big Rooster)
 │   ├── level3.ts              ← "The Overworld" (outdoor town, buildings)
 │   ├── spawner.ts             ← mob factory: LevelDef + map → Mob[]
 │   └── index.ts               ← level registry
@@ -414,8 +416,8 @@ src/
 ├── creatures/
 │   ├── HumanPlayer.ts, CatPlayer.ts
 │   ├── Mob.ts                 ← enemy AI base (aggro, pathfinding, LOS, health bar)
-│   ├── Goblin.ts, Rat.ts, Llama.ts, Troglodyte.ts
-│   ├── Tuskling.ts, Cockroach.ts, Bugaboo.ts, BrindleGrub.ts
+│   ├── Goblin.ts, Rat.ts, AcidLlama.ts, Lizardman.ts
+│   ├── Wereboar.ts, Cockroach.ts, FuzzyNightmare.ts, GravediggerBeetle.ts
 │   ├── TrashGremlin.ts, BigRooster.ts, ElectricGoblin.ts
 │   ├── RoosterMinion.ts, LittleRooster.ts, SlightlyBentRooster.ts
 │   ├── Kraken.ts, KrakenTentacle.ts, GrotesqueSpider.ts
@@ -485,7 +487,7 @@ Player (base: position, HP, stats, walk animation)
 ├── HumanPlayer
 ├── CatPlayer
 └── Mob (AI: aggro, pathfinding, LOS, health bar)
-    ├── Goblin, Rat, Llama, Troglodyte, Tuskling, Bugaboo, BrindleGrub, ...
+    ├── Goblin, Rat, AcidLlama, Lizardman, Wereboar, FuzzyNightmare, GravediggerBeetle, ...
     ├── TrashGremlin, Kraken, ElectricGoblin, BigRooster (bosses)
     ├── LittleRooster, SlightlyBentRooster (gym minions)
     └── GrotesqueSpider (quest boss)

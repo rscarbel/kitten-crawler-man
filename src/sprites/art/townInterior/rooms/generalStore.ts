@@ -8,7 +8,7 @@
  * a long serving counter with its till, scales and sweet jars, and a
  * two-deep display table on the shop floor. Smaller pieces — open bins of
  * nails, flour and salt, a barrel of long-handled tools, slumped sacks, a
- * crate of goblin dynamite kept behind the counter, the clerk's high desk
+ * crate of dynamite kept behind the counter, the clerk's high desk
  * and the storeroom's stacked stock — cluster around those.
  *
  * Every painter keeps its ink inside its own footprint's columns and above
@@ -848,7 +848,7 @@ const POTION_CABINET_HEIGHT_TILES = 1.9;
 
 /**
  * A glass-fronted, locked cabinet for the stock a crawler actually comes in
- * for: rows of red healing draughts on the upper shelves and fog scrolls
+ * for: rows of red healing draughts on the upper shelves and scrolls
  * pigeonholed below, behind two glazed doors with a brass lock plate, under
  * a cornice carrying a painted red heart.
  */
@@ -1726,7 +1726,7 @@ export function paintToolBarrel(ctx: Ctx, frame: TownPropFrame, _variant: number
 // ── Dynamite crate ──────────────────────────────────────────────────────────
 
 /**
- * A crate of goblin dynamite, kept behind the counter where only the keeper
+ * A crate of dynamite, kept behind the counter where only the keeper
  * reaches it: lid off and leant against it, red sticks bundled with their
  * fuses poking up, a yellow warning diamond stencilled on the side.
  */

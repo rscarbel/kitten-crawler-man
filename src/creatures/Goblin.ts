@@ -272,7 +272,7 @@ export class Goblin extends Mob {
           ? DYNAMITE_DROP_CHANCE_CAT
           : 0;
     if (chance > 0 && Math.random() < chance) {
-      items.push({ id: 'goblin_dynamite', quantity: 1 });
+      items.push({ id: 'dynamite', quantity: 1 });
     }
     // Goblins are the dungeon's professional brawlers; the books are theirs to lose.
     maybeDropSkillBook(items, 'brawler');

@@ -39,7 +39,7 @@ import { SkeletonArcher } from '../src/creatures/SkeletonArcher';
 import { SkeletonWarrior } from '../src/creatures/SkeletonWarrior';
 import { RAISED_RATKIN_FAMILY, RaisedRatkin } from '../src/creatures/RaisedRatkin';
 import { Goblin } from '../src/creatures/Goblin';
-import { Troglodyte } from '../src/creatures/Troglodyte';
+import { Lizardman } from '../src/creatures/Lizardman';
 import { CONVERTIBLE_MOB_TYPES } from '../src/creatures/convertibleMobs';
 import { Cow } from '../src/creatures/Cow';
 import { Deinonychus } from '../src/creatures/Deinonychus';
@@ -1246,7 +1246,7 @@ section('Converted allies');
     { name: 'Skeleton Warrior', make: () => new SkeletonWarrior(0, 0, TILE_SIZE) },
     { name: 'Ruins Ghoul', make: () => ghoul() },
     { name: 'Goblin', make: () => new Goblin(0, 0, TILE_SIZE, 'sword') },
-    { name: 'Troglodyte', make: () => new Troglodyte(0, 0, TILE_SIZE) },
+    { name: 'Lizardman', make: () => new Lizardman(0, 0, TILE_SIZE) },
   ];
   check(
     convertibles.length === CONVERTIBLE_MOB_TYPES.length &&

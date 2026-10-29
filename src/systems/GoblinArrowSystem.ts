@@ -2,7 +2,7 @@
  * Everything a goblin archer's arrow does once it has left the string.
  *
  * A system rather than state on the creature, for the same reason
- * `LavaBallSystem` and `SkeletonProjectileSystem` are: a mob stops being updated
+ * `GlobProjectileSystem` and `SkeletonProjectileSystem` are: a mob stops being updated
  * and stops being drawn the frame it dies — `MobUpdateLoop` skips the dead, and
  * kill resolution drops them out of the grid the renderer queries — so a
  * projectile owned by the archer vanished in mid-air the instant the player
@@ -81,7 +81,7 @@ interface SpentArrow {
 /**
  * World pixels per frame.
  *
- * Faster than a lava bolt and slower than a skeleton's bone arrow. It has to
+ * Faster than a thrown glob and slower than a skeleton's bone arrow. It has to
  * beat the player's own run speed — an arrow you can simply walk away from is
  * not a reason to move — while staying slow enough that stepping *sideways* out
  * of the line works, which is the answer the fairness rules require to exist.
@@ -144,9 +144,15 @@ export class GoblinArrowSystem implements GameSystem {
 
   private launch(shot: GoblinArrowShot, archer: Mob): void {
     const heading = normalize(shot.dirX, shot.dirY);
+    const launch = this.gameMap.clearLaunchPoint(
+      archer.x + TILE_SIZE * CENTER_OFFSET,
+      archer.y + TILE_SIZE * CENTER_OFFSET,
+      shot.x,
+      shot.y,
+    );
     this.arrows.push({
-      x: shot.x,
-      y: shot.y,
+      x: launch.x,
+      y: launch.y,
       vx: heading.x * ARROW_SPEED,
       vy: heading.y * ARROW_SPEED,
       age: 0,

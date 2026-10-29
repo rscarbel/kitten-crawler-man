@@ -1,7 +1,7 @@
 /**
  * The props scripted rows hold — hammer, board, crate, wrench, zippo,
  * bottle, longbow — the explosives the throwing hand of the dynamite rows is handed at
- * runtime (dynamite, a black powder bomb) and the sling's carried look,
+ * runtime (dynamite, a black powder bomb, a smoke bomb) and the sling's carried look,
  * as held visuals.
  *
  * Each is painted by its existing prop painter, which draws handle and head
@@ -207,7 +207,7 @@ export const SCRIPTED_PROP_HELD: Readonly<Record<ScriptedPropVisualId, HeldVisua
   ),
   prop_dynamite: scriptedProp(
     'prop_dynamite',
-    'Goblin dynamite',
+    'Dynamite',
     'dynamite',
     'thrown',
     'light',
@@ -218,6 +218,15 @@ export const SCRIPTED_PROP_HELD: Readonly<Record<ScriptedPropVisualId, HeldVisua
     'prop_black_powder_bomb',
     'Black powder bomb',
     'blackPowderBomb',
+    'thrown',
+    'light',
+    { handleLength: 0.5, gripPoint: 0.6, headLength: 0.05, headWidth: 0.2, radius: 'thick' },
+    THROWN_OPTIONS,
+  ),
+  prop_smoke_bomb: scriptedProp(
+    'prop_smoke_bomb',
+    'Smoke bomb',
+    'smokeBomb',
     'thrown',
     'light',
     { handleLength: 0.5, gripPoint: 0.6, headLength: 0.05, headWidth: 0.2, radius: 'thick' },
@@ -296,6 +305,7 @@ const SCRIPTED_PROP_VISUALS: Readonly<Record<PropKind, ScriptedPropVisual>> = {
   wrench: { def: SCRIPTED_PROP_HELD.prop_wrench, painterTurn: 0 },
   dynamite: { def: SCRIPTED_PROP_HELD.prop_dynamite, painterTurn: 0 },
   blackPowderBomb: { def: SCRIPTED_PROP_HELD.prop_black_powder_bomb, painterTurn: 0 },
+  smokeBomb: { def: SCRIPTED_PROP_HELD.prop_smoke_bomb, painterTurn: 0 },
   zippo: { def: SCRIPTED_PROP_HELD.prop_zippo, painterTurn: 0 },
   bottle: { def: SCRIPTED_PROP_HELD.prop_bottle, painterTurn: 0 },
   longbow: { def: SCRIPTED_PROP_HELD.prop_longbow, painterTurn: 0 },

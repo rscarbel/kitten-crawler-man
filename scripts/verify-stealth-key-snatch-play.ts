@@ -49,8 +49,8 @@ const FAULTS = [
   'restore-skips-gate',
   /** Stepping onto the pedestal's front tile lifts nothing. */
   'pickup-ignored',
-  /** The way out hands the clock back at the floor's full time limit. */
-  'timer-from-limit',
+  /** The way out hands the clock back as if the floor had just begun. */
+  'clock-from-zero',
   /** The save written on walking in puts the party at the floor's start, not at the door. */
   'door-save-elsewhere',
   /** The hire follows the party into the prison's held floor instead of being dismissed. */
@@ -154,6 +154,8 @@ const REJOIN_FRAMES = 600;
 /** How close, in tiles, a companion must come to count as back with the party. */
 const REJOIN_REACH_TILES = 4;
 const HIRE_ID = 'crush';
+/** The one tier that holds a floor to its time limit, so the HUD shows one. */
+const NIGHTMARE = 'hard' as const;
 
 let failures = 0;
 let checks = 0;
@@ -188,13 +190,12 @@ function injectFault(active: Fault | null): void {
     case 'pickup-ignored':
       PrisonKeySystem.prototype.update = () => undefined;
       return;
-    case 'timer-from-limit': {
+    case 'clock-from-zero': {
       const sceneProto = DungeonScene.prototype;
       const apply: unknown = Reflect.get(sceneProto, 'applyInteriorReturn');
       if (typeof apply !== 'function') throw new Error('DungeonScene has no applyInteriorReturn');
-      const fullClock = level2.collapseTimeLimitFrames ?? 0;
       sceneProto['applyInteriorReturn'] = function (this: Scene, held) {
-        Reflect.apply(apply, this, [{ ...held, levelTimerFrames: fullClock }]);
+        Reflect.apply(apply, this, [{ ...held, floorElapsedFrames: 0 }]);
       };
       return;
     }
@@ -656,7 +657,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   );
   const doorStep = room.prisonDoor.approachTiles[0] ?? talkTile;
   placeParty(outside, doorStep);
-  const clockAtDoor = outside.levelTimerRemainingFrames;
+  const clockAtDoor = outside.floorClockElapsedFrames;
+  const timeLeftAtDoor = (level2.nightmareTimeLimitFrames ?? 0) - clockAtDoor;
   const building = outside['building'];
   check(building !== null, `${label}: the floor builds the door system`);
   if (building === null) return;
@@ -727,10 +729,13 @@ async function verifySeed(worldSeed: number): Promise<void> {
   for (let frame = 0; frame < CAPTURE_WAIT_FRAMES && prison.isCapturing; frame++) inside.update();
   check(!prison.isCapturing, `${label}: a capture inside runs to its end`);
   for (let frame = 0; frame < FRAMES_INSIDE; frame++) inside.update();
+  const worldTier = settings.difficulty;
+  settings.setDifficultyForSession(NIGHTMARE);
   const heldClock = inside['hudModel']().levelTimer;
+  settings.setDifficultyForSession(worldTier);
   check(
-    heldClock !== null && heldClock.frames === clockAtDoor && heldClock.paused,
-    `${label}: the clock indoors reads ${clockAtDoor}, paused, after a capture and ${FRAMES_INSIDE} frames (${JSON.stringify(heldClock)})`,
+    heldClock !== null && heldClock.frames === timeLeftAtDoor && heldClock.paused,
+    `${label}: Nightmare's time limit indoors reads ${timeLeftAtDoor}, paused, after a capture and ${FRAMES_INSIDE} frames (${JSON.stringify(heldClock)})`,
   );
   if (doorSave !== undefined) verifyReloadInside(doorSave, doorStep, label);
 
@@ -739,8 +744,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   check(back instanceof DungeonScene && back !== outside, `${label}: the door leads back out`);
   if (!(back instanceof DungeonScene)) return;
   check(
-    back.levelTimerRemainingFrames === clockAtDoor,
-    `${label}: the clock reads ${clockAtDoor} on the way out (${back.levelTimerRemainingFrames})`,
+    back.floorClockElapsedFrames === clockAtDoor,
+    `${label}: the clock reads ${clockAtDoor} on the way out (${back.floorClockElapsedFrames})`,
   );
   check(await settleArrival(back, ctx), `${label}: the floor's arrival finishes on the way out`);
   back.update();
@@ -759,10 +764,10 @@ async function verifySeed(worldSeed: number): Promise<void> {
       sameTile(tileOf(companionsBack.hire), room.waitingTiles.hireling),
     `${label}: the hire waits on its gate-room tile`,
   );
-  const clockOut = back.levelTimerRemainingFrames;
+  const clockOut = back.floorClockElapsedFrames;
   verifyCompanionsRejoin(back, talkTile, label);
   check(
-    back.levelTimerRemainingFrames < clockOut,
+    back.floorClockElapsedFrames > clockOut,
     `${label}: the clock runs again outside the prison`,
   );
   const backQuest = back.stealthKeySnatch;

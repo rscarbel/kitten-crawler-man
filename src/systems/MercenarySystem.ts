@@ -318,7 +318,7 @@ export class MercenarySystem implements GameSystem {
     this.roster.lastDeceased = name;
     this.roster.unannouncedDeath = name;
     this.roster.active = null;
-    activeRunStats()?.recordHirelingLost();
+    activeRunStats()?.recordMercenaryLost();
   }
 
   /**

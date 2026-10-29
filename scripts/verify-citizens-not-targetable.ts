@@ -2,8 +2,8 @@
 /**
  * Citizens (`Townsperson`) are never `Mob`s, so nothing that sweeps a mob
  * roster to pick a target — Deinonychus, hirelings and mercenaries (including bolt
- * fire), `SpellSystem`'s homing missiles, the fairy systems — may ever select
- * one. This is a two-part gate:
+ * fire), `SpellSystem`'s entangling roots, `SmokeCloudSystem`'s confusing smoke,
+ * the fairy systems — may ever select one. This is a two-part gate:
  *
  * 1. Runtime: a real `Townsperson` is not `instanceof Mob`, and carries none
  *    of the mob-only surface a targeting sweep reads (`isHostile`,
@@ -13,7 +13,7 @@
  *    mob roster (`roster.mobs`, `mobGrid`, `SpatialGrid<Mob>`, or the
  *    `allMobs` field those roster reads get assigned into) and carries a
  *    hostile-target-selection signal (`nearestHostile`, `pickTarget`,
- *    `.isHostile`, and the like) — the combination a system needs before it
+ *    `.isHostile`, `.isHostileTarget`, and the like) — the combination a system needs before it
  *    could ever hand a citizen to its own targeting logic. `src/scenes` is
  *    excluded: scene files legitimately hold a `Townsperson` reference for
  *    citizen dialog while delegating all combat targeting to the systems
@@ -75,7 +75,7 @@ const ROSTER_READ_PATTERN = /roster\.mobs|\bmobGrid\b|SpatialGrid<Mob>|\ballMobs
 
 /** A file selects a target out of that roster by hostility. */
 const TARGET_SELECTION_SIGNAL_PATTERN =
-  /nearestHostile|nearestEnemy|nearestPartyThreat|pickTarget|findTarget|acquireTarget|bestTarget|closestHostile|selectTarget|\.currentTarget *=|\.isHostile\b/;
+  /nearestHostile|nearestEnemy|nearestPartyThreat|pickTarget|findTarget|acquireTarget|bestTarget|closestHostile|selectTarget|\.currentTarget *=|\.isHostile(Target)?\b/;
 
 function readsRoster(source: string): boolean {
   return ROSTER_READ_PATTERN.test(source);
@@ -127,6 +127,10 @@ check(
   selectsHostileTarget('if (mob.isHostile) candidates.push(mob);'),
 );
 check(
+  'the target-selection scan catches the hostile-target gate (mutation check)',
+  selectsHostileTarget('if (!mob.isHostileTarget) continue;'),
+);
+check(
   'the target-selection scan passes clean source',
   !selectsHostileTarget('if (mob.isAlive) candidates.push(mob);'),
 );
@@ -156,6 +160,7 @@ const EXPECTED_TARGETING_SYSTEMS: readonly string[] = [
   'src/systems/MercenarySystem.ts',
   'src/systems/DeinonychusSystem.ts',
   'src/systems/SpellSystem.ts',
+  'src/systems/SmokeCloudSystem.ts',
   'src/systems/FairySystem.ts',
 ];
 

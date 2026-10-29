@@ -46,7 +46,7 @@ import { level3 } from '../src/levels/level3';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
 import type { BuildingId } from '../src/map/buildingIds';
-import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
+import { stampSafeRoomClinics } from '../src/map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import {
   drawTownInteriorGroundProps,
@@ -245,7 +245,7 @@ function buildInterior(
       : 'default';
   map.generateInterior(kind, floor, name, hasSafeRoom, variant);
   if (hasSafeRoom) {
-    stampSafeRoomCounters(map);
+    stampSafeRoomClinics(map);
     stampSafeRoomDecor(map);
   }
   map.releaseTileArt();

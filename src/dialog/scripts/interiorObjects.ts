@@ -325,7 +325,7 @@ export const EXAMINE_LINES = {
     'Open barrels of nails, flour and salt, a scoop left in each and the price chalked on a stick. Weighed at the counter, not before.',
   ),
   dynamite_crate: narrator.bark(
-    'A crate of goblin dynamite, lid off, kept on the keeper’s side of the counter. The warning on the side has been painted over twice to make it bigger.',
+    'A crate of dynamite, lid off, kept on the keeper’s side of the counter. The warning on the side has been painted over twice to make it bigger.',
   ),
   records_cabinet: narrator.bark(
     "Deeds, licences, tithe rolls, each drawer labelled in the same tight clerk's hand. The newest labels are all in it. So is the drawer marked Featherfall — Correspondence, which is locked.",

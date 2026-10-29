@@ -20,7 +20,7 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
-import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
+import { stampSafeRoomClinics } from '../src/map/safeRoomClinicLayout.js';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
 import type { BuildingKind } from '../src/map/town/townPlan.js';
 import { BUILDING_IDS, isBuildingId, type BuildingId } from '../src/map/buildingIds.js';
@@ -79,11 +79,11 @@ await loadGameSpritesInNode(artSeed);
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
 map.generateInterior(kind, towerFloor, buildingId, hasSafeRoom);
-// `generateInterior` lays the room; the counter run and the furnishings are
+// `generateInterior` lays the room; the doctor's cabinet and the furnishings are
 // stamped by the scene afterwards, so a harness that skipped them was showing a
 // safe room nobody ever plays in.
 if (hasSafeRoom) {
-  stampSafeRoomCounters(map);
+  stampSafeRoomClinics(map);
   stampSafeRoomDecor(map);
 }
 

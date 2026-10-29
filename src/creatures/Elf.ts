@@ -1,0 +1,324 @@
+import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
+import type { Player } from '../Player';
+import { ELF_TILES_PER_WALK_CYCLE, drawElfSprite, prewarmElf } from '../sprites/elfSprite';
+import { WALK_FRAMES } from '../sprites/art/human/timing';
+import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import type { KiteAim } from './tactics/tacticalFrame';
+import { retreatBehindHelper } from './tactics/retreat';
+
+const ELF_HP = 22;
+const ELF_SPEED = 1.15;
+
+/**
+ * How far an elf notices from. Exported for the same reason Miss Quill's cast
+ * range is: the tower confrontation's spawn offsets are only correct relative to
+ * this number, and a gate holding them to a copy of it would go green the day it
+ * moved.
+ */
+export const ELF_AGGRO_RANGE_TILES = 8;
+/** Elves keep their distance and cast from afar. */
+const CAST_RANGE_TILES = 5.5;
+/**
+ * Below this the elf backs off rather than standing its ground — without a
+ * floor under the cast band, a player who simply walks up gets an enemy that
+ * plants its feet and eats hits, which is the opposite of "keeps its distance".
+ */
+const CAST_RANGE_MIN_TILES = 3;
+/** How long one retreat lasts, and how long before the next one can start. */
+const RETREAT_MAX_FRAMES = 70;
+const RETREAT_COOLDOWN_FRAMES = 150;
+/**
+ * Frames between bolt casts (~2.3 s at 60 fps). Exported so the tactics
+ * gate can hold a falling-back elf to the cadence it casts at standing.
+ */
+export const ELF_CAST_COOLDOWN_FRAMES = 140;
+const CAST_ANIM_FRAMES = 24;
+const BOLT_DAMAGE = 5;
+const COIN_DROP_MIN = 2;
+const COIN_DROP_MAX = 5;
+const CENTER_OFFSET = 0.5;
+const FOLLOW_STOP_RANGE_TILES = 1.5;
+const FOLLOW_CLOSE_RANGE_RATIO = 0.85;
+const ELF_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
+const TWO_PI = Math.PI * 2;
+/**
+ * The walk is advanced by the ground the elf actually covers, so its
+ * planted feet stay put on the floor. Capped at one sprite frame per tick:
+ * past that the row is undersampled and a separation shove strobes the legs.
+ */
+const MAX_GAIT_RADIANS_PER_FRAME = TWO_PI / WALK_FRAMES;
+/**
+ * Spread of the per-elf offset into the breathing loop, in seconds, so a
+ * lodge full of them does not rise and fall in unison. Seeded from the spawn
+ * tile, so the same elf always breathes on the same beat.
+ */
+const IDLE_OFFSET_SPAN_SECONDS = 4;
+const IDLE_OFFSET_TILE_X_STEP = 0.37;
+const IDLE_OFFSET_TILE_Y_STEP = 0.71;
+
+const ELF_EYES: EyePlacement = {
+  sideForward: 0.06,
+  sideHeight: -0.36,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.3,
+  frontSpacing: 0.08,
+};
+
+/**
+ * An elf of the cult under the ruins: one of those who went down into the old
+ * city's cellars rather than be carried out on Hawkfolk wings, and came back
+ * sure that Caroline chooses whom she speaks to and can be made to choose. It
+ * burns offerings to be noticed, and a crawler will do. A ranged caster that
+ * holds its distance and hurls bolts of cold fire.
+ */
+export class Elf extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return ELF_EYES;
+  }
+
+  readonly xpValue = 14;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
+  displayName = 'Elf';
+  description =
+    'A violet-hooded elf from the cellars under the ruins, hurling bolts of cold fire so that Caroline will notice.';
+
+  private bolts: SoulBolt[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.bolts.length = 0;
+  }
+  private castCooldown = 0;
+  private castAnimTimer = 0;
+  private isAggro = false;
+  private retreatFrames = 0;
+  private retreatCooldown = 0;
+  private gaitSampleX: number;
+  private gaitSampleY: number;
+  private readonly idleOffsetSeconds: number;
+
+  constructor(tileX: number, tileY: number, tileSize: number) {
+    super(tileX, tileY, tileSize, ELF_HP, ELF_SPEED);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const seed = tileX * IDLE_OFFSET_TILE_X_STEP + tileY * IDLE_OFFSET_TILE_Y_STEP;
+    this.idleOffsetSeconds = (seed % 1) * IDLE_OFFSET_SPAN_SECONDS;
+    // Every elf is stood up by an encounter (the lodge, a tower guard
+    // post, the confrontation) well before the party reaches it, so this is
+    // the moment its fight is scheduled.
+    prewarmElf();
+  }
+
+  /**
+   * Measured over the previous frame so it also picks up the ground lost to
+   * collision slides and separation pushes, not just the intended step.
+   */
+  private syncGaitToDistanceCovered(): void {
+    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const radiansPerPixel = TWO_PI / (ELF_TILES_PER_WALK_CYCLE * this.tileSize);
+    this.walkFrameSpeed = Math.min(coveredPx * radiansPerPixel, MAX_GAIT_RADIANS_PER_FRAME);
+  }
+
+  /**
+   * A caster, so what it can learn is to keep its distance well: fall back
+   * behind another elf rather than straight away from whoever crowds it,
+   * so the player who follows has to get through one to reach the other; and
+   * fall back on one when hurt. Never `block` — it has nothing to turn a blade with — and
+   * never `flank`, whose approach would walk it inside its own cast band.
+   *
+   * A posted guard with `forceAggro` has a target from the moment it spawns,
+   * but a kite or regroup needs blood drawn on both sides of it, so a guard
+   * nobody has fought yet neither kites nor serves as anyone's friend.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return ELF_TACTICS;
+  }
+
+  /** A caster regroups behind its friend, never up to it and into the melee. */
+  protected override get regroupAim(): KiteAim {
+    return retreatBehindHelper;
+  }
+
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.bolts = [];
+    this.castCooldown = 0;
+    this.castAnimTimer = 0;
+    this.isAggro = false;
+    this.retreatFrames = 0;
+    this.retreatCooldown = 0;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+  }
+
+  updateAI(targets: Player[]): void {
+    if (!this.isAlive) return;
+    this.syncGaitToDistanceCovered();
+
+    if (this.castCooldown > 0) this.castCooldown--;
+    if (this.castAnimTimer > 0) this.castAnimTimer--;
+    if (this.retreatCooldown > 0) this.retreatCooldown--;
+
+    this.bolts = advanceSoulBolts(this.bolts, this.map, this.tileSize, targets, (t) =>
+      this.dealSpellDamage(t, BOLT_DAMAGE),
+    );
+
+    const aggroRangePx = this.tileSize * ELF_AGGRO_RANGE_TILES;
+    const castRangePx = this.tileSize * CAST_RANGE_TILES;
+    const castRangeMinPx = this.tileSize * CAST_RANGE_MIN_TILES;
+    const nearest = this.acquireTarget(targets, aggroRangePx);
+
+    this.currentTarget = nearest;
+
+    if (!nearest) {
+      this.isAggro = false;
+      this.retreatFrames = 0;
+      this.tactics.disengage();
+      this.clearAStarPath();
+      // An elf posted by an encounter carries a `homePoint` and a leash, and
+      // only this path consults them: an idle drift of a tile or two is nothing
+      // in a hideout and is the whole margin in a room where the party's
+      // arrival tile sits just outside this aggro range.
+      this.returnHomeOrWander();
+      return;
+    }
+    this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
+
+    const handX = this.x + this.tileSize * CENTER_OFFSET;
+    const handY = this.y + this.tileSize * CENTER_OFFSET;
+    const targetCX = nearest.x + this.tileSize * CENTER_OFFSET;
+    const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
+    const hasLOS = this.map ? this.map.hasLineOfSight(handX, handY, targetCX, targetCY) : true;
+
+    if (hasLOS) {
+      this.lastKnownTargetX = nearest.x;
+      this.lastKnownTargetY = nearest.y;
+    }
+
+    // Whichever fallback starts first runs to its own end: the tactics are not
+    // asked while a backpedal is under way, and a backpedal cannot start while
+    // a kite or regroup is — so the two never trade frames. On a frame where
+    // neither is running, the tactics are asked first; the kite's own cooldown
+    // then leaves the backpedal the next crowding.
+    const tacticalMove =
+      this.retreatFrames > 0
+        ? null
+        : this.chooseTacticalStep(nearest, castRangeMinPx, true, retreatBehindHelper);
+    const isCrowded = hasLOS && nearestDist < castRangeMinPx;
+    const canBackpedal = tacticalMove === null && this.retreatCooldown === 0;
+    if (isCrowded && this.retreatFrames === 0 && canBackpedal) {
+      this.retreatFrames = RETREAT_MAX_FRAMES;
+      this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+    }
+
+    if (tacticalMove !== null) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      // Faced at the quarry, not along the walk, for the same reason the
+      // backpedal is: an elf falling back is still casting.
+      this.faceToward(nearest);
+      // A fall-back is a backpedal's worth of retreat: its cooldown runs from
+      // the end of this one, or a kite that ends still crowded would chain
+      // straight into a backpedal — faster than a kite may go, and half as
+      // long again as the kite itself.
+      if (tacticalMove.breaksOff) this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+    } else if (this.retreatFrames > 0) {
+      this.retreatFrames--;
+      if (nearestDist >= castRangeMinPx) {
+        this.retreatFrames = 0;
+        this.isMoving = false;
+      } else {
+        this.backAwayFrom(nearest);
+      }
+    } else if (!hasLOS) {
+      this.followTargetAStar(
+        this.lastKnownTargetX,
+        this.lastKnownTargetY,
+        this.speed,
+        this.tileSize * FOLLOW_STOP_RANGE_TILES,
+      );
+    } else if (nearestDist > castRangePx) {
+      this.followTargetAStar(
+        nearest.x,
+        nearest.y,
+        this.speed,
+        castRangePx * FOLLOW_CLOSE_RANGE_RATIO,
+      );
+    } else {
+      this.isMoving = false;
+      this.faceToward(nearest);
+    }
+
+    if (hasLOS && nearestDist <= castRangePx && this.castCooldown === 0) {
+      this.faceToward(nearest);
+      this.bolts.push(fireSoulBolt(handX, handY, targetCX, targetCY));
+      this.castCooldown = ELF_CAST_COOLDOWN_FRAMES;
+      this.castAnimTimer = CAST_ANIM_FRAMES;
+      this.projectileSoundPending = true;
+    }
+  }
+
+  /**
+   * Retreats directly away from a target that has closed inside the cast band.
+   *
+   * Straight-line rather than pathfound, same as the goblin archer's kite: a
+   * elf that A*s its way backwards around a corner spends the whole
+   * retreat facing its own path and never casts.
+   */
+  private backAwayFrom(target: Player): void {
+    const dx = this.x - target.x;
+    const dy = this.y - target.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return;
+    this.moveWithCollision((dx / distance) * this.speed, (dy / distance) * this.speed);
+    this.isMoving = true;
+    this.faceToward(target);
+  }
+
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
+    if (!this.isAlive) return;
+
+    renderSoulBolts(ctx, this.bolts, camX, camY);
+
+    const sx = this.x - camX;
+    const sy = this.y - camY;
+
+    ctx.save();
+    if (this.damageFlash > 0) {
+      ctx.filter = 'brightness(3)';
+    }
+
+    const castAnim = this.castAnimTimer > 0 ? 1 - this.castAnimTimer / CAST_ANIM_FRAMES : 0;
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawElfSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.walkFrame,
+        this.isMoving,
+        castAnim,
+        this.facingX,
+        this.facingY,
+        this.idleOffsetSeconds,
+      );
+    });
+
+    if (this.damageFlash > 0) ctx.filter = 'none';
+    ctx.restore();
+
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
+  }
+}

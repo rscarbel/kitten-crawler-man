@@ -37,8 +37,8 @@ const KRASUE_EYES: EyePlacement = {
 };
 
 /**
- * A krasue — a disembodied flying head trailing entrails, born from
- * Scolopendra's poison catastrophe. Fast, erratic, and low-HP but
+ * A krasue — a disembodied flying head trailing entrails, one of the old
+ * city's people made by the Fraying. Fast, erratic, and low-HP but
  * dangerous in a straight fight; the Taloncrest ruins' aerial threat.
  */
 export class Krasue extends Mob {

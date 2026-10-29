@@ -8,7 +8,7 @@ import type { ActionSeverity } from '../actions/types';
 import type { JsonObject } from './json';
 import type { LiveInput, SessionInput } from './types';
 
-/** Under this many seconds on the collapse clock the AI should treat the floor as urgent. */
+/** Under this many seconds left on Nightmare's time limit the AI should treat the floor as urgent. */
 export const LEVEL_TIMER_LOW_SECONDS = 120;
 const SECONDS_PER_MINUTE = 60;
 
@@ -19,7 +19,7 @@ const SECONDS_PER_MINUTE = 60;
  *
  * - `lowHp`: the active crawler is in the low-health band (`isAtOrUnderLowHealth`).
  * - `crawlerDown`: either crawler is knocked out and waiting for a revive.
- * - `levelTimerLow`: the collapse clock is running and under `LEVEL_TIMER_LOW_SECONDS`.
+ * - `levelTimerLow`: Nightmare's time limit is running and under `LEVEL_TIMER_LOW_SECONDS` left.
  * - `inMenu`: a menu or dialog other than the pause screen is up; `isPaused` covers both.
  * - `commentaryOnly`: the player's AI Intensity is Commentary. Every tool
  *   outside `COMMENTARY_ACTIONS` forbids it, which is how the server learns an

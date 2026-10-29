@@ -24,6 +24,7 @@ import {
   BARREL,
   BARREL_SIDE,
   BOOKSHELF,
+  SAFE_ROOM_MEDICINE_CABINET,
   CRAWLER_SIGN,
   CRATE,
   BOULDER_SMALL,
@@ -424,6 +425,10 @@ const DECORATION_TYPES = new Set([
   CRATE,
   BOOKSHELF,
   CRAWLER_SIGN,
+  // The doctor's medicine cabinet stands most of a tile taller than its own
+  // row, so it is Y-sorted: baked flat, a chunk edge would slice its top off,
+  // and the doctor standing in front of it would be drawn under it.
+  SAFE_ROOM_MEDICINE_CABINET,
   // The wilderness's boulders. Y-sorted so a player standing north of a rock is
   // drawn behind it and one standing south is drawn in front — a two-tile-wide
   // boulder overhangs its own tile, so flat-drawing it would put the player's
@@ -521,6 +526,8 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   TOWN_WALL,
   FENCE,
   RUINED_WALL,
+  // Glass, a few dozen bottles and a lamp: static, and many calls to replay.
+  SAFE_ROOM_MEDICINE_CABINET,
 ]);
 
 /** Tile type used where a neighbour lookup falls off the grid. */
@@ -1496,6 +1503,9 @@ export function decorationTileExtentsPx(
   }
   if (type === TENT_POLE) return tentPoleExtentsPx(structure, tx, ty, ts);
   if (type === RIVER_REEDS) return { left: 0, up: REED_OVERHANG_PX, right: 0, down: 0 };
+  // The cabinet rises up the wall behind it, never more than a tile, and stays
+  // inside its own columns.
+  if (type === SAFE_ROOM_MEDICINE_CABINET) return { left: 0, up: ts, right: 0, down: 0 };
   const serviceExtents = serviceLevelPropExtentsPx(type, ts);
   if (serviceExtents !== null) return serviceExtents;
   const cellarExtents = cellarPropExtentsPx(type, ts);

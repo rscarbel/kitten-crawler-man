@@ -20,7 +20,7 @@ import {
  *
  * **Anchor convention:** `sx`/`sy` are the screen pixels of the effect's own
  * centre — the world position minus the camera offset, exactly as
- * `LavaBallSystem` passes `bolt.x - camX, bolt.y - camY`. Every figure's anchor
+ * `GlobProjectileSystem` passes `bolt.x - camX, bolt.y - camY`. Every figure's anchor
  * is its cell centre, so the effect lands where the simulation put it and the
  * caller never has to know the cell size.
  *

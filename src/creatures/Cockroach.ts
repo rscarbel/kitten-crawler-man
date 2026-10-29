@@ -184,10 +184,10 @@ export class Cockroach extends Mob {
   }
 
   /**
-   * A committed bite is dropped rather than frozen when a fog lands on it.
+   * A committed bite is dropped rather than frozen when a smoke cloud lands on it.
    *
    * `updateAI` is skipped entirely for a confused mob, so a timer ticked there
-   * stops: the roach holds one cell of its lunge for as long as the fog lasts
+   * stops: the roach holds one cell of its lunge for as long as the smoke lasts
    * while `doWander` slides it across the floor in that pose, and the damage
    * check then fires on a frame unrelated to where the sprite is. `tickTimers`
    * is the one per-frame hook the loop runs for confused mobs too.
@@ -197,7 +197,7 @@ export class Cockroach extends Mob {
     if (!this.isConfused || this.biteTimer <= 0) return;
     this.biteTimer = 0;
     // The bite is cancelled, not refunded: `attackCooldown` stands, so a roach
-    // fogged mid-lunge does not come out of it biting sooner than one left alone.
+    // smoke-blinded mid-lunge does not come out of it biting sooner than one left alone.
     this.biteDamagePending = false;
   }
 

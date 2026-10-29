@@ -1,6 +1,6 @@
 /**
  * The nursery's short-lived feedback: sawdust and chips thrown by a hammer,
- * splinters and a shudder when a bugaboo lands a blow on the boards, and the
+ * splinters and a shudder when a Fuzzy Nightmare lands a blow on the boards, and the
  * spray of timber when a barrier gives.
  *
  * Purely cosmetic and deliberately outside the quest's checkpoint. It draws
@@ -96,7 +96,7 @@ export class NurseryEffects {
   private readonly shakes = new Map<number, { frames: number; amplitude: number }>();
   private readonly rng: Rng = mulberry32(RNG_SEED);
 
-  /** A bugaboo's blow landing on a grate's boards, centred on `centre`. */
+  /** A Fuzzy Nightmare's blow landing on a grate's boards, centred on `centre`. */
   barrierHit(grateIdx: number, centre: Point, tileSize: number, heavy: boolean): void {
     this.shakes.set(grateIdx, {
       frames: SHAKE_FRAMES,

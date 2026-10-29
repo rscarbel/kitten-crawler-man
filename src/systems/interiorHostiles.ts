@@ -17,7 +17,7 @@ import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { roomKey, type TownMemory } from '../core/state/TownMemory';
 import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
-import { CULT_HIDEOUT_CULTIST_LEVEL } from './CultHideoutSystem';
+import { CULT_HIDEOUT_ELF_LEVEL } from './CultHideoutSystem';
 import { questMobLevel } from './questMobLevel';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
@@ -33,7 +33,7 @@ const SPAWN_SEARCH_RADIUS_TILES = 4;
  * Quill. Matched to the hideout's congregation, so the climb is the same fight
  * the Blackwood Lodge was rather than a softer rerun of it.
  */
-const STAIR_GUARD_LEVEL = CULT_HIDEOUT_CULTIST_LEVEL;
+const STAIR_GUARD_LEVEL = CULT_HIDEOUT_ELF_LEVEL;
 
 /**
  * Where each guard waits, measured from the stair *up*.
@@ -94,12 +94,7 @@ export function interiorHostilesFor(ctx: InteriorHostileContext): Mob[] {
     y: anchor.y + offset.dy,
   }));
   return distinctSpawnTiles(ctx.map, wanted, SPAWN_SEARCH_RADIUS_TILES).map((tile) => {
-    const guard = spawnMob(
-      'city_elf_cultist',
-      tile,
-      ctx.map,
-      liveSpawnContext('quest:interior-hostiles'),
-    );
+    const guard = spawnMob('elf', tile, ctx.map, liveSpawnContext('quest:interior-hostiles'));
     guard.applyMobLevel(questMobLevel(STAIR_GUARD_LEVEL, ctx.partyLevel));
     applySpawnDifficulty(guard);
     // No boss room exists indoors, so nothing else would ever wake them, and a

@@ -33,7 +33,7 @@ export type CampSpawnRule = Omit<MobSpawnRule, 'chance' | 'escorts' | 'terrain'>
  *
  * Factored out because for a long time only room and hallway rules had one, so
  * boss rooms and `extraSpawns` spawned at base stats forever — a level-1
- * troglodyte guarding a floor-1 gauntlet boss, and a gauntlet boss no tougher on
+ * lizardman guarding a floor-1 gauntlet boss, and a gauntlet boss no tougher on
  * the day the party finds it than on the day the floor was authored.
  */
 export interface MobLevelRange {
@@ -59,12 +59,11 @@ export interface MobSpawnRule extends MobLevelRange {
    * Extra mobs spawned into the same room alongside this rule's own, or beside
    * a hallway rule's one body.
    *
-   * The mechanism exists for one creature and states its design contract: a
-   * goblin archer must never be the thing a room is made of. Alone it is a slow,
-   * fragile plinker the player simply walks down; behind a melee line it is what
-   * makes the melee line dangerous. A weighted table can only pick *one* rule
-   * per room, so without this an archer entry would occasionally fill a whole
-   * room with archers and never once produce the mixed group it is for.
+   * A weighted table can only pick *one* rule per room or point, so this is how
+   * a group is authored. A goblin archer must never be the thing a room is made
+   * of: alone it is a slow, fragile plinker the player simply walks down; behind
+   * a melee line it is what makes the melee line dangerous. Giant wasps escort
+   * their own kind, because a wasp is met as a swarm, never one at a time.
    */
   escorts?: EscortSpawnRule[];
   /**
@@ -239,7 +238,7 @@ export type GauntletDef =
     });
 
 /**
- * The band the defense quest's bugaboo wave rolls its level in on this floor.
+ * The band the defense quest's Fuzzy Nightmare wave rolls its level in on this floor.
  *
  * Per floor rather than fixed on the creature, because the encounter is now a
  * mandatory choke that floor 1 meets mid-run and floor 2 meets again much later:
@@ -410,15 +409,13 @@ export interface LevelDef {
    */
   xpDiminishingTiers?: XpDiminishingTier[];
   /**
-   * Runs the floor against a countdown; when it expires the floor collapses and
-   * kills the party. Absent means the floor is untimed.
+   * How long Nightmare lets the party spend on this floor, in frames at 60fps.
+   * Having it is what makes a floor timed. The time on the floor is counted on
+   * every difficulty, but only Nightmare holds it to this limit: when it runs
+   * out, Caroline ends the party and the floor starts over. Absent means the
+   * floor is untimed on every difficulty.
    */
-  hasCollapseTimer?: boolean;
-  /**
-   * How long the countdown `hasCollapseTimer` runs against, in frames at
-   * 60fps. Only meaningful alongside `hasCollapseTimer`; ignored otherwise.
-   */
-  collapseTimeLimitFrames?: number;
+  nightmareTimeLimitFrames?: number;
   /**
    * Spawns extra mobs guarding treasure rooms. Room, hallway and boss spawns are
    * unaffected. Absent means treasure rooms are unguarded.
@@ -495,7 +492,7 @@ export interface LevelDef {
    */
   hasSpiderLab?: boolean;
   /**
-   * Level band the defense quest's bugaboo wave rolls in on this floor. Absent
+   * Level band the defense quest's Fuzzy Nightmare wave rolls in on this floor. Absent
    * means the wave spawns at base stats, which is right only for a floor where
    * the encounter is optional side content.
    */

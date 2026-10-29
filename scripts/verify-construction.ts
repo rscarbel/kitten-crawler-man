@@ -44,7 +44,7 @@ import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ConstructionKit } from '../src/systems/briarHollow/ConstructionKit';
 import { StructureHold } from '../src/systems/briarHollow/structureHold';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';
-import { Bugaboo } from '../src/creatures/Bugaboo';
+import { FuzzyNightmare } from '../src/creatures/FuzzyNightmare';
 import { DefendQuestSystem } from '../src/systems/DefendQuestSystem';
 import { Conversation } from '../src/dialog/Conversation';
 import { GRATE_SPIKES_BASE_HP, GrateSpikesMenu } from '../src/systems/GrateSpikesMenu';
@@ -1734,16 +1734,16 @@ section('Defend-quest grate spikes');
     `the grate carries ${GRATE_SPIKES_BASE_HP} HP of spikes`,
   );
 
-  const bugaboo = new Bugaboo(grate.x, grate.y - 1, TILE_SIZE);
-  const bugHp = bugaboo.hp;
+  const fuzzyNightmare = new FuzzyNightmare(grate.x, grate.y - 1, TILE_SIZE);
+  const nightmareHp = fuzzyNightmare.hp;
   const claw = 10;
-  quest.damageBarrier(grate, claw, bugaboo);
+  quest.damageBarrier(grate, claw, fuzzyNightmare);
   check(
     barrierNow()?.hp === barrierMaxHp && barrierNow()?.spikesHp === GRATE_SPIKES_BASE_HP - claw,
-    "the spikes take a clawing bugaboo's blow before the boards",
+    "the spikes take a clawing Fuzzy Nightmare's blow before the boards",
   );
-  check(bugaboo.hp < bugHp, 'and the bugaboo takes it back');
-  quest.damageBarrier(grate, GRATE_SPIKES_BASE_HP, bugaboo);
+  check(fuzzyNightmare.hp < nightmareHp, 'and the Fuzzy Nightmare takes it back');
+  quest.damageBarrier(grate, GRATE_SPIKES_BASE_HP, fuzzyNightmare);
   const overflow = GRATE_SPIKES_BASE_HP - (GRATE_SPIKES_BASE_HP - claw);
   check(
     barrierNow()?.spikesHp === undefined && barrierNow()?.hp === barrierMaxHp - overflow,

@@ -12,7 +12,11 @@ import type { AIInteractionHost } from '../interactions/types';
 import type { ActionParams, JsonObjectSchema, ParamField } from './schema';
 import type { SessionFlagName } from '../context/sessionContext';
 
-/** The collapse clock as an action may read and move it. */
+/**
+ * Nightmare's time limit on the floor as an action may read and move it.
+ * Moving the time left shifts the floor's elapsed clock, so the limit itself
+ * never changes.
+ */
 export interface AILevelTimer {
   readonly remainingFrames: number;
   readonly limitFrames: number;

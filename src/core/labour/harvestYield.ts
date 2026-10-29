@@ -138,7 +138,7 @@ export function thrallHarvestXp(yieldMultiplier: number): number {
 /** Something extra a lucky harvest tick turns up. */
 export type LuckyDrop = Extract<
   ItemId,
-  'trebuchet_kit' | 'snare_kit' | 'wood_board' | 'rope' | 'goblin_dynamite'
+  'trebuchet_kit' | 'snare_kit' | 'wood_board' | 'rope' | 'dynamite'
 >;
 
 /** A refined wood drop is a board or a rope, evenly. */
@@ -159,6 +159,6 @@ export function rollHarvestLuck(
   if (rng() < kits.treb) return 'trebuchet_kit';
   if (rng() < kits.snare) return 'snare_kit';
   if (rng() >= refinedChance(level, kind)) return null;
-  if (kind === 'stone') return 'goblin_dynamite';
+  if (kind === 'stone') return 'dynamite';
   return rng() < REFINED_WOOD_BOARD_SHARE ? 'wood_board' : 'rope';
 }

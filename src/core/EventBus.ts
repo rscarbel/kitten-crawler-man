@@ -18,7 +18,6 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import type { GrantedReward } from './items/loot/GrantedReward';
 import type { QuestRewardSpec } from '../ui/questReward/types';
-import type { DishId } from '../systems/bopcaDialog';
 import type { TravelDestinationId } from '../systems/travel/travelDestinations';
 import type { SkillId, CrawlerKind } from './skills/SkillManager';
 import type { SpeakerRef } from '../dialog/speakers';
@@ -30,6 +29,7 @@ import type { HarvestKind } from './labour/craftPerks';
 import type { VillageQuestPhase } from './quests/villageQuestPhase';
 import type { BlueprintsQuestPhase } from './quests/blueprintsQuestPhase';
 import type { ItemId } from './items/defs/ItemDefs';
+import type { ThrownItemId } from '../systems/DynamiteSystem';
 import type { EquipmentChange } from './items/equipment/EquipmentManager';
 import type { ToolKind, ToolTier } from './items/gathering/toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
@@ -126,7 +126,7 @@ export interface GameEvents {
   stewRefusedOnCooldown: { eater: Player };
 
   /** A thrown explosive left a crawler's hand; `item` is the one spent. */
-  dynamiteUsed: { player: 'Human' | 'Cat'; item: ItemId };
+  dynamiteUsed: { player: 'Human' | 'Cat'; item: ThrownItemId };
 
   /** A crawler's HP entered the low-health band (`CRAWLER_HP_THRESHOLDS.low_health`). */
   healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
@@ -214,23 +214,14 @@ export interface GameEvents {
    */
   questRewardShown: QuestRewardSpec;
 
-  /** A safe-room Bopca was spoken to. `tone` is which character it is addressing. */
-  bopcaGreeted: { tone: 'toHuman' | 'toCat' };
+  /** A safe room's doctor was spoken to. */
+  doctorGreeted: Record<string, never>;
 
   /**
-   * A crawler asked a Bopca for food; the cook timer has just started.
-   *
-   * No sound is wired to this one: the cook sizzle is a loop, so `BopcaSystem`
-   * drives it from its own state rather than from a start event that has no
-   * matching guarantee of a stop.
+   * A safe room's doctor treated the party: `healed` is the hit points restored
+   * across both crawlers, `cured` the ailments removed.
    */
-  bopcaOrderPlaced: { tone: 'toHuman' | 'toCat' };
-
-  /** A Bopca finished cooking and set a dish down on its counter. */
-  bopcaServedFood: { dishId: DishId };
-
-  /** A crawler took a dish off a Bopca's counter and ate it. */
-  bopcaFoodEaten: { dishId: DishId; healed: number };
+  doctorTreated: { healed: number; cured: number };
 
   /** A crawler's evasiveness turned a mob attack into a clean miss. */
   playerDodged: { player: 'Human' | 'Cat' };
@@ -348,8 +339,8 @@ export interface GameEvents {
 
   /**
    * The run ended on the death screen. `fallen` is the crawler whose death or
-   * bleed-out ended it, or null when the floor's collapse clock ran out on a
-   * party still standing; `cause` is the death explanation's key.
+   * bleed-out ended it, or null when neither crawler was down as the screen
+   * rose; `cause` is the death explanation's key.
    */
   playerDied: { fallen: Player | null; cause: string };
 

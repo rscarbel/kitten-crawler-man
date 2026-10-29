@@ -1,8 +1,7 @@
 /**
- * `verify:tactics` sections for the melee brawlers — the troglodyte, the ruins
+ * `verify:tactics` sections for the melee brawlers — the lizardman, the ruins
  * ghoul, the two clowns, the rock golem, the skeleton warrior, the mantis crony
- * and the lion — plus the city elf cultist, a caster whose kite and
- * regroup share this group's wiring, and the creatures of the same families
+ * and the lion — plus the elf, a caster whose kite and regroup share this group's wiring, and the creatures of the same families
  * that must learn nothing.
  *
  * Each check drives the real creature through the real mob loop on the room
@@ -20,11 +19,8 @@ import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { TACTICAL_RETREAT_MAX_SPEED, type Mob } from '../../src/creatures/Mob';
 import { SkeletonLord } from '../../src/creatures/SkeletonLord';
 import { SkeletonWarrior } from '../../src/creatures/SkeletonWarrior';
-import {
-  CITY_ELF_CULTIST_CAST_COOLDOWN_FRAMES,
-  CityElfCultist,
-} from '../../src/creatures/CityElfCultist';
-import { Troglodyte } from '../../src/creatures/Troglodyte';
+import { ELF_CAST_COOLDOWN_FRAMES, Elf } from '../../src/creatures/Elf';
+import { Lizardman } from '../../src/creatures/Lizardman';
 import { RuinsGhoul } from '../../src/creatures/RuinsGhoul';
 import { TallClown } from '../../src/creatures/TallClown';
 import { FatClown } from '../../src/creatures/FatClown';
@@ -95,7 +91,7 @@ const SKIRMISHER: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regroup'
 const CASTER: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 /** Reaches restated from each creature, so a retune of one shows up here as a slow arrival. */
-const TROGLODYTE_REACH_TILES = 3;
+const LIZARDMAN_REACH_TILES = 3;
 const GHOUL_REACH_TILES = 1.2;
 const TALL_CLOWN_REACH_TILES = 2.2;
 const FAT_CLOWN_REACH_TILES = 1.2;
@@ -103,7 +99,7 @@ const ROCK_GOLEM_REACH_TILES = 1.5;
 const SKELETON_WARRIOR_REACH_TILES = 1.15;
 const MANTIS_REACH_TILES = 1.15;
 const LION_REACH_TILES = 1.3;
-const CULTIST_CROWDING_TILES = 3;
+const ELF_CROWDING_TILES = 3;
 
 /** Whole swings restated from each creature, so a riposte that shortens one shows up here. */
 const GHOUL_SWING_FRAMES = 26;
@@ -114,11 +110,11 @@ const LION_SWING_FRAMES = 22;
 
 const MELEE_CASES: readonly MeleeCase[] = [
   {
-    type: 'troglodyte',
-    isExpectedClass: (mob) => mob instanceof Troglodyte,
+    type: 'lizardman',
+    isExpectedClass: (mob) => mob instanceof Lizardman,
     eligibility: BRAWLER,
-    reachTiles: TROGLODYTE_REACH_TILES,
-    helperType: 'troglodyte',
+    reachTiles: LIZARDMAN_REACH_TILES,
+    helperType: 'lizardman',
   },
   {
     type: 'ruins_ghoul',
@@ -177,11 +173,11 @@ const MELEE_CASES: readonly MeleeCase[] = [
     helperType: 'lion',
   },
   {
-    type: 'city_elf_cultist',
-    isExpectedClass: (mob) => mob instanceof CityElfCultist,
+    type: 'elf',
+    isExpectedClass: (mob) => mob instanceof Elf,
     eligibility: CASTER,
-    reachTiles: CULTIST_CROWDING_TILES,
-    helperType: 'city_elf_cultist',
+    reachTiles: ELF_CROWDING_TILES,
+    helperType: 'elf',
     facesQuarryWhileRetreating: true,
   },
 ];
@@ -1040,9 +1036,8 @@ function checkKite(map: GameMap, harness: TacticsHarness, meleeCase: MeleeCase):
       `${meleeCase.type} kite: falls back behind its friend, not straight away (closed ${(-closing / TILE_SIZE).toFixed(2)} tiles, need ${CASTER_KITE_MIN_CLOSING_TILES})`,
     );
     check(
-      trace.shotsWhileRetreating > 0 &&
-        trace.longestShotGapFrames <= CITY_ELF_CULTIST_CAST_COOLDOWN_FRAMES,
-      `${meleeCase.type} kite: keeps casting through it — ${trace.shotsWhileRetreating} of ${trace.shots} bolts cast mid-kite, longest silence ${trace.longestShotGapFrames} frames (its cadence ${CITY_ELF_CULTIST_CAST_COOLDOWN_FRAMES})`,
+      trace.shotsWhileRetreating > 0 && trace.longestShotGapFrames <= ELF_CAST_COOLDOWN_FRAMES,
+      `${meleeCase.type} kite: keeps casting through it — ${trace.shotsWhileRetreating} of ${trace.shots} bolts cast mid-kite, longest silence ${trace.longestShotGapFrames} frames (its cadence ${ELF_CAST_COOLDOWN_FRAMES})`,
     );
   }
 

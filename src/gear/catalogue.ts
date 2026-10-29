@@ -56,6 +56,10 @@ const HAZARD_GOGGLES_BLAST_TILES = 1;
 const DEMOLITION_APRON_REFUND_CHANCE = 0.2;
 const FOREMANS_HARDHAT_HARVEST_BONUS = 1;
 const SILKSPINNER_WEB_CHANCE = 0.2;
+/** Insulated soles: electrified ground lets none of its damage through. */
+const LINEMAN_ELECTRIC_GROUND_SHARE = 0;
+/** The rubber holds acid off long enough that standing in it costs half. */
+const LINEMAN_ACID_GROUND_SHARE = 0.5;
 const POT_LID_BUCKLER_BLOCK_CHANCE = 0.3;
 /** Shots from anywhere in front of him: within sixty degrees either side of where he faces. */
 const POT_LID_BUCKLER_ARC_DEGREES = 120;
@@ -332,9 +336,18 @@ export const GEAR_CATALOGUE = defineItemDefs({
     equipSubSlot: 'Shoes',
     statBonus: { health: 2 },
     cancelsMomentum: true,
+    traits: [
+      {
+        kind: 'groundHazardWard',
+        hazard: 'electricity',
+        damageShare: LINEMAN_ELECTRIC_GROUND_SHARE,
+      },
+      { kind: 'groundHazardWard', hazard: 'acid', damageShare: LINEMAN_ACID_GROUND_SHARE },
+    ],
     description:
-      'Insulated boots off a lineman who stood on the wrong wire. Whatever charges into you ' +
-      'stops dead at the soles.',
+      "Thick black rubber boots pulled off the Current Goblin's feet. A live floor hums " +
+      'harmlessly under the soles, acid struggles to eat through them, and whatever charges ' +
+      'into you stops dead.',
   },
 
   // Human weapons.

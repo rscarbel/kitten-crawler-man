@@ -26,13 +26,15 @@ import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
 import type { CardinalView } from '../src/sprites/facingView.js';
 import {
   DAVE_ROWS,
-  DAVE_TELEPORT_IN_FRAMES,
-  DAVE_TELEPORT_OUT_FRAMES,
   type DaveSpriteState,
-  type DaveTeleportDraw,
   drawDaveSprite,
   DRAWN_ROWS,
 } from '../src/sprites/daveSprite.js';
+import {
+  TELEPORT_IN_FRAMES,
+  TELEPORT_OUT_FRAMES,
+  type TeleportDraw,
+} from '../src/sprites/teleportEffect.js';
 
 installCanvasGlobals();
 
@@ -61,7 +63,7 @@ const TILE_TOP_TILES = 2.25;
 const STILL_IDLE_OFFSET = 0;
 const FACING_RIGHT = 1;
 
-function standing(teleport: DaveTeleportDraw | null): DaveSpriteState {
+function standing(teleport: TeleportDraw | null): DaveSpriteState {
   return {
     walkPhase: 0,
     isWalking: false,
@@ -142,7 +144,7 @@ function stack(bands: readonly Labelled[]): Canvas {
 }
 
 function teleportFrame(
-  direction: DaveTeleportDraw['direction'],
+  direction: TeleportDraw['direction'],
   elapsedFrames: number,
   tile: number,
 ): Canvas {
@@ -157,7 +159,7 @@ function teleportFrame(
   });
 }
 
-function teleportSheet(direction: DaveTeleportDraw['direction'], frames: number): Canvas {
+function teleportSheet(direction: TeleportDraw['direction'], frames: number): Canvas {
   const ticks = Array.from({ length: frames + 1 }, (_, tick) => tick);
   const large = ticks.map((tick) => ({
     label: `${direction} ${tick}`,
@@ -274,8 +276,8 @@ function rowsSheet(): Canvas {
 }
 
 for (const [name, image] of [
-  ['in', teleportSheet('in', DAVE_TELEPORT_IN_FRAMES)],
-  ['out', teleportSheet('out', DAVE_TELEPORT_OUT_FRAMES)],
+  ['in', teleportSheet('in', TELEPORT_IN_FRAMES)],
+  ['out', teleportSheet('out', TELEPORT_OUT_FRAMES)],
   ['rows', rowsSheet()],
 ] as const) {
   console.log(`  wrote ${writePreviewPng(join(OUT_DIR, `${name}.png`), image.toBuffer())}`);
