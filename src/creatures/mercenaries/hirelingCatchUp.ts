@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 /**
  * When a hireling that has fallen behind is put back beside the party.
@@ -8,8 +8,6 @@ import { TILE_SIZE } from '../../core/constants';
  * longer path from. It then stands there for the rest of the floor, off
  * screen, which reads to the player as a hire that vanished.
  */
-
-const UPDATE_FRAMES_PER_SECOND = 60;
 
 /**
  * Past this straight-line distance from the crawler it follows, a hireling the
@@ -24,7 +22,7 @@ const STUCK_SECONDS = 3;
  * before it is put back beside the party, on screen or not: a hire grinding
  * into a wall in plain view is as lost as one out of sight.
  */
-export const HIRELING_STUCK_FRAMES = STUCK_SECONDS * UPDATE_FRAMES_PER_SECOND;
+export const HIRELING_STUCK_FRAMES = STUCK_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * Pixels a tick must carry the hireling to count as progress on the way home.

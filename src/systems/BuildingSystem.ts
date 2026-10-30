@@ -1,5 +1,5 @@
 import type { GameMap } from '../map/GameMap';
-import type { BuildingEntry } from '../map/buildingEntry';
+import { doorstepOf, type BuildingEntry } from '../map/buildingEntry';
 import { TILE_SIZE } from '../core/constants';
 import { tileCoordKey } from '../map/tileIndex';
 
@@ -10,6 +10,7 @@ import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import type { Camera } from '../core/rendering/camera';
 import { buildingDisplayName } from '../map/buildingIds';
+import type { MobilityClass } from '../map/mobility';
 
 /**
  * A door the scene is holding shut, and what to say when the player tries it.
@@ -40,6 +41,9 @@ export function downedPartnerEntryRefusal(
   return partner.isKnockedOut ? `${partnerName} is down. Help them up before going inside.` : null;
 }
 
+/** Who the street in front of a door is checked as walkable for when a declined prompt steps the player back. */
+const STEP_BACK_MOBILITY = 'walker' as const satisfies MobilityClass;
+
 /** Tile center fraction for player position calculation. */
 const TILE_CENTER_FRAC = 0.5;
 /** Arrow size as fraction of tile size. */
@@ -66,6 +70,8 @@ export class BuildingSystem implements GameSystem {
   private doorUnderfoot = NO_DOOR_HERE;
   /** Whether that door was sealed last frame, so a door opening under them is noticed. */
   private sealedHere = false;
+  /** The body standing on the door last frame, which declining the prompt steps back out. */
+  private bodyOnDoor: { x: number; y: number } | null = null;
 
   /** Doorway tile → index in `gameMap.buildingEntries`, so the per-frame on-door
    * test is one lookup rather than a scan of every entrance in town. Every tile
@@ -95,7 +101,7 @@ export class BuildingSystem implements GameSystem {
   }
 
   /**
-   * Leave: shut the menu and leave it shut.
+   * Shut the menu and leave it shut, with the player where they stand.
    *
    * Nothing else is needed to keep it that way — `detect` only acts when the
    * door under the player changes or changes its mind, and standing still on a
@@ -103,6 +109,28 @@ export class BuildingSystem implements GameSystem {
    */
   closeMenu(): void {
     this._menuOpen = false;
+  }
+
+  /**
+   * The prompt's Leave and Escape: shut the menu and step the player back
+   * onto the street in front of the door.
+   *
+   * The doorway tile sits inside the facade's bottom row, and a body whose
+   * feet pass the facade's base is drawn behind it. Arriving never gets that
+   * far, since the prompt halts the world the moment the door is reached; a
+   * player left standing on the doorway after saying no could walk on into it.
+   */
+  declineEntry(): void {
+    const entry = this.menuEntry;
+    const body = this.bodyOnDoor;
+    this.closeMenu();
+    if (entry === null || body === null) return;
+    const street = doorstepOf(entry);
+    const column = Math.floor((body.x + TILE_SIZE * TILE_CENTER_FRAC) / TILE_SIZE);
+    if (!this.gameMap.isWalkable(column, street.y, STEP_BACK_MOBILITY)) {
+      body.x = street.x * TILE_SIZE;
+    }
+    body.y = street.y * TILE_SIZE;
   }
 
   /** The building whose entry prompt is up, or null while it is down. */
@@ -132,6 +160,8 @@ export class BuildingSystem implements GameSystem {
     const idx = this.entryIndexByDoorTile.get(tileCoordKey(tx, ty)) ?? NO_DOOR_HERE;
     const wasOn = this.onDoor;
     this.onDoor = idx !== NO_DOOR_HERE;
+
+    this.bodyOnDoor = this.onDoor ? active : null;
 
     if (!this.onDoor) {
       this._menuOpen = false;

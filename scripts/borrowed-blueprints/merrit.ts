@@ -34,13 +34,13 @@ import {
   MIDGE_INTRO_SECONDS,
   MIDGE_LEAD_CAPTION,
 } from '../../src/systems/briarHollow/blueprints/BlueprintsStepMoments';
+import { WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 
 const GRAIN_TARGET = 100;
 /** Enough frames for a conversation queued behind another to be seen not to open. */
 const WAIT_FRAMES = 30;
-const UPDATES_PER_SECOND = 60;
 /** Midge walks over, or is snapped beside the party at the call's timeout, within this many frames. */
-const CALL_FRAMES = MIDGE_CALL_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
+const CALL_FRAMES = MIDGE_CALL_TIMEOUT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Page turns before a conversation that will not end is called stuck. */
 const READ_LIMIT = 200;
 /**
@@ -293,7 +293,7 @@ export function verifyMerritGrainAndCall(check: Check): void {
     guidance?.kind === 'escort_waypoint',
     `with Midge on the lead the guide leads along the road to Wendell's pasture (${guidance?.kind ?? 'nothing'})`,
   );
-  for (let frame = 0; frame < MIDGE_INTRO_SECONDS * UPDATES_PER_SECOND; frame++) rig.step();
+  for (let frame = 0; frame < MIDGE_INTRO_SECONDS * WORLD_TICKS_PER_SECOND; frame++) rig.step();
   const following = !blueprints.escort.isWaitingAtGate && !blueprints.escort.isOutOfLeadRange;
   check(following, 'Midge is on the lead beside the party');
   check(

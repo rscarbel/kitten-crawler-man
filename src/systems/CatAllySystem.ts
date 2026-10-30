@@ -16,7 +16,19 @@ import type { CompanionDirective } from './CompanionSystem';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { findSpawnTile } from './MercenarySystem';
-import { PartyTrail, trailGroundOn } from './partyTrail';
+import {
+  canWalkTrail,
+  trailGroundOn,
+  type PartyLine,
+  type PartyLineLink,
+  type TrailFollowSwitch,
+  type TrailStance,
+} from './partyTrail';
+
+/** She never walks off on her own; knocked down, she lies where she fell until she gets up. */
+function catAllyTrailStance(cat: CatAlly): TrailStance {
+  return { isAlive: cat.isAlive, standing: !cat.isDowned, retreating: false };
+}
 
 /**
  * Owns one cat ally in a scene: brings her out beside the crawler she
@@ -29,10 +41,10 @@ import { PartyTrail, trailGroundOn } from './partyTrail';
  * as the presence reports it, and is put away whenever her group is on another
  * map.
  */
-export class CatAllySystem implements GameSystem {
+export class CatAllySystem implements GameSystem, TrailFollowSwitch {
   private cat: CatAlly | null = null;
   private leader: CrawlerKind = 'cat';
-  private trail: PartyTrail | null = null;
+  private trailLink: PartyLineLink | null = null;
   private trailMap: GameMap | null = null;
   private owner: Player | null = null;
   private standingOrder: CompanionDirective | null = null;
@@ -70,19 +82,24 @@ export class CatAllySystem implements GameSystem {
   }
 
   /**
-   * Puts her on the followed crawler's own trail at `spacingPx` of walked
-   * distance, or (null) hands her back to her own feet. On the trail she
-   * does not fight.
+   * Puts her in her place on the party's line, or (null) hands her back to
+   * her own feet. On the line she does not fight.
    */
-  setTrailFollow(spacingPx: number | null): void {
-    this.trail =
-      spacingPx === null
-        ? null
-        : new PartyTrail(
-            spacingPx,
-            trailGroundOn(() => this.trailMap),
-          );
-    if (spacingPx === null && this.cat !== null) this.cat.walksTrail = false;
+  setTrailFollow(line: PartyLine | null): void {
+    this.trailLink =
+      line?.join(
+        'cat_ally',
+        trailGroundOn(() => this.trailMap),
+        () => this.trailWalker(),
+      ) ?? null;
+    if (line === null && this.cat !== null) this.cat.walksTrail = false;
+  }
+
+  /** Her, while she is walking the line. */
+  private trailWalker(): CatAlly | null {
+    const cat = this.cat;
+    if (cat?.walksTrail !== true) return null;
+    return canWalkTrail(catAllyTrailStance(cat)) ? cat : null;
   }
 
   /**
@@ -125,8 +142,11 @@ export class CatAllySystem implements GameSystem {
     cat.allMobs = ctx.roster.mobs;
     cat.directive = this.standingOrder;
     this.trailMap = ctx.gameMap;
-    cat.walksTrail = this.trail !== null;
-    this.trail?.tick(owner, cat);
+    // A caged cat stays where her cage holds her: the trail would walk her out through its bars.
+    const trailLink = this.trailLink;
+    const onTrail = trailLink !== null && !cat.caged && canWalkTrail(catAllyTrailStance(cat));
+    cat.walksTrail = onTrail;
+    if (onTrail) trailLink.step(cat, ctx, ctx.roster.grid);
   }
 
   /** The crawler she follows this frame; null when her group is away from this map. */

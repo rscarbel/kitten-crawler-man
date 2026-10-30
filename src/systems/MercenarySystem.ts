@@ -8,7 +8,14 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
-import { PartyTrail, trailGroundOn } from './partyTrail';
+import {
+  canWalkTrail,
+  trailGroundOn,
+  type PartyLine,
+  type PartyLineLink,
+  type TrailFollowSwitch,
+  type TrailStance,
+} from './partyTrail';
 import {
   contractIsCurrent,
   hirelingStartingHp,
@@ -27,6 +34,7 @@ import { hasAiAttention } from './MobUpdateLoop';
 import { companionLeader, type CarriedCompanion } from './companionCarry';
 import { hirelingShouldCatchUp } from '../creatures/mercenaries/hirelingCatchUp';
 import type { Camera } from '../core/rendering/camera';
+import type { TowerErrandLeg } from '../core/quests/missingCatsProgress';
 import {
   WHOLE_PARTY_PRESENT,
   type CompanionRef,
@@ -88,6 +96,11 @@ function leavingDownedToast(name: string): string {
   return `${name} is down — revive them or leave them behind`;
 }
 
+/** A hire never walks off on its own; it leaves the line only by going down. */
+function mercTrailStance(merc: Mercenary): TrailStance {
+  return { isAlive: merc.isAlive, standing: !merc.isDowned, retreating: false };
+}
+
 /**
  * Manager for a hired mercenary (The Barracks Mercenaries' desk),
  * modelled on `DeinonychusSystem`. Each scene — a floor or a building's interior —
@@ -108,7 +121,7 @@ function leavingDownedToast(name: string): string {
  * Leaving the scene goes through `dismissForTransition`, which despawns the
  * mob and leaves the roster to respawn it from the next scene's system.
  */
-export class MercenarySystem implements GameSystem {
+export class MercenarySystem implements GameSystem, TrailFollowSwitch {
   private merc: Mercenary | null = null;
   /** A hireling that has died and is still lying there. */
   private corpse: Mercenary | null = null;
@@ -124,8 +137,8 @@ export class MercenarySystem implements GameSystem {
   private sceneMobs: readonly Mob[] = [];
   /** Whether the player has been warned, for this fall, that leaving loses the hire. */
   private warnedAboutLeaving = false;
-  /** The trail the hire walks behind the following crawler, while a room wants it there. */
-  private trail: PartyTrail | null = null;
+  /** The hire's place on the party's line, while a room wants it there. */
+  private trailLink: PartyLineLink | null = null;
   private trailMap: GameMap | null = null;
 
   /**
@@ -142,24 +155,32 @@ export class MercenarySystem implements GameSystem {
     }) => boolean = () => false,
     private readonly feedback: HirelingFeedback = SILENT_FEEDBACK,
     private readonly presence: PartyPresence = WHOLE_PARTY_PRESENT,
+    /** The leg of the tower errand the party is on, which keeps the hire's small talk to it; null off it. */
+    private readonly towerErrandLeg: () => TowerErrandLeg | null = () => null,
   ) {
     if (levelId !== null) roster.floorLevelId = levelId;
   }
 
   /**
-   * Puts the hire on the following crawler's own trail at `spacingPx` of walked
-   * distance, behind them in a line, or (null) hands it back to its own feet.
-   * On the trail it does not fight, the same as the companion it follows.
+   * Puts the hire in its place on the party's line, or (null) hands it back
+   * to its own feet. On the line it does not fight, the same as the crawler
+   * it follows.
    */
-  setTrailFollow(spacingPx: number | null): void {
-    this.trail =
-      spacingPx === null
-        ? null
-        : new PartyTrail(
-            spacingPx,
-            trailGroundOn(() => this.trailMap),
-          );
-    if (spacingPx === null && this.merc !== null) this.merc.walksTrail = false;
+  setTrailFollow(line: PartyLine | null): void {
+    this.trailLink =
+      line?.join(
+        'hire',
+        trailGroundOn(() => this.trailMap),
+        () => this.trailWalker(),
+      ) ?? null;
+    if (line === null && this.merc !== null) this.merc.walksTrail = false;
+  }
+
+  /** The hire, while it is walking the line: on its feet, alive, and put there. */
+  private trailWalker(): Mercenary | null {
+    const merc = this.merc;
+    if (merc?.walksTrail !== true) return null;
+    return canWalkTrail(mercTrailStance(merc)) ? merc : null;
   }
 
   /**
@@ -212,6 +233,7 @@ export class MercenarySystem implements GameSystem {
     }
     if (!merc?.isAlive || owner === null) return;
 
+    merc.keepToTowerErrand(this.towerErrandLeg());
     merc.owner = owner;
     merc.cat = ctx.cat;
     merc.allMobs = ctx.roster.mobs;
@@ -223,8 +245,9 @@ export class MercenarySystem implements GameSystem {
     merc.allies = this.allies;
     this.catchUpIfLeftBehind(merc, gameMap, ctx.roster.grid, ctx.camera);
     this.trailMap = gameMap;
-    merc.walksTrail = this.trail !== null;
-    this.trail?.tick(partner ?? owner, merc);
+    const trailLink = this.trailLink;
+    merc.walksTrail = trailLink !== null && canWalkTrail(mercTrailStance(merc));
+    if (merc.walksTrail && trailLink !== null) trailLink.step(merc, ctx, ctx.roster.grid);
 
     const heal = merc.tickSurvival();
     if (heal?.kind === 'potion') this.feedback.sound(POTION_SOUND);
@@ -621,6 +644,7 @@ export class MercenarySystem implements GameSystem {
     merc.safeRoomTest = this.isInSafeRoom;
     this.merc = merc;
     roster.add(merc);
+    merc.keepToTowerErrand(this.towerErrandLeg());
     if (!hired.introduced) {
       hired.introduced = true;
       merc.bark('hired');

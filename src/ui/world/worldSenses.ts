@@ -1,12 +1,15 @@
 /**
  * Painters for what only some crawlers perceive: a scent drifting along a
- * trail as soft wisps, and a ward line glowing on its pulse. Ground paint,
- * drawn before the Y-sorted pass so every body stands over it, in world
- * pixels offset by the camera. A ward that hurts is a ground warning, so it
- * is drawn with the red painters in `dangerTelegraph.ts`, never in ward ink.
+ * trail as soft wisps, and a ward line as a spell wall lit on its pulse.
+ * Ground paint, drawn before the Y-sorted pass so every body stands over it,
+ * in world pixels offset by the camera. A ward that hurts is a ground warning,
+ * so its footprint is drawn with the red painters in `dangerTelegraph.ts` and
+ * the wall standing on it (`wardWallArt.ts`) keeps to the same reds; a ward
+ * resting between burns, or out for good, keeps no red at all.
  */
 
 import { drawDangerLane } from '../../sprites/dangerTelegraph';
+import { drawWardWall } from '../../sprites/wardWallArt';
 import { worldPalette } from '../theme/worldInk';
 import type { WorldPx } from '../../core/rendering/camera';
 
@@ -71,7 +74,16 @@ const WISP_CORE_RADIUS_PX = 2.8;
 const WISP_PEAK_ALPHA = 0.9;
 /** Off-screen slack before a wisp is skipped. */
 const WISP_CULL_PX = WISP_HAZE_RADIUS_PX + WISP_SWAY_PX;
-/** Each wisp's breath starts this far round from the one before it, so they never pulse in step. */
+/**
+ * A wisp fades in over this much trail after it rises at the start, and out
+ * over as much before the end, so none pops into or out of sight.
+ */
+const WISP_END_FADE_PX = WISP_SPACING_PX;
+/**
+ * Each wisp's breath starts this far round from the one before it, so they
+ * never pulse in step. A wisp keeps its own number from where it rises to
+ * where it fades, so its breath and sway never jump while it drifts.
+ */
 const WISP_PHASE_STEP = 0.37;
 const MS_PER_SECOND = 1000;
 const TAU = Math.PI * 2;
@@ -98,20 +110,23 @@ export function paintScentTrail(
 ): void {
   if (strength <= 0 || path.length <= 0) return;
   const ink = worldPalette.senses;
-  const drift = ((view.nowMs / MS_PER_SECOND) * WISP_DRIFT_PX_PER_SECOND) % WISP_SPACING_PX;
+  const travelled = (view.nowMs / MS_PER_SECOND) * WISP_DRIFT_PX_PER_SECOND;
+  const newestWisp = Math.floor(travelled / WISP_SPACING_PX);
+  const oldestWisp = Math.ceil((travelled - path.length) / WISP_SPACING_PX);
   const at = { x: 0, y: 0 };
   ctx.save();
-  let wispIndex = 0;
-  for (let distance = drift; distance <= path.length; distance += WISP_SPACING_PX) {
-    wispIndex++;
+  for (let wisp = newestWisp; wisp >= oldestWisp; wisp--) {
+    const distance = travelled - wisp * WISP_SPACING_PX;
     pointAlong(path, distance, at);
-    const phase = wispIndex * WISP_PHASE_STEP;
+    const phase = wisp * WISP_PHASE_STEP;
     const breath = HALF - HALF * Math.cos(TAU * (view.nowMs / WISP_BREATH_PERIOD_MS + phase));
     const sway = Math.sin(TAU * (view.nowMs / WISP_SWAY_PERIOD_MS + phase)) * WISP_SWAY_PX;
     const x = at.x - view.camX + sway;
     const y = at.y - view.camY - breath * WISP_RISE_PX;
     if (offScreen(view, x, y, WISP_CULL_PX)) continue;
-    const alpha = strength * WISP_PEAK_ALPHA * (HALF + HALF * breath);
+    const endFade = Math.min(distance, path.length - distance) / WISP_END_FADE_PX;
+    const presence = Math.max(0, Math.min(1, endFade));
+    const alpha = strength * presence * WISP_PEAK_ALPHA * (HALF + HALF * breath);
     const haze = ctx.createRadialGradient(x, y, 0, x, y, WISP_HAZE_RADIUS_PX);
     haze.addColorStop(0, ink.scentHaze);
     haze.addColorStop(1, ink.scentFade);
@@ -134,16 +149,8 @@ export interface WardSegment {
   readonly to: SensePoint;
 }
 
-/** Half the width of the ground a ward line covers either side of its run. */
-const WARD_HALF_WIDTH_PX = 7;
-const WARD_GLOW_WIDTH_PX = 9;
-const WARD_CORE_WIDTH_PX = 2;
-/** The ward's weakest glow between pulses, as a share of its strongest. */
-const WARD_REST_SHARE = 0.35;
-/** How fast the shimmer runs along a ward line. */
-const WARD_SHIMMER_PX_PER_SECOND = 40;
-const WARD_SHIMMER_DASH_PX = 6;
-const WARD_SHIMMER_GAP_PX = 10;
+/** Half the width of the ground warning either side of a ward's run: narrow enough that the wall standing on it covers its edges. */
+const WARD_HALF_WIDTH_PX = 5;
 /**
  * The fade a harmful ward is drawn at for a crawler who cannot perceive it:
  * enough to say the ground is dangerous, too faint and too steady to show
@@ -151,49 +158,27 @@ const WARD_SHIMMER_GAP_PX = 10;
  */
 export const WARD_UNPERCEIVED_WARNING_FADE = 0.35;
 
-function rest(pulse: number): number {
-  return WARD_REST_SHARE + (1 - WARD_REST_SHARE) * Math.max(0, Math.min(1, pulse));
-}
-
-/** A harmless ward line glowing and shimmering on `pulse` (0 to 1), at `strength` of full. */
-export function paintWardGlow(
+/** A ward that is out and cannot hurt: its floor runes gone cold and a few dead embers, at `strength` of full. */
+export function paintWardDormant(
   ctx: CanvasRenderingContext2D,
   segments: readonly WardSegment[],
-  pulse: number,
+  wardSeed: number,
   strength: number,
   view: SensePaintView,
 ): void {
-  if (strength <= 0) return;
-  const ink = worldPalette.senses;
-  const shimmer = (view.nowMs / MS_PER_SECOND) * WARD_SHIMMER_PX_PER_SECOND;
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.globalAlpha = strength * rest(pulse);
-  for (const segment of segments) {
-    ctx.beginPath();
-    ctx.moveTo(segment.from.x - view.camX, segment.from.y - view.camY);
-    ctx.lineTo(segment.to.x - view.camX, segment.to.y - view.camY);
-    ctx.setLineDash([]);
-    ctx.strokeStyle = ink.wardGlow;
-    ctx.lineWidth = WARD_GLOW_WIDTH_PX;
-    ctx.stroke();
-    ctx.setLineDash([WARD_SHIMMER_DASH_PX, WARD_SHIMMER_GAP_PX]);
-    ctx.lineDashOffset = -shimmer;
-    ctx.strokeStyle = ink.wardCore;
-    ctx.lineWidth = WARD_CORE_WIDTH_PX;
-    ctx.stroke();
-  }
-  ctx.restore();
+  drawWardWall(ctx, segments, wardSeed, { kind: 'dormant', strength }, view);
 }
 
 /**
- * A ward line that hurts, as a ground warning. For a crawler who perceives
- * it, `fade` follows the ward's pulse so its rhythm shows; for one who does
- * not, the caller passes {@link WARD_UNPERCEIVED_WARNING_FADE}.
+ * A ward line that hurts: its red ground warning with the spell wall standing
+ * on it, lit to `fade`. For a crawler who perceives it, `fade` follows the
+ * ward's pulse so its rhythm shows; for one who does not, the caller passes
+ * {@link WARD_UNPERCEIVED_WARNING_FADE}.
  */
 export function paintWardWarning(
   ctx: CanvasRenderingContext2D,
   segments: readonly WardSegment[],
+  wardSeed: number,
   fade: number,
   view: SensePaintView,
 ): void {
@@ -214,11 +199,26 @@ export function paintWardWarning(
       fade,
     );
   }
+  drawWardWall(ctx, segments, wardSeed, { kind: 'lit', intensity: fade }, view);
 }
 
-/** The fade a harmful ward line shows its perceiver at, on `pulse`. */
-export function wardWarningFade(pulse: number, strength: number): number {
-  return strength * rest(pulse);
+/**
+ * A harmful ward as its perceiver sees it on `pulse` (0 to 1), at `strength`
+ * of full. At rest, between burns, it is only a few sparks on its line and
+ * no red at all, since the floor is safe to cross then; the red warning and
+ * the curtain rise with the pulse and the sparks give way to them.
+ */
+export function paintWardPerceived(
+  ctx: CanvasRenderingContext2D,
+  segments: readonly WardSegment[],
+  wardSeed: number,
+  pulse: number,
+  strength: number,
+  view: SensePaintView,
+): void {
+  const lit = Math.max(0, Math.min(1, pulse));
+  drawWardWall(ctx, segments, wardSeed, { kind: 'resting', strength: strength * (1 - lit) }, view);
+  paintWardWarning(ctx, segments, wardSeed, strength * lit, view);
 }
 
 /** The cue ring's ground ellipse round the feet: wide and flat, as if laid on the floor. */

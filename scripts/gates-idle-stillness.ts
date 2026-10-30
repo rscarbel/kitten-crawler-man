@@ -28,7 +28,7 @@ import { createCanvas, type Canvas } from 'canvas';
 import { paintFigureCell } from './figureSheet.js';
 import { nothingMeasuredFailures, reportFigureGates } from './figureGates.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { TILE_SIZE } from '../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { undressedHumanFigure, HUMAN_ROW_TABLE } from '../src/sprites/art/humanFigure.js';
 import { activeHumanLook } from '../src/sprites/humanSprite.js';
@@ -57,11 +57,7 @@ import {
   EARTH_ELEMENTAL_FIGURES,
   earthElementalStateName,
 } from '../src/sprites/art/earthElementalFigure.js';
-import {
-  heldLength,
-  idleFrameAtSeconds,
-  TICKS_PER_SECOND,
-} from '../src/sprites/art/human/timing.js';
+import { heldLength, idleFrameAtSeconds } from '../src/sprites/art/human/timing.js';
 import { townCastLoopFrame } from '../src/sprites/townCastSprite.js';
 import {
   GOBLIN_ARMED_ARCHETYPES,
@@ -118,7 +114,7 @@ const PX_DECIMALS = 2;
 /** Wide enough for the longest subject label, so the report's numbers line up. */
 const REPORT_LABEL_WIDTH = 52;
 /** The sampling step through runtime clocks: the game's own tick. */
-const CLOCK_STEP_SECONDS = 1 / TICKS_PER_SECOND;
+const CLOCK_STEP_SECONDS = 1 / WORLD_TICKS_PER_SECOND;
 /** How long a runtime clock is followed to find a breath's length: several breaths. */
 const CLOCK_SPAN_SECONDS = 20;
 
@@ -425,7 +421,7 @@ function gateBreathLength(): void {
     }
   }
   for (const state of ['idle', 'idle_side', 'idle_away'] as const) {
-    const seconds = heldLength(HUMAN_ROW_TABLE[state].frameTicks) / TICKS_PER_SECOND;
+    const seconds = heldLength(HUMAN_ROW_TABLE[state].frameTicks) / WORLD_TICKS_PER_SECOND;
     if (seconds < MIN_BREATH_SECONDS) {
       fail('I3', `human.${state} breathes every ${px(seconds)}s (at least ${MIN_BREATH_SECONDS}s)`);
     }

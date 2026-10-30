@@ -19,14 +19,14 @@ import type { SoundId } from '../audio/sounds';
 import { type CanvasSurface, surfaceContext } from '../core/rendering/canvasSurface';
 import { worldPalette } from '../ui/theme/worldInk';
 import { clamp01, easeInOut, easeOut, lerp, ramp } from './art/bipedArt';
-import { TICKS_PER_SECOND } from './art/human/timing';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 // ── Timing ───────────────────────────────────────────────────────────────────
 
 const TELEPORT_IN_SECONDS = 1.1;
 const TELEPORT_OUT_SECONDS = 0.8;
-export const TELEPORT_IN_FRAMES = Math.round(TELEPORT_IN_SECONDS * TICKS_PER_SECOND);
-export const TELEPORT_OUT_FRAMES = Math.round(TELEPORT_OUT_SECONDS * TICKS_PER_SECOND);
+export const TELEPORT_IN_FRAMES = Math.round(TELEPORT_IN_SECONDS * WORLD_TICKS_PER_SECOND);
+export const TELEPORT_OUT_FRAMES = Math.round(TELEPORT_OUT_SECONDS * WORLD_TICKS_PER_SECOND);
 
 /** One teleport on one draw: which way the figure is going, and how far into it. */
 export interface TeleportDraw {

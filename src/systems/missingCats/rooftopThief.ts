@@ -217,7 +217,8 @@ export interface ThiefPose {
   readonly x: number;
   readonly y: number;
   readonly heading: number;
-  readonly flap: number;
+  /** Whole wingbeats flown so far; the figure loops on it. */
+  readonly wingbeat: number;
   readonly carrying: boolean;
 }
 
@@ -262,7 +263,7 @@ export class RooftopThief {
       x: this.x,
       y: this.y,
       heading: this.heading,
-      flap: Math.sin(this.flapPhase),
+      wingbeat: this.flapPhase / FULL_TURN,
       carrying: !this.catOnStep && kind !== 'swooping',
     };
   }

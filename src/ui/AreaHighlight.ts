@@ -1,5 +1,5 @@
 import type { Rect } from './core/geom';
-import { roundRectPath } from './widgets/paint';
+import { roundRectPath } from './widgets/roundRect';
 import { withAlpha } from './theme/color';
 import { worldPalette } from './theme/worldInk';
 import { TILE_SIZE } from '../core/constants';

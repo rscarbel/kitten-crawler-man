@@ -28,19 +28,27 @@ import type { PrisonDifficultyTuning } from '../stealthKeySnatch/prisonTuning';
 
 /**
  * The guards on watch. Tier 0 stands at every difficulty, 1 from normal, 2 on
- * hard only, as in the prison.
+ * hard only, as in the prison. Two stand at every difficulty, so the hall is
+ * never crossed by watching one back alone.
  *
  * - **hall**: walks the hall's middle row, east and back, turning each way
  *   through south so its look never swings up over the cellar stair.
+ * - **landing**: walks the column west of the stair up, looking east over the
+ *   stair's landing from its south end and over the bunks from its north, so
+ *   the stair is reached only while it walks away north.
  * - **stair**: walks the east side from the hearth down to the casks, the
  *   last stretch before the stair up.
  * - **muster**: stands under the muster board looking down the west side.
  */
-const GATEHOUSE_GUARDS: ReadonlyArray<StealthGuardDef> = [
+const GATEHOUSE_GUARDS = [
   { id: 'gatehouse-hall', tier: 0, script: 'a >b p50 fS p30 fW >a p50 fS p30' },
+  { id: 'gatehouse-landing', tier: 0, script: 'g fE p90 fN >f fE p60 fS >g' },
   { id: 'gatehouse-stair', tier: 1, script: 'c >d p60 >c p60' },
   { id: 'gatehouse-muster', tier: 1, script: 'e fS s50/150 p60' },
-];
+] as const satisfies ReadonlyArray<StealthGuardDef>;
+
+/** Which guard each of the gatehouse's posts is. */
+export type GatehouseGuardId = (typeof GATEHOUSE_GUARDS)[number]['id'];
 
 const GATEHOUSE_LAYOUT: StealthLayout = {
   id: 'tower_gatehouse',
@@ -62,7 +70,7 @@ export const GATEHOUSE_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTunin
     patrolSpeedPxPerFrame: 0.9,
     turnDegPerFrame: 2.5,
     spotlight: { radiusTiles: 0, speedPxPerFrame: 0 },
-    suspicion: { coneFillFrames: 60, coneEdgeWeight: 0.35, spotFillFrames: 1, drainFrames: 90 },
+    suspicion: { kind: 'on_sight', alertFillFrames: 60, coneEdgeWeight: 0.35, drainFrames: 90 },
   },
   normal: {
     guardTier: 1,
@@ -71,7 +79,7 @@ export const GATEHOUSE_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTunin
     patrolSpeedPxPerFrame: 1,
     turnDegPerFrame: 3,
     spotlight: { radiusTiles: 0, speedPxPerFrame: 0 },
-    suspicion: { coneFillFrames: 45, coneEdgeWeight: 0.35, spotFillFrames: 1, drainFrames: 120 },
+    suspicion: { kind: 'on_sight', alertFillFrames: 45, coneEdgeWeight: 0.35, drainFrames: 120 },
   },
   hard: {
     guardTier: 2,
@@ -80,12 +88,12 @@ export const GATEHOUSE_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTunin
     patrolSpeedPxPerFrame: 1.1,
     turnDegPerFrame: 3.5,
     spotlight: { radiusTiles: 0, speedPxPerFrame: 0 },
-    suspicion: { coneFillFrames: 34, coneEdgeWeight: 0.4, spotFillFrames: 1, drainFrames: 150 },
+    suspicion: { kind: 'on_sight', alertFillFrames: 34, coneEdgeWeight: 0.4, drainFrames: 150 },
   },
 };
 
 /** The gatehouse's floor as its guards see it: walls, the furniture that stops a look, and open floor. */
-function gatehouseStealthFloor(conditions: TowerConditions): StealthFloor {
+export function gatehouseStealthFloor(conditions: TowerConditions): StealthFloor {
   const build = buildTowerStorey('gatehouse', conditions);
   const { width, height } = build.plan;
   const tiles = new Uint8Array(width * height).fill(PRISON_TILE.wall);

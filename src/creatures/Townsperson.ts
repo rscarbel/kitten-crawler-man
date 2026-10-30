@@ -23,9 +23,11 @@ import {
   pickCitizenFigure,
   type CitizenAction,
   type CitizenFigure,
+  type GaitRow,
 } from './citizenFigure';
 import {
   drawTownspersonBody,
+  townspersonHurryGait,
   townspersonSpeechStyle,
   townspersonWalkCyclePx,
   townspersonWalkFrames,
@@ -48,6 +50,7 @@ import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
+import type { CutscenePace } from '../systems/cutscene/cutsceneSteps';
 
 /**
  * Draw size of a citizen in pixels before the humanoid scale-up — full-tile
@@ -68,6 +71,16 @@ const FACING_DEADZONE = 0.05;
  */
 const FACING_TURN_MARGIN = 1.35;
 const FACING_DWELL_FRAMES = 10;
+
+/**
+ * Ticks one cycle of a hurried gait takes: a run row plays as a jog, and a
+ * walk row no quicker than a brisk walk, past which a short stride turns
+ * into a scurry.
+ */
+const HURRY_TICKS_PER_CYCLE: Readonly<Record<GaitRow['action'], number>> = {
+  walk: 50,
+  run: 40,
+};
 
 /** `phase` is a 0–1 cycle fraction; the sprite wrapper's walk phase is radians. */
 const TWO_PI = Math.PI * 2;
@@ -297,18 +310,39 @@ export class Townsperson implements WanderState {
    */
   scripted = false;
 
-  /** One tick of a cutscene's walk along a unit heading, at this citizen's own pace; null stands them still. */
-  walkScripted(heading: { readonly dx: number; readonly dy: number } | null): void {
+  /** The row a moving citizen is drawn in: a cutscene's hurry can put a Hawkfolk into a run. */
+  private movingAction: GaitRow['action'] = 'walk';
+
+  private get hurryGait(): GaitRow {
+    return townspersonHurryGait(this.wornBody, this.cycleDistanceDrawSize);
+  }
+
+  /** How far one tick of a hurried scripted walk carries this citizen; never slower than their own pace. */
+  get hurrySpeed(): number {
+    const gait = this.hurryGait;
+    return Math.max(this.speed, gait.cyclePx / HURRY_TICKS_PER_CYCLE[gait.action]);
+  }
+
+  /** One tick of a cutscene's walk along a unit heading at `pace`; null stands them still. */
+  walkScripted(
+    heading: { readonly dx: number; readonly dy: number } | null,
+    pace: CutscenePace,
+  ): void {
     if (heading === null) {
       this.moving = false;
       return;
     }
-    this.x += heading.dx * this.speed;
-    this.y += heading.dy * this.speed;
+    const hurrying = pace === 'hurry';
+    const gait = hurrying ? this.hurryGait : null;
+    const stepPx = hurrying ? this.hurrySpeed : this.speed;
+    const cyclePx = gait?.cyclePx ?? this.cycleDistance;
+    const rowFrames = gait?.frames ?? this.walkFrames;
+    this.x += heading.dx * stepPx;
+    this.y += heading.dy * stepPx;
     this.moving = true;
+    this.movingAction = gait?.action ?? 'walk';
     this.framesSinceTurn++;
-    this.phase =
-      (this.phase + gaitCyclesForDistance(this.speed, this.cycleDistance, this.walkFrames)) % 1;
+    this.phase = (this.phase + gaitCyclesForDistance(stepPx, cyclePx, rowFrames)) % 1;
     this.updateFacing(heading.dx, heading.dy);
   }
 
@@ -333,6 +367,7 @@ export class Townsperson implements WanderState {
   update(): void {
     this.followPurgedRecovery();
     if (this.held || this.scripted) return;
+    this.movingAction = 'walk';
     stepWander(this, this.wander, sharedWanderStep);
     this.moving = sharedWanderStep.moving;
     this.framesSinceTurn++;
@@ -435,7 +470,11 @@ export class Townsperson implements WanderState {
     const facing = this.facingXY();
     const routinePose = this.shownRoutinePose;
     const standingAction: CitizenAction = routinePose === null ? 'idle' : 'work';
-    const action = this.held ? 'talk' : this.moving ? 'walk' : standingAction;
+    const action: CitizenAction = this.held
+      ? 'talk'
+      : this.moving
+        ? this.movingAction
+        : standingAction;
     this.drawnRow = drawTownspersonBody(
       ctx,
       this.wornBody,

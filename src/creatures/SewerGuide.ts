@@ -10,6 +10,7 @@ import type { BarkLine, NonEmpty } from '../dialog/line';
 import { pickLine } from '../dialog/line';
 import type { TilePoint } from '../map/town/townPlan';
 import { itemAt } from '../map/sewer/sewerPlan';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * How the guide keeps ahead of the party: it walks on to its next stop only
@@ -41,7 +42,6 @@ const SEWER_GUIDE_LEAD_BAND: SewerGuideLeadBand = {
 };
 
 const MINIMUM_LIVE_HP = 1;
-const UPDATES_PER_SECOND = 60;
 const HALF = 0.5;
 /** Close enough to a stop to count as standing on it, in pixels. */
 const STOP_REACHED_PX = 4;
@@ -72,7 +72,7 @@ const GUIDE_BUBBLE_STYLE: TimedBubbleStyle = {
 };
 
 function seconds(value: number): number {
-  return Math.round(value * UPDATES_PER_SECOND);
+  return Math.round(value * WORLD_TICKS_PER_SECOND);
 }
 
 /** What the guide asks of the place it is guiding through. */

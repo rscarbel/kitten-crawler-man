@@ -11,7 +11,7 @@
  * Run: npx tsx scripts/verify-harvest.ts
  */
 
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import {
   harvestAward,
   harvestIntervalTicks,
@@ -79,7 +79,6 @@ function section(name: string): void {
 
 const EPSILON = 1e-9;
 const PERCENT_MULTIPLIER = 100;
-const TICKS_PER_SECOND = 60;
 const WORLD_SEED = 424242;
 const TILE_CENTRE = 0.5;
 const NO_CAPACITY_BONUS = 0;
@@ -147,8 +146,8 @@ const EXPECTED_SNARE_KIT = 0.05;
 const EXPECTED_THRALL_XP_SHARE = 0.25;
 const EXPECTED_THRALL_LIFETIME_SECONDS = 45;
 const EXPECTED_THRALL_COOLDOWN_SECONDS = 60;
-const THRALL_LIFETIME_TICKS = EXPECTED_THRALL_LIFETIME_SECONDS * TICKS_PER_SECOND;
-const THRALL_COOLDOWN_TICKS = EXPECTED_THRALL_COOLDOWN_SECONDS * TICKS_PER_SECOND;
+const THRALL_LIFETIME_TICKS = EXPECTED_THRALL_LIFETIME_SECONDS * WORLD_TICKS_PER_SECOND;
+const THRALL_COOLDOWN_TICKS = EXPECTED_THRALL_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 const EXPECTED_TREE_HARVESTS = { min: 5, max: 15 } as const;
 const EXPECTED_ROCK_HARVESTS = { min: 20, max: 50 } as const;
 
@@ -289,8 +288,8 @@ const NO_TOOL_SPEED_BONUS = 0;
 
 section('Speed: interval at the ten speed levels, basic tool');
 for (const [level, factor] of EXPECTED_SPEED) {
-  const wood = harvestIntervalTicks('wood', level, NO_TOOL_SPEED_BONUS) / TICKS_PER_SECOND;
-  const stone = harvestIntervalTicks('stone', level, NO_TOOL_SPEED_BONUS) / TICKS_PER_SECOND;
+  const wood = harvestIntervalTicks('wood', level, NO_TOOL_SPEED_BONUS) / WORLD_TICKS_PER_SECOND;
+  const stone = harvestIntervalTicks('stone', level, NO_TOOL_SPEED_BONUS) / WORLD_TICKS_PER_SECOND;
   check(
     Math.abs(wood - EXPECTED_WOOD_BASE_SECONDS * factor) < EPSILON &&
       Math.abs(stone - EXPECTED_STONE_BASE_SECONDS * factor) < EPSILON,
@@ -304,7 +303,7 @@ section('Speed: a tool’s speed bonus stacks additively with Resourcing’s own
   const skillFactor = EXPECTED_SPEED.get(level) ?? 1;
   for (const [tier, def] of TOOL_TIERS.axe.entries()) {
     const expectedFactor = skillFactor - def.speedBonus;
-    const seconds = harvestIntervalTicks('wood', level, def.speedBonus) / TICKS_PER_SECOND;
+    const seconds = harvestIntervalTicks('wood', level, def.speedBonus) / WORLD_TICKS_PER_SECOND;
     check(
       Math.abs(seconds - EXPECTED_WOOD_BASE_SECONDS * expectedFactor) < EPSILON,
       `L${level} ${def.name} (tier ${tier}): ${expectedFactor.toFixed(SHARE_DIGITS)}× base (${seconds.toFixed(SHARE_DIGITS)} s)`,
@@ -491,7 +490,7 @@ interface TileRef {
 /** Ticks the rig's thralls until the first stands still, and returns where; null if it never does. */
 function tickUntilStill(rig: Rig): { x: number; y: number; node: TileRef | null } | null {
   let previous = rig.thralls.snapshot[0];
-  for (let tick = 0; tick < TICKS_PER_SECOND * GLIDE_WAIT_SECONDS; tick++) {
+  for (let tick = 0; tick < WORLD_TICKS_PER_SECOND * GLIDE_WAIT_SECONDS; tick++) {
     rig.thralls.update();
     const view = rig.thralls.snapshot[0];
     if (view.x === previous.x && view.y === previous.y) return view;
@@ -859,7 +858,7 @@ const NODE_LIFE_TICK_LIMIT_MULTIPLE = 3;
 
 section('Node life: speed upgrades never shorten a node’s wall-clock life');
 {
-  const baseIntervalTicks = EXPECTED_STONE_BASE_SECONDS * TICKS_PER_SECOND;
+  const baseIntervalTicks = EXPECTED_STONE_BASE_SECONDS * WORLD_TICKS_PER_SECOND;
   const expectedLifeTicks = NODE_LIFE_CAPACITY * baseIntervalTicks;
   for (const [level, tier] of NODE_LIFE_CASES) {
     const rig = makeRig();
@@ -1061,9 +1060,9 @@ section('Skills are never shared: each crawler harvests at their own level');
 
   check(rig.harvest.tryStart(rig.human), 'The human starts chopping');
   const catBefore = JSON.stringify(rig.cat.craftSkills.snapshot());
-  const human = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  const human = nextAward(rig, rig.human, 'wood', WORLD_TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
   const humanExpectedTicks = Math.ceil(
-    TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS * (EXPECTED_SPEED.get(FAST_LEVEL) ?? 0),
+    WORLD_TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS * (EXPECTED_SPEED.get(FAST_LEVEL) ?? 0),
   );
   check(
     human !== null && human.ticks === humanExpectedTicks,
@@ -1080,8 +1079,8 @@ section('Skills are never shared: each crawler harvests at their own level');
   rig.harvest.stop(rig.human);
 
   check(rig.harvest.tryStart(rig.cat), 'The cat starts chopping');
-  const cat = nextAward(rig, rig.cat, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
-  const catExpectedTicks = TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS;
+  const cat = nextAward(rig, rig.cat, 'wood', WORLD_TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  const catExpectedTicks = WORLD_TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS;
   check(
     cat !== null && cat.ticks === catExpectedTicks,
     `The cat at L1 lands her first wood after ${cat?.ticks ?? 'no'} ticks (expected ${catExpectedTicks})`,
@@ -1102,7 +1101,7 @@ section('XP: the top-tier tool trains four times as fast as the basic one');
     stand(rig.human, takeTree());
     rig.harvest.tryStart(rig.human);
     const before = rig.human.craftSkills.getXp('resourcing');
-    nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+    nextAward(rig, rig.human, 'wood', WORLD_TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
     rig.harvest.stop(rig.human);
     return rig.human.craftSkills.getXp('resourcing') - before;
   };
@@ -1139,7 +1138,7 @@ section('Channel: moving and a hostile each end it; a packed bag does not');
   });
   for (const index of emptied) slots[index] = { ...filler, quantity: 1 };
   rig.harvest.tryStart(rig.human);
-  const packed = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  const packed = nextAward(rig, rig.human, 'wood', WORLD_TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
   check(packed !== null, 'a packed bag still takes the award');
   check(rig.human.inventory.bag.pageCount > 1, 'on a page the bag grew for it');
   rig.harvest.stop(rig.human);
@@ -1324,7 +1323,7 @@ section('Thralls: a quarter of the XP, to the summoner alone');
   const woodBefore = woodHeld(rig.human);
   rig.thralls.trySummon(rig.human, 'axe');
   let gained = -1;
-  for (let tick = 0; tick < TICKS_PER_SECOND * GLIDE_WAIT_SECONDS && gained < 0; tick++) {
+  for (let tick = 0; tick < WORLD_TICKS_PER_SECOND * GLIDE_WAIT_SECONDS && gained < 0; tick++) {
     rig.thralls.update();
     if (woodHeld(rig.human) !== woodBefore) {
       gained = rig.human.craftSkills.getXp('resourcing') - xpBefore;
@@ -1383,7 +1382,11 @@ section('Thralls glide straight, through whatever is in the way');
     }
     const path: GlidePoint[] = [first];
     let reachedTarget = false;
-    for (let tick = 0; tick < TICKS_PER_SECOND * GLIDE_WAIT_SECONDS && !reachedTarget; tick++) {
+    for (
+      let tick = 0;
+      tick < WORLD_TICKS_PER_SECOND * GLIDE_WAIT_SECONDS && !reachedTarget;
+      tick++
+    ) {
       rig.thralls.update();
       const view = rig.thralls.snapshot[0];
       const previous = path[path.length - 1];

@@ -39,7 +39,8 @@ import type { TypeStyle } from '../../theme/tokens';
 import type { TextRole } from '../../theme/skins';
 import { button } from '../../widgets/button';
 import { keycap, keycapSize } from '../../widgets/keycap';
-import { fillRounded, roundRectPath, strokeRounded } from '../../widgets/paint';
+import { fillRounded, strokeRounded } from '../../widgets/paint';
+import { roundRectPath } from '../../widgets/roundRect';
 import { lineHeightOf, measureText, measureTextHeight, text } from '../../widgets/text';
 import { computeWheelLayout, type WheelDisc, type WheelLayout } from './wheelLayout';
 

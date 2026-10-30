@@ -15,7 +15,9 @@
  *
  * What a crawler is carrying (the feather, a tin of tuna) is never mirrored
  * here: the bags are the one source of truth for that, and the quest reads
- * them every time.
+ * them every time. The kitchen's key ring and note are the exception: they
+ * exist only for {@link KitchenStage}, which says where each one is, and the
+ * kitchen makes the bags and the dumbwaiter agree with it.
  */
 
 import { isRecord, parseEvery } from '../util/guards';
@@ -113,6 +115,55 @@ export const CLUE_SITE_CLUES = {
   readonly [MissingCatsClueId, ...MissingCatsClueId[]]
 >;
 
+/**
+ * The human's kitchen chapter, one step at a time, in the only order it can be
+ * played. The kitchen's fittings, the Journal and the human's remarks all read
+ * this one value, and the kitchen moves it on by exactly one step per deed,
+ * so no press can skip a step or do two at once.
+ *
+ * - `key_ring_in_dumbwaiter`: the key ring Belle sent down waits in the dumbwaiter's foot.
+ * - `key_ring_in_hand`: the human has it, and the larder is still locked.
+ * - `larder_open`: the larder is unlocked and the key ring spent; the bell is next.
+ * - `bell_rung`: the bell has been rung, and the answer is on its way down.
+ * - `note_in_dumbwaiter`: the cellmate's note waits in the dumbwaiter's foot.
+ * - `note_in_hand`: the human has read it, and a tin of tuna is what goes up.
+ * - `tuna_sent`: the tuna has gone up, and the cellmate is fed.
+ */
+export const KITCHEN_STAGES = [
+  'key_ring_in_dumbwaiter',
+  'key_ring_in_hand',
+  'larder_open',
+  'bell_rung',
+  'note_in_dumbwaiter',
+  'note_in_hand',
+  'tuna_sent',
+] as const;
+export type KitchenStage = (typeof KITCHEN_STAGES)[number];
+
+/** The step after `stage`, or null once the cellmate is fed. */
+export function nextKitchenStage(stage: KitchenStage): KitchenStage | null {
+  const next = KITCHEN_STAGES.indexOf(stage) + 1;
+  return next < KITCHEN_STAGES.length ? KITCHEN_STAGES[next] : null;
+}
+
+/** Whether the kitchen has reached `stage`, or gone past it. */
+export function kitchenStageReached(
+  progress: Pick<MissingCatsProgress, 'kitchen'>,
+  stage: KitchenStage,
+): boolean {
+  return KITCHEN_STAGES.indexOf(progress.kitchen) >= KITCHEN_STAGES.indexOf(stage);
+}
+
+/** Whether the larder stands unlocked: from the key ring turning in it, for good. */
+export function larderUnlocked(progress: Pick<MissingCatsProgress, 'kitchen'>): boolean {
+  return kitchenStageReached(progress, 'larder_open');
+}
+
+/** Whether Pumpkin has had her tuna. */
+export function cellmateFed(progress: Pick<MissingCatsProgress, 'kitchen'>): boolean {
+  return progress.kitchen === 'tuna_sent';
+}
+
 /** How many waves come up the cistern into the lodge cellar before it is held. */
 export const LODGE_CELLAR_WAVE_COUNT = 3;
 
@@ -121,6 +172,12 @@ export const STAKEOUT_CAT: TownCatId = 'taloncrest_general_store_cat';
 
 export interface MissingCatsProgress {
   phase: MissingCatsPhase;
+  /**
+   * The regular on the bench outside the Sleeping Cat Inn has told the party
+   * the innkeeper's cat is missing, which points the Journal at the innkeeper
+   * before the questline has started.
+   */
+  innWallSitterHeard: boolean;
   /** The investigation's finds. Order of finding is free; every one is needed. */
   readonly clues: Set<MissingCatsClueId>;
   /** Sgt. Kessler has shown the fur found at the cellar lid, so the lid is open to the party. */
@@ -135,22 +192,28 @@ export interface MissingCatsProgress {
   avielChoice: AvielChoice | null;
   /** Dave has been asked for help with the bait plan and said no. */
   daveRefusedBait: boolean;
+  /** The thief has seen the party watching from hiding during the stakeout, and the party has talked it through. */
+  thiefSpottedParty: boolean;
   /** The cellar elf has agreed to meet the human at the storm-drain grate on the Civic Terrace. */
   elfWaitsAtGrate: boolean;
   /** The town cats Belle let out of their cages; none of them is bound in the circle. */
   readonly catsFreed: Set<TownCatId>;
   /** The ward conduit's sluice is shut, so the archive's wards pulse instead of burning solid. */
   conduitShut: boolean;
+  /** Belle and Pumpkin have talked through how each of the archive's wards is passed. */
+  archiveWardsExplained: boolean;
+  /** Something has weighed down the archive's ward plate, which puts the west ward out for good. */
+  westWardOut: boolean;
   /** The archivist's key ring has been sent down the dumbwaiter. */
   keyRingSent: boolean;
-  /** Pumpkin's tin of tuna has been sent up the dumbwaiter. */
-  tunaSent: boolean;
+  /** Where the human's kitchen chapter stands. */
+  kitchen: KitchenStage;
+  /** Belle has woken in the cattery and talked with the cat in the next cage. */
+  cellmateMet: boolean;
   /** Belle has worked her own cage's latch open in the cattery. */
   crawlerCatUncaged: boolean;
   /** Belle has let her cellmate out, and the stray goes with her. */
   cellmateFreed: boolean;
-  /** The kitchen's larder door has been unlocked with the archivist's key ring. */
-  larderOpened: boolean;
   /** The bell storey's counterweight has dropped, raising the kitchen's portcullis. */
   portcullisRaised: boolean;
 }
@@ -158,19 +221,23 @@ export interface MissingCatsProgress {
 export function createMissingCatsProgress(): MissingCatsProgress {
   return {
     phase: 'not_started',
+    innWallSitterHeard: false,
     clues: new Set(),
     kesslerShowedFur: false,
     cellarWavesHeld: 0,
     avielChoice: null,
     daveRefusedBait: false,
+    thiefSpottedParty: false,
     elfWaitsAtGrate: false,
     catsFreed: new Set(),
     conduitShut: false,
+    archiveWardsExplained: false,
+    westWardOut: false,
     keyRingSent: false,
-    tunaSent: false,
+    kitchen: 'key_ring_in_dumbwaiter',
+    cellmateMet: false,
     crawlerCatUncaged: false,
     cellmateFreed: false,
-    larderOpened: false,
     portcullisRaised: false,
   };
 }
@@ -186,6 +253,18 @@ export function phaseReached(
   phase: MissingCatsPhase,
 ): boolean {
   return phaseIndex(progress.phase) >= phaseIndex(phase);
+}
+
+/**
+ * Whether Belle's own cattery cage stands open: once she has worked its latch,
+ * and for good once her cattery chapter is over, since the keeper shuts her
+ * back in only during it. The cage as built, its latch and its hold on her
+ * all read this, so they cannot disagree.
+ */
+export function crawlerCatCageOpen(
+  progress: Pick<MissingCatsProgress, 'phase' | 'crawlerCatUncaged'>,
+): boolean {
+  return progress.crawlerCatUncaged || phaseReached(progress, 'seeking_entry');
 }
 
 /** Whether every clue of `site` has been found. */
@@ -226,6 +305,19 @@ export function missingTownCats(
 }
 
 /**
+ * Whether `cat` is in her own home's room right now: not taken, and not out
+ * on the General Store's step, where Penny sits at dusk through the stakeout
+ * as the thief's bait.
+ */
+export function townCatIndoors(
+  progress: Pick<MissingCatsProgress, 'phase'>,
+  cat: TownCatId,
+): boolean {
+  if (missingTownCats(progress).includes(cat)) return false;
+  return !(cat === STAKEOUT_CAT && progress.phase === 'stakeout');
+}
+
+/**
  * Whether Sydney's desk lends the human a hire for the tower at no fee: from
  * the cellar elf's offer of the drain until the party is whole again inside.
  */
@@ -237,6 +329,28 @@ export function towerLoanOffered(
     phaseReached(progress, 'seeking_entry') &&
     !phaseReached(progress, 'ascent')
   );
+}
+
+/**
+ * The two legs of the tower errand a hire walks with the party: `cat_taken`
+ * while Belle is held in the tower and the human goes after her, and
+ * `party_whole` once she has rejoined and the climb is to the Warden.
+ */
+export type TowerErrandLeg = 'cat_taken' | 'party_whole';
+
+/**
+ * Which leg of the tower errand a hire walking with the party is on: from the
+ * cellar elf's offer of the drain until the Warden falls, null outside it.
+ */
+export function towerErrandLeg(
+  progress: Pick<MissingCatsProgress, 'phase' | 'elfWaitsAtGrate'>,
+): TowerErrandLeg | null {
+  const errandUnderWay =
+    progress.elfWaitsAtGrate &&
+    phaseReached(progress, 'seeking_entry') &&
+    !phaseReached(progress, 'aftermath');
+  if (!errandUnderWay) return null;
+  return phaseReached(progress, 'ascent') ? 'party_whole' : 'cat_taken';
 }
 
 /**
@@ -279,19 +393,23 @@ export const TOWN_CAT_COUNT = TOWN_CAT_IDS.length;
 
 export interface MissingCatsProgressCheckpoint {
   readonly phase: MissingCatsPhase;
+  readonly innWallSitterHeard: boolean;
   readonly clues: readonly MissingCatsClueId[];
   readonly kesslerShowedFur: boolean;
   readonly cellarWavesHeld: number;
   readonly avielChoice: AvielChoice | null;
   readonly daveRefusedBait: boolean;
+  readonly thiefSpottedParty: boolean;
   readonly elfWaitsAtGrate: boolean;
   readonly catsFreed: readonly TownCatId[];
   readonly conduitShut: boolean;
+  readonly archiveWardsExplained: boolean;
+  readonly westWardOut: boolean;
   readonly keyRingSent: boolean;
-  readonly tunaSent: boolean;
+  readonly kitchen: KitchenStage;
+  readonly cellmateMet: boolean;
   readonly crawlerCatUncaged: boolean;
   readonly cellmateFreed: boolean;
-  readonly larderOpened: boolean;
   readonly portcullisRaised: boolean;
 }
 
@@ -301,19 +419,23 @@ export function captureMissingCatsProgress(
 ): MissingCatsProgressCheckpoint {
   return {
     phase: progress.phase,
+    innWallSitterHeard: progress.innWallSitterHeard,
     clues: [...progress.clues],
     kesslerShowedFur: progress.kesslerShowedFur,
     cellarWavesHeld: progress.cellarWavesHeld,
     avielChoice: progress.avielChoice,
     daveRefusedBait: progress.daveRefusedBait,
+    thiefSpottedParty: progress.thiefSpottedParty,
     elfWaitsAtGrate: progress.elfWaitsAtGrate,
     catsFreed: [...progress.catsFreed],
     conduitShut: progress.conduitShut,
+    archiveWardsExplained: progress.archiveWardsExplained,
+    westWardOut: progress.westWardOut,
     keyRingSent: progress.keyRingSent,
-    tunaSent: progress.tunaSent,
+    kitchen: progress.kitchen,
+    cellmateMet: progress.cellmateMet,
     crawlerCatUncaged: progress.crawlerCatUncaged,
     cellmateFreed: progress.cellmateFreed,
-    larderOpened: progress.larderOpened,
     portcullisRaised: progress.portcullisRaised,
   };
 }
@@ -327,21 +449,25 @@ export function restoreMissingCatsProgress(
   snapshot: MissingCatsProgressCheckpoint,
 ): void {
   progress.phase = snapshot.phase;
+  progress.innWallSitterHeard = snapshot.innWallSitterHeard;
   progress.clues.clear();
   for (const clue of snapshot.clues) progress.clues.add(clue);
   progress.kesslerShowedFur = snapshot.kesslerShowedFur;
   progress.cellarWavesHeld = snapshot.cellarWavesHeld;
   progress.avielChoice = snapshot.avielChoice;
   progress.daveRefusedBait = snapshot.daveRefusedBait;
+  progress.thiefSpottedParty = snapshot.thiefSpottedParty;
   progress.elfWaitsAtGrate = snapshot.elfWaitsAtGrate;
   progress.catsFreed.clear();
   for (const cat of snapshot.catsFreed) progress.catsFreed.add(cat);
   progress.conduitShut = snapshot.conduitShut;
+  progress.archiveWardsExplained = snapshot.archiveWardsExplained;
+  progress.westWardOut = snapshot.westWardOut;
   progress.keyRingSent = snapshot.keyRingSent;
-  progress.tunaSent = snapshot.tunaSent;
+  progress.kitchen = snapshot.kitchen;
+  progress.cellmateMet = snapshot.cellmateMet;
   progress.crawlerCatUncaged = snapshot.crawlerCatUncaged;
   progress.cellmateFreed = snapshot.cellmateFreed;
-  progress.larderOpened = snapshot.larderOpened;
   progress.portcullisRaised = snapshot.portcullisRaised;
 }
 
@@ -358,17 +484,21 @@ export function parseMissingCatsProgressCheckpoint(
   const clues = parseEvery(value.clues, (entry) => oneOf(entry, MISSING_CATS_CLUE_IDS));
   const catsFreed = parseEvery(value.catsFreed, (entry) => oneOf(entry, TOWN_CAT_IDS));
   const avielChoice = value.avielChoice === null ? null : oneOf(value.avielChoice, AVIEL_CHOICES);
+  const kitchen = oneOf(value.kitchen, KITCHEN_STAGES);
   const {
+    innWallSitterHeard,
     kesslerShowedFur,
     cellarWavesHeld,
     daveRefusedBait,
+    thiefSpottedParty,
     elfWaitsAtGrate,
     conduitShut,
+    archiveWardsExplained,
+    westWardOut,
     keyRingSent,
-    tunaSent,
+    cellmateMet,
     crawlerCatUncaged,
     cellmateFreed,
-    larderOpened,
     portcullisRaised,
   } = value;
   if (
@@ -376,19 +506,23 @@ export function parseMissingCatsProgressCheckpoint(
     clues === undefined ||
     catsFreed === undefined ||
     avielChoice === undefined ||
+    kitchen === undefined ||
+    typeof innWallSitterHeard !== 'boolean' ||
     typeof kesslerShowedFur !== 'boolean' ||
     typeof cellarWavesHeld !== 'number' ||
     !Number.isInteger(cellarWavesHeld) ||
     cellarWavesHeld < 0 ||
     cellarWavesHeld > LODGE_CELLAR_WAVE_COUNT ||
     typeof daveRefusedBait !== 'boolean' ||
+    typeof thiefSpottedParty !== 'boolean' ||
     typeof elfWaitsAtGrate !== 'boolean' ||
     typeof conduitShut !== 'boolean' ||
+    typeof archiveWardsExplained !== 'boolean' ||
+    typeof westWardOut !== 'boolean' ||
     typeof keyRingSent !== 'boolean' ||
-    typeof tunaSent !== 'boolean' ||
+    typeof cellmateMet !== 'boolean' ||
     typeof crawlerCatUncaged !== 'boolean' ||
     typeof cellmateFreed !== 'boolean' ||
-    typeof larderOpened !== 'boolean' ||
     typeof portcullisRaised !== 'boolean'
   ) {
     return undefined;
@@ -397,19 +531,23 @@ export function parseMissingCatsProgressCheckpoint(
   if (choiceOwed && avielChoice === null) return undefined;
   return {
     phase,
+    innWallSitterHeard,
     clues,
     kesslerShowedFur,
     cellarWavesHeld,
     avielChoice,
     daveRefusedBait,
+    thiefSpottedParty,
     elfWaitsAtGrate,
     catsFreed,
     conduitShut,
+    archiveWardsExplained,
+    westWardOut,
     keyRingSent,
-    tunaSent,
+    kitchen,
+    cellmateMet,
     crawlerCatUncaged,
     cellmateFreed,
-    larderOpened,
     portcullisRaised,
   };
 }
@@ -432,17 +570,22 @@ export function missingCatsProgressAt(phase: MissingCatsPhase): MissingCatsProgr
     progress.cellarWavesHeld = LODGE_CELLAR_WAVE_COUNT;
   }
   if (phaseReached(progress, 'bait')) progress.avielChoice = 'kept';
+  if (phaseReached(progress, 'chase')) progress.thiefSpottedParty = true;
   if (phaseReached(progress, 'captured')) progress.daveRefusedBait = true;
   if (phaseReached(progress, 'seeking_entry')) {
+    progress.cellmateMet = true;
     progress.crawlerCatUncaged = true;
     progress.cellmateFreed = true;
   }
   if (phaseReached(progress, 'sewer')) progress.elfWaitsAtGrate = true;
   if (phaseReached(progress, 'archive')) progress.conduitShut = true;
-  if (phaseReached(progress, 'gatehouse')) progress.keyRingSent = true;
+  if (phaseReached(progress, 'gatehouse')) {
+    progress.keyRingSent = true;
+    progress.archiveWardsExplained = true;
+    progress.westWardOut = true;
+  }
   if (phaseReached(progress, 'bell_storey')) {
-    progress.larderOpened = true;
-    progress.tunaSent = true;
+    progress.kitchen = 'tuna_sent';
   }
   if (phaseReached(progress, 'ascent')) progress.portcullisRaised = true;
   return progress;

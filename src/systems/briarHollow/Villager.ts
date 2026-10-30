@@ -11,7 +11,7 @@
  * system planned, and draws them. `VillagerSystem` decides where they go.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { TilePoint } from '../../map/town/townPlan';
 import {
@@ -78,10 +78,8 @@ const VILLAGER_BUBBLE_STYLE: TimedBubbleStyle = { border: '#c8a860', text: '#f5e
 /** The "…" bubble's pulse runs on frames. */
 const ELLIPSIS_PULSE_PER_FRAME = 1;
 
-/** The sim's fixed update rate, matching `VillagerSystem`'s own tick. */
-const SIM_UPDATES_PER_SECOND = 60;
 /** For advancing spark particles by a whole tick's worth at a time. */
-const TICK_SECONDS = 1 / SIM_UPDATES_PER_SECOND;
+const TICK_SECONDS = 1 / WORLD_TICKS_PER_SECOND;
 /** How many sparks a hammer strike throws. */
 const SPARK_BURST_COUNT = 10;
 /** How long a spark lives before it burns out, in seconds. */

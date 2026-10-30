@@ -15,7 +15,7 @@ import {
   createBriarHollowState,
   type BriarHollowState,
 } from '../../src/core/quests/briarHollowState';
-import { TILE_SIZE } from '../../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { teachBoth } from '../../src/core/labour/CraftSkills';
 import { EventBus } from '../../src/core/EventBus';
 import { createPartyCraftsState } from '../../src/core/labour/partyCrafts';
@@ -82,11 +82,10 @@ import { UNZOOMED, cameraAt } from '../../src/core/rendering/camera';
 
 const STATIONS_MAP_SIZE = 280;
 const STATIONS_MAP_SEED = 1;
-const UPDATES_PER_SECOND = 60;
 /** A few frames past the channel's own length, so rounding can never leave it one short. */
 const FRAME_SLACK = 3;
-const UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * UPDATES_PER_SECOND) + FRAME_SLACK;
-const PRESS_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * UPDATES_PER_SECOND) + FRAME_SLACK;
+const UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * WORLD_TICKS_PER_SECOND) + FRAME_SLACK;
+const PRESS_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * WORLD_TICKS_PER_SECOND) + FRAME_SLACK;
 /** Far enough below a machine that nothing at the sawmill is in reach. */
 const OUT_OF_REACH_TILES = 6;
 /** A step bigger than the channel's drift tolerance. */
@@ -625,7 +624,7 @@ export function verifyRebuildAndCutsApart(check: Check): void {
   standBeside(rig, saw);
   give(rig, SAW_UPGRADE_COST);
   rig.quest.tryUpgradeStation(rig.human);
-  setInteractionPromptsSuppressed(false);
+  setInteractionPromptsSuppressed(false, 'clear');
   const promptCtx = surfaceContext(allocCanvas('ui', PROMPT_CANVAS_PX, PROMPT_CANVAS_PX));
   const claimed = rig.services.renderPrompt(promptCtx, 0, 0, rig.human);
   check(
@@ -679,7 +678,7 @@ const NON_COLOUR_FILL = 'gradient-or-pattern';
 
 function recordFrame(draw: (ctx: CanvasRenderingContext2D) => void): RecordedFrame {
   setViewportSize(CAPTION_SCREEN_PX, CAPTION_SCREEN_PX);
-  setInteractionPromptsSuppressed(false);
+  setInteractionPromptsSuppressed(false, 'clear');
   const ctx = surfaceContext(allocCanvas('ui', CAPTION_SCREEN_PX, CAPTION_SCREEN_PX));
   const texts: DrawnText[] = [];
   const fills: string[] = [];

@@ -34,7 +34,7 @@
  */
 
 import { hollowPropInkTop } from '../../../map/tiles/hollowVillageTiles';
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import { viewportHeight, viewportWidth } from '../../../core/rendering/Viewport';
 import type { SpatialGrid } from '../../../core/world/SpatialGrid';
 import type { Mob } from '../../../creatures/Mob';
@@ -57,7 +57,6 @@ import { drawInteractionPrompt, drawInteractionPromptOver } from '../../../ui/In
 import type { Rect } from '../../../ui/core/geom';
 import { hostileWithinAttackRange } from '../../interactionPromptGate';
 import type { TileRect } from '../questGuidance';
-import { UPDATES_PER_SECOND } from '../structureRules';
 import type { BlueprintsCrawler, BlueprintsQuestContext } from './blueprintsContext';
 import { grantBlueprintsItem, holderOf } from './blueprintsProgress';
 import {
@@ -97,9 +96,9 @@ export type ScytheGrade = 'perfect' | 'good' | 'miss';
 /** Why a live swing stopped early; see `GrainHarvest.swingInterruption`. */
 type SwingInterruption = 'lost' | 'brokenOff';
 
-const SCYTHE_SWING_TICKS = Math.round(SCYTHE_SWING_SECONDS * UPDATES_PER_SECOND);
+const SCYTHE_SWING_TICKS = Math.round(SCYTHE_SWING_SECONDS * WORLD_TICKS_PER_SECOND);
 const MS_PER_SECOND = 1000;
-const TICK_MS = MS_PER_SECOND / UPDATES_PER_SECOND;
+const TICK_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /**
  * How far past the last tick a press may be placed by its timestamp, in
  * ticks: two frames at the slowest rate the loop still keeps up with (two
@@ -127,7 +126,7 @@ const SWING_MOTION_TOLERANCE_PX = 0.5;
 const FACING_PREFERENCE_DOT = 0.5;
 /** The cat swings the scythe with her two-paw chop, landing this long before the swing ends, as the grain falls. */
 const CAT_SWIPE_LEAD_SECONDS = 0.4;
-const CAT_SWIPE_LEAD_TICKS = Math.round(CAT_SWIPE_LEAD_SECONDS * UPDATES_PER_SECOND);
+const CAT_SWIPE_LEAD_TICKS = Math.round(CAT_SWIPE_LEAD_SECONDS * WORLD_TICKS_PER_SECOND);
 const SCYTHE_LOOK_TIER = 0;
 /** The scythe's pegs art stands this many tiles above its own tile, where a tap may land on it. */
 const PEGS_TAP_HEADROOM_TILES = 2;
@@ -296,7 +295,7 @@ export class GrainHarvest {
     const stand = this.stands.get(tileKey(tileX, tileY));
     if (stand === undefined) return 'full';
     const ticksSince = stand.stubbleAtTick === null ? 0 : this.tick - stand.stubbleAtTick;
-    return grainStageFor(stand.cuts, ticksSince / UPDATES_PER_SECOND);
+    return grainStageFor(stand.cuts, ticksSince / WORLD_TICKS_PER_SECOND);
   }
 
   /** Once per gameplay frame: advances a swing, ends it early on an interruption, and regrows stubble. */
@@ -608,7 +607,7 @@ export class GrainHarvest {
       pressShare: swing.pressShare,
       verdict: swing.verdict,
       verdictAgeSeconds:
-        swing.verdict === null ? 0 : (this.tick - swing.verdictTick) / UPDATES_PER_SECOND,
+        swing.verdict === null ? 0 : (this.tick - swing.verdictTick) / WORLD_TICKS_PER_SECOND,
       verdictGrain: grainForGrade(swing.verdict ?? 'miss'),
       goodWindow: SCYTHE_GOOD_WINDOW,
       perfectWindow: SCYTHE_PERFECT_WINDOW,
@@ -627,7 +626,7 @@ export class GrainHarvest {
   }
 
   private regrow(): void {
-    const regrowTicks = GRAIN_REGROW_SECONDS * UPDATES_PER_SECOND;
+    const regrowTicks = GRAIN_REGROW_SECONDS * WORLD_TICKS_PER_SECOND;
     for (const [key, stand] of this.stands) {
       if (stand.stubbleAtTick === null) continue;
       if (this.tick - stand.stubbleAtTick >= regrowTicks) this.stands.delete(key);

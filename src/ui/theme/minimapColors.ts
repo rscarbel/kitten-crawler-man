@@ -48,6 +48,7 @@ import {
   CAT_LEDGE,
   CAT_GAP,
   FLOOR_DROP,
+  FLOOR_DROP_SPANNED,
   RIVER_ROCK,
   ROCK_DEPOSIT,
   SAFE_ROOM_BANNER,
@@ -180,6 +181,9 @@ export function minimapTileColor(type: number): string {
     // A hole through the floor: darker than any floor round it.
     case FLOOR_DROP:
       return '#0a0908';
+    // A board across the hole: the walnut of the board, so the way over shows.
+    case FLOOR_DROP_SPANNED:
+      return '#6e5434';
     case GARDEN_PLANTING:
       return '#5f7a34'; // planted bed — a shade greener than the verge it sits on
     case FENCE:

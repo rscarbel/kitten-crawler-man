@@ -13,8 +13,7 @@
  * still reaches the world or the HUD beneath.
  */
 
-import { TILE_SIZE } from '../../core/constants';
-import { UPDATES_PER_SECOND } from '../../systems/briarHollow/structureRules';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type {
   BellAlertView,
   SiegeOutcomeView,
@@ -147,7 +146,7 @@ function easeOutBack(t: number): number {
 }
 
 function framesToMs(frames: number): number {
-  return (frames / UPDATES_PER_SECOND) * MS_PER_SECOND;
+  return (frames / WORLD_TICKS_PER_SECOND) * MS_PER_SECOND;
 }
 
 /** 0 to 1 and back over one pulse period, on the UI clock. */

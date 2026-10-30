@@ -11,7 +11,7 @@
 
 import { createCanvas, type Canvas } from 'canvas';
 
-import { TILE_SIZE } from '../../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants.js';
 import { KRAKEN_VISUAL_SCALE } from '../../src/creatures/Kraken.js';
 import { setDungeonFloorTheme } from '../../src/map/dungeon/floorTheme.js';
 import { dungeonWaterDepth, floodDungeonTile } from '../../src/map/dungeonWater.js';
@@ -61,8 +61,6 @@ const T = TILE_SIZE;
 const ROOM_W = 24;
 const ROOM_H = 14;
 const BACKGROUND = '#101214';
-/** World ticks per second, to turn the review's tick into the water's clock. */
-const TICKS_PER_SECOND = 60;
 
 interface TileBox {
   readonly x: number;
@@ -166,7 +164,7 @@ function floorCanvas(
       if (isDungeonWater(cell)) waterRuns.add(tx, ty, dungeonWaterDepth(cell));
     }),
   );
-  drawDungeonWaterSurface(ctx, waterRuns, 0, 0, frame / TICKS_PER_SECOND);
+  drawDungeonWaterSurface(ctx, waterRuns, 0, 0, frame / WORLD_TICKS_PER_SECOND);
   return { canvas, ctx };
 }
 

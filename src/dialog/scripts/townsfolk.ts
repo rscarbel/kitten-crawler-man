@@ -392,7 +392,7 @@ export const GOSSIP_LINES = {
   elvesBlamed:
     'Kessler found cat fur at the Lodge cellar lid. Elves, then. Who else lights candles under a town?',
   lodgeHeld:
-    'They say the elves came up out of the Lodge cellar to hold it, not to rob it. Nobody’s sure what to do with that.',
+    'They say ghouls and floating heads came up the Lodge cellar, and the elves ran in off the alley to hold it shut. Nobody’s sure what to do with that.',
   pennyTaken: 'Kestrel’s Penny is gone too. That’s every cat inside the wall.',
   avielGrounded:
     'The High Roost clipped Deacon Aviel on the dome. Took his flight feathers in front of the whole parish.',

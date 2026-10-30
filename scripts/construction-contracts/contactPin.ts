@@ -12,7 +12,7 @@
 
 import type { BriarHollowState } from '../../src/core/quests/briarHollowState';
 import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
-import { TILE_SIZE } from '../../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
 import type { TilePoint, TileRect } from '../../src/map/town/townPlan';
 import {
@@ -24,7 +24,7 @@ import {
   issueContract,
 } from '../../src/systems/constructionContracts/contractGenerator';
 import { SOLDIER_IDS, type SoldierId } from '../../src/core/quests/villagerIds';
-import { buildSiegeRig, UPDATES_PER_SECOND, type SiegeRig } from '../villageSiegeHarness';
+import { buildSiegeRig, type SiegeRig } from '../villageSiegeHarness';
 import type { Check } from './shared';
 import { PLENTY_OF_EACH_MATERIAL, stockUp } from './shared';
 
@@ -34,19 +34,19 @@ const RIG_ASSAULT_LEVEL = 6;
 const PEACETIME_PHASE = 'complete' satisfies VillageQuestPhase;
 /** Long enough for the slowest villager to cross the village and settle. */
 const SETTLE_SECONDS = 75;
-const SETTLE_FRAMES = SETTLE_SECONDS * UPDATES_PER_SECOND;
+const SETTLE_FRAMES = SETTLE_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Past the village's staggered return from shelter, plus the walk across one room. */
 const INDOOR_SETTLE_SECONDS = 9;
-const INDOOR_SETTLE_FRAMES = INDOOR_SETTLE_SECONDS * UPDATES_PER_SECOND;
+const INDOOR_SETTLE_FRAMES = INDOOR_SETTLE_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long a held contact is watched for not wandering off. */
 const HOLD_WATCH_SECONDS = 40;
-const HOLD_WATCH_FRAMES = HOLD_WATCH_SECONDS * UPDATES_PER_SECOND;
+const HOLD_WATCH_FRAMES = HOLD_WATCH_SECONDS * WORLD_TICKS_PER_SECOND;
 /** The village lives its day for this long before the contract is taken. */
 const WARM_UP_SECONDS = 5;
-const WARM_UP_FRAMES = WARM_UP_SECONDS * UPDATES_PER_SECOND;
+const WARM_UP_FRAMES = WARM_UP_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Long enough for the siege's alarm to send everyone where the siege wants them. */
 const SIEGE_REACT_SECONDS = 20;
-const SIEGE_REACT_FRAMES = SIEGE_REACT_SECONDS * UPDATES_PER_SECOND;
+const SIEGE_REACT_FRAMES = SIEGE_REACT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** The siege's countdown, held well beyond the check so no wave ever starts. */
 const HELD_COUNTDOWN_FRAMES = 1_000_000;
 /** More presses than any thanks has pages. */

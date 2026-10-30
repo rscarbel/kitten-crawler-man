@@ -17,7 +17,7 @@
  */
 
 import type { SoundId } from '../../../audio/sounds';
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import {
   canAfford,
   costRequirements,
@@ -114,10 +114,9 @@ const STATION_UPGRADED_CALLOUT: Readonly<Record<BlueprintsStationId, string>> = 
   ropeWalk: 'Rope walk upgraded!',
 };
 
-const UPDATES_PER_SECOND = 60;
-const STATION_UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * UPDATES_PER_SECOND);
+const STATION_UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * WORLD_TICKS_PER_SECOND);
 /** The resource strip stays up for the whole channel, renewed this often. */
-const RESOURCE_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
+const RESOURCE_NOTE_INTERVAL_FRAMES = WORLD_TICKS_PER_SECOND;
 /**
  * How far the worker may drift before the channel counts as abandoned.
  * Measured from position rather than read off `isMoving`, which means "tried

@@ -64,7 +64,7 @@ import {
   VOSS_PROGRESS,
 } from '../dialog/scripts/scenes/anchor';
 
-const ANCHOR_QUEST_ID = 'anchor_shards' as const satisfies QuestId;
+export const ANCHOR_QUEST_ID = 'anchor_shards' as const satisfies QuestId;
 
 /** Voss's cut for four seconds of work and thirty years of knowing which four. */
 const ANCHOR_ASSEMBLY_FEE_COINS = 25;
@@ -506,6 +506,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     if (this.status === 'available') {
       return [
         {
+          kind: 'single',
           id: ANCHOR_QUEST_ID,
           name,
           status: 'available',
@@ -521,6 +522,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     if (outstanding.length === 0) {
       return [
         {
+          kind: 'single',
           id: ANCHOR_QUEST_ID,
           name,
           status: 'active',
@@ -534,17 +536,20 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     // the header (rather than one shard specifically) still points the arrow
     // somewhere useful instead of nowhere.
     const header: TrackerEntry = {
+      kind: 'header',
+      pinLeadsTo: 'nearest_step',
       id: ANCHOR_QUEST_ID,
       name,
       status: 'active',
       objective: `Recover the Wayfinder's shards (${held}/${SHARDS_REQUIRED})`,
       target: this.stepTarget(outstanding[0]),
     };
-    const steps: TrackerEntry[] = outstanding.map((shardId, index) => ({
+    const steps = outstanding.map((shardId, index): TrackerEntry => ({
       id: `${ANCHOR_QUEST_ID}:${shardId}`,
+      kind: 'step',
       parentId: ANCHOR_QUEST_ID,
       name: SHARD_STEP_NAMES[shardId],
-      status: 'active' as const,
+      status: 'active',
       objective: SHARD_OBJECTIVES[shardId],
       hint: `Shard ${held + index + 1} of ${SHARDS_REQUIRED} — Voss joins them once you have all three.`,
       target: this.stepTarget(shardId),

@@ -215,9 +215,9 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     requires: ['floor3_dave_allies'],
     lines: [
       "I've been in this town before. A long time before you.",
-      "I wasn't on my own then. I had a cat. Pumpkin. Bad-tempered, and the best partner I ever had.",
-      'We got as far as that tower. She went in there and never came out.',
-      'I waited longer than I should have. Then I went on without her.',
+      "I wasn't on my own then. I had a cat. Pumpkin. High-maintenance, and the best partner I ever had.",
+      'We got as far as that tower. They took her in there. I went in after her, and all I found was what was left of her.',
+      'I went on without her after that. Not much else you can do.',
     ],
   },
 

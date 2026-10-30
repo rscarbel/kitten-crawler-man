@@ -5,7 +5,7 @@
  *
  * Part 1 exercises `paginate` directly against a synthetic, character-counting
  * `measure` function — no canvas needed, so the break rules (paragraph
- * boundary, sentence end, word boundary, character) are checked in isolation.
+ * boundary, full page, word boundary, character) are checked in isolation.
  *
  * Part 2 discovers every `DialogLine` exported from a script module under
  * `src/dialog/scripts/`, renders each through the real `DialogBox` at a short
@@ -166,6 +166,29 @@ const LONG_SENTENCE_WORD_COUNT = 20;
   assertOffsetsMatchSource(paragraphs, pages, label);
 }
 
+const FULL_PAGE_MAX_LINES = 2;
+const FULL_PAGE_MAX_WIDTH = 12;
+
+{
+  const label = 'a page fills every line it has';
+  // "Short one." ends a sentence on line one. Cutting there would leave line
+  // two empty, and backing off the window's last word would push "carry" to
+  // a page it never needed.
+  const paragraphs: Paragraphs = ['Short one. Then a carry over onto more.'];
+  const pages = paginate(paragraphs, measureChars, FULL_PAGE_MAX_WIDTH, FULL_PAGE_MAX_LINES);
+  const firstPageLines = computeLineSpans(pages[0].text, FULL_PAGE_MAX_WIDTH, measureChars);
+  check(
+    firstPageLines.length === FULL_PAGE_MAX_LINES,
+    `${label}: the first page uses all ${FULL_PAGE_MAX_LINES} lines (got "${pages[0].text}")`,
+  );
+  check(pages[0].text === 'Short one. Then a carry', `${label}: the cut is the full window`);
+  check(
+    !pages.some((page) => page.text.startsWith(' ')),
+    `${label}: no page opens on the separator the cut consumed`,
+  );
+  assertOffsetsMatchSource(paragraphs, pages, label);
+}
+
 const HUGE_WORD_MAX_WIDTH = 8;
 const HUGE_WORD_LENGTH = 37;
 const HUGE_WORD_MAX_LINES = 1;
@@ -277,6 +300,47 @@ const NEWLINE_AT_BOUNDARY_MAX_LINES = 2;
   check(pages.length === 2, `${label}: paginates onto two pages`);
   check(pages[0].text === 'AAAA\nBBBB', `${label}: first page keeps its own forced break`);
   check(pages[1].text === 'CCCC', `${label}: second page starts clean, with no leading blank line`);
+  assertOffsetsMatchSource(paragraphs, pages, label);
+}
+
+const CRLF_AT_BOUNDARY_MAX_WIDTH = 200;
+const CRLF_AT_BOUNDARY_MAX_LINES = 2;
+
+{
+  // A Windows line ending at the cut is one break, not a '\r' the cut
+  // consumes and a '\n' left to open the next page on a blank line.
+  const label = 'CRLF at a page boundary';
+  const paragraphs: Paragraphs = ['AAAA\r\nBBBB\r\nCCCC'];
+  const pages = paginate(
+    paragraphs,
+    measureChars,
+    CRLF_AT_BOUNDARY_MAX_WIDTH,
+    CRLF_AT_BOUNDARY_MAX_LINES,
+  );
+  check(pages.length === 2, `${label}: paginates onto two pages`);
+  check(pages[0].text === 'AAAA\r\nBBBB', `${label}: first page keeps its own forced break`);
+  check(pages[1].text === 'CCCC', `${label}: second page starts clean, with no leading blank line`);
+  assertOffsetsMatchSource(paragraphs, pages, label);
+}
+
+const BLANK_CRLF_LINE_MAX_WIDTH = 200;
+const BLANK_CRLF_LINE_MAX_LINES = 1;
+
+{
+  // After the first cut the rest opens on a CRLF, so the one-line window is
+  // an empty line: the cut must still move forward rather than cut nothing.
+  const label = 'one-line box over a blank CRLF line';
+  const paragraphs: Paragraphs = ['AAAA\r\n\r\nBBBB'];
+  const pages = paginate(
+    paragraphs,
+    measureChars,
+    BLANK_CRLF_LINE_MAX_WIDTH,
+    BLANK_CRLF_LINE_MAX_LINES,
+  );
+  check(
+    pages.map((page) => page.text).join('|') === 'AAAA||BBBB',
+    `${label}: the blank line is its own page and paginating ends`,
+  );
   assertOffsetsMatchSource(paragraphs, pages, label);
 }
 

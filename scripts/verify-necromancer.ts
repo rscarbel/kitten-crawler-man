@@ -17,7 +17,7 @@
  */
 
 import { gameContext } from './nodeGameContext';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
 import type { CrawlerKind } from '../src/core/skills/SkillManager';
@@ -118,7 +118,6 @@ function section(name: string): void {
 
 const WORLD_SEED = 7919;
 const MAP_SIZE = 280;
-const UPDATES_PER_SECOND = 60;
 /** The level every creature here is levelled to: the village's band sits at 5–8. */
 const TEST_LEVEL = 7;
 const HALF = TILE_SIZE / 2;
@@ -493,7 +492,7 @@ function telegraphPaints(necro: Necromancer): boolean {
   let volleyAnglesOk = true;
   const volleyAngleError = 1e-6;
 
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 60; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 60; frame++) {
     keepCrawlersStanding(rig);
     // The target keeps moving through every cast, so a bolt re-aimed on its
     // release frame would miss the fan the ground showed.
@@ -591,7 +590,7 @@ section('Home zone: from each lane he reaches his zone and holds it');
     let warmedAt: number | null = null;
     let firstStandingDraw: number | null = null;
     let driftInPlace = 0;
-    for (let frame = 0; frame < UPDATES_PER_SECOND * WATCH_SECONDS; frame++) {
+    for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * WATCH_SECONDS; frame++) {
       keepCrawlersStanding(rig);
       const beforeX = necro.x;
       const beforeY = necro.y;
@@ -624,8 +623,8 @@ section('Home zone: from each lane he reaches his zone and holds it');
       `${laneId} lane: he drifted in place ${(driftShare * 100).toFixed(1)}% of his time in the zone (at most ${MAX_DRIFT_IN_PLACE_SHARE * 100}%)`,
     );
     check(
-      arrivedAt !== null && arrivedAt <= UPDATES_PER_SECOND * ARRIVAL_LIMIT_SECONDS,
-      `${laneId} lane: he reached his zone ${arrivedAt === null ? 'never' : `in ${(arrivedAt / UPDATES_PER_SECOND).toFixed(1)} s`} (limit ${ARRIVAL_LIMIT_SECONDS} s)`,
+      arrivedAt !== null && arrivedAt <= WORLD_TICKS_PER_SECOND * ARRIVAL_LIMIT_SECONDS,
+      `${laneId} lane: he reached his zone ${arrivedAt === null ? 'never' : `in ${(arrivedAt / WORLD_TICKS_PER_SECOND).toFixed(1)} s`} (limit ${ARRIVAL_LIMIT_SECONDS} s)`,
     );
     check(
       share >= MIN_ZONE_SHARE,
@@ -639,7 +638,7 @@ section('Home zone: from each lane he reaches his zone and holds it');
 section('Home zone: he never enters the palisade, even with every segment breached');
 
 const HOME_STREAMS = 12;
-const HOME_STREAM_FRAMES = UPDATES_PER_SECOND * 60 * 5;
+const HOME_STREAM_FRAMES = WORLD_TICKS_PER_SECOND * 60 * 5;
 /** How often a stream throws him at the wall, and how hard. */
 const SHOVE_EVERY_FRAMES = 400;
 const SHOVE_TILES = 6;
@@ -929,7 +928,7 @@ section('Grave Pulse: the lowest-health structure in reach, broken by a direct h
   };
   let blowsAtChannelStart = 0;
 
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 90 && !interruptChecked; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 90 && !interruptChecked; frame++) {
     keepCrawlersStanding(rig);
     step(rig);
     const telegraph = necro.groundTelegraph;
@@ -1004,7 +1003,7 @@ section('Death: a held terminal phase, and justDied latches once');
   necro.takeHit(harnessHit(rig.human, necro.maxHp * 2, 'melee'));
   let lastFrameHeld = 0;
   let awake = false;
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 10; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 10; frame++) {
     step(rig);
     if (necro.isAlive) awake = true;
     if (necro.currentRow.action === 'death' && necro.currentRow.frame === DEATH_FRAMES - 1) {
@@ -1018,7 +1017,7 @@ section('Death: a held terminal phase, and justDied latches once');
   );
   check(necro.isDeathSettled, 'the death reached its settled heap');
   check(
-    lastFrameHeld > UPDATES_PER_SECOND * 5,
+    lastFrameHeld > WORLD_TICKS_PER_SECOND * 5,
     `the heap held its last frame (${lastFrameHeld} frames)`,
   );
   check(necro.belongsInMobGrid, 'the heap is still drawn');
@@ -1048,7 +1047,7 @@ section('Grave Bull: a charge into a wooden wall deals three times its weight');
   let pawFrames = 0;
   let headingHeld = true;
   let lockedHeading: { x: number; y: number } | null = null;
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 20 && bull.lastChargeEnd === null; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 20 && bull.lastChargeEnd === null; frame++) {
     step(rig);
     if (bull.isPawing) {
       pawFrames++;
@@ -1105,12 +1104,12 @@ section('Grave Bull: a snare stops the charge dead');
   const snare = {};
   let rootedAt: { x: number; y: number } | null = null;
   let movedWhileRooted = 0;
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 6; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 6; frame++) {
     keepCrawlersStanding(rig);
     if (bull.isPawing) placeCrawler(rig.human, start.x + 5, start.y - 3);
     step(rig);
     if (bull.isCharging && rootedAt === null) {
-      bull.root(UPDATES_PER_SECOND * 10, snare);
+      bull.root(WORLD_TICKS_PER_SECOND * 10, snare);
       rootedAt = { x: bull.x, y: bull.y };
     } else if (rootedAt !== null && bull.isRooted) {
       movedWhileRooted = Math.max(
@@ -1139,7 +1138,7 @@ section('Grave Bull: with nothing in the lane, the charge stops at eight tiles')
   rig.roster.add(bull);
   placeCrawler(rig.human, start.x + 5, start.y);
   placeCrawler(rig.cat, start.x + 5, start.y - 30);
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 6 && bull.lastChargeEnd === null; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 6 && bull.lastChargeEnd === null; frame++) {
     keepCrawlersStanding(rig);
     // Stepping out of the locked line during the paw: the charge meets nobody.
     if (bull.isPawing) placeCrawler(rig.human, start.x + 5, start.y - 4);
@@ -1230,7 +1229,7 @@ section('Siege strike: a raised ratkin batters the wall in its way, and spikes b
   placeCrawler(rig.cat, site.square.bellTile.x + 1, site.square.bellTile.y);
   const ref: StructureRef | null = segmentId === null ? null : { kind: 'segment', id: segmentId };
   const before = ref === null ? 0 : rig.defense.hp(ref);
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 6; frame++) step(rig);
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 6; frame++) step(rig);
   const lost = ref === null ? 0 : before - rig.defense.hp(ref);
   const blow = raised.structureStrikeDamage;
   check(lost > 0, `the wall in its way took blows (${lost})`);
@@ -1240,7 +1239,7 @@ section('Siege strike: a raised ratkin batters the wall in its way, and spikes b
   );
   if (ref !== null) rig.defense.applySpikes(ref, 'human');
   const hpBefore = raised.hp;
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 4; frame++) step(rig);
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 4; frame++) step(rig);
   check(raised.hp < hpBefore, 'spikes sent its blows back at it');
   check(
     new SkeletonArcher(0, 0, TILE_SIZE).siegeStructureMultiplier === 0,

@@ -23,6 +23,7 @@ import { createCanvas } from 'canvas';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext, asNodeCanvas } from './nodeGameContext.js';
 import type { ResidentSet } from '../src/systems/WorldResidency.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 installCanvasGlobals();
 
@@ -766,8 +767,7 @@ const VIEW_W = 1280;
 const VIEW_H = 720;
 const RESIDENCY_VIEW = { viewWidth: worldPx(VIEW_W), viewHeight: worldPx(VIEW_H) };
 setViewportSize(VIEW_W, VIEW_H);
-const UPDATES_PER_SECOND = 60;
-const WALK_TILES_PER_FRAME = FASTEST_WALK_TILES_PER_SECOND / UPDATES_PER_SECOND;
+const WALK_TILES_PER_FRAME = FASTEST_WALK_TILES_PER_SECOND / WORLD_TICKS_PER_SECOND;
 const releaseTiles =
   FACADE_RING.leadSeconds * FASTEST_WALK_TILES_PER_SECOND + FACADE_RING.releaseHysteresisTiles;
 /** A placed sheet's area, standing in for a building. */

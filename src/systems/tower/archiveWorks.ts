@@ -7,8 +7,8 @@
  * - **Solid**, before the conduit is shut: every ward bars its tiles to
  *   everyone. Belle coming down from the cattery finds the east room sealed.
  * - **Pulsing**, once it is shut: the doorway's ward burns on a rhythm and
- *   bites whoever is in it while it burns; the west ward goes dark while its
- *   plate is held; the north door's ward stays solid.
+ *   bites whoever is in it while it burns; the west ward goes dark for good
+ *   the first time its plate is weighed down; the north door's ward stays solid.
  * - **Sweeping**, once the Warden knows the party is inside: each ward sweeps
  *   back and forth across its band, fed by a standing stone. Only Belle can
  *   find which stone feeds a ward — standing by it marks it — and only the
@@ -19,25 +19,38 @@
  * last tile it stood on outside every ward.
  *
  * Before the Warden knows, krasue wardens drift on their rounds. They do not
- * fight; one that sees a crawler for long enough has the party caught and
- * set back at the cattery stair's landing, as the gatehouse's guards do. A
- * warden that hears a noise within its reach (a jar knocked off a shelf top)
- * drifts to the edge of its round nearest the noise and stares that way for
- * a while. Once the Warden knows, the krasue come to fight.
+ * fight; one that sees a crawler at all has the party caught at a glance
+ * and set back at the cattery stair's landing, as the gatehouse's guards do,
+ * and one that sees a companion is put on orange alert.
+ * A warden is the archive's keeper, and the dumbwaiter's bell is how it is
+ * called: rung, the warden stops, turns toward the sound with a `?`, then
+ * leaves its round by the south doorway to hang in front of the hatch,
+ * peering in at what came up, before it drifts back the way it came. Its back
+ * is to the room the whole time it peers, and its own room stands empty.
+ * Rung again, it goes back to the hatch, so the bell can always be used.
+ * Once the Warden knows, the krasue come to fight.
+ *
+ * While the party is apart, each thing in the room that can be worked wears
+ * the same quiet tell (`interestGlint.ts`): a sheen on whatever can be batted
+ * off a shelf top or rung, and a soft pool of light on the plate.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { TOWER_STAIR_SPAN } from '../../map/tileTypes';
 import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
 import { liveSpawnContext, spawnMob } from '../../levels/spawnFunnel';
+import type { Mob } from '../../creatures/Mob';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import {
   ARCHIVE_FIXED_WARDS,
+  ARCHIVE_KNOCKABLES,
   ARCHIVE_KRASUE_TILES,
   ARCHIVE_SWEEPING_WARDS,
   ARCHIVE_WARD_PLATE,
+  ARCHIVE_WARDEN_BELL_PATH,
   ARCHIVE_WARDEN_ROUNDS,
+  TOWER_DUMBWAITER,
   towerStoreyPlan,
   type ArchiveFixedWard,
   type ArchiveSweepingWard,
@@ -46,17 +59,26 @@ import {
 import type { Player, DamageSource } from '../../Player';
 import { WARD_STONE_VARIANT } from '../../sprites/art/townInterior/rooms/towerWorks';
 import { MINE_ROWS } from '../../sprites/art/humanFigure';
-import { drawKrasueSprite } from '../../sprites/krasueSprite';
+import { drawKrasueSprite, krasueFloatPhase } from '../../sprites/krasueSprite';
+import { drawQuestBeacon } from '../../sprites/questBeacon';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import { worldPalette } from '../../ui/theme/worldInk';
 import { drawSightFan } from '../../ui/world/worldSightFan';
 import { drawGlyphBadge, glyphBadgeBob } from '../../ui/world/glyphBadge';
 import { drawSuspicionMarker } from '../../ui/world/suspicionMarker';
+import { drawInterestGlint, drawInterestPool } from '../../ui/world/interestGlint';
+import { TOWER_DUMBWAITER_BELL_FLAG } from '../../map/town/interiors/roomMechanisms';
 import type { WardSegment } from '../../ui/world/worldSenses';
 import type { SystemContext } from '../GameSystem';
 import { MashInteraction, type MashInteractionDef, type MashPress } from '../MashInteraction';
 import type { SenseSourceHandle } from '../senses/SenseLayer';
 import type { WorkChannelBuilder } from '../WorkChannel';
+import {
+  CAUGHT_AFTER_SEEN_FRAMES,
+  stepSuspicion,
+  SUSPICION_CAPTURE,
+} from '../stealthKeySnatch/detection';
+import type { OnSightNoticeTuning } from '../stealthKeySnatch/prisonTuning';
 import { CaptureFade } from './captureFade';
 import {
   sameTile,
@@ -78,8 +100,7 @@ const WARD_BITE_COOLDOWN_FRAMES = 45;
 const PULSE_PERIOD_FRAMES = 150;
 const PULSE_BURN_FRAMES = 55;
 const PULSE_WARN_FRAMES = 35;
-/** How bright a pulsing ward glows between burns, as a share of full. */
-const PULSE_REST = 0.12;
+/** How far a pulsing ward's warning has risen, as a share of full, the frame before it burns. */
 const PULSE_WARN_PEAK = 0.75;
 
 /** Frames a sweeping ward takes to cross its band and come back, and how far apart the sweeps start. */
@@ -108,18 +129,55 @@ const STONE_DEF: MashInteractionDef = {
 /** A warden's drift speed, in pixels a frame, and how close to a corner counts as there. */
 const WARDEN_SPEED = 0.55;
 const WARDEN_ARRIVE_PX = 2;
-/** What a warden sees: how far, how wide either side of the way it faces, and how long it must look. */
+/** What a warden sees: how far, and how wide either side of the way it faces. */
 const WARDEN_SIGHT_TILES = 3.5;
 const WARDEN_SIGHT_HALF_SHARE_OF_PI = 0.3;
 const WARDEN_SIGHT_HALF_ANGLE = Math.PI * WARDEN_SIGHT_HALF_SHARE_OF_PI;
-const WARDEN_SEE_FRAMES = 40;
-/** How long a warden stares toward a noise it heard. */
-const WARDEN_INVESTIGATE_FRAMES = 420;
+/** A warden's look has no soft edge: whoever it sees, it sees in full view. */
+const WARDEN_SIGHTING_WEIGHT = 1;
+/**
+ * How a warden notices. It catches at a glance, so only how long it stays on
+ * its guard after losing sight of someone is its own.
+ */
+const WARDEN_WARY_FRAMES = 40;
+const WARDEN_NOTICE = {
+  kind: 'on_sight',
+  alertFillFrames: CAUGHT_AFTER_SEEN_FRAMES,
+  coneEdgeWeight: WARDEN_SIGHTING_WEIGHT,
+  drainFrames: WARDEN_WARY_FRAMES,
+} as const satisfies OnSightNoticeTuning;
+/** How long a warden stands turning to the bell before it sets off, and how fast it turns. */
+const WARDEN_HEARING_FRAMES = 50;
+const WARDEN_TURN_RADIANS_PER_FRAME = 0.08;
+/** Called, a warden goes to the hatch faster than it keeps its round. */
+const WARDEN_ANSWER_SPEED = 1.1;
+/** How long it hangs at the hatch peering in, its back to the room. */
+const WARDEN_PEER_FRAMES = 600;
+/** How full its `?` stands while it turns to the bell: heard, not yet seen. */
+const WARDEN_HEARD_SUSPICION = 0.5;
 const WARDEN_MARKER_LIFT_TILES = 1.1;
 /** Line of sight is walked in steps this long, as a share of a tile. */
 const SIGHT_STEP_TILES = 0.25;
 
+const MS_PER_SECOND = 1000;
+const MS_PER_WORLD_FRAME = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
+
+/** The stairwell's mark sorts just behind anyone standing on its far row, so the beam is never drawn over them. */
+const STAIR_MARK_SORTS_BEHIND_PX = 1;
+
 const CAPTURE_TOAST = 'A warden saw you and drove you back to the stairs.';
+
+/** Where each tell sits: a sheen this far above a shelf-top thing's tile centre, and the plate's pool radius. */
+const GLINT_LIFT_TILES = 0.3;
+const BELL_GLINT_LIFT_TILES = 0.4;
+const PLATE_POOL_RADIUS_TILES = 1.05;
+/** The archive's things that wear a sheen until they are knocked off, each with its twinkle's stagger. */
+const GLINTING_KNOCKABLES = [
+  { ...ARCHIVE_KNOCKABLES.key_ring, seed: 0 },
+  { ...ARCHIVE_KNOCKABLES.shelf_board, seed: 1 },
+  { ...ARCHIVE_KNOCKABLES.plate_jar, seed: 2 },
+] as const;
+const BELL_GLINT_SEED = 3;
 
 const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
@@ -131,7 +189,7 @@ const PAW_TOES = 4;
 
 /** A paw print, the badge Belle leaves over a stone she has found. */
 function pawGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number): void {
-  ctx.fillStyle = worldPalette.senses.wardCore;
+  ctx.fillStyle = worldPalette.senses.pawMark;
   ctx.beginPath();
   ctx.arc(cx, cy + radius * PAW_TOE_SHARE, radius * PAW_PAD_SHARE, 0, FULL_TURN);
   ctx.fill();
@@ -162,6 +220,18 @@ interface Stone {
   found: boolean;
 }
 
+/**
+ * A warden away from its round to answer the bell: turning to the sound,
+ * going leg by leg along {@link ARCHIVE_WARDEN_BELL_PATH}, peering into the
+ * hatch, then coming back along it. `leg` is the index of the path tile it is
+ * drifting toward.
+ */
+type WardenErrand =
+  | { readonly kind: 'hearing'; frames: number; readonly thenLeg: number }
+  | { readonly kind: 'going'; leg: number }
+  | { readonly kind: 'peering'; frames: number }
+  | { readonly kind: 'returning'; leg: number };
+
 interface Warden {
   readonly round: readonly TowerTile[];
   x: number;
@@ -169,9 +239,19 @@ interface Warden {
   facingX: number;
   facingY: number;
   next: number;
-  seenFrames: number;
-  investigating: { readonly toward: { x: number; y: number }; frames: number } | null;
-  floatPhase: number;
+  /** How near it is to catching the party, 0 to {@link SUSPICION_CAPTURE}. */
+  suspicion: number;
+  errand: WardenErrand | null;
+  floatFrames: number;
+}
+
+const LAST_BELL_LEG = ARCHIVE_WARDEN_BELL_PATH.length - 1;
+
+type ArchiveFixedWardId = keyof typeof ARCHIVE_FIXED_WARDS;
+const ARCHIVE_FIXED_WARD_IDS = Object.keys(ARCHIVE_FIXED_WARDS).filter(isArchiveFixedWardId);
+
+function isArchiveFixedWardId(value: string): value is ArchiveFixedWardId {
+  return value in ARCHIVE_FIXED_WARDS;
 }
 
 type Crawler = HumanPlayer | CatPlayer;
@@ -198,6 +278,8 @@ export class ArchiveWorks extends StoreyWorks {
   private readonly wards: LiveWard[] = [];
   private readonly stones: Stone[] = [];
   private readonly wardens: Warden[] = [];
+  /** The krasue risen to fight once the Warden knows. */
+  private readonly krasue: Mob[] = [];
   /** Tiles each fixed ward bars this frame, so a change is a block or an unblock. */
   private readonly barred = new Set<string>();
   private readonly lastSafe = new Map<Crawler, TowerTile>();
@@ -205,6 +287,10 @@ export class ArchiveWorks extends StoreyWorks {
   private readonly capture = new CaptureFade();
   private readonly stopListening: () => void;
   private clock = 0;
+  /** Frames the world has run on this storey, captures included: what its tells and badges move by, so they hold still while the world is halted. */
+  private worldFrames = 0;
+  /** Whether the archive is the storey on show: a bell rung anywhere else is not heard here. */
+  private shown = false;
 
   constructor(deps: StoreyWorksDeps) {
     super(deps);
@@ -217,14 +303,23 @@ export class ArchiveWorks extends StoreyWorks {
         const krasue = spawnMob('krasue', tile, deps.map, ARCHIVE_SPAWNS);
         applySpawnDifficulty(krasue);
         deps.addMob(krasue);
+        this.krasue.push(krasue);
       }
     }
-    this.stopListening = deps.bus.on('worldNoise', (noise) => this.hear(noise));
+    this.stopListening = deps.bus.on('conveyorSignalled', ({ flag, from }) => {
+      const rungHere = flag === TOWER_DUMBWAITER_BELL_FLAG && from === 'head';
+      if (rungHere && this.shown) this.answerBell();
+    });
   }
 
   /** Whether the party is being caught, which holds its input. */
   get playerLocked(): boolean {
     return this.capture.active;
+  }
+
+  /** Whether a warden keeps its round here, so the party has to keep out of its look. */
+  get watched(): boolean {
+    return this.wardens.length > 0;
   }
 
   /** How dark the capture has the screen. */
@@ -233,21 +328,25 @@ export class ArchiveWorks extends StoreyWorks {
   }
 
   enter(_ctx: SystemContext): void {
+    this.shown = true;
     if (this.deps.progress.phase === 'cattery') this.moment({ kind: 'cattery_exit_reached' });
   }
 
   leave(): void {
+    this.shown = false;
     if (!this.capture.active) return;
     this.capture.cancel();
     this.resetWardens();
   }
 
   update(ctx: SystemContext): void {
+    this.worldFrames++;
     if (this.capture.active) {
       this.stepCapture();
       return;
     }
     this.clock++;
+    this.noteWardPlate();
     this.settleBars();
     const crawlers = this.deps.presentCrawlers();
     for (const crawler of [ctx.human, ctx.cat]) {
@@ -255,7 +354,7 @@ export class ArchiveWorks extends StoreyWorks {
       this.watchFeet(crawler);
     }
     this.findStones(ctx.cat, crawlers.includes(ctx.cat));
-    this.moveWardens(crawlers);
+    this.moveWardens(crawlers, this.deps.presentCompanions());
   }
 
   tryInteract(ctx: SystemContext): boolean {
@@ -269,7 +368,6 @@ export class ArchiveWorks extends StoreyWorks {
 
   renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const warden of this.wardens) {
-      const hasSeenSomeone = warden.seenFrames > 0;
       drawSightFan(ctx, {
         origin: { x: warden.x + TILE_SIZE * HALF - camX, y: warden.y + TILE_SIZE * HALF - camY },
         rim: {
@@ -278,18 +376,21 @@ export class ArchiveWorks extends StoreyWorks {
           halfAngleRad: WARDEN_SIGHT_HALF_ANGLE,
           reachPx: WARDEN_SIGHT_TILES * TILE_SIZE,
         },
-        suspicion: hasSeenSomeone ? 1 : 0,
+        suspicion: warden.suspicion,
       });
     }
   }
 
   renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const nowMs = performance.now();
+    const nowMs = this.worldFrames * MS_PER_WORLD_FRAME;
+    this.renderPlatePool(ctx, camX, camY, nowMs);
+    this.renderGlints(ctx, camX, camY, nowMs);
     for (const warden of this.wardens) {
+      const heard = warden.errand?.kind === 'hearing' ? WARDEN_HEARD_SUSPICION : 0;
       drawSuspicionMarker(ctx, {
         x: warden.x + TILE_SIZE * HALF - camX,
         y: warden.y - camY - TILE_SIZE * WARDEN_MARKER_LIFT_TILES,
-        suspicion: warden.seenFrames / WARDEN_SEE_FRAMES,
+        suspicion: Math.max(heard, warden.suspicion),
         alarmed: this.capture.active,
         nowMs,
       });
@@ -317,7 +418,7 @@ export class ArchiveWorks extends StoreyWorks {
   }
 
   roomFigures(): InteriorFigure[] {
-    return this.wardens.map((warden) => ({
+    const figures: InteriorFigure[] = this.wardens.map((warden) => ({
       y: warden.y,
       render: (ctx, camX, camY, tileSize) =>
         drawKrasueSprite(
@@ -325,16 +426,126 @@ export class ArchiveWorks extends StoreyWorks {
           warden.x - camX,
           warden.y - camY,
           tileSize,
-          warden.floatPhase,
-          warden.seenFrames > 0,
+          krasueFloatPhase(warden.floatFrames),
+          warden.suspicion > 0,
           warden.facingX >= 0 ? 1 : -1,
         ),
     }));
+    const stairMark = this.stairDownMark();
+    if (stairMark !== null) figures.push(stairMark);
+    return figures;
+  }
+
+  /**
+   * The quest beam over the stairwell down once the key ring has gone and
+   * the stair is Belle's way on, until the west ward is out. The Journal leads
+   * her here by this mark alone while the way to the stair runs through that
+   * ward, where an arrow would point straight into it; once it is out, the
+   * Journal's own route leads her.
+   */
+  private stairDownMark(): InteriorFigure | null {
+    const { progress } = this.deps;
+    const markLeadsBelle =
+      progress.phase === 'archive' && progress.keyRingSent && !progress.westWardOut;
+    if (!markLeadsBelle) return null;
+    const stair = towerStoreyPlan('archive').stairDown;
+    if (stair === null) return null;
+    const left = stair.x * TILE_SIZE;
+    const top = stair.y * TILE_SIZE;
+    const span = TOWER_STAIR_SPAN * TILE_SIZE;
+    return {
+      y: top + span - TILE_SIZE - STAIR_MARK_SORTS_BEHIND_PX,
+      render: (ctx, camX, camY) => {
+        drawQuestBeacon(
+          ctx,
+          left - camX,
+          top - camY,
+          span,
+          camX,
+          camY,
+          this.worldFrames * MS_PER_WORLD_FRAME,
+          worldPalette.objective.ready,
+        );
+      },
+    };
+  }
+
+  standDown(): void {
+    for (const stone of this.stones) {
+      if (stone.work.isFinished) continue;
+      this.deps.map.setPlacedInteriorPropVariant(stone.ward.stoneId, WARD_STONE_VARIANT.broken);
+      stone.putOut();
+    }
+    this.stones.length = 0;
+    for (const ward of this.wards) {
+      ward.handle?.remove();
+      for (const tile of ward.tiles()) {
+        if (this.barred.delete(`${tile.x},${tile.y}`)) {
+          this.deps.map.unblockTilePermanently(tile.x, tile.y);
+        }
+      }
+    }
+    this.wards.length = 0;
+    this.wardens.length = 0;
+    for (const krasue of this.krasue) this.deps.removeMob(krasue);
+    this.krasue.length = 0;
   }
 
   dispose(): void {
     this.stopListening();
     for (const ward of this.wards) ward.handle?.remove();
+  }
+
+  /**
+   * The pool of light on the plate until its ward is out, washed over the
+   * plate itself so the plate reads lit. Only while the room is a puzzle:
+   * wardens on their rounds.
+   */
+  private renderPlatePool(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    nowMs: number,
+  ): void {
+    if (this.wardens.length === 0 || this.deps.progress.westWardOut) return;
+    const plate = tileCentrePx(ARCHIVE_WARD_PLATE.at);
+    drawInterestPool(ctx, {
+      x: plate.x - camX,
+      y: plate.y - camY,
+      radiusPx: TILE_SIZE * PLATE_POOL_RADIUS_TILES,
+      nowMs,
+    });
+  }
+
+  /**
+   * The sheen on each thing still standing on its shelf top, and on the bell
+   * while a warden is there to answer it.
+   */
+  private renderGlints(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    nowMs: number,
+  ): void {
+    if (this.wardens.length === 0) return;
+    const { knockOffs } = this.deps.mechanisms;
+    for (const thing of GLINTING_KNOCKABLES) {
+      if (!knockOffs.isStanding(thing.id)) continue;
+      const at = tileCentrePx(thing.at);
+      drawInterestGlint(ctx, {
+        x: at.x - camX,
+        y: at.y - camY - TILE_SIZE * GLINT_LIFT_TILES,
+        nowMs,
+        seed: thing.seed,
+      });
+    }
+    const bell = tileCentrePx(TOWER_DUMBWAITER.head.bell);
+    drawInterestGlint(ctx, {
+      x: bell.x - camX,
+      y: bell.y - camY - TILE_SIZE * BELL_GLINT_LIFT_TILES,
+      nowMs,
+      seed: BELL_GLINT_SEED,
+    });
   }
 
   // ── Wards ──────────────────────────────────────────────────────────────────
@@ -343,12 +554,12 @@ export class ArchiveWorks extends StoreyWorks {
     const state = this.deps.conditions.wards;
     switch (state) {
       case 'solid':
-        for (const ward of Object.values(ARCHIVE_FIXED_WARDS)) this.addFixed(ward, () => true);
+        for (const id of ARCHIVE_FIXED_WARD_IDS) this.addFixed(id, () => true);
         return;
       case 'pulsing':
-        this.addFixed(ARCHIVE_FIXED_WARDS.north_door, () => true);
-        this.addPulsing(ARCHIVE_FIXED_WARDS.doorway);
-        this.addFixed(ARCHIVE_FIXED_WARDS.west, () => !this.wardPlateHeld);
+        this.addFixed('north_door', () => true);
+        this.addPulsing('doorway');
+        this.addFixed('west', () => !this.deps.progress.westWardOut);
         return;
       case 'sweeping':
         Object.values(ARCHIVE_SWEEPING_WARDS).forEach((ward, index) =>
@@ -364,12 +575,22 @@ export class ArchiveWorks extends StoreyWorks {
     }
   }
 
-  private get wardPlateHeld(): boolean {
-    return this.deps.mechanisms.plates.isPlateHeld(ARCHIVE_WARD_PLATE.id);
+  /**
+   * The west ward goes out for good the first time anything weighs its plate
+   * down, and stays out across rebuilds and reloads. Nothing on its far side
+   * can reach the plate, so a ward that lit again once Pumpkin wandered off it
+   * would shut Belle in by the stair down before the key ring has gone and the
+   * stair will take her.
+   */
+  private noteWardPlate(): void {
+    if (this.deps.mechanisms.plates.isPlateHeld(ARCHIVE_WARD_PLATE.id)) {
+      this.deps.progress.westWardOut = true;
+    }
   }
 
   /** A ward that bars its tiles while `lit` says so, and is dark and open otherwise. */
-  private addFixed(ward: ArchiveFixedWard, lit: () => boolean): void {
+  private addFixed(id: ArchiveFixedWardId, lit: () => boolean): void {
+    const ward = ARCHIVE_FIXED_WARDS[id];
     const live: LiveWard = {
       tiles: () => ward.tiles,
       biting: () => false,
@@ -377,6 +598,7 @@ export class ArchiveWorks extends StoreyWorks {
       handle: null,
     };
     live.handle = this.deps.senses.add('ward', {
+      id,
       segments: fixedSegments(ward),
       get hurts() {
         return lit();
@@ -386,7 +608,8 @@ export class ArchiveWorks extends StoreyWorks {
     this.wards.push(live);
   }
 
-  private addPulsing(ward: ArchiveFixedWard): void {
+  private addPulsing(id: ArchiveFixedWardId): void {
+    const ward = ARCHIVE_FIXED_WARDS[id];
     const live: LiveWard = {
       tiles: () => ward.tiles,
       biting: () => this.pulseBurning,
@@ -394,6 +617,7 @@ export class ArchiveWorks extends StoreyWorks {
       handle: null,
     };
     live.handle = this.deps.senses.add('ward', {
+      id,
       segments: fixedSegments(ward),
       hurts: true,
       pulse: () => this.pulseStrength,
@@ -409,13 +633,13 @@ export class ArchiveWorks extends StoreyWorks {
     return this.pulseFrame >= PULSE_PERIOD_FRAMES - PULSE_BURN_FRAMES;
   }
 
-  /** Dim at rest, brightening through the warning, full while it burns: the rhythm the cat reads. */
+  /** Out at rest, rising through the warning, full while it burns: the rhythm the cat reads. */
   private get pulseStrength(): number {
     if (this.pulseBurning) return 1;
     const warnFrom = PULSE_PERIOD_FRAMES - PULSE_BURN_FRAMES - PULSE_WARN_FRAMES;
-    if (this.pulseFrame < warnFrom) return PULSE_REST;
+    if (this.pulseFrame < warnFrom) return 0;
     const share = (this.pulseFrame - warnFrom) / PULSE_WARN_FRAMES;
-    return PULSE_REST + (PULSE_WARN_PEAK - PULSE_REST) * share;
+    return PULSE_WARN_PEAK * share;
   }
 
   private addSweeping(ward: ArchiveSweepingWard, index: number): void {
@@ -446,6 +670,7 @@ export class ArchiveWorks extends StoreyWorks {
       handle: null,
     };
     live.handle = this.deps.senses.add('ward', {
+      id: ward.stoneId,
       segments,
       hurts: true,
       pulse: () => {
@@ -559,9 +784,9 @@ export class ArchiveWorks extends StoreyWorks {
       facingX: 1,
       facingY: 0,
       next: 1 % round.length,
-      seenFrames: 0,
-      investigating: null,
-      floatPhase: 0,
+      suspicion: 0,
+      errand: null,
+      floatFrames: 0,
     };
   }
 
@@ -571,45 +796,47 @@ export class ArchiveWorks extends StoreyWorks {
     }
   }
 
-  private hear(noise: { x: number; y: number; radiusTiles: number }): void {
+  /** The bell is rung: each warden turns to it and goes, or if already at the hatch, peers on. */
+  private answerBell(): void {
     for (const warden of this.wardens) {
-      const distance = Math.hypot(noise.x - warden.x, noise.y - warden.y);
-      if (distance > noise.radiusTiles * TILE_SIZE) continue;
-      warden.investigating = { toward: noise, frames: WARDEN_INVESTIGATE_FRAMES };
+      const errand = warden.errand;
+      if (errand === null) {
+        warden.errand = { kind: 'hearing', frames: WARDEN_HEARING_FRAMES, thenLeg: 0 };
+        continue;
+      }
+      switch (errand.kind) {
+        case 'hearing':
+        case 'going':
+          continue;
+        case 'peering':
+          errand.frames = WARDEN_PEER_FRAMES;
+          continue;
+        case 'returning':
+          warden.errand = {
+            kind: 'hearing',
+            frames: WARDEN_HEARING_FRAMES,
+            thenLeg: Math.min(errand.leg + 1, LAST_BELL_LEG),
+          };
+          continue;
+        default: {
+          const unhandled: never = errand;
+          throw new Error(`unhandled warden errand ${JSON.stringify(unhandled)}`);
+        }
+      }
     }
   }
 
-  private moveWardens(crawlers: readonly Player[]): void {
+  private moveWardens(crawlers: readonly Player[], companions: readonly Player[]): void {
     for (const warden of this.wardens) {
-      warden.floatPhase++;
-      const target = this.wardenTarget(warden);
-      const dx = target.x - warden.x;
-      const dy = target.y - warden.y;
-      const distance = Math.hypot(dx, dy);
-      if (distance > WARDEN_ARRIVE_PX) {
-        const step = Math.min(WARDEN_SPEED, distance);
-        warden.x += (dx / distance) * step;
-        warden.y += (dy / distance) * step;
-        warden.facingX = dx / distance;
-        warden.facingY = dy / distance;
-      } else if (warden.investigating === null) {
-        warden.next = (warden.next + 1) % warden.round.length;
-      }
-      const investigating = warden.investigating;
-      if (investigating !== null) {
-        const towardX = investigating.toward.x - warden.x;
-        const towardY = investigating.toward.y - warden.y;
-        const length = Math.hypot(towardX, towardY);
-        if (distance <= WARDEN_ARRIVE_PX && length > 0) {
-          warden.facingX = towardX / length;
-          warden.facingY = towardY / length;
-        }
-        investigating.frames--;
-        if (investigating.frames <= 0) warden.investigating = null;
-      }
-      const sees = crawlers.some((crawler) => this.wardenSees(warden, crawler));
-      warden.seenFrames = sees ? warden.seenFrames + 1 : Math.max(0, warden.seenFrames - 1);
-      if (warden.seenFrames >= WARDEN_SEE_FRAMES) {
+      warden.floatFrames++;
+      if (warden.errand === null) this.keepRound(warden);
+      else this.runErrand(warden, warden.errand);
+      const sighting = {
+        crawler: this.wardenSeesAny(warden, crawlers),
+        companion: this.wardenSeesAny(warden, companions),
+      };
+      warden.suspicion = stepSuspicion(warden.suspicion, 'cone', sighting, WARDEN_NOTICE);
+      if (warden.suspicion >= SUSPICION_CAPTURE) {
         this.capture.begin();
         this.moment({ kind: 'archive_caught' });
         return;
@@ -617,16 +844,89 @@ export class ArchiveWorks extends StoreyWorks {
     }
   }
 
-  /** Where a warden is drifting to: its round's next corner, or while it listens, its round's edge nearest the noise. */
-  private wardenTarget(warden: Warden): { x: number; y: number } {
-    const investigating = warden.investigating;
-    if (investigating === null) return tileOriginPx(warden.round[warden.next]);
-    const xs = warden.round.map((tile) => tile.x * TILE_SIZE);
-    const ys = warden.round.map((tile) => tile.y * TILE_SIZE);
-    return {
-      x: Math.min(Math.max(investigating.toward.x, Math.min(...xs)), Math.max(...xs)),
-      y: Math.min(Math.max(investigating.toward.y, Math.min(...ys)), Math.max(...ys)),
-    };
+  private keepRound(warden: Warden): void {
+    if (this.driftToward(warden, warden.round[warden.next], WARDEN_SPEED)) {
+      warden.next = (warden.next + 1) % warden.round.length;
+    }
+  }
+
+  private runErrand(warden: Warden, errand: WardenErrand): void {
+    switch (errand.kind) {
+      case 'hearing':
+        this.turnToward(warden, tileCentrePx(TOWER_DUMBWAITER.head.bell));
+        errand.frames--;
+        if (errand.frames <= 0) warden.errand = { kind: 'going', leg: errand.thenLeg };
+        return;
+      case 'going':
+        if (!this.driftToward(warden, ARCHIVE_WARDEN_BELL_PATH[errand.leg], WARDEN_ANSWER_SPEED))
+          return;
+        if (errand.leg < LAST_BELL_LEG) {
+          errand.leg++;
+          return;
+        }
+        warden.errand = { kind: 'peering', frames: WARDEN_PEER_FRAMES };
+        this.moment({ kind: 'archive_bell_answered' });
+        return;
+      case 'peering':
+        this.turnToward(warden, tileCentrePx(TOWER_DUMBWAITER.head.hatch));
+        errand.frames--;
+        if (errand.frames <= 0) warden.errand = { kind: 'returning', leg: LAST_BELL_LEG - 1 };
+        return;
+      case 'returning':
+        if (!this.driftToward(warden, ARCHIVE_WARDEN_BELL_PATH[errand.leg], WARDEN_SPEED)) return;
+        if (errand.leg > 0) {
+          errand.leg--;
+          return;
+        }
+        warden.errand = null;
+        warden.next = this.roundCornerAfter(warden, ARCHIVE_WARDEN_BELL_PATH[0]);
+        return;
+      default: {
+        const unhandled: never = errand;
+        throw new Error(`unhandled warden errand ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+
+  /** Drifts a warden toward `tile`, facing the way it goes. Returns whether it has arrived. */
+  private driftToward(warden: Warden, tile: TowerTile, speed: number): boolean {
+    const target = tileOriginPx(tile);
+    const dx = target.x - warden.x;
+    const dy = target.y - warden.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= WARDEN_ARRIVE_PX) return true;
+    const step = Math.min(speed, distance);
+    warden.x += (dx / distance) * step;
+    warden.y += (dy / distance) * step;
+    warden.facingX = dx / distance;
+    warden.facingY = dy / distance;
+    return false;
+  }
+
+  /** Turns a warden's look a little toward world pixel `at`, as a head turns to a sound. */
+  private turnToward(warden: Warden, at: { readonly x: number; readonly y: number }): void {
+    const toward = Math.atan2(
+      at.y - (warden.y + TILE_SIZE * HALF),
+      at.x - (warden.x + TILE_SIZE * HALF),
+    );
+    const facing = Math.atan2(warden.facingY, warden.facingX);
+    const off = Math.atan2(Math.sin(toward - facing), Math.cos(toward - facing));
+    const turn = Math.max(
+      -WARDEN_TURN_RADIANS_PER_FRAME,
+      Math.min(WARDEN_TURN_RADIANS_PER_FRAME, off),
+    );
+    warden.facingX = Math.cos(facing + turn);
+    warden.facingY = Math.sin(facing + turn);
+  }
+
+  /** The index of the corner of a warden's round after `corner`, so its round picks up from there. */
+  private roundCornerAfter(warden: Warden, corner: TowerTile): number {
+    const at = warden.round.findIndex((tile) => sameTile(tile, corner));
+    return (Math.max(at, 0) + 1) % warden.round.length;
+  }
+
+  private wardenSeesAny(warden: Warden, bodies: readonly Player[]): number {
+    return bodies.some((body) => this.wardenSees(warden, body)) ? WARDEN_SIGHTING_WEIGHT : 0;
   }
 
   private wardenSees(warden: Warden, crawler: Player): boolean {

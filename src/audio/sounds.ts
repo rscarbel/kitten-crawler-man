@@ -1767,17 +1767,17 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   barrel_float_knock_2: './src/audio/bosses/kraken/barrel_float_knock_2.mp3',
   barrel_stack_topple: './src/audio/bosses/kraken/barrel_stack_topple.mp3',
   kraken_growl: './src/audio/bosses/kraken/kraken_growl.mp3',
-  pump_outflow_loop: './src/audio/bosses/kraken/pump_outflow_loop.mp3',
-  pump_shutdown: './src/audio/bosses/kraken/pump_shutdown.mp3',
-  pump_valve_turn_1: './src/audio/bosses/kraken/pump_valve_turn_1.mp3',
-  pump_valve_turn_2: './src/audio/bosses/kraken/pump_valve_turn_2.mp3',
-  pump_valve_turn_3: './src/audio/bosses/kraken/pump_valve_turn_3.mp3',
-  pump_valve_turn_4: './src/audio/bosses/kraken/pump_valve_turn_4.mp3',
+  pump_outflow_loop: './src/audio/effects/water_works/pump_outflow_loop.mp3',
+  pump_shutdown: './src/audio/effects/water_works/pump_shutdown.mp3',
+  pump_valve_turn_1: './src/audio/effects/water_works/pump_valve_turn_1.mp3',
+  pump_valve_turn_2: './src/audio/effects/water_works/pump_valve_turn_2.mp3',
+  pump_valve_turn_3: './src/audio/effects/water_works/pump_valve_turn_3.mp3',
+  pump_valve_turn_4: './src/audio/effects/water_works/pump_valve_turn_4.mp3',
   raft_slam_wood_1: './src/audio/bosses/kraken/raft_slam_wood_1.mp3',
   raft_slam_wood_2: './src/audio/bosses/kraken/raft_slam_wood_2.mp3',
   raft_slam_wood_3: './src/audio/bosses/kraken/raft_slam_wood_3.mp3',
   raft_slam_wood_4: './src/audio/bosses/kraken/raft_slam_wood_4.mp3',
-  room_drain_rush: './src/audio/bosses/kraken/room_drain_rush.mp3',
+  room_drain_rush: './src/audio/effects/water_works/room_drain_rush.mp3',
   shark_breach_bite: './src/audio/bosses/kraken/shark_breach_bite.mp3',
   shark_fin_chase_loop: './src/audio/bosses/kraken/shark_fin_chase_loop.mp3',
   knight_magic_windup: './src/audio/bosses/dark_knight/knight_magic_windup.mp3',
@@ -2443,12 +2443,7 @@ export const WOOD_SMASHING_SOUNDS = [
  * yet and so belong to no SFX group. `check:audio` exempts only these from
  * its every-effect-is-in-a-group rule; wiring one up means removing it here.
  */
-export const UNWIRED_SOUND_IDS = [
-  'belle_demanding_meow',
-  'door_creak_2',
-  'door_creak_3',
-  'door_creak_4',
-] as const satisfies ReadonlyArray<SoundId>;
+export const UNWIRED_SOUND_IDS = ['belle_demanding_meow'] as const satisfies ReadonlyArray<SoundId>;
 
 /**
  * Long, rare one-shots that are decoded the first time they are played rather

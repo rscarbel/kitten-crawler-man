@@ -31,6 +31,7 @@ import {
 } from '../destructiblePropArt';
 import { flameStamps, hashUnit } from '../../flameStamps';
 import { TOWN_TILE_SCALE } from '../town/townArt';
+import { NOMINAL_RENDER_FRAMES_PER_SECOND } from '../../../core/rendering/renderFrameClock';
 
 /** What kind of fire a site holds, which decides the shape of its flames. */
 export type PropFlameStyle = 'hearth' | 'brazier' | 'forge' | 'stove' | 'torch';
@@ -156,9 +157,8 @@ const FLAME_FRAME_BUDGET_MEGABYTES = 3;
 /** A frame drawn this frame or the one before is never let go. */
 const FLAME_FRAME_PROTECTED_FRAMES = 1;
 const FLAME_FRAME_IDLE_RELEASE_SECONDS = 30;
-const FLAME_FRAME_IDLE_FRAMES_PER_SECOND = 60;
 const FLAME_FRAME_IDLE_RELEASE_FRAMES =
-  FLAME_FRAME_IDLE_RELEASE_SECONDS * FLAME_FRAME_IDLE_FRAMES_PER_SECOND;
+  FLAME_FRAME_IDLE_RELEASE_SECONDS * NOMINAL_RENDER_FRAMES_PER_SECOND;
 
 /** One baked frame of a site's fire, with where the flames' foot sits in it. */
 interface BakedFlameFrame {

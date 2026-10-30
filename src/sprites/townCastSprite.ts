@@ -26,7 +26,7 @@ import type { TownCastLook } from './person/townCastLooks';
 import { DANCE_FPS, danceStateName, type DanceStyle } from './art/danceStyles';
 
 /** What a citizen can be doing, as far as the sprite is concerned. */
-export type TownCastAction = 'idle' | 'walk' | 'talk' | 'work' | 'dance';
+export type TownCastAction = 'idle' | 'walk' | 'run' | 'talk' | 'work' | 'dance';
 
 const LOOP_FPS = 8;
 const MS_PER_SECOND = 1000;
@@ -85,8 +85,9 @@ export function townCastStateFor(
   return townCastStateName(rowRoleFor(action, look), viewFor(action, look, facingX, facingY));
 }
 
-/** The row an action plays: a look with no art for it stands in its idle. */
+/** The row an action plays: a look with no art for it stands in its idle, and the cast hurries in its walk. */
 function rowRoleFor(action: TownCastAction, look: TownCastLook): TownCastRowRole {
+  if (action === 'run') return 'walk';
   if (action === 'work' && !look.hasWork) return 'idle';
   if (action === 'dance' && look.hasDance !== true) return 'idle';
   return action;
@@ -122,8 +123,9 @@ export function drawTownCastSprite(
   const nowSeconds = performance.now() / MS_PER_SECOND;
   const loopOffset = state.loopOffsetSeconds ?? 0;
   let frame: number;
-  if (state.action === 'walk') frame = walkFrameIndex(state.walkPhase, frames);
-  else if (key === danceStateName(state.danceStyle ?? DEFAULT_DANCE_STYLE)) {
+  if (state.action === 'walk' || state.action === 'run') {
+    frame = walkFrameIndex(state.walkPhase, frames);
+  } else if (key === danceStateName(state.danceStyle ?? DEFAULT_DANCE_STYLE)) {
     frame = timeFrameIndex(nowSeconds + loopOffset, DANCE_FPS, frames);
   } else frame = townCastLoopFrame(rowRoleFor(state.action, look), frames, nowSeconds + loopOffset);
 

@@ -20,15 +20,15 @@
 
 import type { Mob } from '../creatures/Mob';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
-const FRAMES_PER_SECOND = 60;
 const REMINDER_DELAY_SECONDS = 90;
-const REMINDER_DELAY_FRAMES = REMINDER_DELAY_SECONDS * FRAMES_PER_SECOND;
+const REMINDER_DELAY_FRAMES = REMINDER_DELAY_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How often a blocked reminder retries once the 90s wait has already elapsed. */
-const RETRY_INTERVAL_FRAMES = FRAMES_PER_SECOND;
+const RETRY_INTERVAL_FRAMES = WORLD_TICKS_PER_SECOND;
 /** How long the HUD stays in its flagged, more-prominent state once a nag fires. */
 const FLASH_DURATION_SECONDS = 3;
-const FLASH_DURATION_FRAMES = FLASH_DURATION_SECONDS * FRAMES_PER_SECOND;
+const FLASH_DURATION_FRAMES = FLASH_DURATION_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * A blow lands well under a second apart in any real exchange, so a mob that
@@ -36,7 +36,7 @@ const FLASH_DURATION_FRAMES = FLASH_DURATION_SECONDS * FRAMES_PER_SECOND;
  * tagged somebody a floor ago. {@link Mob.framesSinceStruckPlayer} is exactly
  * this recency, not the `hasStruckPlayer` latch, which never clears.
  */
-const RECENTLY_STRUCK_FRAMES = 2 * FRAMES_PER_SECOND;
+const RECENTLY_STRUCK_FRAMES = 2 * WORLD_TICKS_PER_SECOND;
 
 /**
  * Whether the party stands in a boss room whose fight is not over. Supplied by

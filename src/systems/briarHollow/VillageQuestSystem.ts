@@ -1023,7 +1023,11 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   private trackerEntry(): TrackerEntry | null {
     const phase = this.phase;
-    const base = { id: BRIAR_HOLLOW_QUEST_ID, name: BRIAR_HOLLOW_QUEST_NAME } as const;
+    const base = {
+      kind: 'single',
+      id: BRIAR_HOLLOW_QUEST_ID,
+      name: BRIAR_HOLLOW_QUEST_NAME,
+    } as const;
     const mayor = (): TrackerTarget | undefined => this.villagerTarget('bramblewick');
     switch (phase) {
       case 'unmet': {
@@ -1198,7 +1202,9 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     }
   }
 
-  private assaultEntry(base: { readonly id: string; readonly name: string }): TrackerEntry {
+  private assaultEntry(
+    base: Pick<Extract<TrackerEntry, { kind: 'single' }>, 'kind' | 'id' | 'name'>,
+  ): TrackerEntry {
     const assault = this.deps.assault();
     const wave = assault?.waveNumber ?? 1;
     const bellPercent = Math.round((assault?.bellFraction ?? 1) * PERCENT);

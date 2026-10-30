@@ -4,13 +4,13 @@ import {
   FLOODED_APPROACH_DEFAULT_MIN_LENGTH_TILES,
   WIDE_CORRIDOR_WIDTH_TILES,
 } from '../map/floodedApproach';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 /** Floor 1 is the shorter of the two timed floors — a first-time crawler's own dungeon. */
 const LEVEL1_NIGHTMARE_TIME_LIMIT_MINUTES = 40;
 export const LEVEL1_NIGHTMARE_TIME_LIMIT_FRAMES =
-  LEVEL1_NIGHTMARE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+  LEVEL1_NIGHTMARE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 
 /** Goblin spawn chance (85%). */
 const GOBLIN_CHANCE = 0.85;

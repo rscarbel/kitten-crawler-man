@@ -32,7 +32,8 @@ import { ACTIVATE_KEYS, FOCUS_MOVE_KEYS, type Surface, type Ui } from '../../cor
 import { drawCoinRewardIcon, drawXpRewardIcon } from '../../icons/rewardIcons';
 import { skinsFor, type BrassSkin } from '../../theme/skins';
 import { itemSlot } from '../../widgets/itemSlot';
-import { fillRounded, roundRectPath, strokeRounded } from '../../widgets/paint';
+import { fillRounded, strokeRounded } from '../../widgets/paint';
+import { roundRectPath } from '../../widgets/roundRect';
 import { panel, type FooterButton, type PanelOptions } from '../../widgets/panel';
 import { lineHeightOf, measureTextHeight, text, type TextOptions } from '../../widgets/text';
 import { fitPanelBody } from './endScreenParts';

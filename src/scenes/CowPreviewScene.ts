@@ -37,9 +37,9 @@ import { GameMap } from '../map/GameMap';
 import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 const BASE_TILE_SIZE = 32;
-const FRAMES_PER_SECOND = 60;
 const TWO_PI = Math.PI * 2;
 
 const ZOOM_IN_GAME = 1;
@@ -130,7 +130,7 @@ export class CowPreviewScene extends PreviewScene {
 
   update(): void {
     if (this.paused) return;
-    const dt = SPEED_LEVELS[this.speedIndex] / FRAMES_PER_SECOND;
+    const dt = SPEED_LEVELS[this.speedIndex] / WORLD_TICKS_PER_SECOND;
     this.clock += dt;
     for (const walker of this.walkers) {
       if (this.actionOf(walker) !== 'walk') continue;

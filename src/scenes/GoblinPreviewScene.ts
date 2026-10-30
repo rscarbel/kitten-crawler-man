@@ -45,6 +45,7 @@ import {
 import { GOBLIN_BOMBER_ARCHETYPES, type GoblinBomberArchetype } from '../sprites/art/goblinArt';
 import { drawGoblinBomberSprite } from '../sprites/goblinBomberSprite';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 const ARCHETYPES: ReadonlyArray<GoblinArchetype> = ['sword', 'axe', 'mace', 'warhammer', 'bow'];
 
@@ -154,7 +155,6 @@ const PEAK_FRAME_OUTLINE_WIDTH = 2;
 const GROUND_FRACTION = 0.86;
 /** Inset of a cell's own caption from its left edge. */
 const CELL_TEXT_INSET = 4;
-const FRAMES_PER_SECOND = 60;
 /** Gore needs a map to settle onto; a small empty one is enough for a preview. */
 const PREVIEW_MAP_SIZE = 24;
 
@@ -185,7 +185,7 @@ export class GoblinPreviewScene extends PreviewScene {
 
   /** Which frame of a row is showing right now, at the chosen playback speed. */
   private frameOf(row: RowSpec, weapon: GoblinArchetype): number {
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(weapon, row.state);
   }
 
@@ -304,7 +304,7 @@ export class GoblinPreviewScene extends PreviewScene {
   private renderBombers(ctx: CanvasRenderingContext2D, gridLeft: number, gridTop: number): void {
     const cell = this.cellSize();
     const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     GOBLIN_BOMBER_ARCHETYPES.forEach((archetype, column) => {
       worldText(ctx, archetype, {
         x: gridLeft + column * (cell.w + CELL_PADDING) + cell.w / 2,

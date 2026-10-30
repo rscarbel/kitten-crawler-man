@@ -11,6 +11,8 @@
  * Deliberately *not* in `Settings`: a pin belongs to a run, not to a device.
  */
 
+import { resolvePinnedEntry, type TrackerEntry } from '../../systems/questTracker';
+
 /**
  * Who set the current pin. A player pin (tapped in the Journal) always keeps
  * the world arrow; an auto-pin (set when a quest starts) yields to whichever
@@ -37,6 +39,33 @@ export function releaseAutoPin(progress: JournalProgress, questId: string): void
   if (progress.pinSource !== 'auto' || progress.pinnedTrackerId !== questId) return;
   progress.pinnedTrackerId = null;
   progress.pinSource = null;
+}
+
+/** A pin that kept the arrow when another quest asked for it. */
+export interface HeldPin {
+  readonly pinnedId: string;
+  readonly entry: TrackerEntry;
+}
+
+/**
+ * Pins `questId`, which the party has just started or been told about, as
+ * the automatic pin, unless a pin on another quest the Journal can still
+ * follow holds the arrow. Returns that pin when it does, so a scene can ask
+ * the player whether to switch, and null once `questId` is pinned.
+ */
+export function autoPinQuest(
+  progress: JournalProgress,
+  questId: string,
+  entries: ReadonlyArray<TrackerEntry>,
+): HeldPin | null {
+  const pinnedId = progress.pinnedTrackerId;
+  if (pinnedId !== null && pinnedId !== questId) {
+    const entry = resolvePinnedEntry(pinnedId, entries);
+    if (entry !== null) return { pinnedId, entry };
+  }
+  progress.pinnedTrackerId = questId;
+  progress.pinSource = 'auto';
+  return null;
 }
 
 /** A point-in-time copy, for the in-run safe-room checkpoint. */

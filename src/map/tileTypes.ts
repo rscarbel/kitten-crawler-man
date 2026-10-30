@@ -832,16 +832,20 @@ export const CAT_GAP = 191;
 /**
  * A hole through a storey's floor where the boards have gone, or the open
  * shaft a building's bells hang in: dark down to the storey below. Nobody
- * stands on it, but a thing thrown or knocked off flies across it, and a
- * board fallen over it is floor again.
+ * stands on it, but a thing thrown or knocked off flies across it.
  */
 export const FLOOR_DROP = 192;
+/**
+ * A hole in the floor with a board fallen across it: painted as the hole,
+ * since the board lying over it is its own art, but stood on like floor.
+ */
+export const FLOOR_DROP_SPANNED = 193;
 
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 193;
+export const TILE_TYPE_COUNT = 194;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

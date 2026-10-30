@@ -611,7 +611,11 @@ export class StealthKeySnatchSystem
   trackerEntries(): ReadonlyArray<TrackerEntry> {
     const room = this.room;
     if (room === null) return [];
-    const base = { id: STEALTH_KEY_SNATCH_QUEST_ID, name: STEALTH_KEY_SNATCH_QUEST_NAME };
+    const base = {
+      kind: 'single',
+      id: STEALTH_KEY_SNATCH_QUEST_ID,
+      name: STEALTH_KEY_SNATCH_QUEST_NAME,
+    } as const;
     switch (this.currentPhase) {
       case 'unmet':
         return [

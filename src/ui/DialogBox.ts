@@ -42,6 +42,7 @@ import { allocCanvas, surfaceContext } from '../core/rendering/canvasSurface';
 import type { Paragraphs } from '../dialog/line';
 import { computeLineSpans, paginate, splitSentences, type Page } from '../dialog/paginate';
 import type { SpeakerSkin, SpeakerTypeface, SpeakerVoice, TextCase } from '../dialog/speakers';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 let measuringCtx: CanvasRenderingContext2D | null = null;
 
@@ -62,7 +63,6 @@ function measuringContext(): CanvasRenderingContext2D {
  * otherwise pile up into a buzz.
  */
 const WORD_TICK_MIN_GAP_MS = 45;
-const UPDATE_TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 /**
  * The most one `update()` may advance a clock-paced reveal: a couple of update
@@ -71,7 +71,7 @@ const MS_PER_SECOND = 1000;
  */
 const REVEAL_CLOCK_MAX_STEP_TICKS = 2;
 const REVEAL_CLOCK_MAX_STEP_MS =
-  (REVEAL_CLOCK_MAX_STEP_TICKS * MS_PER_SECOND) / UPDATE_TICKS_PER_SECOND;
+  (REVEAL_CLOCK_MAX_STEP_TICKS * MS_PER_SECOND) / WORLD_TICKS_PER_SECOND;
 
 // Layout geometry
 const DIALOG_MAX_WIDTH = 560;
@@ -307,8 +307,6 @@ function applyTextCase(paragraphs: Paragraphs, textCase: TextCase): Paragraphs {
       return paragraphs;
     case 'upper':
       return [first.toUpperCase(), ...rest.map((paragraph) => paragraph.toUpperCase())];
-    case 'lower':
-      return [first.toLowerCase(), ...rest.map((paragraph) => paragraph.toLowerCase())];
     default: {
       const unhandled: never = textCase;
       return unhandled;

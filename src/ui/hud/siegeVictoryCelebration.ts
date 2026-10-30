@@ -10,7 +10,6 @@
  * they hold still under a pause along with the silence.
  */
 
-import { UPDATES_PER_SECOND } from '../../systems/briarHollow/structureRules';
 import {
   VICTORY_FANFARE_FRAMES,
   fireworkSchedule,
@@ -33,6 +32,7 @@ import {
   seconds,
   sparkleColors,
 } from '../screens/dialogs/endScreenParts';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 /** What the celebration reads each frame: frames since the siege was won. */
 export interface SiegeVictoryCelebration {
@@ -73,7 +73,7 @@ const BLOCK_CENTRE_FRACTION = 0.4;
 const RAYS_REACH = 4;
 
 function framesAt(secondsIn: number): number {
-  return secondsIn * UPDATES_PER_SECOND;
+  return secondsIn * WORLD_TICKS_PER_SECOND;
 }
 
 function easeOutCubic(t: number): number {

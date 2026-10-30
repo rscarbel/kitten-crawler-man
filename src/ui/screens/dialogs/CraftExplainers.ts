@@ -1,6 +1,6 @@
 /**
- * The "how it works" explainers (the craft skills, village processing and
- * Deinonychus) behind one handle and one surface.
+ * The "how it works" explainers (the craft skills, village processing,
+ * Deinonychus and Belle's senses) behind one handle and one surface.
  *
  * Only one is ever up at a time, and every scene treats whichever it is the
  * same way, so a scene mounts the one surface and anything that gains an
@@ -19,7 +19,8 @@ import {
 import type { ExplainerEntry } from './explainerPages';
 
 /** A craft skill's own id, or another process explained the same way. */
-export type ExplainerId = CraftSkillId | 'processing' | 'deinonychus' | 'dual_harvest';
+export type ExplainerId =
+  CraftSkillId | 'processing' | 'deinonychus' | 'dual_harvest' | 'cat_senses';
 
 export interface CraftExplainersSurfaceOptions {
   /** Defaults to `craft-explainers`. */

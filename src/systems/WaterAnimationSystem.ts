@@ -27,7 +27,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import type { Camera } from '../core/rendering/camera';
+import { terrainAlignedCamera, type Camera } from '../core/rendering/camera';
 import { snapUserX, snapUserY } from '../map/tiles/deviceSnap';
 import type { GameMap } from '../map/GameMap';
 import {
@@ -40,11 +40,6 @@ import {
 } from '../map/tileTypes';
 import { drawRiverRockTile } from '../map/tiles/decorationTiles';
 import { drawDungeonWaterSurface, DungeonWaterRuns } from '../map/tiles/dungeonWaterSurface';
-import {
-  drawDungeonShoreSurface,
-  DungeonShoreTiles,
-  isDungeonShoreTile,
-} from '../map/tiles/dungeonWaterShore';
 import { drawDungeonWaterline } from '../sprites/dungeonWaterlineSprite';
 import { frameTime } from '../utils';
 import type { GameSystem } from './GameSystem';
@@ -402,8 +397,6 @@ export class WaterAnimationSystem implements GameSystem {
    * streaks, flecks and sun glints: it is opaque runoff under a ceiling.
    */
   private readonly dungeonRuns = new DungeonWaterRuns();
-  /** Visible tiles along a dungeon waterline, whose chop is clipped to the line and laps onto the floor. */
-  private readonly dungeonShore = new DungeonShoreTiles();
   /** Tiles per opacity level in the streak pass; see `STREAK_ALPHA_LEVELS`. */
   private readonly streakLevelCounts = new Array<number>(STREAK_ALPHA_LEVELS).fill(0);
   private readonly glints: { x: number; y: number; alpha: number }[] = [];
@@ -547,10 +540,14 @@ export class WaterAnimationSystem implements GameSystem {
    *
    * Called from the `renderGround` slot in `RenderPipeline`, not from `update` —
    * there is no per-frame state to advance, only the shared `frameTime` to read.
+   * Drawn on the terrain's pixel grid: the column and kerb under it are baked
+   * into the terrain, and a surface sliding up to a pixel against them shows
+   * a line along every bank.
    */
   renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
-    const { x: camX, y: camY } = camera;
-    this.collectVisible(camera);
+    const floorCamera = terrainAlignedCamera(camera);
+    const { x: camX, y: camY } = floorCamera;
+    this.collectVisible(floorCamera);
     // Nothing this method draws can appear outside the river, so with no river
     // on screen there is nothing to do — including for ripples, which are always
     // shed in water and would be clipped away regardless.
@@ -558,8 +555,6 @@ export class WaterAnimationSystem implements GameSystem {
 
     const time = frameTime;
     const previousAlpha = ctx.globalAlpha;
-    // Before the clip: laps run up onto the dry floor beside the water.
-    drawDungeonShoreSurface(ctx, this.gameMap.structure, this.dungeonShore, camX, camY, time);
     ctx.save();
     this.clipToWater(ctx);
     drawDungeonWaterSurface(ctx, this.dungeonRuns, camX, camY, time);
@@ -597,14 +592,11 @@ export class WaterAnimationSystem implements GameSystem {
     this.rockCount = 0;
     this.clipRunCount = 0;
     this.dungeonRuns.reset();
-    this.dungeonShore.reset();
     for (let ty = firstTileY; ty <= lastTileY; ty++) {
       const row = structure[ty];
       let runStartTx = -1;
       for (let tx = firstTileX; tx <= lastTileX; tx++) {
         const type = row[tx].type;
-        const isShore = isDungeonShoreTile(structure, tx, ty);
-        if (isShore) this.dungeonShore.add(tx, ty);
         const isRock = type === RIVER_ROCK;
         if (!isRock && type !== FloorTypeValue.water) {
           if (runStartTx >= 0) this.pushClipRun(runStartTx, tx, ty, camX, camY);
@@ -614,7 +606,7 @@ export class WaterAnimationSystem implements GameSystem {
         if (runStartTx < 0) runStartTx = tx;
         const cell = row[tx];
         if (isDungeonWater(cell)) {
-          if (!isShore) this.dungeonRuns.add(tx, ty, depthIndex(cell));
+          this.dungeonRuns.add(tx, ty, depthIndex(cell));
           continue;
         }
         const list = isRock ? this.rocks : this.visible;
@@ -680,7 +672,7 @@ export class WaterAnimationSystem implements GameSystem {
    * streak has length, a rock's wake has a 13 px radius and a wader's ripple
    * grows past 30 px. On a bank tile all three spill onto the grass, which reads
    * as the river's surface painted over the land. Its rects are snapped to
-   * whole device pixels so its edge meets the snapped shore and chop exactly.
+   * whole device pixels so its edge meets the snapped chop exactly.
    */
   private clipToWater(ctx: CanvasRenderingContext2D): void {
     const transform = ctx.getTransform();
@@ -955,6 +947,9 @@ export class WaterAnimationSystem implements GameSystem {
    * rim lands on top of the cut edge and hides the fact that it is a hard
    * horizontal line through a sprite. In dungeon water, which hides the body
    * below it completely, the cut is ringed with churning foam instead.
+   * `screenX`/`screenY` and `camX`/`camY` are on the terrain-aligned camera
+   * {@link renderGround} draws the surface on, so the rim and the ripples
+   * around it share a pixel.
    */
   renderWaterline(
     ctx: CanvasRenderingContext2D,

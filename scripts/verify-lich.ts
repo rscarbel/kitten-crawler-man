@@ -45,7 +45,7 @@ import {
   towerStoreyIndex,
   type TowerConditions,
 } from '../src/map/town/interiors/townCenterTower';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -1451,8 +1451,7 @@ function playWholeFight(stream: number): void {
   /** Five minutes of game time — many times what the fight needs when it works. */
   const FIGHT_BUDGET_MINUTES = 5;
   const SECONDS_PER_MINUTE = 60;
-  const FRAMES_PER_SECOND = 60;
-  const FIGHT_FRAME_BUDGET = FIGHT_BUDGET_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+  const FIGHT_FRAME_BUDGET = FIGHT_BUDGET_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
   const STRIKE_RANGE_TILES = 2;
   /** A swing's search box, in tiles: one tile either side of where the Lich is drawn. */
   const SWING_REACH_TILES = 3;
@@ -1555,6 +1554,18 @@ function playWholeFight(stream: number): void {
   let dazedThisFrame = false;
   /** Whether the room's live-hazard count was ever seen to fall during the tantrum. */
   let hazardFieldEverShrank = false;
+  /**
+   * The float's heading as last seen, and how far it has travelled since it
+   * last turned round. Turning back before covering {@link FLOAT_WOBBLE_SPAN_TILES}
+   * is the Lich dithering between two stations rather than fleeing anybody.
+   */
+  let floatHeading: { readonly x: number; readonly y: number } | null = null;
+  let floatTravelSinceReversalPx = Number.POSITIVE_INFINITY;
+  let floatPreviousPosition: { readonly x: number; readonly y: number } | null = null;
+  let floatWobbles = 0;
+  let floatReversals = 0;
+  let floatTravelPx = 0;
+  const FLOAT_WOBBLE_SPAN_TILES = 2;
   let previousHazardTiles = 0;
   /** Frames the companion spent standing somewhere the fire was about to reach. */
   let companionInDangerFrames = 0;
@@ -1883,6 +1894,31 @@ function playWholeFight(stream: number): void {
         if (hazardTiles < previousHazardTiles) hazardFieldEverShrank = true;
         previousHazardTiles = hazardTiles;
       }
+      const floating = phase === 'tantrum' && !isDazed && !ritual.playerLocked;
+      if (!floating) {
+        floatHeading = null;
+        floatPreviousPosition = null;
+        floatTravelSinceReversalPx = Number.POSITIVE_INFINITY;
+      } else {
+        const previous = floatPreviousPosition;
+        floatPreviousPosition = { x: lich.x, y: lich.y };
+        const stepX = previous === null ? 0 : lich.x - previous.x;
+        const stepY = previous === null ? 0 : lich.y - previous.y;
+        const stepLength = Math.hypot(stepX, stepY);
+        if (stepLength > 0) {
+          const heading = { x: stepX / stepLength, y: stepY / stepLength };
+          const turnedBack =
+            floatHeading !== null && heading.x * floatHeading.x + heading.y * floatHeading.y < 0;
+          if (turnedBack) {
+            floatReversals++;
+            if (floatTravelSinceReversalPx < FLOAT_WOBBLE_SPAN_TILES * TILE_SIZE) floatWobbles++;
+            floatTravelSinceReversalPx = 0;
+          }
+          floatTravelSinceReversalPx += stepLength;
+          floatTravelPx += stepLength;
+          floatHeading = heading;
+        }
+      }
       if (phasesSeen[phasesSeen.length - 1] !== phase) phasesSeen.push(phase);
       framesInPhase.set(phase, (framesInPhase.get(phase) ?? 0) + 1);
 
@@ -2190,6 +2226,14 @@ function playWholeFight(stream: number): void {
   check(
     swingsThatMissedTheGrid === 0,
     `${swingsThatMissedTheGrid} swing(s) aimed at where the Lich is drawn found nothing there — a system-driven move skipped the mob grid`,
+  );
+  check(
+    floatTravelPx > FLOAT_WOBBLE_SPAN_TILES * TILE_SIZE,
+    `the floating Lich travelled only ${Math.round(floatTravelPx)} px, so the wobble check below watched nothing`,
+  );
+  check(
+    floatWobbles === 0,
+    `the floating Lich turned straight back ${floatWobbles} time(s) (of ${floatReversals} reversals) within ${FLOAT_WOBBLE_SPAN_TILES} tiles of its last turn — it dithers between stations instead of fleeing`,
   );
   check(
     hazardFieldEverShrank,

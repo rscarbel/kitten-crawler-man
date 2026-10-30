@@ -30,7 +30,7 @@
  * Pickups are not written to a save — like floor loot, a reload clears them.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { playPickupGesture } from '../creatures/humanGestures';
 import type { GameMap } from '../map/GameMap';
@@ -71,7 +71,6 @@ export interface GroundPickupCheckpoint {
   readonly nextId: number;
 }
 
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 const HALF = 0.5;
 const FULL_CIRCLE = Math.PI * 2;
@@ -84,10 +83,10 @@ export const GROUND_PICKUP_PROMPT_RADIUS_TILES = 1.3;
 const GROUND_PICKUP_TTL_MINUTES = 10;
 /** How long an uncollected pickup lies there before it is gone. */
 export const GROUND_PICKUP_TTL_FRAMES =
-  GROUND_PICKUP_TTL_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+  GROUND_PICKUP_TTL_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 const GROUND_PICKUP_BLINK_SECONDS = 10;
 /** A pickup blinks for this long before it vanishes, so its going is not a surprise. */
-export const GROUND_PICKUP_BLINK_FRAMES = GROUND_PICKUP_BLINK_SECONDS * FRAMES_PER_SECOND;
+export const GROUND_PICKUP_BLINK_FRAMES = GROUND_PICKUP_BLINK_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Frames per half-blink: on for this long, off for this long. */
 const BLINK_HALF_PERIOD_FRAMES = 8;
 

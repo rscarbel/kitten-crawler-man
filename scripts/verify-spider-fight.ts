@@ -37,7 +37,7 @@ import {
   type TileContent,
 } from '../src/map/tileTypes';
 import { isWalkableTileType } from '../src/map/walkability';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { referenceStats, type ReferenceAttack } from '../src/core/party/referenceCrawler';
@@ -70,7 +70,6 @@ import {
   SLAM_CONE_RADIUS_PX,
   SLAM_CONE_RADIUS_TILES,
   SPIDER_ATTACK_TIMELINES,
-  SPIDER_FRAMES_PER_SECOND,
   MIN_IMPACT_HOLD_FRAMES,
   attackStageAt,
   audioSeekSeconds,
@@ -1478,7 +1477,7 @@ function gateAudio(matrix: readonly DodgeResult[]): void {
       record('3', `${attack}: has a timed impact sound`, false, 'no audioImpactSeconds');
       continue;
     }
-    const landing = cue + (impactSeconds - audioSeekSeconds(attack)) * SPIDER_FRAMES_PER_SECOND;
+    const landing = cue + (impactSeconds - audioSeekSeconds(attack)) * WORLD_TICKS_PER_SECOND;
     const offBy = Math.abs(landing - strikeFrame(attack));
     record(
       '3',
@@ -1490,7 +1489,7 @@ function gateAudio(matrix: readonly DodgeResult[]): void {
       .filter((result) => result.scenario.attack === attack)
       .map((result) => result.still.soundCueFrame);
     const creatureCuesOnTime = cues.length > 0 && cues.every((frame) => frame === cue);
-    const audibleLeadFrames = (impactSeconds - audioSeekSeconds(attack)) * SPIDER_FRAMES_PER_SECOND;
+    const audibleLeadFrames = (impactSeconds - audioSeekSeconds(attack)) * WORLD_TICKS_PER_SECOND;
     const creatureLanding = Math.max(
       cues.length === 0 ? Infinity : 0,
       ...cues.map((frame) =>
@@ -4342,7 +4341,7 @@ const TTK_PARTY_LEVELS: readonly number[] = [-1, 0, 1, 2].map(
 const TTK_TARGET_MIN_SECONDS = 90;
 const TTK_TARGET_MAX_SECONDS = 150;
 const FIGHT_BUDGET_SECONDS = 600;
-const FIGHT_FRAME_BUDGET = FIGHT_BUDGET_SECONDS * SPIDER_FRAMES_PER_SECOND;
+const FIGHT_FRAME_BUDGET = FIGHT_BUDGET_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Pixels of slack the reader keeps between itself and any drawn danger. */
 const READER_MARGIN_PX = 10;
 /** The cat's missile reach, as the reader uses it. */
@@ -4642,7 +4641,7 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
   let frame = 0;
   let stalledFrames = 0;
   const frameBudget = standsInHerWay(style)
-    ? TANK_BUDGET_SECONDS * SPIDER_FRAMES_PER_SECOND
+    ? TANK_BUDGET_SECONDS * WORLD_TICKS_PER_SECOND
     : FIGHT_FRAME_BUDGET;
   for (; frame < frameBudget && spider.isAlive; frame++) {
     const herBefore = centreOf(spider);
@@ -4801,7 +4800,7 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
   ).length;
   return {
     areaHits,
-    ttkSeconds: frame / SPIDER_FRAMES_PER_SECOND,
+    ttkSeconds: frame / WORLD_TICKS_PER_SECOND,
     killed: !spider.isAlive,
     bossDamageTaken: bossHits.length,
     otherDamageTaken: otherHits,
@@ -5073,7 +5072,7 @@ function measureRealLab(site: LabSite): RealLabMetrics {
             (run.bossDamageTaken + run.otherDamageTaken) / (run.ttkSeconds / SECONDS_PER_MINUTE),
         ),
       ),
-      stalledSeconds: mean(runs.map((run) => run.stalledFrames / SPIDER_FRAMES_PER_SECOND)),
+      stalledSeconds: mean(runs.map((run) => run.stalledFrames / WORLD_TICKS_PER_SECOND)),
       campedAreaHits: mean(
         camperRuns.map((run) => run.areaHits / (run.ttkSeconds / SECONDS_PER_MINUTE)),
       ),

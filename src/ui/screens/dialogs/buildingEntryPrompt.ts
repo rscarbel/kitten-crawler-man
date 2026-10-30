@@ -1,6 +1,6 @@
 /**
  * "Enter this building?" when the crawler steps onto a doorway. Enter is the
- * default; Escape and Leave keep the party outside until they step off and on.
+ * default; Escape and Leave step the party back onto the street in front of it.
  */
 
 import type { BuildingEntry } from '../../../map/buildingEntry';
@@ -15,7 +15,7 @@ import { buildingDisplayName } from '../../../map/buildingIds';
 export interface BuildingEntryPromptSource {
   readonly menuEntry: BuildingEntry | null;
   enterActiveBuilding(): void;
-  closeMenu(): void;
+  declineEntry(): void;
 }
 
 const PROMPT_WIDTH: PanelWidth = 'sm';
@@ -45,7 +45,7 @@ export function buildingEntryPromptSurface(
     isOpen: () => (source()?.menuEntry ?? null) !== null,
     haltsWorld: true,
     locksKeyboard: true,
-    escape: { kind: 'close', onEscape: () => source()?.closeMenu() },
+    escape: { kind: 'close', onEscape: () => source()?.declineEntry() },
     onKey: (key, mods) => swallowAttackKey(key, mods, true),
     content: (ui) => {
       const entry = source()?.menuEntry ?? null;
@@ -58,7 +58,7 @@ export function buildingEntryPromptSurface(
         extra: stackParts(ui, [keyboardHint(ui, PROMPT_WIDTH, LEAVE_HINT)]),
         width: PROMPT_WIDTH,
         buttons: [
-          { id: 'leave', label: 'Leave', onTap: () => source()?.closeMenu() },
+          { id: 'leave', label: 'Leave', onTap: () => source()?.declineEntry() },
           { id: 'enter', label: 'Enter', onTap: () => source()?.enterActiveBuilding() },
         ],
         defaultButton: ENTER_BUTTON_INDEX,

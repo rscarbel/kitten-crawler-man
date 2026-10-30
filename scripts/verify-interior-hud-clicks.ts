@@ -515,7 +515,11 @@ check(inside(loriSlot, hudHotbarSlot(POTION_SLOT)), 'the slot point is on the ba
 
 console.log('\nEach HUD control reaches its own action and nothing else');
 
-const journal: InteriorJournalSource = { entries: () => [], progress: createJournalProgress() };
+const journal: InteriorJournalSource = {
+  entries: () => [],
+  progress: createJournalProgress(),
+  partyOnShow: () => undefined,
+};
 const room = await enter(
   building((entry) => entry.type === 'store'),
   createAnchorQuestProgress(),

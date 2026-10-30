@@ -21,7 +21,7 @@ import type { TileContent } from '../map/tileTypes';
 import { clamp } from '../utils';
 import { townInteriorPropArtRiseTiles } from '../sprites/art/townInterior/townInteriorProps';
 import { intersect, type Rect } from '../ui/core/geom';
-import type { WorldRect } from '../core/rendering/worldRect';
+import type { WorldRect, WorldRows } from '../core/rendering/worldRect';
 import { UNZOOMED, worldPx } from '../core/rendering/camera';
 
 /**
@@ -145,6 +145,52 @@ export function followCamera(
       clear.y + clear.h,
       focusRange === null ? null : { start: focusRange.top, end: focusRange.bottom },
     ),
+  };
+}
+
+/**
+ * The camera's y moved so `rows` lie inside the clear span from `clearStart`
+ * to `clearEnd`: all of them where they fit, and their top where they do
+ * not, since a room's far wall is where a fight is staged. The tile `focus`
+ * stands on outranks the rows and stays inside the clear span whatever
+ * they ask.
+ */
+export function keepRowsInView(
+  cameraY: number,
+  rows: WorldRows,
+  focus: number,
+  clearStart: number,
+  clearEnd: number,
+): number {
+  const showsTop = rows.top - clearStart;
+  const showsBottom = rows.bottom - clearEnd;
+  const rowsFit = rows.bottom - rows.top <= clearEnd - clearStart;
+  const wanted = rowsFit ? clamp(cameraY, showsBottom, showsTop) : showsTop;
+  const halfTile = TILE_SIZE * CENTRE_OF_TILE;
+  const focusAtClearEnd = focus + halfTile - clearEnd;
+  const focusAtClearStart = focus - halfTile - clearStart;
+  if (focusAtClearEnd > focusAtClearStart) return cameraY;
+  return clamp(wanted, focusAtClearEnd, focusAtClearStart);
+}
+
+/**
+ * {@link followCamera}, then, when a scene names rows to keep in view,
+ * {@link keepRowsInView} on its y: the whole of a scene's framing, pure in
+ * its inputs, so a gate can ask where the camera stands.
+ */
+export function framedCamera(
+  focus: { readonly x: number; readonly y: number },
+  bounds: WorldRect,
+  view: Rect,
+  clear: Rect,
+  focusRange: WorldRect | null,
+  keepRows: WorldRows | null,
+): { x: number; y: number } {
+  const followed = followCamera(focus, bounds, view, clear, focusRange);
+  if (keepRows === null) return followed;
+  return {
+    x: followed.x,
+    y: keepRowsInView(followed.y, keepRows, focus.y, clear.y, clear.y + clear.h),
   };
 }
 

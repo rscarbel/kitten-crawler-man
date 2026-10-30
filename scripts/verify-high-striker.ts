@@ -26,12 +26,11 @@ import {
   highStrikerPeakAtS,
   highStrikerPuckUp,
 } from '../src/systems/circus/highStrikerTimeline.js';
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { applyMovement } from '../src/systems/GameLoopPhases';
 import { MINE_IMPACT_FRAME, MINE_TICKS_PER_FRAME } from '../src/sprites/art/human/actionsGather';
-import { TICKS_PER_SECOND } from '../src/sprites/art/human/timing';
 import { HighStrikerSystem, walksToForecourt } from '../src/systems/circus/HighStrikerSystem';
 import { CIRCUS_TERRAIN_CLEARANCE_TILES } from '../src/map/overworld/circusGroundsLayout';
 import { CLIFF } from '../src/map/tileTypes';
@@ -115,7 +114,7 @@ function checkWalkingLockIn(): void {
   const human = new HumanPlayer(placed.rect.x, placed.rect.y + 1, TILE_SIZE);
   human.isActive = true;
   const tick = (): void => {
-    now += 1 / TICKS_PER_SECOND;
+    now += 1 / WORLD_TICKS_PER_SECOND;
     human.tickTimers();
     system.update(site.map, false);
   };
@@ -231,7 +230,7 @@ function checkShutInSpot(kind: 'human' | 'cat'): void {
     return;
   }
   const tick = (): void => {
-    now += 1 / TICKS_PER_SECOND;
+    now += 1 / WORLD_TICKS_PER_SECOND;
     crawler.tickTimers();
     system.update(site.map, false);
   };

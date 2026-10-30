@@ -27,6 +27,7 @@ import {
 } from '../widgets/carolineFrame';
 import { drawGlass, fillRounded } from '../widgets/paint';
 import { lineHeightOf, measureText, measureTextHeight, text } from '../widgets/text';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 /** Beyond this, the oldest toast is dropped rather than growing the stack up the screen. */
 export const MAX_VISIBLE_TOASTS = 4;
@@ -37,10 +38,12 @@ export const TOAST_DISPLAY_TICKS = 150;
 /** Ticks at the end of a toast's life spent fading out, so it never simply blinks out. */
 export const TOAST_FADE_TICKS = 30;
 
-const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
-const MS_PER_TICK = MS_PER_SECOND / TICKS_PER_SECOND;
-const TOAST_ENTER_TICKS = Math.max(1, Math.round((motion.base * TICKS_PER_SECOND) / MS_PER_SECOND));
+const MS_PER_TICK = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
+const TOAST_ENTER_TICKS = Math.max(
+  1,
+  Math.round((motion.base * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND),
+);
 const EASE_OUT_POWER = 3;
 
 /** The widest a toast is drawn even in a wide lane, so a long line stays a glance. */

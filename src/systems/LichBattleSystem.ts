@@ -26,7 +26,7 @@
  * rules look like on screen.
  */
 
-import { FOLLOWER_SPEED, PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { FOLLOWER_SPEED, PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
@@ -60,8 +60,7 @@ import {
 } from './MashInteraction';
 import { REPAIR_ROWS } from '../sprites/art/humanFigure';
 import type { WorkChannelBuilder } from './WorkChannel';
-import type { TopBandEntry } from '../ui/hud/topBand';
-import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
+import type { BandMeterRow } from '../ui/hud/topBandStack';
 import {
   LICH_FIREWALL_BARK,
   LICH_RECKONING_BARK,
@@ -264,6 +263,19 @@ const FLOAT_PATH_INSET_TILES = 1;
  * the spot for the rest of the phase.
  */
 const FLOAT_STATION_REACHED_PX = LICH_FLOAT_SPEED * 2;
+/** How many stations ahead the float looks for a crawler standing in its way. */
+const FLOAT_LOOKAHEAD_STATIONS = 3;
+/** How near a station a crawler has to stand, in tiles, to count as in the float's way. */
+const FLOAT_CLEARANCE_TILES = 2;
+
+/** Which way round the perimeter ring the float travels: forward is clockwise. */
+type RingDirection = 1 | -1;
+
+/** Where the float is headed: a station on the ring, and which way it is travelling. */
+interface FloatCourse {
+  readonly station: TilePos;
+  readonly direction: RingDirection;
+}
 
 // ── The binding ──────────────────────────────────────────────────────────────
 
@@ -296,7 +308,6 @@ const OBJECTIVE_BINDING_CAT_WORKING = 'Hold the Lich off while Belle unbinds the
 
 const DODGE_BAR_LABEL = 'Survive the rain';
 const CENTER_OFFSET = 0.5;
-const FRAMES_PER_SECOND = 60;
 
 /** What the boss bar says the player should be doing, per phase. */
 const OBJECTIVE_ONSLAUGHT = 'It has worn that mask over this town for years. End it.';
@@ -491,7 +502,7 @@ export class LichBattleSystem implements GroundHazardSource {
   /** Per-column answers to {@link gapIsStandable}; the storey never changes. */
   private readonly standableGapCache = new Map<number, boolean>();
   private cachedWaveSpawnRow: number | null = null;
-  private floatStation: TilePos | null = null;
+  private floatCourse: FloatCourse | null = null;
   private orderedLaneColumn: number | null = null;
   private waveIgnitionSoundPending = false;
   /**
@@ -1335,7 +1346,7 @@ export class LichBattleSystem implements GroundHazardSource {
     this.orbPlanner.reset();
     this.orbPlanner.setInterval(ORB_SPAWN_INTERVAL_FRAMES);
     this.companion?.clearDirective();
-    this.floatStation = null;
+    this.floatCourse = null;
     this.hooks.openBark(LICH_TANTRUM_BARK, () => {
       this.hooks.showBanner(TANTRUM_BANNER_TITLE, TANTRUM_BANNER_SUBTITLE);
       this.audio?.play('deep_rumbling');
@@ -1396,24 +1407,26 @@ export class LichBattleSystem implements GroundHazardSource {
   }
 
   /**
-   * Walks the Lich around the room's perimeter, choosing at each station the
-   * neighbour that puts it further from the nearest crawler. Unreachable by
-   * design: it is immune while it floats, and the phase is a dodge, not a chase.
+   * Walks the Lich around the room's perimeter, keeping to one direction round
+   * the ring and turning back only when a crawler stands in the way ahead (see
+   * {@link nextFloatCourse}). Unreachable by design: it is immune while it
+   * floats, and the phase is a dodge, not a chase.
    */
   private floatAwayFromParty(ctx: SystemContext, crawlers: ReadonlyArray<Player>): void {
     const stations = this.perimeterStations();
     if (stations.length === 0) return;
-    let station = this.floatStation;
-    if (station === null) {
-      station = farthestStationFrom(stations, crawlers);
+    let course = this.floatCourse;
+    if (course === null) {
+      course = { station: farthestStationFrom(stations, crawlers), direction: 1 };
     } else {
-      const targetX = station.col * TILE_SIZE;
-      const targetY = station.row * TILE_SIZE;
+      const targetX = course.station.col * TILE_SIZE;
+      const targetY = course.station.row * TILE_SIZE;
       if (Math.hypot(targetX - this.lich.x, targetY - this.lich.y) <= FLOAT_STATION_REACHED_PX) {
-        station = nextStationAwayFrom(stations, station, crawlers);
+        course = nextFloatCourse(stations, course, crawlers);
       }
     }
-    this.floatStation = station;
+    this.floatCourse = course;
+    const { station } = course;
 
     const targetX = station.col * TILE_SIZE;
     const targetY = station.row * TILE_SIZE;
@@ -2001,27 +2014,20 @@ export class LichBattleSystem implements GroundHazardSource {
     this.renderCarrier(ctx, camX, camY);
   }
 
-  /** The dodge clock, stacked under the boss bar for the phase that has one. */
-  topBandEntry(): TopBandEntry | null {
+  /** The dodge clock, a row of the boss bar's card for the phase that has one. */
+  dodgeClockRow(): BandMeterRow | null {
     if (this.machine.phase !== 'tantrum') return null;
     if (this.machine.tantrumMode !== 'float') return null;
     const seconds = secondsLeftOnDodgeClock(this.machine.dodgeProgress);
-    return stackedBandEntry({
-      id: 'lich-dodge',
-      priority: 'encounter',
-      maxWidth: TOP_BAND_WIDTH.regular,
-      rows: [
-        {
-          kind: 'meter',
-          id: 'lich-dodge/clock',
-          value: this.machine.dodgeProgress,
-          max: 1,
-          meterKind: 'stamina',
-          label: DODGE_BAR_LABEL,
-          valueText: `${seconds}s`,
-        },
-      ],
-    });
+    return {
+      kind: 'meter',
+      id: 'lich-dodge/clock',
+      value: this.machine.dodgeProgress,
+      max: 1,
+      meterKind: 'stamina',
+      label: DODGE_BAR_LABEL,
+      valueText: `${seconds}s`,
+    };
   }
 
   private tickBursts(): void {
@@ -2148,7 +2154,7 @@ function segmentPointDistance(
  */
 function secondsLeftOnDodgeClock(progress: number): number {
   const framesLeft = (1 - progress) * DODGE_SURVIVAL_FRAMES;
-  return Math.max(1, Math.ceil(framesLeft / FRAMES_PER_SECOND));
+  return Math.max(1, Math.ceil(framesLeft / WORLD_TICKS_PER_SECOND));
 }
 
 function farthestStationFrom(
@@ -2167,25 +2173,52 @@ function farthestStationFrom(
 }
 
 /**
- * The next station clockwise or anticlockwise, whichever moves away from the
- * party. A ring walked in one fixed direction would eventually walk the Lich
+ * The next station along the ring in the course's direction, or back the
+ * other way when a crawler stands within {@link FLOAT_CLEARANCE_TILES} of the
+ * next {@link FLOAT_LOOKAHEAD_STATIONS} stations ahead and the way back is
+ * clear. A ring walked in one fixed direction would eventually walk the Lich
  * straight through whoever is chasing it.
+ *
+ * The direction is held between stations rather than chosen afresh at each
+ * one: picking whichever neighbour is further from the party sends the Lich
+ * back the moment it passes the station furthest from them, and it then
+ * shuttles between that station and its neighbour for the rest of the phase.
+ * Pinned from both sides, it keeps going: it is immune while it floats, and
+ * turning round there would only shuttle it between the two crawlers.
  */
-function nextStationAwayFrom(
+function nextFloatCourse(
   stations: ReadonlyArray<TilePos>,
-  current: TilePos,
+  course: FloatCourse,
   crawlers: ReadonlyArray<Player>,
-): TilePos {
+): FloatCourse {
   const index = stations.findIndex(
-    (station) => station.col === current.col && station.row === current.row,
+    (station) => station.col === course.station.col && station.row === course.station.row,
   );
-  if (index < 0) return farthestStationFrom(stations, crawlers);
-  const forward = stations[(index + 1) % stations.length];
-  const backward = stations[(index - 1 + stations.length) % stations.length];
-  return nearestCrawlerTileDistance(forward, crawlers) >=
-    nearestCrawlerTileDistance(backward, crawlers)
-    ? forward
-    : backward;
+  if (index < 0) return { station: farthestStationFrom(stations, crawlers), direction: 1 };
+  const reverse: RingDirection = course.direction === 1 ? -1 : 1;
+  const turnsBack =
+    crawlerInTheWay(stations, index, course.direction, crawlers) &&
+    !crawlerInTheWay(stations, index, reverse, crawlers);
+  const direction = turnsBack ? reverse : course.direction;
+  return { station: ringStation(stations, index + direction), direction };
+}
+
+function ringStation(stations: ReadonlyArray<TilePos>, index: number): TilePos {
+  return stations[((index % stations.length) + stations.length) % stations.length];
+}
+
+/** Whether a crawler stands near any of the next few stations from `index` going `direction`. */
+function crawlerInTheWay(
+  stations: ReadonlyArray<TilePos>,
+  index: number,
+  direction: RingDirection,
+  crawlers: ReadonlyArray<Player>,
+): boolean {
+  for (let step = 1; step <= FLOAT_LOOKAHEAD_STATIONS; step++) {
+    const station = ringStation(stations, index + step * direction);
+    if (nearestCrawlerTileDistance(station, crawlers) < FLOAT_CLEARANCE_TILES) return true;
+  }
+  return false;
 }
 
 function nearestCrawlerTileDistance(station: TilePos, crawlers: ReadonlyArray<Player>): number {

@@ -9,10 +9,11 @@
  * under.
  *
  * The briefing table carries the pinned map of the row because what the
- * Lodge is actually watching is the drainage under the alley, and the iron
+ * Lodge is actually watching is the drainage under the alley, and the
  * cellar lid in the floor south of it is the same lid Kessler's own lines
- * describe — flush with the boards and never opened by an interaction, since
- * the cellar this room sits on is a quest space, not a room this layout owns.
+ * describe — flush with the boards and never opened by an interaction. Only
+ * the questline lifts it (`LodgeCellarHatch`): the shaft under it is a quest
+ * space, not a room this layout owns.
  */
 
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';

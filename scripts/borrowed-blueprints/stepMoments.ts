@@ -45,14 +45,14 @@ import {
   buildSiegeRig,
   questRewardSurface,
   questRewardUi,
-  UPDATES_PER_SECOND,
   type QuestRewardUi,
 } from '../villageSiegeHarness';
 import { BLUEPRINTS_RIG_SEED, blueprintsRig, type Check } from './fence';
 import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera';
+import { WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 
 const GRAIN_TARGET = 100;
-const BANNER_FRAMES = STEP_BANNER_SECONDS * UPDATES_PER_SECOND;
+const BANNER_FRAMES = STEP_BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** The rig never scrolls, so the village's world-anchored panels read the map's origin. */
 const HARNESS_CAMERA_TOP_LEFT = { x: 0, y: 0 } as const;
 
@@ -162,7 +162,7 @@ const COMPLETE_RIG_ASSAULT_LEVEL = 6;
 /** Frames a rig is given for the screen to go up once it is due: it opens on the first. */
 const OPEN_WITHIN_FRAMES = 3;
 /** Long enough that a screen raised a second time would certainly be up. */
-const NO_REPLAY_FRAMES = 2 * UPDATES_PER_SECOND;
+const NO_REPLAY_FRAMES = 2 * WORLD_TICKS_PER_SECOND;
 const SCREEN_W = 1280;
 const SCREEN_H = 720;
 /** A point on no button, well clear of the panel. */

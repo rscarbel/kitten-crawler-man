@@ -41,7 +41,7 @@ const PATCH_WORLD_PX = PATCH_TILES * TILE_SIZE;
  * Painted pixels per world pixel. The chop is soft-edged, so a little under
  * the usual device scale is indistinguishable and saves most of the bytes.
  */
-export const DUNGEON_WATER_SURFACE_DENSITY = 1.5;
+const DUNGEON_WATER_SURFACE_DENSITY = 1.5;
 const PATCH_PX = Math.round(PATCH_WORLD_PX * DUNGEON_WATER_SURFACE_DENSITY);
 const LOOP_FRAMES = 16;
 const LOOP_FRAMES_PER_SECOND = 6;
@@ -343,15 +343,6 @@ export function releaseDungeonWaterSurface(): void {
 /** The loop frame shown at `timeSeconds`. */
 function dungeonWaterSurfaceFrameAt(timeSeconds: number): number {
   return positiveMod(Math.floor(timeSeconds * LOOP_FRAMES_PER_SECOND), LOOP_FRAMES);
-}
-
-/**
- * The painted chop patch shown at `timeSeconds`, at
- * {@link DUNGEON_WATER_SURFACE_DENSITY} painted pixels per world pixel and
- * repeating every patch, for a caller that lays it through its own mask.
- */
-export function dungeonWaterSurfacePatchAt(timeSeconds: number): CanvasSurface {
-  return frameSurface(currentFrames(), dungeonWaterSurfaceFrameAt(timeSeconds));
 }
 
 const DEPTH_LEVELS = MAX_WATER_DEPTH + 1;

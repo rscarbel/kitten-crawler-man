@@ -15,9 +15,10 @@
  *    potion. The town is already a safe zone with a free bed, so this is
  *    convenience/flavor, not a combat heal.
  *
- * The system exposes `tryInteract` for the scene's Space-priority chain (yielding
- * to combat/quests/citizens like every other interaction) and `renderPrompt` for
- * the floating SPACE hint. Purely additive: it never touches combat or mobs.
+ * The system exposes `tryInteract` for the scene's Space-priority chain,
+ * `reachTarget` for the scene to rank what a press would reach (the board is
+ * quest business), and `renderPrompt` for the floating SPACE hint. Purely
+ * additive: it never touches combat or mobs.
  */
 
 import { TILE_SIZE } from '../core/constants';
@@ -112,6 +113,16 @@ interface HealSpot {
   cooldownFrames: number;
   tiles: TileXY[];
 }
+
+/** The one prop a press would reach; see `TownPropSystem.reachTarget`. */
+export type TownPropTarget =
+  | { readonly kind: 'noticeBoard'; readonly board: NoticeBoardProp }
+  | {
+      readonly kind: 'fortuneTeller';
+      readonly teller: FortuneTellerProp;
+      readonly marker: QuestMarkerState;
+    }
+  | { readonly kind: 'healSpot'; readonly spot: HealSpot; readonly tile: TileXY };
 
 export class TownPropSystem implements GameSystem {
   private readonly healSpots: HealSpot[] = [];
@@ -213,42 +224,66 @@ export class TownPropSystem implements GameSystem {
   }
 
   /**
+   * What a press from `active` would reach, in the order a press tries them:
+   * the board, Madame Voss, then a heal spot (only while hurt and off
+   * cooldown). Null when nothing is in reach.
+   */
+  reachTarget(active: Player): TownPropTarget | null {
+    const board = this.board;
+    if (board !== null && this.tileWithinReach(active, board.tile)) {
+      return { kind: 'noticeBoard', board };
+    }
+    const teller = this.fortuneTellerProp;
+    if (teller !== null && this.tileWithinReach(active, teller.tile)) {
+      return { kind: 'fortuneTeller', teller, marker: teller.markerState };
+    }
+    if (this.healCooldown > 0 || active.hp >= active.maxHp) return null;
+    const near = this.nearestHealSpot(active);
+    return near === null ? null : { kind: 'healSpot', spot: near.spot, tile: near.tile };
+  }
+
+  /**
    * Space-key handler for the scene's interaction chain. Opens the board or heals
    * at the nearest fountain/well/bench in reach. Returns whether the press was used.
    */
   tryInteract(active: Player): boolean {
-    if (this.board !== null && this.tileWithinReach(active, this.board.tile)) {
-      this.onReadBoard();
-      return true;
-    }
-    if (this.fortuneTile !== null && this.tileWithinReach(active, this.fortuneTile)) {
-      this.onConsultFortune();
-      return true;
-    }
-    if (this.healCooldown <= 0 && active.hp < active.maxHp) {
-      const near = this.nearestHealSpot(active);
-      if (near !== null) {
-        this.heal(active, near.spot);
+    const target = this.reachTarget(active);
+    if (target === null) return false;
+    switch (target.kind) {
+      case 'noticeBoard':
+        this.onReadBoard();
         return true;
+      case 'fortuneTeller':
+        this.onConsultFortune();
+        return true;
+      case 'healSpot':
+        this.heal(active, target.spot);
+        return true;
+      default: {
+        const unhandled: never = target;
+        return unhandled;
       }
     }
-    return false;
   }
 
   /** Floats a SPACE prompt over the nearest actionable prop, if one is in range. */
   renderPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
-    if (this.board !== null && this.tileWithinReach(active, this.board.tile)) {
-      drawInteractionPromptOver(ctx, this.board, camX, camY, 'Read');
-      return;
-    }
-    const fortuneTeller = this.fortuneTellerProp;
-    if (fortuneTeller !== null && this.tileWithinReach(active, fortuneTeller.tile)) {
-      drawInteractionPromptOver(ctx, fortuneTeller, camX, camY, 'Consult');
-      return;
-    }
-    if (this.healCooldown <= 0 && active.hp < active.maxHp) {
-      const near = this.nearestHealSpot(active);
-      if (near !== null) this.drawHealPrompt(ctx, near.spot, near.tile, camX, camY);
+    const target = this.reachTarget(active);
+    if (target === null) return;
+    switch (target.kind) {
+      case 'noticeBoard':
+        drawInteractionPromptOver(ctx, target.board, camX, camY, 'Read');
+        return;
+      case 'fortuneTeller':
+        drawInteractionPromptOver(ctx, target.teller, camX, camY, 'Consult');
+        return;
+      case 'healSpot':
+        this.drawHealPrompt(ctx, target.spot, target.tile, camX, camY);
+        return;
+      default: {
+        const unhandled: never = target;
+        return unhandled;
+      }
     }
   }
 
@@ -448,12 +483,12 @@ export class TownPropSystem implements GameSystem {
  * she is baked by `generate-taloncrest-sprites.ts` into this town's own folder.
  */
 const NOTICE_BOARD_SHEET_KEY = 'town_notice_board';
-const BENCH_SHEET_KEY = 'town_bench';
+export const BENCH_SHEET_KEY = 'town_bench';
 const FORTUNE_TELLER_SHEET_KEY = 'taloncrest_fortune_teller';
 
 /** None of the three moves, so each is one picture in a single-state sheet. */
-const FIXTURE_STATE = 'idle';
-const FIXTURE_FRAME = 0;
+export const FIXTURE_STATE = 'idle';
+export const FIXTURE_FRAME = 0;
 
 /**
  * How far a heal spot's art stands above the tile it is used from. A well is

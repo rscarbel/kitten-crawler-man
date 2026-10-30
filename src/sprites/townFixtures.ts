@@ -87,6 +87,8 @@ export function drawNoticeBoard(
 // Bench: a low wooden seat with a backrest, sitting wholly within its own tile.
 const BENCH_SIDE_INSET_PX = 2;
 const BENCH_SEAT_FRACTION = 0.55;
+/** Height of the bench's seat above the bottom edge of its tile, in tiles: where a sitter's weight rests. */
+export const BENCH_SEAT_HEIGHT_TILES = 1 - BENCH_SEAT_FRACTION;
 const BENCH_SEAT_THICKNESS_PX = 4;
 const BENCH_LEG_WIDTH_PX = 3;
 const BENCH_LEG_HEIGHT_PX = 6;

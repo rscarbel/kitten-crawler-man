@@ -6,6 +6,8 @@
  */
 
 import {
+  citizenHurryGait,
+  prewarmCitizenHurry,
   citizenSpeechStyle,
   citizenWalkCyclePx,
   citizenWalkFrames,
@@ -14,6 +16,7 @@ import {
   prewarmCitizenFigure,
   type CitizenFigure,
   type CitizenSpriteState,
+  type GaitRow,
 } from './citizenFigure';
 import {
   bespokeResidentFigure,
@@ -59,6 +62,25 @@ export function townspersonWalkFrames(body: TownspersonBody): number {
     default:
       return unhandledBody(body);
   }
+}
+
+/** The row this body hurries in, drawn at `tileSize`: a bespoke painter has no run, so it hurries in its walk. */
+export function townspersonHurryGait(body: TownspersonBody, tileSize: number): GaitRow {
+  switch (body.kind) {
+    case 'citizen':
+      return citizenHurryGait(body.figure, tileSize);
+    case 'bespoke': {
+      const figure = bespokeResidentFigure(body.id);
+      return { action: 'walk', cyclePx: figure.walkCyclePx(tileSize), frames: figure.walkFrames };
+    }
+    default:
+      return unhandledBody(body);
+  }
+}
+
+/** Warms the row this body hurries in; a bespoke painter hurries in its walk, warm with the rest. */
+export function prewarmTownspersonHurry(body: TownspersonBody): void {
+  if (body.kind === 'citizen') prewarmCitizenHurry(body.figure);
 }
 
 /** The dialog style this body speaks in. */

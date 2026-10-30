@@ -11,15 +11,13 @@ import {
   VIAL_FRAMES,
   VIAL_STATE,
 } from './art/clownGasFigure';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Draw wrappers for the three figures the Evil Clown's gas vials are made of.
  *
  * Painted by `clownGasArt.ts`; review them with `npm run render:clowns`.
  */
-
-/** Frames per second the game loop runs at; the rows are timed against it. */
-const FRAMES_PER_SECOND = 60;
 
 /** Tumble speed of the thrown bottle. */
 const VIAL_FPS = 12;
@@ -57,7 +55,7 @@ export function drawClownVial(
   ageFrames: number,
   heightPx: number,
 ): void {
-  const seconds = ageFrames / FRAMES_PER_SECOND;
+  const seconds = ageFrames / WORLD_TICKS_PER_SECOND;
   drawFigureCached(
     ctx,
     CLOWN_VIAL_FIGURE,
@@ -107,7 +105,7 @@ export function drawClownGas(
   seed: number,
   alpha: number,
 ): void {
-  const seconds = ageFrames / FRAMES_PER_SECOND;
+  const seconds = ageFrames / WORLD_TICKS_PER_SECOND;
   const frame = (timeFrameIndex(seconds, GAS_FPS, GAS_FRAMES) + seed) % GAS_FRAMES;
   drawFigureCached(ctx, CLOWN_GAS_FIGURE, GAS_STATE, frame, sx, sy, tileSize, { alpha });
 }

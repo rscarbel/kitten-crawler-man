@@ -311,15 +311,17 @@ export const worldPalette = {
   },
   /**
    * What only some crawlers perceive, painted for the one being steered: a
-   * scent drifting along a trail and a ward line's glow. A ward that hurts is
-   * a ground warning and draws in `groundWarning`'s red instead.
+   * scent drifting along a trail, and the paw Belle leaves on a ward stone she
+   * has found. A ward itself draws in `wardWall`'s reds while it can hurt,
+   * in `wardResting`'s ember gold between its burns, and in `wardSpent`'s ash
+   * once it is out.
    */
   senses: {
     scentCore: 'rgba(250, 232, 190, 0.9)',
     scentHaze: 'rgba(232, 204, 150, 0.7)',
     scentFade: 'rgba(226, 196, 140, 0)',
-    wardCore: '#ede9fe',
-    wardGlow: 'rgba(167, 139, 250, 0.55)',
+    /** The paw print badge over a ward stone Belle has found. */
+    pawMark: '#ede9fe',
     /**
      * The ring round a crawler's feet while something only they perceive is
      * in reach: the scent's own warm cream, so it reads as "her nose" and
@@ -330,9 +332,54 @@ export const worldPalette = {
     cueFade: 'rgba(250, 214, 150, 0)',
   },
   /**
-   * A town cat held to a pillar of the Warden's circle: the pillar's ward
-   * light pooled round her and drawn out to her collar as a tether, in the
-   * ward's own violet.
+   * A ward wall: a curtain of arcane fire standing on a line of floor runes.
+   * It is a danger, so every tone stays within crimson and red, rising to a
+   * pale rose-white only in the hot core and the crackle running through it.
+   */
+  wardWall: {
+    bodyCore: 'rgba(150, 12, 30, 0.95)',
+    bodyFade: 'rgba(90, 4, 16, 0)',
+    flameCore: 'rgba(255, 46, 72, 0.9)',
+    flameFade: 'rgba(200, 16, 40, 0)',
+    heartCore: 'rgba(255, 228, 232, 0.95)',
+    heartFade: 'rgba(255, 120, 140, 0)',
+    filament: 'rgba(255, 170, 182, 0.8)',
+    rune: '#ff3b4f',
+    runeHalo: 'rgba(255, 30, 60, 0.9)',
+    floorGlowCore: 'rgba(230, 24, 48, 0.85)',
+    floorGlowFade: 'rgba(160, 8, 28, 0)',
+    wispCore: 'rgba(255, 80, 100, 0.8)',
+    wispFade: 'rgba(220, 20, 50, 0)',
+    mote: '#ffd0d6',
+    arcGlow: 'rgba(255, 60, 90, 0.55)',
+    arcCore: '#fff1f3',
+  },
+  /**
+   * A live ward between its burns: a few warm ember-gold sparks on its line
+   * and nothing else. Safe to cross then, so there is no red in them; red on
+   * a ward always means it can hurt now.
+   */
+  wardResting: {
+    mote: '#f2d38a',
+  },
+  /**
+   * A ward wall that is out for good: its runes and embers gone cold. Ash and
+   * cold grey with no red in them, so red on a ward always means it can hurt.
+   */
+  wardSpent: {
+    rune: '#8b8782',
+    runeHalo: 'rgba(120, 118, 114, 0.45)',
+    emberCore: 'rgba(150, 146, 140, 0.7)',
+    emberFade: 'rgba(96, 92, 88, 0)',
+    mote: '#b4afa8',
+    floorGlowCore: 'rgba(112, 110, 106, 0.5)',
+    floorGlowFade: 'rgba(72, 70, 66, 0)',
+  },
+  /**
+   * A town cat held to a pillar of the Warden's circle: the pillar's light
+   * pooled round her and drawn out to her collar as a tether, in violet, the
+   * colour of ward stones and the Warden's working, kept away from red, which
+   * only ground about to hurt may wear.
    */
   binding: {
     tetherCore: '#ede9fe',
@@ -340,12 +387,21 @@ export const worldPalette = {
     haloCore: 'rgba(196, 181, 253, 0.7)',
     haloFade: 'rgba(167, 139, 250, 0)',
   },
-  /** Things moved by the room's own works: a conveyor's waiting load and its raised bell. */
+  /**
+   * Things moved by the room's own works: a conveyor's waiting load and its
+   * raised bell, and the sheen that catches the light on anything in a room
+   * that can be batted, rung or weighed down (`interestGlint.ts`).
+   */
   mechanism: {
     waitingGlow: 'rgba(253, 230, 138, 0.55)',
     waitingFade: 'rgba(253, 230, 138, 0)',
     signalRaised: '#fde68a',
     signalEdge: 'rgba(0, 0, 0, 0.85)',
+    glintCore: '#fffbeb',
+    glintHalo: 'rgba(254, 243, 199, 0.6)',
+    glintFade: 'rgba(254, 243, 199, 0)',
+    poolCore: 'rgba(254, 240, 190, 0.6)',
+    poolFade: 'rgba(254, 240, 190, 0)',
   },
   /**
    * The world re-rendering someone as they teleport in or out — Dave, or a

@@ -1,9 +1,10 @@
 /**
  * Draw wrapper for the Hawkfolk cast. Two very different callers share it:
  * Hawkfolk citizens (`Townsperson`, dispatched through `../creatures/citizenFigure.ts`)
- * play only the idle/walk/talk/work rows; the Cloak & Dagger's dancers play
+ * play the idle/walk/talk/work rows, and the run when a cutscene hurries one
+ * along; the Cloak & Dagger's dancers play
  * their dance routines; the fightable street-tough `Hawkfolk` mob plays the
- * same rig's run and combat rows (strike, aggro, hurt, death) on one of the
+ * run too, and the rig's combat rows (strike, aggro, hurt, death) on one of the
  * four tough looks. Mirrors `ratkinCastSprite.ts`'s contract so both draw
  * through the one shared figure cache the same way.
  */
@@ -193,6 +194,17 @@ export function prewarmHawkfolkCastMember(id: HawkfolkLookId): void {
     for (const view of PREWARM_VIEWS) {
       prewarmFigureState(figure, castStateName(role, view));
     }
+  }
+}
+
+/**
+ * Warms a cast member's run in every facing, urgently: a citizen only runs
+ * when a cutscene hurries them, moments after a scene knows it will.
+ */
+export function prewarmHawkfolkRun(id: HawkfolkLookId): void {
+  const figure = hawkfolkCastFigure(id);
+  for (const view of PREWARM_VIEWS) {
+    prewarmFigureState(figure, castStateName('run', view), undefined, true);
   }
 }
 

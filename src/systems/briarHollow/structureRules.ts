@@ -19,9 +19,7 @@ import {
 } from '../../core/labour/craftPerks';
 import { CONSTRUCTION_XP_PER_WOODEN_WALL } from '../../core/labour/CraftSkills';
 import type { PalisadeTier } from '../../map/tileTypes';
-
-/** The fixed-step loop runs sixty updates a second; every timer below is counted in them. */
-export const UPDATES_PER_SECOND = 60;
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 // ── Palisade tiers ──────────────────────────────────────────────────────────
 
@@ -236,7 +234,7 @@ export function scaledMaxHp(baseHp: number, builderLevel: number): number {
 export function jobFrames(baseSeconds: number, builderLevel: number): number {
   return Math.max(
     1,
-    Math.round(baseSeconds * UPDATES_PER_SECOND * constructionTimeFactor(builderLevel)),
+    Math.round(baseSeconds * WORLD_TICKS_PER_SECOND * constructionTimeFactor(builderLevel)),
   );
 }
 

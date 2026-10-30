@@ -41,7 +41,7 @@ import type { keybindings } from '../../core/input/Keybindings';
 import type { SceneWorld } from '../kits/SceneWorld';
 import type { MenusKit } from '../kits/MenusKit';
 import type { KeyModifiers, Surface } from '../../ui/core/UiRoot';
-import type { SystemContext } from '../GameSystem';
+import { presentCrawlers, type SystemContext } from '../GameSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import type { TrackerEntry } from '../questTracker';
@@ -56,7 +56,7 @@ import {
   type ToolTier,
 } from '../../core/items/gathering/toolTiers';
 import { VILLAGER_TALK_RANGE_TILES, VillagerSystem } from './VillagerSystem';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import {
   drawQuestMarker,
   questMarkerColorFor,
@@ -66,7 +66,8 @@ import { hollowPropInkTop } from '../../map/tiles/hollowVillageTiles';
 import { noticeBoardMarkerFor } from '../constructionContracts/contractIssue';
 import type { VillagerPartyState } from './villagerCircumstances';
 import { partyCount } from '../../core/items/gathering/partyResources';
-import { hostileWithinAttackRange } from '../interactionPromptGate';
+import { hostileWithinAttackRange, interactionStance } from '../interactionPromptGate';
+import { stanceAllows, type InteractionStance } from '../../ui/interactionFocus';
 import {
   drawInteractionPrompt,
   interactionPromptsDrawnThisFrame,
@@ -873,7 +874,8 @@ export class BriarHollowKit {
     camY: number,
     active: HumanPlayer | CatPlayer,
   ): boolean {
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    const stance = this.stanceFor(active);
+    if (stance === 'fighting') return false;
     // A prop, stall or sign prompt already up means an earlier link of the
     // Space chain takes the press.
     if (interactionPromptsDrawnThisFrame() > 0) return false;
@@ -902,6 +904,7 @@ export class BriarHollowKit {
       );
       return true;
     }
+    if (!stanceAllows(stance, 'person')) return false;
     const owedContact = this.owedContactInReach(active);
     if (owedContact?.kind === 'villager') {
       return this.villagers?.renderPrompt(ctx, camX, camY, active) === true;
@@ -926,7 +929,8 @@ export class BriarHollowKit {
    * rather than a key.
    */
   tryInteract(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    const stance = this.stanceFor(active);
+    if (stance === 'fighting') return false;
     // A fence section of Merrit's in reach, or the scythe and the grain: each
     // only takes the press in its own step and only when something is in
     // reach, so outside those it falls straight through.
@@ -945,6 +949,8 @@ export class BriarHollowKit {
     // villager stands nearer than the machine does.
     if (this.services?.tryInteract(active) === true) return true;
     if (this.tryReadNoticeBoard(active)) return true;
+    // Everything below is a conversation.
+    if (!stanceAllows(stance, 'person')) return false;
     if (this.tryTalkToOwedContact(active)) return true;
     if (this.recruiter?.tryInteract(active) === true) return true;
     const soldier = this.soldierIsNearer(active) ? this.soldiers?.talkTarget(active) : null;
@@ -980,24 +986,22 @@ export class BriarHollowKit {
   }
 
   /**
-   * The notice board's tile when a press from `active` would read it: in
-   * reach, with no hostile in attack range, and no villager nearer. Villagers
-   * loiter on the tile in front of the board, and one standing nearer is
-   * spoken to first.
+   * The notice board's tile when it is in reach of `active`. The board posts
+   * the village's quests, so it is read ahead of any villager loitering in
+   * front of it; a hostile in attack range keeps the press a swing through
+   * the stance every caller checks first.
    */
   private boardInReach(active: HumanPlayer | CatPlayer): TilePoint | null {
     const board = this.noticeBoardTile;
     if (board === null || this.deps.openNoticeBoard === undefined) return null;
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return null;
     const boardTiles =
       Math.hypot(board.x * TILE_SIZE - active.x, board.y * TILE_SIZE - active.y) / TILE_SIZE;
     if (boardTiles > VILLAGE_BOARD_REACH_TILES) return null;
-    const villager = this.villagers?.talkTarget(active) ?? null;
-    if (villager !== null) {
-      const villagerTiles = Math.hypot(villager.x - active.x, villager.y - active.y) / TILE_SIZE;
-      if (villagerTiles < boardTiles) return null;
-    }
     return board;
+  }
+
+  private stanceFor(active: HumanPlayer | CatPlayer): InteractionStance {
+    return interactionStance(active, presentCrawlers(this.deps), this.world.roster.grid);
   }
 
   private tryReadNoticeBoard(active: HumanPlayer | CatPlayer): boolean {
@@ -1102,13 +1106,15 @@ export class BriarHollowKit {
    * quiet when the village would take the press first.
    */
   wouldInteract(active: HumanPlayer | CatPlayer): boolean {
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    const stance = this.stanceFor(active);
+    if (stance === 'fighting') return false;
     if (this.blueprints?.harvest.wouldInteract(active) === true) return true;
     if ((this.blueprints?.fence.sectionInReach(active) ?? null) !== null) return true;
     if (this.contracts?.wouldInteract(active, this.competingTiles(active)) === true) return true;
     if (this.livestock?.wouldPet(active) === true) return true;
     if (this.services?.wouldInteract(active) === true) return true;
     if (this.boardInReach(active) !== null) return true;
+    if (!stanceAllows(stance, 'person')) return false;
     if (this.recruiter?.wouldInteract(active) === true) return true;
     const villagers = this.villagers;
     return (
@@ -1562,9 +1568,7 @@ const STICK_IN_HAND_REACH_TILES = 12;
 const SEISMIC_STOMP_REACH_TILES = 9;
 const TILE_CENTRE_FRACTION = 0.5;
 
-/** The kit is ticked by the fixed-step loop, this many times a second. */
-const UPDATES_PER_SECOND = 60;
-const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 
 /** Enough presses to reveal a narrated line's text and then dismiss it, however many words it has. */
 const QUEST_LINE_DISMISS_ATTEMPTS = 4;

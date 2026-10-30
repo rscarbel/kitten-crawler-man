@@ -2,6 +2,7 @@ import type { MercenaryVoiceId } from '../../core/party/mercenaryTemplates';
 import { HIRELING_POTION_COOLDOWN_FRAMES } from './hirelingSurvival';
 import type { BarkLine, NonEmpty } from '../../dialog/line';
 import type { MercenaryLines } from '../../dialog/roles';
+import type { TowerErrandLeg } from '../../core/quests/missingCatsProgress';
 import {
   BROTHER_ANSELM,
   CRUSH,
@@ -55,6 +56,38 @@ export type MercenaryBarkTrigger =
   | 'floor_end'
   | 'loan_end';
 
+/**
+ * The triggers that are a hire's own small talk rather than a call about the
+ * fight in front of it. On an errand they read the errand's lines instead,
+ * and a trigger the errand has nothing for stays silent.
+ */
+const CHATTER_TRIGGERS = [
+  'hired',
+  'idle',
+  'talk',
+] as const satisfies readonly MercenaryBarkTrigger[];
+type ChatterTrigger = (typeof CHATTER_TRIGGERS)[number];
+
+/** What a hire says on an errand in place of its small talk. */
+type ErrandLines = Pick<MercenaryLines, ChatterTrigger>;
+
+/**
+ * A hire's voice on one leg of a questline errand with the party, kept to
+ * the errand: spoken lines, or stage directions for a hire with no words.
+ */
+interface ErrandLegVoice {
+  readonly lines: ErrandLines;
+  readonly actions?: ErrandLines;
+}
+
+/** A hire's voice on every leg of the tower errand, so a leg cannot ship without its lines. */
+export type ErrandVoice = Readonly<Record<TowerErrandLeg, ErrandLegVoice>>;
+
+/** Whether `trigger` is small talk, which an errand keeps to its own lines. */
+export function isChatterTrigger(trigger: MercenaryBarkTrigger): trigger is ChatterTrigger {
+  return CHATTER_TRIGGERS.some((chatter) => chatter === trigger);
+}
+
 /** The two stone noises a golem can make; see `playMobAudioCues` for which cue each is. */
 export type MercenaryGrunt = 'grunt' | 'frustrated';
 
@@ -68,6 +101,8 @@ export interface MercenaryVoice {
   readonly actions?: MercenaryLines;
   /** Sounds made instead of words, read only where neither table has a line. */
   readonly grunts?: Partial<Record<MercenaryBarkTrigger, MercenaryGrunt>>;
+  /** The hire under the tower for the stolen cats, where its small talk would be in the way. */
+  readonly towerErrand: ErrandVoice;
 }
 
 /**

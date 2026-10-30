@@ -17,7 +17,7 @@
  * it mutes the ambience bus every loop plays through.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
 import type { GameMap } from '../../map/GameMap';
@@ -40,7 +40,6 @@ import {
   type StaticLightTile,
 } from './dungeonEmitters';
 
-const FRAMES_PER_SECOND = 60;
 /** The gap between ambient one-shots, in seconds. */
 const ONE_SHOT_GAP_MIN_S = 6;
 const ONE_SHOT_GAP_MAX_S = 20;
@@ -267,7 +266,7 @@ export class DungeonAmbienceSystem {
 
   private nextOneShotGap(): number {
     const seconds = ONE_SHOT_GAP_MIN_S + this.random() * (ONE_SHOT_GAP_MAX_S - ONE_SHOT_GAP_MIN_S);
-    return Math.round(seconds * FRAMES_PER_SECOND);
+    return Math.round(seconds * WORLD_TICKS_PER_SECOND);
   }
 
   private playOneShot(listenerTileX: number, listenerTileY: number): void {
@@ -277,7 +276,7 @@ export class DungeonAmbienceSystem {
     );
     const named = character?.ambience.oneShots ?? [];
     const choices = named.length > 0 ? named : FLOOR_ONE_SHOTS[this.deps.floor];
-    const growlTooSoon = this.framesSinceGrowl < GROWL_MIN_GAP_S * FRAMES_PER_SECOND;
+    const growlTooSoon = this.framesSinceGrowl < GROWL_MIN_GAP_S * WORLD_TICKS_PER_SECOND;
     const allowed = choices.filter((id) => id !== 'distant_growl' || !growlTooSoon);
     if (allowed.length === 0) return;
     const id = allowed[Math.floor(this.random() * allowed.length)];

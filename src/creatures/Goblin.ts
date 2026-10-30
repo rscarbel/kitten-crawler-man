@@ -5,7 +5,7 @@ import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { HumanPlayer } from './HumanPlayer';
 import { CatPlayer } from './CatPlayer';
-import { PLAYER_SPEED } from '../core/constants';
+import { PLAYER_SPEED, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { SHARED_LOOKS_TIER } from '../core/perf/varietyTier';
 import { weightedVariantFamily } from '../core/mobs/mobVariantFamily';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -69,9 +69,8 @@ const HEAVY_ATTACK_CHANCE = 0.35;
  * goblin mid-swing pops in at the screen edge with its hammer already visible.
  */
 const GOBLIN_CULL_MARGIN_TILES = 1.5;
-const FRAMES_PER_SECOND = 60;
 /** Seconds one game frame covers, for the animator's idle-break clock. */
-const SECONDS_PER_FRAME = 1 / FRAMES_PER_SECOND;
+const SECONDS_PER_FRAME = 1 / WORLD_TICKS_PER_SECOND;
 const MILLISECONDS_PER_SECOND = 1000;
 /**
  * A one-shot row samples the *middle* of each frame, so its impact lands half a

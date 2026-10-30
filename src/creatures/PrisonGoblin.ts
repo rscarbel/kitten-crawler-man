@@ -23,6 +23,7 @@ import type { BarkLine } from '../dialog/line';
 import { PRISON_HIT_BARKS } from '../dialog/scripts/scenes/stealthKeySnatch';
 import { pickFreshLine } from '../dialog/scripts/scenes/cloggedBathroom';
 import { wrapAngle } from '../systems/stealthKeySnatch/detection';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Who a prison goblin is: the guard at the stealth gate, or a guard walking the prison. */
 export type PrisonGoblinRole = 'gateGuard' | 'patrol';
@@ -82,8 +83,7 @@ export const PRISON_GOBLIN_TURN_RADIANS_PER_FRAME = Math.PI / TURN_FRAMES_PER_HA
  * looking along a corridor flips left-right on every wobble of his light.
  */
 const PROFILE_FLIP_DEADBAND_RADIANS = 0.15;
-const FRAMES_PER_SECOND = 60;
-const SECONDS_PER_FRAME = 1 / FRAMES_PER_SECOND;
+const SECONDS_PER_FRAME = 1 / WORLD_TICKS_PER_SECOND;
 const MILLISECONDS_PER_SECOND = 1000;
 const HALF = 0.5;
 /** The guard figures overhang their tile like every goblin painter does. */

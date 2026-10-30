@@ -6,12 +6,14 @@
  * thing in the bag is the thing that was on the floor.
  */
 
+import { AVIEL_FEATHER_GREY } from './hawkfolk/palette';
+
 const OUTLINE = '#1e1a18';
 const OUTLINE_WIDTH_SHARE = 0.05;
 
-const FEATHER_VANE = '#8d929a';
+const FEATHER_VANE = AVIEL_FEATHER_GREY;
 const FEATHER_VANE_SHADE = '#5f646c';
-const FEATHER_SHAFT = '#d9d4c8';
+export const FEATHER_SHAFT = '#d9d4c8';
 /** Along its length the vane is widest a little below the middle, as a flight feather is. */
 const FEATHER_WIDEST_SHARE = 0.42;
 const FEATHER_HALF_WIDTH_SHARE = 0.17;
@@ -186,99 +188,6 @@ export function drawCutLatchShape(ctx: CanvasRenderingContext2D, width: number):
       LATCH_CUT_FACE_PX,
       barHeight,
     );
-  }
-  ctx.restore();
-}
-
-const THIEF_BODY = '#2c2a33';
-const THIEF_WING = '#3d3a46';
-const THIEF_WING_EDGE = '#5b5866';
-const THIEF_SHADOW = 'rgba(0,0,0,0.28)';
-const CARRIED_CAT = '#c98a4a';
-const WING_SPAN_SHARE = 1.1;
-const WING_DEPTH_SHARE = 0.32;
-const WING_FLAP_LIFT_SHARE = 0.28;
-const BODY_LENGTH_SHARE = 0.42;
-const BODY_WIDTH_SHARE = 0.14;
-const HEAD_RADIUS_SHARE = 0.09;
-const SHADOW_WIDTH_SHARE = 0.7;
-const SHADOW_HEIGHT_SHARE = 0.18;
-const CARRIED_CAT_RADIUS_SHARE = 0.12;
-const CARRIED_CAT_DROP_SHARE = 0.3;
-const HALF = 0.5;
-
-/**
- * The thief's shadow on the ground under it, `size` pixels across: the one
- * part of it that sits on the street, so a player can tell where over the
- * roofs it is.
- */
-export function drawWingedThiefShadow(ctx: CanvasRenderingContext2D, size: number): void {
-  ctx.save();
-  ctx.fillStyle = THIEF_SHADOW;
-  ctx.beginPath();
-  ctx.ellipse(
-    0,
-    0,
-    size * SHADOW_WIDTH_SHARE * HALF,
-    size * SHADOW_HEIGHT_SHARE * HALF,
-    0,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  ctx.restore();
-}
-
-/**
- * A winged shape seen against the dusk from below: no face, no colours, only
- * a long body between two broad wings, the wings lifted by `flap` (-1 to 1).
- * `heading` is in radians, 0 = east. With `carrying` a small cat hangs under it.
- */
-export function drawWingedThief(
-  ctx: CanvasRenderingContext2D,
-  size: number,
-  heading: number,
-  flap: number,
-  carrying: boolean,
-): void {
-  const span = size * WING_SPAN_SHARE;
-  const depth = size * WING_DEPTH_SHARE;
-  const lift = size * WING_FLAP_LIFT_SHARE * flap;
-  ctx.save();
-  ctx.rotate(heading);
-  ctx.lineWidth = Math.max(1, size * OUTLINE_WIDTH_SHARE);
-  ctx.strokeStyle = THIEF_WING_EDGE;
-  ctx.fillStyle = THIEF_WING;
-  for (const side of [-1, 1] as const) {
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.quadraticCurveTo(-depth, side * (span * HALF + lift), -depth * 2, side * span * HALF);
-    ctx.quadraticCurveTo(-depth * HALF, side * depth, 0, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-  ctx.fillStyle = THIEF_BODY;
-  ctx.beginPath();
-  ctx.ellipse(
-    -size * BODY_LENGTH_SHARE * HALF,
-    0,
-    size * BODY_LENGTH_SHARE * HALF,
-    size * BODY_WIDTH_SHARE,
-    0,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(size * HEAD_RADIUS_SHARE, 0, size * HEAD_RADIUS_SHARE, 0, Math.PI * 2);
-  ctx.fill();
-  if (carrying) {
-    ctx.fillStyle = CARRIED_CAT;
-    ctx.beginPath();
-    ctx.arc(-size * CARRIED_CAT_DROP_SHARE, 0, size * CARRIED_CAT_RADIUS_SHARE, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   }
   ctx.restore();
 }

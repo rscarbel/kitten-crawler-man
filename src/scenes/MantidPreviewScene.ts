@@ -33,6 +33,7 @@ import {
   type MantidSheet,
 } from '../sprites/mantidSprite';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawMantidSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -102,7 +103,6 @@ const LABEL_GAP = 2;
 const OVERHANG_TILES = 3.5;
 /** Where a cell's mantis stands, as a fraction of the cell's height. */
 const GROUND_FRACTION = 0.94;
-const FRAMES_PER_SECOND = 60;
 const TWO_PI = Math.PI * 2;
 
 /**
@@ -149,7 +149,7 @@ export class MantidPreviewScene extends PreviewScene {
   }
 
   private frameOf(row: RowSpec): number {
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(this.sheet, row.probeState);
   }
 

@@ -125,7 +125,7 @@ function journalRow(
   journal: JournalContext,
 ): void {
   const { space, size } = ui.theme;
-  const isSubstep = entry.parentId !== undefined;
+  const isSubstep = entry.kind === 'step';
   const indent = isSubstep ? space.xl : 0;
   const rowRect = layout.row(rowHeight(ui, entry), space.sm);
   const rect = inset(rowRect, { l: indent });

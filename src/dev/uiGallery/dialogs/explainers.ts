@@ -8,6 +8,7 @@ import { CraftExplainers, type ExplainerId } from '../../../ui/screens/dialogs/C
 import { CONSTRUCTION_EXPLAINER } from '../../../ui/screens/dialogs/constructionExplainer';
 import { deinonychusExplainerEntry } from '../../../ui/screens/dialogs/deinonychusExplainer';
 import { DUAL_HARVEST_EXPLAINER } from '../../../ui/screens/dialogs/dualHarvestExplainer';
+import { CAT_SENSES_EXPLAINER } from '../../../ui/screens/dialogs/catSensesExplainer';
 import { PROCESSING_EXPLAINER } from '../../../ui/screens/dialogs/processingExplainer';
 import { RESOURCING_EXPLAINER } from '../../../ui/screens/dialogs/resourcingExplainer';
 import { buildVillageNotices, workOrderNotice, type Notice } from '../../../systems/townNotices';
@@ -66,6 +67,7 @@ function explainerFixtures(id: ExplainerId, pageCount: number): readonly DialogF
     host.register('resourcing', RESOURCING_EXPLAINER);
     host.register('processing', PROCESSING_EXPLAINER);
     host.register('dual_harvest', DUAL_HARVEST_EXPLAINER);
+    host.register('cat_senses', CAT_SENSES_EXPLAINER);
     host.register(
       'deinonychus',
       deinonychusExplainerEntry(() => DEINONYCHUS_FIXTURE_LEVEL, namedDeinonychus()),
@@ -321,6 +323,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   ...explainerFixtures('processing', THREE_PAGES),
   ...explainerFixtures('deinonychus', THREE_PAGES),
   ...explainerFixtures('dual_harvest', 1),
+  ...explainerFixtures('cat_senses', THREE_PAGES),
   blackjackFixture('blackjack-rules', true, 0),
   blackjackFixture('blackjack-rules-page5', false, BLACKJACK_LATER_PAGE),
   ...tutorialFixtures('defend-tutorial', DEFEND_PAGES, (model, id) =>

@@ -17,6 +17,7 @@ import { SOUND_MANIFEST, type SoundId } from '../../src/audio/sounds.js';
 import { dbToGain } from '../../src/audio/voiceFades.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
 import { EventBus } from '../../src/core/EventBus.js';
+import { QUEST_IDS, QUEST_TRAITS } from '../../src/core/quests/QuestManager.js';
 import { BigRooster } from '../../src/creatures/BigRooster.js';
 import { playMobAudioCues } from '../../src/systems/GameLoopPhases.js';
 import { mobVoiceTakes } from '../../src/systems/mobVoices.js';
@@ -483,4 +484,70 @@ async function checkOffscreenSoundsDistant(harness: AudioHarness, check: Check):
   );
   check(beyondStarted === 0, 'past its off-screen hearing range it takes no voice');
   audio.dispose();
+}
+
+const OBJECTIVE_CHIME_ID: SoundId = 'objective_complete';
+
+/**
+ * 26. An objective finished plays the chime for a quest whose traits ask for
+ * it, and none for a quest whose traits keep it quiet.
+ */
+export async function checkObjectiveChime(harness: AudioHarness, check: Check): Promise<void> {
+  const audio = await freshManager(harness, [OBJECTIVE_CHIME_ID]);
+  const bus = new EventBus();
+  audio.wireEvents(bus);
+  for (const questId of QUEST_IDS) {
+    const before = harness.sources.length;
+    bus.emit('objectiveComplete', { questId, objectiveId: `${questId}:chime_check` });
+    await harness.flush();
+    const chimes = soundingOf(startedSince(harness, before), OBJECTIVE_CHIME_ID).length;
+    const wanted = QUEST_TRAITS[questId].chimesOnObjectives ? 1 : 0;
+    check(
+      chimes === wanted,
+      `an objective of ${questId} plays ${wanted} chime${wanted === 1 ? '' : 's'} (${chimes})`,
+    );
+    harness.advance(PAST_INTERVAL_MS);
+  }
+  await checkChimeWaitsOutConversations(harness, bus, check);
+  audio.dispose();
+}
+
+const DAVE_SPEAKER = { kind: 'cast', id: 'dave' } as const;
+const BELLE_SPEAKER = { kind: 'cast', id: 'belle' } as const;
+
+/**
+ * Two boxes open at once, the objective finished under both: the chime
+ * waits through the first closing, and plays once the second has.
+ */
+async function checkChimeWaitsOutConversations(
+  harness: AudioHarness,
+  bus: EventBus,
+  check: Check,
+): Promise<void> {
+  const chiming = QUEST_IDS.find((questId) => QUEST_TRAITS[questId].chimesOnObjectives);
+  if (chiming === undefined) {
+    check(false, 'some quest chimes on its objectives');
+    return;
+  }
+  const chimesSince = (before: number): number =>
+    soundingOf(startedSince(harness, before), OBJECTIVE_CHIME_ID).length;
+  const before = harness.sources.length;
+  bus.emit('conversation', { speaker: DAVE_SPEAKER, phase: 'started' });
+  bus.emit('conversation', { speaker: BELLE_SPEAKER, phase: 'started' });
+  bus.emit('objectiveComplete', { questId: chiming, objectiveId: `${chiming}:chime_wait_check` });
+  await harness.flush();
+  check(
+    chimesSince(before) === 0,
+    `no chime while two conversations are open (${chimesSince(before)})`,
+  );
+  bus.emit('conversation', { speaker: DAVE_SPEAKER, phase: 'ended' });
+  await harness.flush();
+  check(
+    chimesSince(before) === 0,
+    `no chime once one closes with the other still open (${chimesSince(before)})`,
+  );
+  bus.emit('conversation', { speaker: BELLE_SPEAKER, phase: 'ended' });
+  await harness.flush();
+  check(chimesSince(before) === 1, `one chime once both have closed (${chimesSince(before)})`);
+  harness.advance(PAST_INTERVAL_MS);
 }

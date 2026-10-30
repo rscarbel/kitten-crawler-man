@@ -2,16 +2,19 @@
  * The capture at the plaza fountain, as a cutscene: the carrier settles
  * beside Belle to make a show of taking her, krasue drop out of the dark, the
  * carrier is thrown aside, and Belle is lifted away toward the spire before
- * the screen goes black. Every hit lands on the capture jingle's own clock,
- * so what is said after the jingle starts is said over the scene, never
- * holding it.
+ * the screen goes black. The capture jingle comes in as the pretence
+ * closes, started partway into its recording so that its drop hit falls
+ * {@link CAPTURE_DROP_AFTER_PRETENCE_S} after the last line however long the
+ * player reads, and the krasue lands on that hit. Every later step keeps to
+ * the jingle's own clock, so what is said after the drop is said over the
+ * scene, never holding it.
  *
  * The krasue and the carrier are not creatures of the street: they are
  * painted bodies that exist for the length of the scene ({@link CaptureStaging}),
  * lent to the script as actors by the ids in {@link CAPTURE_ACTOR_IDS}.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { AvielChoice } from '../../core/quests/missingCatsProgress';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
 import {
@@ -19,11 +22,15 @@ import {
   CAPTURE_PRETENCE,
   captureSprung,
 } from '../../dialog/scripts/scenes/missingCats';
-import { drawWingedThief, drawWingedThiefShadow } from '../../sprites/art/missingCatsArt';
+import {
+  drawWingedThief,
+  drawWingedThiefShadow,
+  prewarmWingedThief,
+  WINGED_THIEF_SIZE_TILES,
+} from '../../sprites/art/wingedThiefFigure';
 import { drawKrasueSprite } from '../../sprites/krasueSprite';
 import { stagedActor, type CutsceneActor, type StagedBody } from '../cutscene/cutsceneActors';
 import type { CutscenePoint } from '../cutscene/cutsceneCamera';
-import { WORLD_TICKS_PER_SECOND } from '../cutscene/CutsceneDirector';
 import type { CutsceneScript } from '../cutscene/cutsceneSteps';
 import {
   CAPTURE_CUE,
@@ -65,7 +72,11 @@ const KRASUE_DROP_FRAMES = 30;
 const THROW_FRAMES = 20;
 const LIFT_FRAMES = 240;
 const FADE_FRAMES = 120;
-const SETTLE_AFTER_PRETENCE_FRAMES = 20;
+
+/** Seconds from the pretence's last line closing to the krasue landing on the jingle's drop hit. */
+export const CAPTURE_DROP_AFTER_PRETENCE_S = 0.8;
+/** How far into {@link CAPTURE_CUE} it comes in, so the drop hit falls that long after the pretence. */
+const CUE_ENTERS_AT_S = CAPTURE_KRASUE_LANDS_AT_S - CAPTURE_DROP_AFTER_PRETENCE_S;
 
 /** The cue mark the krasue sets off from, so it lands on the drop's hit. */
 const KRASUE_SETS_OFF_AT_S =
@@ -78,16 +89,16 @@ const KRASUE_SHRIEK = { takes: ['krasue_attack'] } as const;
 
 /** The krasue is drawn at this share of a tile; a head with its trailing viscera reads larger than a cat. */
 const KRASUE_SIZE_SHARE = 1.1;
-/** The carrier is drawn this many tiles across, the same as the thief over the roofs. */
-const CARRIER_SIZE_TILES = 1.4;
-const CARRIER_SIZE_PX = TILE_SIZE * CARRIER_SIZE_TILES;
-/** How fast the krasue bobs and the carrier's wings beat, in radians a tick. */
+/** The carrier is drawn the same size as the thief over the roofs. */
+const CARRIER_SIZE_PX = TILE_SIZE * WINGED_THIEF_SIZE_TILES;
+/** How fast the krasue bobs, in radians a tick. */
 const FLOAT_RADIANS_PER_TICK = 0.08;
-const FLAP_RADIANS_PER_TICK = 0.25;
+/** How many of its wingbeats the carrier flies a tick. */
+const WINGBEATS_PER_TICK = 0.04;
 /** A thrown carrier tumbles: its heading turns this far a tick while it is on the move. */
 const TUMBLE_RADIANS_PER_TICK = 0.35;
 /** A settled carrier holds its wings half-folded and faces north, toward the spire. */
-const SETTLED_FLAP = 0.3;
+const SETTLED_WINGBEAT = 0.2;
 const FACING_NORTH_RADIANS = -Math.PI / 2;
 
 function stagedAt(at: CutscenePoint): StagedBody {
@@ -116,6 +127,7 @@ export class CaptureStaging {
 
   /** `belle` is Belle's tile-origin pixels on the fountain. */
   constructor(belle: CutscenePoint) {
+    prewarmWingedThief();
     this.krasue = stagedAt(offset(belle, 0, -KRASUE_START_TILES_ABOVE));
     this.carrier = stagedAt(offset(belle, -CARRIER_START_TILES_WEST, -CARRIER_START_TILES_ABOVE));
     this.lastCarrier = { x: this.carrier.x, y: this.carrier.y };
@@ -164,10 +176,10 @@ export class CaptureStaging {
     hides: (body: object) => boolean,
   ): void {
     if (!hides(this.carrier)) {
-      const flap = this.carrierMoving ? Math.sin(this.ticks * FLAP_RADIANS_PER_TICK) : SETTLED_FLAP;
+      const wingbeat = this.carrierMoving ? this.ticks * WINGBEATS_PER_TICK : SETTLED_WINGBEAT;
       ctx.save();
       ctx.translate(this.carrier.x + HALF_TILE - camX, this.carrier.y + HALF_TILE - camY);
-      drawWingedThief(ctx, CARRIER_SIZE_PX, this.carrierHeading, flap, false);
+      drawWingedThief(ctx, CARRIER_SIZE_PX, this.carrierHeading, wingbeat, false);
       ctx.restore();
     }
     if (!hides(this.krasue)) {
@@ -193,8 +205,9 @@ export interface CaptureScriptArgs {
 }
 
 /**
- * The capture's steps. Belle is the crawler being steered, so the scene's
- * own actor for her (`cat`) is the one lifted away.
+ * The capture's steps, from Belle already sitting on the rim. She is named
+ * by her crawler kind (`cat`) rather than as the active crawler, so the scene
+ * plays the same whichever crawler the player is steering.
  */
 export function captureScript({
   belle,
@@ -218,8 +231,7 @@ export function captureScript({
       kind: 'conversation',
       request: { lines: CAPTURE_PRETENCE[choice], reward: null, questRelated: true },
     },
-    { kind: 'wait', frames: SETTLE_AFTER_PRETENCE_FRAMES },
-    { kind: 'playCue', cue: CAPTURE_CUE },
+    { kind: 'playCue', cue: CAPTURE_CUE, fromS: CUE_ENTERS_AT_S },
     { kind: 'waitForCue', cue: CAPTURE_CUE, atS: KRASUE_SETS_OFF_AT_S },
     { kind: 'showActor', who: 'capture_krasue' },
     {

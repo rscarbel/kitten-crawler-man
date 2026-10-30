@@ -17,6 +17,28 @@ export const QUEST_IDS = [
 ] as const;
 export type QuestId = (typeof QUEST_IDS)[number];
 
+/** How a quest sounds, decided per quest so a new one cannot ship without saying. */
+interface QuestTraits {
+  /**
+   * Whether finishing one of its objectives plays the objective chime. A
+   * questline whose objectives are many small steps of one long story keeps
+   * quiet between them: the chime reads as a quest finished.
+   */
+  readonly chimesOnObjectives: boolean;
+}
+
+export const QUEST_TRAITS = {
+  anchor_shards: { chimesOnObjectives: true },
+  grotesque_spider: { chimesOnObjectives: true },
+  defend_goblin_mother: { chimesOnObjectives: true },
+  borrowed_blueprints: { chimesOnObjectives: true },
+  briar_hollow_plea: { chimesOnObjectives: true },
+  stealth_key_snatch: { chimesOnObjectives: true },
+  construction_contract: { chimesOnObjectives: true },
+  clogged_bathroom: { chimesOnObjectives: true },
+  taloncrest_missing_cats: { chimesOnObjectives: false },
+} as const satisfies Record<QuestId, QuestTraits>;
+
 export type QuestStatus = 'available' | 'active' | 'completed' | 'failed';
 export type QuestType = 'story' | 'mini';
 

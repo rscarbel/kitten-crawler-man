@@ -703,7 +703,9 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
   };
 }
 
-function parseJournalProgressCheckpoint(value: unknown): JournalProgressCheckpoint | undefined {
+export function parseJournalProgressCheckpoint(
+  value: unknown,
+): JournalProgressCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const { pinnedTrackerId, pinSource } = value;
   if (pinnedTrackerId !== null && !isString(pinnedTrackerId)) return undefined;

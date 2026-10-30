@@ -35,6 +35,8 @@ import type { MusicClaims } from '../../audio/AudioScope';
 import type { MusicStemOf } from '../../audio/music/stemSets';
 import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
 import type { EventBus } from '../../core/EventBus';
+import { TILE_SIZE } from '../../core/constants';
+import type { WorldRows } from '../../core/rendering/worldRect';
 import { displayHp } from '../../core/party/crawlerFormulas';
 import {
   madeAvielChoice,
@@ -75,6 +77,7 @@ import { prewarmLichLocomotion } from '../../sprites/lichSprite';
 import { prewarmLichFightEffects } from '../../sprites/skeletonEffectsSprite';
 import { objectiveRow } from '../../ui/hud/objectiveLine';
 import type { TopBandEntry } from '../../ui/hud/topBand';
+import type { StairRefusal } from '../TowerStairSystem';
 import { stackedBandEntry, type BandRow, type BandTone } from '../../ui/hud/topBandStack';
 import { questBannerEntry, QUEST_BANNER_FRAMES } from '../../ui/QuestBanners';
 import type { SystemContext } from '../GameSystem';
@@ -92,6 +95,17 @@ import { BoundCats } from './boundCats';
 import { CatsWalkOut } from '../missingCats/catsWalkOut';
 
 const CATTERY_STOREY = towerStoreyIndex('cattery');
+const NORTH_WALL_ROW = 0;
+
+/**
+ * The cattery's rows from the north wall down through the ritual circle, in
+ * world pixels: the fight is staged against the far wall, where the top
+ * band's cards would otherwise lie over it, so the camera keeps these clear.
+ */
+export const WARDEN_ARENA_ROWS: WorldRows = {
+  top: NORTH_WALL_ROW * TILE_SIZE,
+  bottom: (RITUAL_CIRCLE_TILE.y + TOWN_INTERIOR_PROPS.ritual_circle.footprint.h) * TILE_SIZE,
+};
 /** The storey below the cattery: from here up, the fight's music is held decoded. */
 const ARCHIVE_STOREY = towerStoreyIndex('archive');
 
@@ -112,6 +126,18 @@ const FIGHT_STEMS = {
 } as const satisfies Record<string, MusicStemOf<'warden_ritual'>>;
 
 const WARDEN_NAME = 'The Warden, the Lich';
+
+/**
+ * Said instead of the stair prompt while the Warden is up: the fight cannot
+ * be walked away from, so the way down is not offered until it is over.
+ */
+const FIGHT_HOLDS_THE_STAIR: StairRefusal = {
+  kind: 'notice',
+  text: 'The stair is no way out of this fight. Finish the Warden first.',
+};
+
+/** The stages from the Warden's reveal to the room being told it has fallen, while the stair down is held. */
+const STAIR_HELD_STAGES: ReadonlySet<RitualStage> = new Set(['reveal', 'fight', 'falling']);
 
 /** Who flies in for a cat: Aviel kept his feathers if his secret was kept, and the Roost sends one of its own if not. */
 const CARRIER_BY_CHOICE = {
@@ -208,6 +234,11 @@ export class TowerRitualSystem {
 
   get defeatMessage(): string {
     return 'The Warden beat you, and the tower threw you out.';
+  }
+
+  /** Why the cattery's stair down will not be taken, or null once the fight is over or before it starts. */
+  get stairDownRefusal(): StairRefusal | null {
+    return STAIR_HELD_STAGES.has(this.stage) ? FIGHT_HOLDS_THE_STAIR : null;
   }
 
   /** True while a scripted beat owns both crawlers' bodies. */
@@ -573,8 +604,6 @@ export class TowerRitualSystem {
     const entries: TopBandEntry[] = [];
     const bossBar = this.bossBarEntry();
     if (bossBar !== null) entries.push(bossBar);
-    const dodge = this.battle?.topBandEntry() ?? null;
-    if (dodge !== null) entries.push(dodge);
     const banner = questBannerEntry({
       id: 'tower-ritual-banner',
       title: this.banner.title,
@@ -584,6 +613,12 @@ export class TowerRitualSystem {
     });
     if (banner !== null) entries.push(banner);
     return entries;
+  }
+
+  /** {@link WARDEN_ARENA_ROWS} while the Warden stands in the circle. */
+  cameraKeepRows(): WorldRows | null {
+    if (this.stage !== 'reveal' && this.stage !== 'fight') return null;
+    return WARDEN_ARENA_ROWS;
   }
 
   private bossBarEntry(): TopBandEntry | null {
@@ -600,6 +635,8 @@ export class TowerRitualSystem {
         valueText: `${displayHp(warden.hp)} / ${warden.maxHp}`,
       },
     ];
+    const dodgeClock = this.battle?.dodgeClockRow() ?? null;
+    if (dodgeClock !== null) rows.push(dodgeClock);
     const objective = this.battle?.objectiveLine;
     if (objective !== undefined) rows.push(objectiveRow({ text: objective, tone: 'success' }));
     return stackedBandEntry({

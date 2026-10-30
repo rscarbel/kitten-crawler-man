@@ -42,8 +42,7 @@ globals.document = {
   },
 };
 
-const { TILE_SIZE } = await import('../src/core/constants');
-const { TICKS_PER_SECOND } = await import('../src/sprites/art/human/timing');
+const { TILE_SIZE, WORLD_TICKS_PER_SECOND } = await import('../src/core/constants');
 const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
@@ -107,7 +106,7 @@ const AFTER_PEAK_S = 0.25;
 const FULL_POWER = 1;
 const MID_POWER = 0.55;
 const WEAK_POWER = 0.2;
-const TICK_S = 1 / TICKS_PER_SECOND;
+const TICK_S = 1 / WORLD_TICKS_PER_SECOND;
 
 await loadSprites('src/images/');
 const { paintEnvironmentArtInNode } = await import('./nodeCanvasGlobals.js');
@@ -166,7 +165,7 @@ function drawQueuedPrompts(ctx: CanvasRenderingContext2D): void {
     now: () => 0,
     warn: () => undefined,
   });
-  root.mount(promptSurface());
+  root.mount(promptSurface(() => []));
   root.frame(ctx);
 }
 
@@ -177,7 +176,7 @@ function renderPanel(system: System, crawler: Crawler, label: string): Panel {
   const camY = (striker.y + 1 + VIEW_ROWS_BELOW - VIEW_TILES_HIGH) * TILE_SIZE;
   const canvas = createCanvas(width, height);
   const ctx = asGameContext(canvas.getContext('2d'));
-  setInteractionPromptsSuppressed(false);
+  setInteractionPromptsSuppressed(false, 'clear');
   renderCanvas(ctx, site.map.structure, TILE_SIZE, camX, camY, width, height);
   const draws: Array<{ sortY: number; draw: () => void }> = [];
   for (const { tx, ty, sortYAnchorPx } of site.map.getVisibleDecorationTiles({

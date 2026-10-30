@@ -17,7 +17,7 @@
 
 import type { AudioManager } from '../../audio/AudioManager';
 import { VILLAGE_CUES } from '../../audio/villageSoundCues';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type {
   ActiveContract,
   BriarHollowState,
@@ -76,8 +76,7 @@ import {
   type VillagerSystem,
 } from './VillagerSystem';
 
-const UPDATES_PER_SECOND = 60;
-const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 const TILE_CENTRE = 0.5;
 
 /** A held position is guarded this far round. */
@@ -94,16 +93,16 @@ const POST_CHASE_SLACK_TILES = 2;
  */
 export const SOLDIER_FOLLOW_MAX_TILES_OUTSIDE = 30;
 /** How often the follower's village leash is measured. */
-const LEASH_CHECK_FRAMES = UPDATES_PER_SECOND;
+const LEASH_CHECK_FRAMES = WORLD_TICKS_PER_SECOND;
 
 /** Outside the siege, a downed soldier gets back up by itself after this long. */
 export const SOLDIER_DOWNED_RECOVERY_SECONDS = 60;
-const SOLDIER_DOWNED_RECOVERY_FRAMES = SOLDIER_DOWNED_RECOVERY_SECONDS * UPDATES_PER_SECOND;
+const SOLDIER_DOWNED_RECOVERY_FRAMES = SOLDIER_DOWNED_RECOVERY_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A soldier who gets back up after the siege, or by themselves, has this share of their health. */
 export const SOLDIER_RISE_HP_FRACTION = 0.5;
 /** A crawler standing over a downed soldier helps them up after this long. */
 export const SOLDIER_HELP_UP_SECONDS = 2;
-const SOLDIER_HELP_UP_FRAMES = SOLDIER_HELP_UP_SECONDS * UPDATES_PER_SECOND;
+const SOLDIER_HELP_UP_FRAMES = SOLDIER_HELP_UP_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A soldier helped up early has this share of their health. */
 export const SOLDIER_HELP_UP_HP_FRACTION = 0.3;
 
@@ -111,7 +110,7 @@ export const SOLDIER_HELP_UP_HP_FRACTION = 0.3;
 export const SOLDIER_REGEN_SHARE_PER_SECOND = 0.01;
 /** Healing waits until this long after the last wound. */
 const SOLDIER_REGEN_DELAY_SECONDS = 5;
-const SOLDIER_REGEN_DELAY_FRAMES = SOLDIER_REGEN_DELAY_SECONDS * UPDATES_PER_SECOND;
+const SOLDIER_REGEN_DELAY_FRAMES = SOLDIER_REGEN_DELAY_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** Cooldowns on each call-out, per soldier, in seconds. */
 const ENEMY_SPOTTED_COOLDOWN_SECONDS = 60;

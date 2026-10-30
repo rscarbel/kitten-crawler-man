@@ -19,15 +19,13 @@ import {
   viewportHeight,
   viewportWidth,
 } from './rendering/Viewport';
+import { WORLD_TICKS_PER_SECOND } from './constants';
 
 /** Milliseconds per second. */
 const MS_PER_SECOND = 1000;
 
-/** Frame rate for fixed timestep (60 fps). */
-const FRAME_RATE = 60;
-
 /** Fixed timestep for game update loop in milliseconds. */
-const FIXED_DT_MS = MS_PER_SECOND / FRAME_RATE;
+const FIXED_DT_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 
 /** Maximum accumulated time to process in one frame to prevent death spiral. */
 const MAX_ACCUMULATOR_MULTIPLIER = 5;

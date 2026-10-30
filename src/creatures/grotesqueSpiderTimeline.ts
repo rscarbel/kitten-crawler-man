@@ -12,7 +12,7 @@
  * the audio can import it without pulling in the whole mob.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from './mobLevelScaling';
 
 /** Every attack the spider can commit to. */
@@ -42,9 +42,6 @@ export interface SpiderAttackTimeline {
   /** Seconds into the attack's impact sound file where the audible hit is, or null for no timed cue. */
   readonly audioImpactSeconds: number | null;
 }
-
-/** Game frames per second; every frame count in this module is at this rate. */
-export const SPIDER_FRAMES_PER_SECOND = 60;
 
 /**
  * The shortest hold of a strike pose. Two catch-up updates can share a single
@@ -169,7 +166,7 @@ export function attackStageAt(attack: SpiderAttack, frame: number): SpiderAttack
 
 /** How many frames before the strike the audible impact sits in its sound file. */
 function audioLeadFrames(audioImpactSeconds: number): number {
-  return Math.round(audioImpactSeconds * SPIDER_FRAMES_PER_SECOND);
+  return Math.round(audioImpactSeconds * WORLD_TICKS_PER_SECOND);
 }
 
 /**
@@ -192,7 +189,7 @@ export function audioStartFrame(attack: SpiderAttack): number | null {
 export function audioSeekSeconds(attack: SpiderAttack): number {
   const { audioImpactSeconds } = SPIDER_ATTACK_TIMELINES[attack];
   if (audioImpactSeconds === null) return 0;
-  return Math.max(0, audioImpactSeconds - strikeFrame(attack) / SPIDER_FRAMES_PER_SECOND);
+  return Math.max(0, audioImpactSeconds - strikeFrame(attack) / WORLD_TICKS_PER_SECOND);
 }
 
 /**

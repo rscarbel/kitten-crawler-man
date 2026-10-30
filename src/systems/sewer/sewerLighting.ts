@@ -10,11 +10,14 @@
  *   crawler, then one stretched blit over the world.
  * - **The shafts** are a faint cool wash added over each grate pool, so
  *   daylight reads as falling from above rather than glowing in the floor.
+ * - **The glints** are faint pools cut round whatever the party can work
+ *   (a valve wheel, a sluice), breathing slowly, so a fitting that takes a
+ *   press stands a shade brighter than the brick round it.
  *
  * Darkness is contrast only: nothing in the sewer is hidden by it.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import {
   allocCanvas,
   releaseSurface,
@@ -52,11 +55,25 @@ const PARTY_LIGHT_STRENGTH = 0.8;
 /** Share of the light's radius cut fully before it falls away. */
 const PARTY_LIGHT_CORE = 0.35;
 
+/** A workable fitting's glint: barely lifted out of the dark, never a lamp. */
+const GLINT_RADIUS_TILES = 1.5;
+const GLINT_STRENGTH = 0.3;
+/** How far the glint's strength swells and falls either side of its rest, as a share of it. */
+const GLINT_BREATH_SHARE = 0.25;
+const GLINT_BREATH_PERIOD_SECONDS = 2.6;
+const GLINT_BREATH_PERIOD_TICKS = GLINT_BREATH_PERIOD_SECONDS * WORLD_TICKS_PER_SECOND;
+
 const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
 
-/** A point that carries light, read every frame. */
+/** A body that carries light: the top-left of its tile, read every frame. */
 export interface SewerLightSource {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A point of interest the dark is lifted round, in world pixels at its centre. */
+export interface SewerGlint {
   readonly x: number;
   readonly y: number;
 }
@@ -124,11 +141,18 @@ export class SewerLighting {
     return this.cut;
   }
 
-  /** The dark over the world, with the party's light cut out of it, and the grates' shafts. */
+  /**
+   * The dark over the world, with the party's light and the glints over
+   * `interest` cut out of it, and the grates' shafts. `worldTicks` is the
+   * caller's clock of world ticks, which the glints breathe on, so they hold
+   * still while the world is halted.
+   */
   renderDarkness(
     ctx: CanvasRenderingContext2D,
     camera: Camera,
     party: Iterable<SewerLightSource>,
+    interest: Iterable<SewerGlint>,
+    worldTicks: number,
   ): void {
     const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const startedAt = perfMonitor.begin();
@@ -139,13 +163,12 @@ export class SewerLighting {
     cut.imageSmoothingEnabled = true;
     const mask = this.maskSurface();
     const maskToCut = CUT_SCALE / MASK_SCALE;
-    cut.drawImage(
-      mask,
-      -camX * CUT_SCALE,
-      -camY * CUT_SCALE,
-      mask.width * maskToCut,
-      mask.height * maskToCut,
-    );
+    // Both stretches go through the transform, not drawImage's destination
+    // size: the browsers draw the two alike, but node-canvas resamples a
+    // destination-sized blit through a whole intermediate surface, several
+    // times slower, and the headless perf numbers are read off node-canvas.
+    cut.setTransform(maskToCut, 0, 0, maskToCut, -camX * CUT_SCALE, -camY * CUT_SCALE);
+    cut.drawImage(mask, 0, 0);
     cut.setTransform(CUT_SCALE, 0, 0, CUT_SCALE, -camX * CUT_SCALE, -camY * CUT_SCALE);
     cut.globalCompositeOperation = 'destination-out';
     const radius = PARTY_LIGHT_RADIUS_TILES * TILE_SIZE;
@@ -161,9 +184,13 @@ export class SewerLighting {
       cut.arc(cx, cy, radius, 0, FULL_TURN);
       cut.fill();
     }
+    this.cutGlints(cut, interest, worldTicks);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(surface, 0, 0, surface.width / CUT_SCALE, surface.height / CUT_SCALE);
+    ctx.scale(1 / CUT_SCALE, 1 / CUT_SCALE);
+    ctx.drawImage(surface, 0, 0);
+    ctx.restore();
+    ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const shaftRadius = SHAFT_RADIUS_TILES * TILE_SIZE;
     for (const grate of this.grates) {
@@ -175,5 +202,24 @@ export class SewerLighting {
     }
     ctx.restore();
     perfMonitor.end('lighting', startedAt);
+  }
+
+  private cutGlints(
+    cut: CanvasRenderingContext2D,
+    interest: Iterable<SewerGlint>,
+    worldTicks: number,
+  ): void {
+    const breath = Math.sin((worldTicks / GLINT_BREATH_PERIOD_TICKS) * FULL_TURN);
+    const strength = GLINT_STRENGTH * (1 + breath * GLINT_BREATH_SHARE);
+    const radius = GLINT_RADIUS_TILES * TILE_SIZE;
+    for (const glint of interest) {
+      const pool = cut.createRadialGradient(glint.x, glint.y, 0, glint.x, glint.y, radius);
+      pool.addColorStop(0, `rgba(0,0,0,${strength})`);
+      pool.addColorStop(1, 'rgba(0,0,0,0)');
+      cut.fillStyle = pool;
+      cut.beginPath();
+      cut.arc(glint.x, glint.y, radius, 0, FULL_TURN);
+      cut.fill();
+    }
   }
 }

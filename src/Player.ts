@@ -140,6 +140,7 @@ import {
 import { HUMANOID_NPC_SCALE } from './sprites/humanoidScale';
 import type { PromptFigure } from './ui/InteractionPrompt';
 import type { ScriptedDeathKind } from './systems/scriptedDeath/scriptedDeathKinds';
+import { WORLD_TICKS_PER_SECOND } from './core/constants';
 
 const NO_SILHOUETTE_LAYERS: readonly SilhouetteLayer[] = [];
 const ALWAYS_PRESENT = (): boolean => true;
@@ -431,7 +432,6 @@ export const STAT_BOOST_FLASH_FRAMES = 90;
 const XP_PER_LEVEL_MULTIPLIER = 10;
 /** Share of max HP a health potion gives back — the crawlers' and the hirelings' alike. */
 export const POTION_HEAL_FRACTION = 0.5;
-const FRAMES_PER_SECOND = 60;
 /** Iron Stomach can shorten a swallow's timers by a lot, but never to nothing. */
 const MIN_IRON_STOMACH_TIME_SCALE = 0.4;
 
@@ -1720,7 +1720,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     const rechargeDenominator = this.health + DENOMINATOR_OFFSET;
     const cooldownReduction = rechargeNumerator / rechargeDenominator;
     const cooldownSeconds = DEFAULT_POTION_COOLDOWN_SECONDS - cooldownReduction;
-    return Math.max(1, Math.round(cooldownSeconds * FRAMES_PER_SECOND * this.ironStomachTimeScale));
+    return Math.max(
+      1,
+      Math.round(cooldownSeconds * WORLD_TICKS_PER_SECOND * this.ironStomachTimeScale),
+    );
   }
 
   /**

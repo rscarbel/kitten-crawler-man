@@ -1,7 +1,7 @@
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { randomInt, normalize } from '../utils';
 import {
   drawKrakenSprite,
@@ -102,7 +102,6 @@ const YELL_INTERVAL_MAX = 1200;
 const DAMAGE_FLASH_SLAM = 12;
 const DAMAGE_FLASH_SWING = 8;
 const CENTER_OFFSET = 0.5;
-const FRAMES_PER_SECOND = 60;
 const KRAKEN_CULL_MARGIN_TILES = 3;
 
 /** The hit tell, brighter than the enrage tint so a landed blow always reads. */
@@ -506,7 +505,7 @@ export class Kraken extends Mob implements KrakenRoomControl {
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 
-    this.animTime += 1 / FRAMES_PER_SECOND;
+    this.animTime += 1 / WORLD_TICKS_PER_SECOND;
 
     if (!this.roomDrained) {
       this.currentTarget = null;

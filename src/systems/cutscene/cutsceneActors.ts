@@ -5,7 +5,7 @@ import type { MobilityClass } from '../../map/mobility';
 import type { Player } from '../../Player';
 import { applyMovement, type MovementInput, type SouthCollisionAnchor } from '../GameLoopPhases';
 import type { CutscenePoint } from './cutsceneCamera';
-import type { CutsceneFacing } from './cutsceneSteps';
+import type { CutsceneFacing, CutscenePace } from './cutsceneSteps';
 
 /** A unit heading for one tick of a scripted walk. */
 export type CutsceneHeading = Pick<MovementInput, 'dx' | 'dy'>;
@@ -29,11 +29,11 @@ export interface CutsceneActor {
   /** The object the scene draws, which it asks `CutsceneDirector.hides` about in its render pass. */
   readonly body: object;
   readonly mobility: MobilityClass;
-  /** How far one tick of the actor's own walk carries them, which a walk's time allowance is sized by. */
-  readonly walkPxPerTick: number;
+  /** How far one tick of the actor's walk carries them at each pace, which a walk's time allowance is sized by. */
+  readonly walkPxPerTick: () => Readonly<Record<CutscenePace, number>>;
   readonly position: () => CutscenePoint;
-  /** One tick of a scripted walk along `heading`, at the actor's own pace; null stands them still. */
-  readonly walk: (heading: CutsceneHeading | null) => void;
+  /** One tick of a scripted walk along `heading` at `pace`; null stands them still. */
+  readonly walk: (heading: CutsceneHeading | null, pace: CutscenePace) => void;
   /** Sets the actor down at `at` without a step: each tick of a glide, and a walk that ran out of time. */
   readonly place: (at: CutscenePoint) => void;
   readonly face: (facing: CutsceneFacing) => void;
@@ -73,6 +73,11 @@ function faceBody(body: Player, facing: CutsceneFacing): void {
   body.facingY = vector.dy;
 }
 
+const ONE_GAIT_AT_PLAYER_SPEED: Readonly<Record<CutscenePace, number>> = {
+  stroll: PLAYER_SPEED,
+  hurry: PLAYER_SPEED,
+};
+
 /** How a body actor is moved, and what holds it. */
 export interface BodyActorOptions {
   readonly map: () => GameMap;
@@ -88,7 +93,7 @@ export function bodyActor(body: Player, options: BodyActorOptions): CutsceneActo
   return {
     body,
     mobility: body.mobility,
-    walkPxPerTick: PLAYER_SPEED,
+    walkPxPerTick: () => ONE_GAIT_AT_PLAYER_SPEED,
     position: () => ({ x: body.x, y: body.y }),
     walk: (heading) => {
       if (heading === null) {
@@ -107,14 +112,14 @@ export function bodyActor(body: Player, options: BodyActorOptions): CutsceneActo
   };
 }
 
-/** An interior occupant or a townsperson in the street, at their own walking pace. */
+/** An interior occupant or a townsperson in the street: they stroll at their own pace and hurry in their quickest gait. */
 export function townspersonActor(person: Townsperson): CutsceneActor {
   return {
     body: person,
     mobility: 'walker',
-    walkPxPerTick: person.speed,
+    walkPxPerTick: () => ({ stroll: person.speed, hurry: person.hurrySpeed }),
     position: () => ({ x: person.x, y: person.y }),
-    walk: (heading) => person.walkScripted(heading),
+    walk: (heading, pace) => person.walkScripted(heading, pace),
     place: (at) => person.placeScripted(at),
     face: (facing) => {
       const vector = FACING_VECTORS[facing];
@@ -142,9 +147,10 @@ export interface StagedBody {
 }
 
 /**
- * A staged body, stepped straight along each heading at `walkPxPerTick`. Its
- * walks follow the pathfinder's waypoints, so the ground it crosses is
- * already ground its mobility class may stand on; a glide carries it anywhere.
+ * A staged body, stepped straight along each heading at `walkPxPerTick`; a
+ * stroll and a hurry move it at that same speed. Its walks follow the
+ * pathfinder's waypoints, so the ground it crosses is already ground its
+ * mobility class may stand on; a glide carries it anywhere.
  */
 export function stagedActor(
   body: StagedBody,
@@ -155,10 +161,11 @@ export function stagedActor(
     body.facingX = heading.dx;
     body.facingY = heading.dy;
   };
+  const oneGait = { stroll: walkPxPerTick, hurry: walkPxPerTick };
   return {
     body,
     mobility,
-    walkPxPerTick,
+    walkPxPerTick: () => oneGait,
     position: () => ({ x: body.x, y: body.y }),
     walk: (heading) => {
       if (heading === null) {

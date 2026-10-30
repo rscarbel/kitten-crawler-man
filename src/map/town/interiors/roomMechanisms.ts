@@ -40,6 +40,8 @@ const INTERIOR_PLATE_SETS: Partial<
 
 /** The tower dumbwaiter's conveyor, for a system that watches what it carries. */
 export const TOWER_DUMBWAITER_CONVEYOR_ID = 'tower_dumbwaiter';
+/** The tower dumbwaiter's bell pulls, for a system that works one of them itself. */
+export const TOWER_DUMBWAITER_BELL_ID = 'tower_dumbwaiter_bell';
 /** The flag the tower dumbwaiter's bell pull raises at the other end. */
 export const TOWER_DUMBWAITER_BELL_FLAG = exchangeFlag('tower_dumbwaiter_bell');
 
@@ -60,11 +62,15 @@ export const CONVEYOR_PLACEMENTS: readonly ConveyorPlacement[] = [
     fixture: 'dumbwaiter',
     foot: towerEnd('foot', 'hatch'),
     head: towerEnd('head', 'hatch'),
-    accepts: ['quest_tuna_tin'],
+    // Nothing is sent on it from a bag at an unclaimed end: the key ring goes
+    // down by being batted into the hatch, and the tin the kitchen sends up is
+    // eaten as it arrives, so a tin sent down from the top would have nowhere
+    // in the kitchen's sequence to go.
+    accepts: [],
   },
   {
     kind: 'signal',
-    id: 'tower_dumbwaiter_bell',
+    id: TOWER_DUMBWAITER_BELL_ID,
     fixture: 'dumbwaiter_bell',
     foot: towerEnd('foot', 'bell'),
     head: towerEnd('head', 'bell'),

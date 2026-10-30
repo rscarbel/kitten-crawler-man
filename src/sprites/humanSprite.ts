@@ -26,7 +26,7 @@ import {
 import { FACING_VIEWS, type FacingView, selectFacing } from './facingView';
 import { type HumanWarmSpan } from './humanReactions';
 import { type Pt } from './art/bipedArt';
-import { heldFrameAt, heldLength, TICKS_PER_SECOND } from './art/human/timing';
+import { heldFrameAt, heldLength } from './art/human/timing';
 import { type HumanFigure, humanFigureFor } from './art/human/appearance';
 import { type Outfit, outfitOf, sameOutfit } from './garments/outfit';
 import { HUMAN_CRAWLER_LOOKS } from '../characters/humanCrawlerLooks';
@@ -53,6 +53,7 @@ import { type OffHandGrip, offHandGripKey } from './art/human/offHand';
 import type { HeldVisualDef } from './held/heldVisualDef';
 import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
 import { fusePhaseOf } from './held/art/scriptedPropHeld';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Every strike the animator can throw, read off the row table: a row is a
@@ -471,7 +472,7 @@ function selectHumanRow(state: HumanSpriteState, idleSeconds: number): HumanRowS
   }
 
   const idleRow = rowInView(view, (row) => row.role === 'idle');
-  const idleTicks = Math.floor(idleSeconds * TICKS_PER_SECOND) % rowLengthInTicks(idleRow);
+  const idleTicks = Math.floor(idleSeconds * WORLD_TICKS_PER_SECOND) % rowLengthInTicks(idleRow);
   const frame = rowFrameAtTicks(idleRow, idleTicks);
   return pick(idleRow.name, frame);
 }

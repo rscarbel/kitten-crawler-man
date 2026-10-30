@@ -37,7 +37,7 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
 import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
@@ -114,24 +114,23 @@ const HUMAN_WANDER_RNG_SALT = 0x5eed;
 
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 30;
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 const SIMULATED_MINUTES = 5;
 const SIMULATED_SECONDS = SIMULATED_MINUTES * SECONDS_PER_MINUTE;
-const TOTAL_FRAMES = SIMULATED_SECONDS * FRAMES_PER_SECOND;
+const TOTAL_FRAMES = SIMULATED_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Two blasts beside the herd, and the siege after them. */
 const FIRST_BLAST_SECOND = 60;
 const SECOND_BLAST_SECOND = 150;
 const BLAST_FRAMES: readonly number[] = [
-  FIRST_BLAST_SECOND * FRAMES_PER_SECOND,
-  SECOND_BLAST_SECOND * FRAMES_PER_SECOND,
+  FIRST_BLAST_SECOND * WORLD_TICKS_PER_SECOND,
+  SECOND_BLAST_SECOND * WORLD_TICKS_PER_SECOND,
 ];
 const SIEGE_START_SECOND = 220;
 const SIEGE_END_SECOND = 280;
-const SIEGE_START_FRAME = SIEGE_START_SECOND * FRAMES_PER_SECOND;
-const SIEGE_END_FRAME = SIEGE_END_SECOND * FRAMES_PER_SECOND;
+const SIEGE_START_FRAME = SIEGE_START_SECOND * WORLD_TICKS_PER_SECOND;
+const SIEGE_END_FRAME = SIEGE_END_SECOND * WORLD_TICKS_PER_SECOND;
 const SHELTER_DEADLINE_SECONDS = 30;
-const SHELTER_DEADLINE_FRAMES = SHELTER_DEADLINE_SECONDS * FRAMES_PER_SECOND;
+const SHELTER_DEADLINE_FRAMES = SHELTER_DEADLINE_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** The rules the herd is held to, stated here rather than read from the code under test. */
 const CALF_NEAR_MOTHER_TILES = 4;
@@ -143,12 +142,12 @@ const CALF_NEAR_MOTHER_SHARE = 0.95;
  * tries it again is just as stuck as one grinding at it.
  */
 const STUCK_WINDOW_SECONDS = 5;
-const STUCK_WINDOW_FRAMES = STUCK_WINDOW_SECONDS * FRAMES_PER_SECOND;
-const STUCK_TRYING_FRAMES = 2 * FRAMES_PER_SECOND;
+const STUCK_WINDOW_FRAMES = STUCK_WINDOW_SECONDS * WORLD_TICKS_PER_SECOND;
+const STUCK_TRYING_FRAMES = 2 * WORLD_TICKS_PER_SECOND;
 const STUCK_MIN_PROGRESS_PX = TILE_SIZE;
 /** The energy shield is cast among the herd this far in, at its widest level. */
 const SHIELD_SECOND = 100;
-const SHIELD_FRAME = SHIELD_SECOND * FRAMES_PER_SECOND;
+const SHIELD_FRAME = SHIELD_SECOND * WORLD_TICKS_PER_SECOND;
 const SHIELD_LEVEL = 15;
 /** Animals gathered round the human for the shield. */
 const SHIELD_VICTIMS = 3;
@@ -156,7 +155,7 @@ const SHIELD_VICTIMS = 3;
 const STICK_KILL_REACH_TILES = 3;
 /** A stick is lit this long before each blast, which is the herd's warning to warm its rows. */
 const STICK_BURN_SECONDS = 3;
-const STICK_BURN_FRAMES = STICK_BURN_SECONDS * FRAMES_PER_SECOND;
+const STICK_BURN_FRAMES = STICK_BURN_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * The herd's share of the figure cache, stated here: a pasture of six figures
  * next to a whole village's villagers, soldiers and undead gets a third.
@@ -166,10 +165,10 @@ const BYTES_PER_KILOBYTE = 1024;
 const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 /** How long an animal put off the pen has to walk back on. */
 const RETURN_DEADLINE_SECONDS = 20;
-const RETURN_DEADLINE_FRAMES = RETURN_DEADLINE_SECONDS * FRAMES_PER_SECOND;
+const RETURN_DEADLINE_FRAMES = RETURN_DEADLINE_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A panic is a flinch and a three-second run; this is the longest it may take to end. */
 const PANIC_LIMIT_SECONDS = 5;
-const PANIC_LIMIT_FRAMES = PANIC_LIMIT_SECONDS * FRAMES_PER_SECOND;
+const PANIC_LIMIT_FRAMES = PANIC_LIMIT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A blast is set off this far from the animal it is aimed beside, in tiles. */
 const BLAST_OFFSET_TILES = 1.5;
 /** Ground the whole herd covers in one seed's five minutes, at the least, for the run to mean anything. */
@@ -179,10 +178,10 @@ const LANE_MAX_TILES = 4;
 
 /** The human lingers this long at each stop as he wanders the pen. */
 const HUMAN_LINGER_MAX_SECONDS = 4;
-const HUMAN_LINGER_MAX_FRAMES = HUMAN_LINGER_MAX_SECONDS * FRAMES_PER_SECOND;
+const HUMAN_LINGER_MAX_FRAMES = HUMAN_LINGER_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Every so often the human drives the cow nearest the gate at a tile this far out along the lane. */
 const DRIVE_EVERY_SECONDS = 12;
-const DRIVE_EVERY_FRAMES = DRIVE_EVERY_SECONDS * FRAMES_PER_SECOND;
+const DRIVE_EVERY_FRAMES = DRIVE_EVERY_SECONDS * WORLD_TICKS_PER_SECOND;
 const LANE_EXIT_TILES = 2;
 /** The cat sits this far off, out of the herd's way. */
 const CAT_OFFSET_TILES = 6;
@@ -194,14 +193,14 @@ const EXPECTED_BURGERS_MAX = 3;
 const OVERKILL_DAMAGE = 10_000;
 /** A dead cow stands back up this long after it fell; stated here rather than read from the code under test. */
 const RESPAWN_SECONDS = 30;
-const RESPAWN_FRAMES = RESPAWN_SECONDS * FRAMES_PER_SECOND;
+const RESPAWN_FRAMES = RESPAWN_SECONDS * WORLD_TICKS_PER_SECOND;
 const RESPAWN_SEEDS = 5;
-const JUST_BEFORE_RESPAWN_FRAMES = RESPAWN_FRAMES - 2 * FRAMES_PER_SECOND;
+const JUST_BEFORE_RESPAWN_FRAMES = RESPAWN_FRAMES - 2 * WORLD_TICKS_PER_SECOND;
 /** Frames given to a respawn to be noticed once its time is up. */
-const RESPAWN_SLACK_FRAMES = 2 * FRAMES_PER_SECOND;
+const RESPAWN_SLACK_FRAMES = 2 * WORLD_TICKS_PER_SECOND;
 /** Frames a dropped stick takes to go off, with room to spare. */
 const DYNAMITE_WAIT_SECONDS = 6;
-const DYNAMITE_WAIT_FRAMES = DYNAMITE_WAIT_SECONDS * FRAMES_PER_SECOND;
+const DYNAMITE_WAIT_FRAMES = DYNAMITE_WAIT_SECONDS * WORLD_TICKS_PER_SECOND;
 const DYNAMITE_HOTBAR_SLOT = 0;
 const MISSILE_HOTBAR_SLOT = 1;
 /** Cows gathered round the stick for the blast test. */
@@ -210,7 +209,7 @@ const BLAST_VICTIMS = 3;
 const SPAWN_SITE_LEVEL = 8;
 /** How long a pen-less cow is watched for, which must see it wander. */
 const STRAY_WANDER_SECONDS = 30;
-const STRAY_WANDER_FRAMES = STRAY_WANDER_SECONDS * FRAMES_PER_SECOND;
+const STRAY_WANDER_FRAMES = STRAY_WANDER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Where a hostile stands for the tap cases: behind the cat, and between the cat and the cow. */
 const HOSTILE_BEHIND_TILES = 4;
 const HOSTILE_AHEAD_TILES = 1;

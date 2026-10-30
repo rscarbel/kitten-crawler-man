@@ -13,7 +13,7 @@
 
 import type { Camera } from '../../core/rendering/camera';
 import type { AudioManager } from '../../audio/AudioManager';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
 import {
   canAfford,
@@ -55,12 +55,7 @@ import type { TopBandEntry } from '../../ui/hud/topBand';
 import { worldPalette } from '../../ui/theme/worldInk';
 import { worldBar } from '../../ui/world/worldShapes';
 import { questCounterEntry } from '../briarHollow/QuestCounterHud';
-import {
-  CONSTRUCTION_XP,
-  UPDATES_PER_SECOND,
-  WALL_TIERS,
-  jobFrames,
-} from '../briarHollow/structureRules';
+import { CONSTRUCTION_XP, WALL_TIERS, jobFrames } from '../briarHollow/structureRules';
 import { WorkChannel, type WorkChannelBuilder } from '../WorkChannel';
 import {
   contractSiteFor,
@@ -106,7 +101,7 @@ const FINISHED_TEXT: Readonly<Record<ContractSpotDef['kind'], string>> = {
 const TILE_CENTRE = 0.5;
 const MS_PER_SECOND = 1000;
 /** How often the resource strip is kept up while a spot is worked, so it shows what is about to go. */
-const RESOURCE_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
+const RESOURCE_NOTE_INTERVAL_FRAMES = WORLD_TICKS_PER_SECOND;
 const PROGRESS_BAR_WIDTH = 36;
 const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT_PX = 10;

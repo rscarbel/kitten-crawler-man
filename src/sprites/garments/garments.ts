@@ -60,7 +60,12 @@ import { SHOWMANS_TOP_HAT } from './human/showmansTopHat';
 import { DEMOLITION_APRON } from './human/demolitionApron';
 import { SCRAPMAIL_VEST } from './human/scrapmailVest';
 import { HEARTHGUARD_QUILTED_VEST } from './human/hearthguardQuiltedVest';
-import { HUMAN_MOON_LOCKET, HUMAN_STONEHEART_AMULET, HUMAN_SUN_LOCKET } from './human/neckPendants';
+import {
+  HUMAN_HUSHED_BELL,
+  HUMAN_MOON_LOCKET,
+  HUMAN_STONEHEART_AMULET,
+  HUMAN_SUN_LOCKET,
+} from './human/neckPendants';
 import {
   HUMAN_LINEMAN_BOOTS,
   HUMAN_HEARTHGUARD_BOOTS,
@@ -148,6 +153,7 @@ const HUMAN_WORN_GARMENTS: Readonly<Record<HumanWornGarmentId, WornGarmentDef<'h
   human_stoneheart_amulet: HUMAN_STONEHEART_AMULET,
   human_sun_locket: HUMAN_SUN_LOCKET,
   human_moon_locket: HUMAN_MOON_LOCKET,
+  human_hushed_bell: HUMAN_HUSHED_BELL,
   human_scrappers_wraps: HUMAN_SCRAPPERS_WRAPS,
   human_silkspinner_gloves: HUMAN_SILKSPINNER_GLOVES,
   human_iron_knuckle_gauntlet: HUMAN_IRON_KNUCKLE_GAUNTLET,

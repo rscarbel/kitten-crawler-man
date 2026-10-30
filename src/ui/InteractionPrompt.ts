@@ -1,5 +1,12 @@
 import { TILE_SIZE } from '../core/constants';
-import { chooseFocus, type FocusCandidate, type PromptOwner } from './interactionFocus';
+import {
+  chooseFocus,
+  stanceAllows,
+  type FocusCandidate,
+  type InteractableKind,
+  type InteractionStance,
+  type PromptOwner,
+} from './interactionFocus';
 import type { Requirement } from './RequirementRow';
 import { skinsFor } from './theme/skins';
 import type { Theme } from './theme/tokens';
@@ -62,6 +69,7 @@ const keepClear: PromptKeepClear[] = [];
 /** Every box ever handed out, reused frame to frame so keeping clear allocates nothing. */
 const keepClearPool: Array<{ -readonly [K in keyof PromptKeepClear]: PromptKeepClear[K] }> = [];
 let promptsSuppressed = false;
+let stance: InteractionStance = 'clear';
 let promptsDrawnThisFrame = 0;
 let raisingFor: PromptOwner | null = null;
 let focusOrigin: { x: number; y: number } | null = null;
@@ -76,13 +84,21 @@ let shownOwner: PromptOwner | null = null;
  * dialog system is added. A scene instead answers the question once per frame
  * from its `UiRoot`'s surface stack, in one call for every prompt.
  *
+ * `frameStance` is the fight around the steering crawler this frame: a prompt
+ * for something it keeps a press from reaching is never raised, so the prompt
+ * on screen always names what the press does.
+ *
  * Call it at the top of every scene render that draws prompts: the flag is
  * module state, so a scene that never sets it inherits the last scene's answer.
  * It also drops anything still queued, so a scene without the prompt surface
  * mounted never accumulates prompts.
  */
-export function setInteractionPromptsSuppressed(suppressed: boolean): void {
+export function setInteractionPromptsSuppressed(
+  suppressed: boolean,
+  frameStance: InteractionStance,
+): void {
   promptsSuppressed = suppressed;
+  stance = frameStance;
   promptsDrawnThisFrame = 0;
   queue.length = 0;
   keepClear.length = 0;
@@ -124,16 +140,25 @@ export function raisePromptsFor<T>(owner: PromptOwner, raise: () => T): T {
 
 /**
  * Hands an interact press to whatever the one interact prompt on screen
- * names, when `owners` — the scene's own — raised it. Returns whether it took
- * the press. A scene calls this ahead of the rest of its interact chain, so
- * the press always reaches the thing the prompt named; owners from another
+ * names, when `owners` — the scene's own — raised it and `pressStance`, the
+ * fight as the press lands, still lets a press reach it. Returns whether it
+ * took the press. A scene calls this ahead of the rest of its interact chain,
+ * so the press always reaches the thing the prompt named; owners from another
  * scene are ignored, since the prompt last shown may be from the scene this
  * one replaced.
  */
-export function pressFocusedPrompt(owners: Readonly<Record<string, PromptOwner>>): boolean {
+export function pressFocusedPrompt(
+  owners: Readonly<Record<string, PromptOwner>>,
+  pressStance: InteractionStance,
+): boolean {
   const owner = shownOwner;
   if (owner === null || !Object.values(owners).includes(owner)) return false;
-  return owner.act();
+  return stanceAllows(pressStance, owner.kind) && owner.act();
+}
+
+/** The owner of the interact prompt the prompt surface last showed; null when it showed none. */
+export function shownPromptOwner(): PromptOwner | null {
+  return shownOwner;
 }
 
 /**
@@ -285,6 +310,8 @@ function queuePrompt(
   requirements: readonly Requirement[] | null,
 ): void {
   if (promptsSuppressed) return;
+  const interactKey = keyOverride === undefined;
+  if (interactKey && !stanceAllows(stance, raisedKind(raisingFor))) return;
   promptsDrawnThisFrame++;
   const anchorX = sx + objW / 2;
   const m = ctx.getTransform();
@@ -321,7 +348,7 @@ export function hasQueuedPrompts(): boolean {
  */
 export function drainQueuedPrompts(draw: (prompt: QueuedPrompt) => void): void {
   const interactPrompts = queue.filter((prompt) => prompt.keyOverride === null);
-  const focusIndex = chooseFocus(interactPrompts.map(focusCandidate));
+  const focusIndex = chooseFocus(interactPrompts.map(focusCandidate), stance);
   const focus: QueuedPrompt | null = focusIndex < 0 ? null : interactPrompts[focusIndex];
   shownOwner = focus === null ? null : focus.owner;
   for (const prompt of queue) {
@@ -331,6 +358,11 @@ export function drainQueuedPrompts(draw: (prompt: QueuedPrompt) => void): void {
   queue.length = 0;
 }
 
+/** A prompt raised outside any owner ranks, and is held back, as an unnamed thing. */
+function raisedKind(owner: PromptOwner | null): InteractableKind {
+  return owner?.kind ?? 'other';
+}
+
 function focusCandidate(prompt: QueuedPrompt): FocusCandidate {
-  return { kind: prompt.owner?.kind ?? 'other', distance: prompt.focusDistance };
+  return { kind: raisedKind(prompt.owner), distance: prompt.focusDistance };
 }

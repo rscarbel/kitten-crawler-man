@@ -3,6 +3,7 @@ import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import type { DamageOptions, DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
+import type { TowerErrandLeg } from '../core/quests/missingCatsProgress';
 import { normalize } from '../utils';
 import type { GolemRockThrow } from '../systems/RockThrowSystem';
 import type { HirelingShot } from '../systems/HirelingShotSystem';
@@ -509,6 +510,11 @@ export class Mercenary extends Mob {
     if (utterance.grunt === 'grunt') this.specialSoundPending = true;
     if (utterance.grunt === 'frustrated') this.damageSoundPending = true;
     return true;
+  }
+
+  /** Keeps the hire's small talk to the leg of the tower errand the party is on; null lets it talk freely. */
+  keepToTowerErrand(leg: TowerErrandLeg | null): void {
+    this.barker.towerErrandLeg = leg;
   }
 
   /** The player walked up and asked. */

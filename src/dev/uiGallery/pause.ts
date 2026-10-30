@@ -11,7 +11,7 @@ import { AbilityManager } from '../../core/skills/AbilityManager';
 import { ACHIEVEMENT_DEFS, AchievementManager } from '../../core/progression/AchievementManager';
 import { isAchievementId } from '../../core/progression/achievementSave';
 import { awardXp } from '../../core/progression/awardXp';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { EventBus } from '../../core/EventBus';
 import {
   clearDifficultyChangeGuard,
@@ -54,16 +54,16 @@ const FIXTURE_PROFICIENCY_USES = 37;
 const ACHIEVEMENTS_PER_CRAWLER = 4;
 const ABILITY_XP = 60;
 const CRAFT_XP = 700;
-const FRAMES_PER_SECOND = 60;
 const PLAYED_SECONDS = 1380;
-const PLAYED_FRAMES = FRAMES_PER_SECOND * PLAYED_SECONDS;
+const PLAYED_FRAMES = WORLD_TICKS_PER_SECOND * PLAYED_SECONDS;
 const DEINONYCHUS_PETS = 48;
 const OTHER_COW_PETS = 25;
 const MIDGE_PETS = 12;
+const TOWN_CAT_PETS = 9;
 /** Deep enough that the Stats tab shows the floor's clock beside the run's. */
 const FIXTURE_FLOOR = 2;
 const PLAYED_FLOOR_SECONDS = 305;
-const PLAYED_FLOOR_FRAMES = FRAMES_PER_SECOND * PLAYED_FLOOR_SECONDS;
+const PLAYED_FLOOR_FRAMES = WORLD_TICKS_PER_SECOND * PLAYED_FLOOR_SECONDS;
 const MERCENARIES_HIRED = 2;
 /** The key chip the keyboard-focus fixture walks to: well below the first screenful of rows. */
 const FOCUS_TARGET = 30;
@@ -181,6 +181,7 @@ export function pauseFixtureData(): PauseFixtureData {
   for (let pet = 0; pet < DEINONYCHUS_PETS; pet++) gameStats.recordDeinonychusPetted();
   for (let pet = 0; pet < OTHER_COW_PETS; pet++) gameStats.recordCowPetted(false);
   for (let pet = 0; pet < MIDGE_PETS; pet++) gameStats.recordCowPetted(true);
+  for (let pet = 0; pet < TOWN_CAT_PETS; pet++) gameStats.recordTownCatPetted();
   gameStats.beginFloor();
   for (let frame = 0; frame < PLAYED_FLOOR_FRAMES; frame++) gameStats.recordPlayedFrame();
   for (let hire = 0; hire < MERCENARIES_HIRED; hire++) gameStats.recordMercenaryHired();
@@ -336,6 +337,7 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
     progress: createJournalProgress(),
     entries: [
       {
+        kind: 'single',
         id: 'bounty',
         name: 'Shady’s Bounty',
         status: 'active',
@@ -344,6 +346,8 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
         target: { x: 34, y: 2 },
       },
       {
+        kind: 'header',
+        pinLeadsTo: 'nearest_step',
         id: 'anchor',
         name: 'The Anchor is Broken',
         status: 'active',
@@ -352,6 +356,7 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
       },
       {
         id: 'anchor/shard-1',
+        kind: 'step',
         parentId: 'anchor',
         name: 'Shard in the Starlight Tent',
         status: 'active',
@@ -359,6 +364,7 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
         target: { x: 2, y: 12 },
       },
       {
+        kind: 'single',
         id: 'blueprints',
         name: 'Borrowed Blueprints',
         status: 'available',
@@ -366,12 +372,19 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
         target: { x: 18, y: 14 },
       },
       {
+        kind: 'single',
         id: 'bathroom',
         name: 'The Clogged Bathroom',
         status: 'failed',
         objective: 'The water got there first',
       },
-      { id: 'rats', name: 'Rat Problem', status: 'completed', objective: 'Cellar cleared' },
+      {
+        kind: 'single',
+        id: 'rats',
+        name: 'Rat Problem',
+        status: 'completed',
+        objective: 'Cellar cleared',
+      },
     ],
   };
   return screen;

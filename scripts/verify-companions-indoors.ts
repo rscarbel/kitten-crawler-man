@@ -48,6 +48,10 @@
  *
  *   npx tsx scripts/verify-companions-indoors.ts [--fault=<name>]
  *
+ * While the party hides (see `companionsIndoors/hidingTrail.ts`), Deinonychus and
+ * the attack cow keep a step behind the crawler they follow, and the cow is
+ * never stood up or caught up on a map her crawler is not on.
+ *
  * Every `--fault=` injects one split-party regression and must turn it red.
  */
 
@@ -55,7 +59,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TILE_SIZE } from '../src/core/constants';
-import { INTERACTABLE_RANK } from '../src/ui/interactionFocus';
+import { INTERACTABLES, interactableRank, type InteractableKind } from '../src/ui/interactionFocus';
 import { level3 } from '../src/levels/level3';
 import { setViewportSize } from '../src/core/rendering/Viewport';
 import {
@@ -128,6 +132,7 @@ import {
   isSplitPartyFault,
   type SplitPartyFault,
 } from './companionsIndoors/splitParty';
+import { checkHidingTrail } from './companionsIndoors/hidingTrail';
 import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
@@ -1582,6 +1587,10 @@ const PLAYER_MANAGER_PATH = resolve(SCENES_DIR, '..', 'core', 'party', 'PlayerMa
 const HUD_SURFACE_PATH = resolve(SCENES_DIR, '..', 'ui', 'hud', 'HudSurface.ts');
 
 /** The source of one method, from its signature to the closing brace at method depth. */
+function isInteractableKind(key: string): key is InteractableKind {
+  return key in INTERACTABLES;
+}
+
 function methodBody(source: string, signature: string): string | null {
   const start = source.indexOf(signature);
   if (start < 0) return null;
@@ -1746,11 +1755,11 @@ function checkSceneWiring(): void {
     mercenaryPrompt?.includes('raisePromptsFor(this.promptOwners.mercenary') === true,
     'the hire’s Talk prompt is raised for the hire',
   );
-  const otherRanks = Object.entries(INTERACTABLE_RANK).flatMap(([kind, rank]) =>
-    kind === 'companion' ? [] : [rank],
+  const otherRanks = Object.keys(INTERACTABLES).flatMap((kind) =>
+    kind === 'companion' || !isInteractableKind(kind) ? [] : [interactableRank(kind)],
   );
   check(
-    otherRanks.every((rank) => rank < INTERACTABLE_RANK.companion),
+    otherRanks.every((rank) => rank < interactableRank('companion')),
     'and a companion ranks below every other prompt, so anything else in reach is the one shown',
   );
   const hudModelBody = methodBody(interior, 'private hudModel(): HudModel {');
@@ -1980,6 +1989,8 @@ checkSceneWiring();
 checkDownedPartnerKeepsEveryDoorShut();
 section('A split party');
 checkSplitParty(check, splitFault);
+section('While the party hides');
+checkHidingTrail(check);
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

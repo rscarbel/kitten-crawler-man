@@ -12,6 +12,8 @@
  * - Following: an owner who walks off is caught up with, to inside the follow
  *   band; an owner who leaves mid-fight is followed home, and the leash alone
  *   holds a hireling near her when a fight is still in sight.
+ * - Hiding: put on its owner's trail, as a room being hidden in puts it, a
+ *   hire stays a step behind her as she creeps cover to cover.
  * - Credit: a kill landed by the hireling pays its owner the top XP share.
  * - Friendly fire: through a fight with crawlers and Deinonychus pressed against it,
  *   no ally loses HP to the hireling, while the hostiles do.
@@ -27,7 +29,8 @@
  * that cannot see its effect fails rather than passes.
  */
 
-import { TILE_SIZE } from '../../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
+import { PARTY_TRAIL_SPACING_TILES, PartyLine } from '../../src/systems/partyTrail';
 import { GameMap } from '../../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
@@ -1496,6 +1499,92 @@ function checkFollowing(report: LifecycleGateReporter): void {
   );
 }
 
+// ── Hiding together ──────────────────────────────────────────────────────────
+
+/**
+ * The furthest a hire walking its owner's trail while the party hides may
+ * stand from her, in tiles: one step behind, on ground she stood on a step
+ * ago, so it hides where she hid.
+ */
+const HIDING_FOLLOW_BOUND_TILES = PARTY_TRAIL_SPACING_TILES;
+/** Room for the trail's sub-pixel strides past the bound. */
+const HIDING_FOLLOW_SLACK_TILES = 0.05;
+/** How long the hire is given, once put on the trail, to close the gap it starts from. */
+const HIDING_SETTLE_FRAMES = WORLD_TICKS_PER_SECOND * 2;
+/** Her creep from cover to cover, in tiles walked one leg after another from where she starts. */
+const HIDING_CREEP_LEGS = [
+  { dx: 6, dy: 0 },
+  { dx: 0, dy: 4 },
+  { dx: -4, dy: 0 },
+  { dx: 0, dy: -3 },
+] as const;
+/** How long she waits behind each piece of cover before the next leg. */
+const HIDING_WAIT_FRAMES = WORLD_TICKS_PER_SECOND;
+const HIDING_START_TILE = { x: 6, y: 6 } as const;
+
+/**
+ * Walks the owner from cover to cover, on her own with the cat elsewhere, as
+ * the gatehouse's split plays, and reports the hire's farthest from her once
+ * it has settled: on her trail (`onTrail`) as the scene puts it while the
+ * party hides, or left to its own follow.
+ */
+function farthestWhileHiding(id: MercenaryTemplateId, onTrail: boolean): number | null {
+  const built = buildScene(id, {
+    map: makeRoom(),
+    humanTile: HIDING_START_TILE,
+    catTile: { x: ROOM_WIDTH_TILES - 2, y: ROOM_HEIGHT_TILES - 2 },
+  });
+  const scene: Scene = { ...built, ctx: { ...built.ctx, partner: null } };
+  const merc = scene.system.activeMerc;
+  if (merc === null) return null;
+  withoutStuckRescue(merc);
+  if (onTrail) scene.system.setTrailFollow(new PartyLine(PARTY_TRAIL_SPACING_TILES * TILE_SIZE));
+  let frame = 0;
+  let farthest = 0;
+  const tick = (): void => {
+    step(scene);
+    frame++;
+    if (frame > HIDING_SETTLE_FRAMES)
+      farthest = Math.max(farthest, tilesBetween(merc, scene.human));
+  };
+  for (let wait = 0; wait < HIDING_SETTLE_FRAMES; wait++) tick();
+  for (const leg of HIDING_CREEP_LEGS) {
+    const goalX = scene.human.x + leg.dx * TILE_SIZE;
+    const goalY = scene.human.y + leg.dy * TILE_SIZE;
+    while (scene.human.x !== goalX || scene.human.y !== goalY) {
+      scene.human.x = approach(scene.human.x, goalX, PLAYER_SPEED);
+      scene.human.y = approach(scene.human.y, goalY, PLAYER_SPEED);
+      scene.human.isMoving = true;
+      tick();
+    }
+    scene.human.isMoving = false;
+    for (let wait = 0; wait < HIDING_WAIT_FRAMES; wait++) tick();
+  }
+  return farthest;
+}
+
+function approach(from: number, to: number, stride: number): number {
+  const gap = to - from;
+  return Math.abs(gap) <= stride ? to : from + Math.sign(gap) * stride;
+}
+
+function checkHidingTogether(report: LifecycleGateReporter): void {
+  report.section('While the party hides, every hire keeps a step behind its owner');
+  const bound = HIDING_FOLLOW_BOUND_TILES + HIDING_FOLLOW_SLACK_TILES;
+  for (const id of MERCENARY_TEMPLATE_IDS) {
+    const farthest = farthestWhileHiding(id, true);
+    report.check(
+      farthest !== null && farthest <= bound,
+      `${id} on its owner's trail stays within ${HIDING_FOLLOW_BOUND_TILES} tile of her as she creeps cover to cover (${farthest?.toFixed(2) ?? 'no hireling'} at most)`,
+    );
+  }
+  const loose = farthestWhileHiding('hammer_hands', false);
+  report.checkCatches(
+    loose !== null && loose <= bound,
+    `a hire left to its own follow is caught straying past ${HIDING_FOLLOW_BOUND_TILES} tile (${loose?.toFixed(2) ?? 'no hireling'} at most)`,
+  );
+}
+
 // ── Credit ───────────────────────────────────────────────────────────────────
 
 const CORNER_TILE = 1;
@@ -1835,9 +1924,8 @@ const FIGHT_GOBLIN_TILES: readonly (readonly [number, number])[] = [
 /** The cat waits out the fight sealed in a far pocket, so the owner takes it alone. */
 const CAT_POCKET_TILE_X = 28;
 const CAT_POCKET_TILE_Y = 3;
-const FRAMES_PER_SECOND = 60;
 const FIGHT_WINDOW_SECONDS = 90;
-const FIGHT_WINDOW_FRAMES = FIGHT_WINDOW_SECONDS * FRAMES_PER_SECOND;
+const FIGHT_WINDOW_FRAMES = FIGHT_WINDOW_SECONDS * WORLD_TICKS_PER_SECOND;
 
 interface FightOutcome {
   /** The frame the owner went down, or null if she lasted the window. */
@@ -1967,7 +2055,7 @@ function keptAliveLonger(
  * cannot pass for a healer.
  */
 const HEAL_MARGIN_SECONDS = 1.5;
-const HEAL_MARGIN_FRAMES = HEAL_MARGIN_SECONDS * FRAMES_PER_SECOND;
+const HEAL_MARGIN_FRAMES = HEAL_MARGIN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** One stance's fight on every survivability stream. */
 function fightOnStreams(hire: MercenaryTemplateId | null, stance: HireStance): FightOutcome[] {
@@ -1996,7 +2084,7 @@ function allKnockedOut(baseline: readonly FightOutcome[]): boolean {
 }
 
 function describeMargin(frames: number): string {
-  return `${frames >= 0 ? '+' : ''}${(frames / FRAMES_PER_SECOND).toFixed(1)} s`;
+  return `${frames >= 0 ? '+' : ''}${(frames / WORLD_TICKS_PER_SECOND).toFixed(1)} s`;
 }
 
 function sameFight(a: FightOutcome, b: FightOutcome): boolean {
@@ -2004,7 +2092,7 @@ function sameFight(a: FightOutcome, b: FightOutcome): boolean {
 }
 
 function describeFight(outcome: FightOutcome): string {
-  const seconds = (frames: number): string => (frames / FRAMES_PER_SECOND).toFixed(1);
+  const seconds = (frames: number): string => (frames / WORLD_TICKS_PER_SECOND).toFixed(1);
   return outcome.knockoutFrame === null
     ? `standing after ${seconds(FIGHT_WINDOW_FRAMES)} s, ${outcome.hpLost} HP lost`
     : `down at ${seconds(outcome.knockoutFrame)} s`;
@@ -2012,7 +2100,7 @@ function describeFight(outcome: FightOutcome): string {
 
 function marginSeconds(hired: FightOutcome, baseline: FightOutcome): string {
   const frames = framesStanding(hired) - framesStanding(baseline);
-  return `${frames >= 0 ? '+' : ''}${(frames / FRAMES_PER_SECOND).toFixed(1)} s`;
+  return `${frames >= 0 ? '+' : ''}${(frames / WORLD_TICKS_PER_SECOND).toFixed(1)} s`;
 }
 
 function checkSurvivability(report: LifecycleGateReporter): void {
@@ -2087,6 +2175,7 @@ function runLifecycleChecks(report: LifecycleGateReporter): void {
   checkLeavingACrawlerBehind(report);
   checkSlowDrift(report);
   checkFollowing(report);
+  checkHidingTogether(report);
   checkCredit(report);
   checkFriendlyFire(report);
   checkBoulder(report);

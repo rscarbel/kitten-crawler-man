@@ -37,7 +37,7 @@ import { partyCoins } from '../../core/party/partyCoins';
 import { constructionUnlocked } from '../../core/quests/villageUnlocks';
 import { RESOURCE_IDS } from '../../core/items/gathering/resourceIds';
 import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { keybindings } from '../../core/input/Keybindings';
 import {
   actionPrompt,
@@ -92,7 +92,6 @@ import {
 import {
   BELL_TOWER_REPAIR_COINS,
   TREBUCHET_MAX_AMMO,
-  UPDATES_PER_SECOND,
   WALL_TIERS,
   damageStageFor,
 } from './structureRules';
@@ -123,7 +122,7 @@ const TREBUCHET_HINT_LINE_GAP_PX = 13;
  * footprint distance from the crawler's centre that this check measures.
  */
 const TREBUCHET_NEARBY_SLACK_TILES = 1;
-const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 /** A tile's centre, as a fraction of the tile from its corner. */
 const TILE_CENTRE = 0.5;
 /** Reach is measured to a tile's centre, so a tile whose near edge is in reach counts. */

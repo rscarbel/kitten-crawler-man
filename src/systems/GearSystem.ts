@@ -9,7 +9,7 @@ import type { Mob } from '../creatures/Mob';
 import { hitTrainingOn, resolveCrawlerHit, type ResolvedHit } from '../core/combat/outgoingHit';
 import { FIRE_HIT, UNTAGGED_HIT, type DamageTags } from '../core/combat/damageTags';
 import { runTickHooks, wornClaws, wornTraits } from '../gear/gearHooks';
-import type { GearFxRequest } from '../gear/gearLive';
+import { FULL_NOTICE_RANGE_SHARE, type GearFxRequest } from '../gear/gearLive';
 import { setCompletionPieces, setRarity, wornSets } from '../gear/setProgress';
 import type { GearSetId } from '../gear/sets';
 import {
@@ -295,8 +295,14 @@ export class GearSystem implements GameSystem, GearWorld {
 
   update(): void {
     this.frame++;
-    this.tickCrawler(this.human, this.cat);
-    this.tickCrawler(this.cat, this.human);
+    const together = !this.human.isAway && !this.cat.isAway;
+    // A worn hush reaches the other crawler too, so both are cleared before
+    // either ticks: clearing one inside its own tick would undo what the
+    // first crawler's tick had just granted her.
+    this.human.gear.live.noticeRangeShare = FULL_NOTICE_RANGE_SHARE;
+    this.cat.gear.live.noticeRangeShare = FULL_NOTICE_RANGE_SHARE;
+    this.tickCrawler(this.human, together ? this.cat : null);
+    this.tickCrawler(this.cat, together ? this.human : null);
     this.easeRelicSides();
     this.updateBolts();
     this.updateBrambles();
@@ -369,7 +375,8 @@ export class GearSystem implements GameSystem, GearWorld {
     return crawler === this.human ? 'human' : 'cat';
   }
 
-  private tickCrawler(crawler: Crawler, partner: Crawler): void {
+  /** `partner` is null while either crawler is away from the party: a link cannot reach a cat in another building. */
+  private tickCrawler(crawler: Crawler, partner: Crawler | null): void {
     const live = crawler.gear.live;
     const moved =
       live.lastX === null ||
@@ -816,6 +823,7 @@ export class GearSystem implements GameSystem, GearWorld {
 
   private drawTether(ctx: CanvasRenderingContext2D): void {
     if (!this.human.gear.live.partnerLinked && !this.cat.gear.live.partnerLinked) return;
+    if (this.human.concealed || this.cat.concealed) return;
     const sun = centreOf(this.human);
     const moon = centreOf(this.cat);
     drawPartnerTether(

@@ -1,4 +1,5 @@
 import { noteDrawFailure, recoverDrawState } from '../core/rendering/drawFailure';
+import { terrainAlignedCoord } from '../core/rendering/camera';
 import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
 import { stealthGateExtentsPx } from './tiles/stealthGateTiles';
 import { serviceLevelPropExtentsPx } from './tiles/serviceLevelPropTiles';
@@ -106,6 +107,7 @@ import {
 
 import { CHUNK_TILES } from './tiles/chunkTiles';
 import { drawImageSnapped } from './tiles/deviceSnap';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Milliseconds of chunk baking a frame of play may spend, matching the figure
@@ -136,7 +138,6 @@ const CHUNK_SPECULATIVE_BUDGET_MS = 1;
 const MAX_CACHED_CHUNKS = 60;
 
 const CHUNK_IDLE_RELEASE_SECONDS = 30;
-const CHUNK_FRAMES_PER_SECOND = 60;
 /**
  * Frames of this map's own drawing a chunk may go undrawn before it is let go,
  * however far below {@link MAX_CACHED_CHUNKS} the cache is. A map that lives
@@ -148,7 +149,7 @@ const CHUNK_FRAMES_PER_SECOND = 60;
  * Counted on the cache's own frames, so a map not drawn at all (the floor
  * outside while the party is in a building) ages nothing.
  */
-const CHUNK_IDLE_RELEASE_FRAMES = CHUNK_IDLE_RELEASE_SECONDS * CHUNK_FRAMES_PER_SECOND;
+const CHUNK_IDLE_RELEASE_FRAMES = CHUNK_IDLE_RELEASE_SECONDS * WORLD_TICKS_PER_SECOND;
 
 declare const __DEV_BUILD__: boolean | undefined;
 /** Whether this is a dev build, where the stale-chunk drain is watched. */
@@ -1180,12 +1181,12 @@ export class TileChunkCache {
     const cx1 = Math.min(this.chunksX - 1, Math.floor((cameraX + viewW) / chunkPx));
     const cy1 = Math.min(this.chunksY - 1, Math.floor((cameraY + viewH) / chunkPx));
 
-    // Floored once so every chunk shares one alignment; each blit is then
+    // Aligned once so every chunk shares one alignment; each blit is then
     // snapped to whole device pixels, since under a fractional render scale or
     // camera zoom a whole world pixel is still a fractional device pixel and
     // neighbouring chunks would leave a hairline between them.
-    const baseX = Math.floor(-cameraX);
-    const baseY = Math.floor(-cameraY);
+    const baseX = -terrainAlignedCoord(cameraX);
+    const baseY = -terrainAlignedCoord(cameraY);
     const transform = ctx.getTransform();
     const blit = (canvas: CanvasSurface, x: number, y: number): void =>
       drawImageSnapped(ctx, canvas, x, y, canvas.width, canvas.height, transform);

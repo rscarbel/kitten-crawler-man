@@ -28,7 +28,7 @@ import {
   type CanvasSurface,
 } from '../../core/rendering/canvasSurface';
 import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { MILLISECONDS_PER_SECOND } from '../../core/spriteAssets/SpriteRenderer';
 import type { WorkingTool } from '../../core/items/gathering/toolTiers';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -51,7 +51,6 @@ import {
 } from '../../sprites/art/circusArt';
 import { HIGH_STRIKER_BELL, HIGH_STRIKER_PUCK } from '../../sprites/art/circusOverlayAnchors';
 import { MINE_IMPACT_FRAME } from '../../sprites/art/human/actionsGather';
-import { TICKS_PER_SECOND } from '../../sprites/art/human/timing';
 import { MINE_ROWS, eventFrame } from '../../sprites/art/humanFigure';
 import { rgba } from '../../sprites/art/town/townArt';
 import { getCircusRamp } from '../../sprites/art/town/townPalette';
@@ -106,7 +105,7 @@ const BELL_CORE_STOPS: ReadonlyArray<GlowStop> = [
 // ── The meter ─────────────────────────────────────────────────────────────────
 
 /** One of the game's fixed update steps, in seconds: what the meter's sweep is paced by. */
-const UPDATE_STEP_S = 1 / TICKS_PER_SECOND;
+const UPDATE_STEP_S = 1 / WORLD_TICKS_PER_SECOND;
 /** A meter nobody locks in is put away after this long. */
 const METER_TIMEOUT_S = 8;
 /**

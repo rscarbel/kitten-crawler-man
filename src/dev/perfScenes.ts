@@ -55,6 +55,9 @@ const VILLAGE_STREET_SIDE_TILES = 7;
 const BOSS_ROOM_LAP_REACH_TILES = 4;
 const CIRCUS_LAP_REACH_TILES = 10;
 const INTERIOR_LAP_REACH_TILES = 6;
+/** The ladder's chamber in the tower drain is wide and shallow, and the spillway walls it in to the east. */
+const SEWER_LAP_REACH_X_TILES = 8;
+const SEWER_LAP_REACH_Y_TILES = 3;
 
 /** Steps walked once, then `lap` over and over. */
 function leadInThenLap(
@@ -179,6 +182,13 @@ const PERF_SCENES: readonly PerfScene[] = [
       takePrompt({ kind: 'buildingDoor', id: 'taloncrest_nightclub' }),
       INTERIOR_LAP,
     ),
+  },
+  {
+    id: 'sewer',
+    description:
+      'Down the storm drain into the tower drain, then laps of the ladder chamber under its dark and grate light',
+    query: pinnedFloor('playtest=sewer'),
+    route: leadInThenLap([], crossLap(ARRIVAL, SEWER_LAP_REACH_X_TILES, SEWER_LAP_REACH_Y_TILES)),
   },
   {
     id: 'casino-table',

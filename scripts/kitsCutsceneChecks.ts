@@ -9,7 +9,7 @@
  * under it.
  */
 
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { Conversation } from '../src/dialog/Conversation';
 import type { GameMap } from '../src/map/GameMap';
 import type { Player } from '../src/Player';
@@ -25,7 +25,6 @@ import {
   CutsceneDirector,
   SILENT_CUE_CLOCK,
   WALK_UP_TIMEOUT_FRAMES,
-  WORLD_TICKS_PER_SECOND,
   type CutsceneCueClock,
 } from '../src/systems/cutscene/CutsceneDirector';
 import {
@@ -99,7 +98,7 @@ function probeActor(start: CutsceneTile, fault: CutsceneStepFault | null): Probe
   const actor: CutsceneActor = {
     body: at,
     mobility: 'walker',
-    walkPxPerTick: PROBE_WALK_PX_PER_TICK,
+    walkPxPerTick: () => ({ stroll: PROBE_WALK_PX_PER_TICK, hurry: PROBE_WALK_PX_PER_TICK }),
     position: () => ({ x: at.x, y: at.y }),
     walk: (heading: CutsceneHeading | null) => {
       if (heading === null || fault === 'walk-goes-nowhere') return;
@@ -165,6 +164,7 @@ function makeRig(fault: CutsceneStepFault | null, cueClock: CutsceneCueClock): R
         setPartyDown: (recorded) => {
           if (fault !== 'action-dropped') ran.push(recorded);
         },
+        cellarHatch: () => undefined,
       }),
     cueClock,
   });
@@ -208,7 +208,14 @@ export function runCutsceneStepChecks(
     );
     let heldMidWalk = false;
     director.play([
-      { kind: 'walkTo', who: 'cat', tile: walk.to, face: 'down', then: 'waitForArrival' },
+      {
+        kind: 'walkTo',
+        who: 'cat',
+        tile: walk.to,
+        pace: 'stroll',
+        face: 'down',
+        then: 'waitForArrival',
+      },
     ]);
     const ticks = runOut(director, active, map, () => {
       heldMidWalk ||= cat.held;
@@ -228,7 +235,14 @@ export function runCutsceneStepChecks(
     const placer = probeActor(walk.from, fault);
     director.actors.register('cat', () => ({ ...stuck.actor, place: placer.actor.place }));
     director.play([
-      { kind: 'walkTo', who: 'cat', tile: walk.to, face: 'left', then: 'waitForArrival' },
+      {
+        kind: 'walkTo',
+        who: 'cat',
+        tile: walk.to,
+        pace: 'stroll',
+        face: 'left',
+        then: 'waitForArrival',
+      },
     ]);
     const ticks = runOut(director, active, map);
     check(
@@ -371,7 +385,10 @@ export function runCutsceneStepChecks(
     runOut(director, active, map);
     const [landed] = ran;
     check(
-      ran.length === 1 && landed.tile.x === walk.to.x && landed.tile.y === walk.to.y,
+      ran.length === 1 &&
+        landed.kind === 'setPartyDown' &&
+        landed.tile.x === walk.to.x &&
+        landed.tile.y === walk.to.y,
       'run: the interior is handed its world action, payload intact',
     );
   }

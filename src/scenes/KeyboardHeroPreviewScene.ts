@@ -62,6 +62,7 @@ import {
   type TouchArtState,
 } from '../systems/keyboardHeroBoardArt';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 const BG_COLOR = previewInk.keyboardHero.backdrop;
 const PANEL_COLOR = previewInk.keyboardHero.panel;
@@ -130,8 +131,7 @@ const STATIC_BED_ALPHA = 1;
  * track in step with the wall clock the system's own effects run on.
  */
 const MS_PER_SECOND = 1000;
-const PREVIEW_FRAME_RATE = 60;
-const SIM_FRAME_MS = MS_PER_SECOND / PREVIEW_FRAME_RATE;
+const SIM_FRAME_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 
 /** Turns the letterbox's 0-1 scale into the percentage its caption reads in. */
 const PERCENT = 100;

@@ -5,12 +5,14 @@
  * get a number.
  */
 
-const FRAMES_PER_SECOND = 60;
+import { WORLD_TICKS_PER_SECOND } from '../constants';
+
 const SECONDS_PER_MINUTE = 60;
 const DOUBLE_DAMAGE_MINUTES = 5;
 
 /** How long the wheel's double-damage curse lasts. */
-export const DOUBLE_DAMAGE_FRAMES = DOUBLE_DAMAGE_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+export const DOUBLE_DAMAGE_FRAMES =
+  DOUBLE_DAMAGE_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 
 /** What the double-damage curse multiplies every blow by. */
 export const DOUBLE_DAMAGE_SCALE = 2;

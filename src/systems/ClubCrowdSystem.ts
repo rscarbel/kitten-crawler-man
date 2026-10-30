@@ -22,7 +22,7 @@
  *   walking the crowd does.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
@@ -33,7 +33,6 @@ import {
 } from '../sprites/clubCastFigure';
 import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import { CLUB_PATRON_REFS } from '../sprites/clubCastRoster';
-import { CLUB_ANIM_FRAMES_PER_SECOND } from '../core/club/clubTiming';
 import { stepWander, type WanderParams, type WanderStep } from '../creatures/townWander';
 import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
 import {
@@ -223,7 +222,6 @@ const PATRON_MOTION_HOLD_TICKS = 4;
  * leaning on whoever stands still longest.
  */
 const PATRON_STALL_TICKS = 90;
-const TICKS_PER_SECOND = CLUB_ANIM_FRAMES_PER_SECOND;
 /** Closing on the target by less than this many pixels in a tick counts as no progress. */
 const PATRON_PROGRESS_EPSILON = 0.05;
 /**
@@ -493,7 +491,7 @@ export class ClubCrowdSystem {
     p.spotX = p.x;
     p.spotY = p.y;
     p.intentStartTick = this.tick;
-    p.intentEndsTick = this.tick + Math.round(WAIT_SECONDS * TICKS_PER_SECOND);
+    p.intentEndsTick = this.tick + Math.round(WAIT_SECONDS * WORLD_TICKS_PER_SECOND);
   }
 
   /**
@@ -543,7 +541,7 @@ export class ClubCrowdSystem {
         ? [WATCH_STAY_MIN_SECONDS, WATCH_STAY_MAX_SECONDS]
         : [GATHER_STAY_MIN_SECONDS, GATHER_STAY_MAX_SECONDS];
     const staySeconds = minSeconds + this.random() * (maxSeconds - minSeconds);
-    p.intentEndsTick = this.tick + Math.round(staySeconds * TICKS_PER_SECOND);
+    p.intentEndsTick = this.tick + Math.round(staySeconds * WORLD_TICKS_PER_SECOND);
     p.targetX = target.x;
     p.targetY = target.y;
     p.spotX = target.x;
@@ -653,7 +651,7 @@ export class ClubCrowdSystem {
     if (p.intent.kind !== 'gather' || p.motionTicks > 0) return false;
     const group = this.members[p.intent.gathering] ?? [];
     if (group.length < 2) return false;
-    const turn = Math.floor(this.tick / (SPEAKING_TURN_SECONDS * TICKS_PER_SECOND));
+    const turn = Math.floor(this.tick / (SPEAKING_TURN_SECONDS * WORLD_TICKS_PER_SECOND));
     return group[(turn + p.intent.gathering) % group.length] === p;
   }
 
@@ -778,7 +776,7 @@ export class ClubCrowdSystem {
       walkPhase: p.walkCycle * TWO_PI,
       facingX: p.facingX,
       facingY: p.facingY,
-      loopOffsetSeconds: p.seed / CLUB_ANIM_FRAMES_PER_SECOND,
+      loopOffsetSeconds: p.seed / WORLD_TICKS_PER_SECOND,
     });
   }
 

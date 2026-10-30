@@ -17,8 +17,9 @@
  * Nothing here is durable: a door visit or a rewind drops a banner mid-show.
  */
 
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import type { BlueprintsQuestPhase } from '../../../core/quests/blueprintsQuestPhase';
+import { BLUEPRINTS_QUEST_ID } from './blueprintsProgress';
 import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { Cow } from '../../../creatures/Cow';
 import type { QuestMarkerState } from '../../../sprites/questNPCSprite';
@@ -32,7 +33,6 @@ import {
   type TopBandEntry,
 } from '../../../ui/hud/topBand';
 import { measureTextHeight, text } from '../../../ui/widgets/text';
-import { UPDATES_PER_SECOND } from '../structureRules';
 import type { BlueprintsQuestContext } from './blueprintsContext';
 import { worldPalette } from '../../../ui/theme/worldInk';
 
@@ -66,12 +66,12 @@ export const MIDGE_WAITING_CAPTION = 'Midge is waiting for you';
 
 /** How long Midge wears her `!` and caption at the start of the escort, however well she follows. */
 export const MIDGE_INTRO_SECONDS = 8;
-const MIDGE_INTRO_TICKS = MIDGE_INTRO_SECONDS * UPDATES_PER_SECOND;
+const MIDGE_INTRO_TICKS = MIDGE_INTRO_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** How long a banner stays up, the last second of it fading. */
 export const STEP_BANNER_SECONDS = 4.5;
-const STEP_BANNER_TICKS = STEP_BANNER_SECONDS * UPDATES_PER_SECOND;
-const STEP_BANNER_FADE_TICKS = UPDATES_PER_SECOND;
+const STEP_BANNER_TICKS = STEP_BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
+const STEP_BANNER_FADE_TICKS = WORLD_TICKS_PER_SECOND;
 
 export const STEP_BANNER_ENTRY_ID = 'blueprints-step-banner';
 const STEP_BANNER_MAX_WIDTH = 420;
@@ -120,10 +120,16 @@ export class BlueprintsStepMoments {
   onPhaseChanged(from: BlueprintsQuestPhase, to: BlueprintsQuestPhase): void {
     if (from === 'build_fence' && to === 'report_fence') {
       this.show(FENCE_DONE_BANNER);
-      this.ctx.bus.emit('objectiveComplete', { objectiveId: FENCE_DONE_OBJECTIVE_ID });
+      this.ctx.bus.emit('objectiveComplete', {
+        questId: BLUEPRINTS_QUEST_ID,
+        objectiveId: FENCE_DONE_OBJECTIVE_ID,
+      });
     } else if (from === 'harvest_grain' && to === 'deliver_grain') {
       this.show(HARVEST_DONE_BANNER);
-      this.ctx.bus.emit('objectiveComplete', { objectiveId: HARVEST_DONE_OBJECTIVE_ID });
+      this.ctx.bus.emit('objectiveComplete', {
+        questId: BLUEPRINTS_QUEST_ID,
+        objectiveId: HARVEST_DONE_OBJECTIVE_ID,
+      });
     } else if (to === 'escort_midge') {
       this.show(ESCORT_START_BANNER);
       this.midgeIntroTicksLeft = MIDGE_INTRO_TICKS;

@@ -2358,7 +2358,7 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
   );
   const mastCentreX = ((Math.min(...poleColumns) + Math.max(...poleColumns) + 1) / 2) * TILE_SIZE;
   installCanvasGlobals();
-  setInteractionPromptsSuppressed(false);
+  setInteractionPromptsSuppressed(false, 'clear');
   const promptsBefore = queuedPrompts().length;
   placeAt(human, MAZE_RING_CENTRE_TILE);
   exits.renderPrompt(surfaceContext(allocCanvas('ui', 1, 1)), 0, 0, human);

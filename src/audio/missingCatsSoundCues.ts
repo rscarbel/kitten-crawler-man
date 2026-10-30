@@ -19,6 +19,35 @@ import type { AudioManager } from './AudioManager';
 import type { JingleId, MusicTrackId, SoundId } from './sounds';
 import type { MusicStemOf } from './music/stemSets';
 import { AMBIENT_RAMP_MS, type LoopLevel } from './loopLevels';
+import type { CueSlot } from './cueSlot';
+
+/**
+ * The elves letting the cellar lid down once it has held. Waits on
+ * `cellar_lid_drop`; the lid's creak stands in.
+ */
+const CELLAR_LID_SHUT_CUE: CueSlot<'cellar_lid_drop'> = {
+  takes: ['trapdoor_creak_open'],
+  standInFor: 'cellar_lid_drop',
+};
+
+/**
+ * Something climbing the cistern's iron rungs and out of the lodge's cellar.
+ * Waits on the sewer's `iron_ladder_rung_1` … `_3`; the rope ladder stands in.
+ */
+const CELLAR_CLIMB_CUE: CueSlot<'iron_ladder_rung'> = {
+  takes: ['rope_ladder_climb'],
+  standInFor: 'iron_ladder_rung',
+};
+
+/**
+ * A town cat at home purring as a crawler pets her. Waits on
+ * `town_cat_purr_1` … `_3`; nothing the game has is a purr, so it is silent
+ * until they land.
+ */
+const TOWN_CAT_PURR_CUE: CueSlot<'town_cat_purr'> = {
+  takes: [],
+  standInFor: 'town_cat_purr',
+};
 
 export const MISSING_CATS_CUES = {
   /** A missing-cat notice read off the plaza board, heard as the notices pinned there. */
@@ -31,8 +60,12 @@ export const MISSING_CATS_CUES = {
   featherPickup: ['feather_pickup'],
   /** The tuna dish or the cut latch looked at closely. No recording is asked for; silent. */
   clueExamined: [],
-  /** The lodge's cellar lid hauled up for the defence. */
+  /** The lodge's cellar lid hauled up by Kessler. */
   cellarLidOpen: ['trapdoor_creak_open'],
+  cellarLidShut: CELLAR_LID_SHUT_CUE.takes,
+  cellarClimb: CELLAR_CLIMB_CUE.takes,
+  /** The lodge's front door thrown open by the elves running in from the alley. */
+  lodgeDoorBurst: ['door_creak_1', 'door_creak_2', 'door_creak_3', 'door_creak_4'],
   /** The storm-drain grate heaved up by the cellar elf. Waits on `drain_grate_drag_open`; the cellar lid's creak stands in. */
   grateOpened: ['trapdoor_creak_open'],
   /** The thief launching off a roof with the cat. */
@@ -45,6 +78,9 @@ export const MISSING_CATS_CUES = {
   thiefFlyby: ['hawkfolk_wing_flyby_1', 'hawkfolk_wing_flyby_2', 'hawkfolk_wing_flyby_3'],
   /** The General Store's cat taken from the step. */
   catSnatched: ['cat_snatched_yowl'],
+  /** The hearts floating up off a town cat at home a crawler has just petted: the cow's chime. */
+  townCatHearts: ['happy_hearts'],
+  townCatPurr: TOWN_CAT_PURR_CUE.takes,
 } as const satisfies Record<string, readonly SoundId[]>;
 
 /** The stakeout's music: the thin stem while the party watches, the full mix from the swoop on. */

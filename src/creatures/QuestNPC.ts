@@ -1,6 +1,6 @@
 import { Player, HP_BAR_Y_OFFSET } from '../Player';
 import type { MobilityClass } from '../map/mobility';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   drawQuestNPCSprite,
   drawQuestMarker,
@@ -20,8 +20,7 @@ const INITIAL_POTION_COUNT = 10;
 const HURT_FADE_FRAMES = 8;
 /** Seconds the hurt tint holds at full strength before its fade begins. */
 const HURT_HOLD_SECONDS = 5;
-const FRAMES_PER_SECOND = 60;
-const HURT_FRAMES = HURT_HOLD_SECONDS * FRAMES_PER_SECOND + HURT_FADE_FRAMES;
+const HURT_FRAMES = HURT_HOLD_SECONDS * WORLD_TICKS_PER_SECOND + HURT_FADE_FRAMES;
 /** Share of a strike's flash intensity the sustained hurt tint carries. */
 const HURT_FLASH_PROGRESS = 0.45;
 

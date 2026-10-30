@@ -12,7 +12,8 @@ import { drawSnare } from '../../../sprites/art/snareArt';
 import { worldText } from '../../world/worldText';
 import { drawResourceIcon } from '../resourceIcons';
 import { drawConstructionIcon } from '../constructionIcon';
-import { UPDATES_PER_SECOND, WALL_TIERS } from '../../../systems/briarHollow/structureRules';
+import { WALL_TIERS } from '../../../systems/briarHollow/structureRules';
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 /** The world art is drawn at this tile size in the illustrations. */
 const STAGE_TILE = 40;
@@ -33,7 +34,7 @@ const SNARE_X_SHARE = 0.7;
 const TREBUCHET_DEPTH_TILES = 3;
 const LABEL_GAP = 6;
 const SIEGE_LABEL_GAP = 4;
-const SECONDS_PER_FRAME = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_FRAME = 1 / WORLD_TICKS_PER_SECOND;
 
 function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
   worldText(ctx, text, {

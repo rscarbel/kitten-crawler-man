@@ -2,7 +2,7 @@
  * The cats walking out of the cattery once the Warden has fallen: every town
  * cat the fight left in the room gets up from where she waited and runs for
  * the stair down, and is gone from the room once she reaches it. Where each
- * cat goes from there is the town's to show, in her own building and street.
+ * cat goes from there is the town's to show, in her own building.
  */
 
 import { TILE_SIZE } from '../../core/constants';

@@ -20,7 +20,7 @@ import {
   spend,
   type ResourceCost,
 } from '../../../core/items/gathering/partyResources';
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import { activeInputMode, byInputMode } from '../../../ui/core/inputMode';
 import { blueprintsPhaseAtLeast } from '../../../core/quests/blueprintsQuestPhase';
 import {
@@ -33,7 +33,6 @@ import {
   drawInteractionPromptWithCost,
   interactionPromptsSuppressed,
 } from '../../../ui/InteractionPrompt';
-import { UPDATES_PER_SECOND } from '../structureRules';
 import type { BlueprintsCrawler, BlueprintsQuestContext } from './blueprintsContext';
 import { BLUEPRINTS_CUES } from './blueprintsSoundCues';
 import { worldPalette } from '../../../ui/theme/worldInk';
@@ -49,7 +48,7 @@ export const FENCE_SECTION_WORK_SECONDS = 1.5;
 /** What the party is told when a section is pressed without the boards for it. */
 export const FENCE_SHORT_MESSAGE = 'Not enough materials.';
 
-const FENCE_SECTION_WORK_FRAMES = Math.round(FENCE_SECTION_WORK_SECONDS * UPDATES_PER_SECOND);
+const FENCE_SECTION_WORK_FRAMES = Math.round(FENCE_SECTION_WORK_SECONDS * WORLD_TICKS_PER_SECOND);
 const UNBUILT_STYLE: FenceStyle = 'rickety';
 const BUILT_STYLE: FenceStyle = 'post_and_rail';
 const TILE_CENTRE = 0.5;
@@ -59,7 +58,7 @@ const TILE_CENTRE = 0.5;
  */
 const WORK_MOTION_TOLERANCE_PX = 0.5;
 /** How often the resource strip is kept up while hammering, so it shows the boards about to go. */
-const RESOURCE_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
+const RESOURCE_NOTE_INTERVAL_FRAMES = WORLD_TICKS_PER_SECOND;
 const WORK_LOOP_VOLUME = 0.7;
 /** The cat has no hammering row: her swipe lands on this cadence while she works a section. */
 const CAT_HAMMER_SWING_TICKS = 30;

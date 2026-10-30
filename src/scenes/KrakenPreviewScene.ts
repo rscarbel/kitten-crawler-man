@@ -55,6 +55,7 @@ import { GameMap } from '../map/GameMap';
 import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -120,7 +121,6 @@ const LABEL_GAP = 2;
 const CELL_WIDTH_TILES = 5.2;
 const CELL_HEIGHT_TILES = 4.4;
 const GROUND_FRACTION = 0.62;
-const FRAMES_PER_SECOND = 60;
 
 /** Gore needs a map to settle onto; a small empty one is enough for a preview. */
 const PREVIEW_MAP_SIZE = 24;
@@ -409,7 +409,7 @@ export class KrakenPreviewScene extends PreviewScene {
     const gridLeft = MARGIN + ROW_LABEL_WIDTH;
     const gridTop = this.panelTop + LABEL_SIZE + LABEL_GAP;
     const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
-    const animTime = this.clock / FRAMES_PER_SECOND;
+    const animTime = this.clock / WORLD_TICKS_PER_SECOND;
 
     VIEWS.forEach((view, column) => {
       const x = gridLeft + column * (cell.w + CELL_PADDING);

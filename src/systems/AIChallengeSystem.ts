@@ -19,7 +19,7 @@ import { speaksInCarolineFrame } from '../ai/AIChatFeed';
 import { crawlerAIName, crawlerDisplayName } from '../characters/characters';
 import type { Rarity } from '../core/items/defs/rarity';
 import type { EventBus } from '../core/EventBus';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { GameMap } from '../map/GameMap';
@@ -35,12 +35,11 @@ import {
 import type { GameSystem, SystemContext } from './GameSystem';
 import { secondsLabel, type TrackerEntry } from './questTracker';
 
-const FRAMES_PER_SECOND = 60;
 const TAUNT_TOAST_TICKS = 420;
 const RESULT_TOAST_TICKS = 300;
 const CHALLENGE_WARNING_SECONDS = 10;
 /** Below this many frames left the band reads in warning colour. */
-export const CHALLENGE_WARNING_FRAMES = CHALLENGE_WARNING_SECONDS * FRAMES_PER_SECOND;
+export const CHALLENGE_WARNING_FRAMES = CHALLENGE_WARNING_SECONDS * WORLD_TICKS_PER_SECOND;
 
 type CrawlerSide = 'Human' | 'Cat';
 
@@ -150,7 +149,7 @@ export class AIChallengeSystem implements GameSystem {
     if (offered === null) return;
     this.offered = null;
     const { rules } = CHALLENGE_TEMPLATES[offered.spec.template];
-    const framesLimit = rules.timed ? offered.spec.seconds * FRAMES_PER_SECOND : null;
+    const framesLimit = rules.timed ? offered.spec.seconds * WORLD_TICKS_PER_SECOND : null;
     this.active = {
       id: offered.id,
       spec: offered.spec,
@@ -227,6 +226,7 @@ export class AIChallengeSystem implements GameSystem {
     const clock = active.framesLeft === null ? '' : ` (${secondsLabel(active.framesLeft)} left)`;
     return [
       {
+        kind: 'single',
         id: `ai-${active.id}`,
         name: `Challenge: ${active.spec.title}`,
         status: 'active',
@@ -273,7 +273,7 @@ export class AIChallengeSystem implements GameSystem {
     this.deps.bus.emit('challengeCompleted', {
       ...this.summaryOf(active),
       rewardedTo: side,
-      secondsTaken: Math.round(active.framesElapsed / FRAMES_PER_SECOND),
+      secondsTaken: Math.round(active.framesElapsed / WORLD_TICKS_PER_SECOND),
     });
     this.deps.postToast(
       `Challenge complete: ${active.spec.title}! ${active.spec.rewardRarity} chest for ${name}.`,

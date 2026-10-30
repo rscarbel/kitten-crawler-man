@@ -25,7 +25,7 @@
 
 import { PAINTED_CATS, PLAYER_CAT, type PaintedCat } from '../characters/characterLooks';
 import { TOWN_CATS } from '../systems/critters/TownCats';
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   catLookOf,
   ITEM_DEF,
@@ -62,7 +62,6 @@ import { catRowViewOf } from '../sprites/catViews';
 import { wornGarmentOf } from '../sprites/garments/garments';
 import { catGarmentsWearing } from '../sprites/garments/itemLooks';
 import { selectFacing, type FacingSelection, type FacingView } from '../sprites/facingView';
-import { TICKS_PER_SECOND } from '../sprites/art/human/timing';
 import { worldText } from '../ui/world/worldText';
 import { worldPlate, worldTint } from '../ui/world/worldShapes';
 import type { WorldGesture } from '../ui/core/UiRoot';
@@ -444,7 +443,7 @@ interface ScriptStep {
 const HEADING_TICKS = 30;
 /** Past the longest idle-break delay, so a break always shows. */
 const UNTIL_IDLE_BREAK_SECONDS = 12;
-const SECONDS = TICKS_PER_SECOND;
+const SECONDS = WORLD_TICKS_PER_SECOND;
 const LIVE_SCRIPT: ReadonlyArray<ScriptStep> = [
   { ticks: 2 * SECONDS, label: 'standing' },
   ...COMPASS.map((heading) => ({

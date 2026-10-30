@@ -1,7 +1,7 @@
 /**
  * What finishing "A Cat Always Comes Back" pays, and the reward screen that
- * says so: experience to both crawlers, coins, and the Warden's grinning
- * mask. Paid once, on the moment Pumpkin walks back in on Dave, which is what
+ * says so: experience to both crawlers, coins, and the Hushed Bell the freed
+ * cats left behind. Paid once, on the moment Pumpkin walks back in on Dave, which is what
  * completes the questline; it opens nothing and ends nothing.
  */
 
@@ -23,21 +23,25 @@ import { enterMissingCatsPhase } from './missingCatsPhase';
 export const MISSING_CATS_COMPLETION_XP = 1500;
 /** Coins paid to the human, who led the way into the tower. */
 export const MISSING_CATS_COMPLETION_COINS = 400;
-/** The mask the Warden wore to look alive, cracked down its middle. */
-const MISSING_CATS_REWARD_GEAR = 'grinning_mask' as const satisfies GearId;
+/**
+ * A cattery cat's bell with its clapper stopped: what the tower taught, slipping
+ * past watchers unheard, and never alone, since the hush carries to the
+ * crawler at the wearer's side.
+ */
+const MISSING_CATS_REWARD_GEAR = 'hushed_bell' as const satisfies GearId;
 
 /** Pays the questline's rewards to `party` and returns the screen that shows them. */
 function payMissingCatsRewards(party: GearParty, bus: EventBus): QuestRewardSpec {
   const xpApplied = awardPartyXp(party.human, party.cat, MISSING_CATS_COMPLETION_XP, bus);
   party.human.earnCoins(MISSING_CATS_COMPLETION_COINS);
-  const mask = grantQuestGear(party, MISSING_CATS_REWARD_GEAR, 'human');
+  const bell = grantQuestGear(party, MISSING_CATS_REWARD_GEAR, 'cat');
   return {
     questTitle: MISSING_CATS_QUEST_NAME,
     quote: MISSING_CATS_REWARD_QUOTE,
     sections: [
       ...partyXpSections(xpApplied),
       { kind: 'coins', amount: MISSING_CATS_COMPLETION_COINS },
-      { kind: 'items', items: [mask] },
+      { kind: 'items', items: [bell] },
     ],
   };
 }

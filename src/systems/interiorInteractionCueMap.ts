@@ -28,7 +28,6 @@ const EXAMINE_CUES: Partial<Record<TownInteriorExamineId, InteriorCue>> = {
 const USE_CUES: Record<TownInteriorUseId, InteriorCue> = {
   shop_bell: 'counterBell',
   offering_bowl: 'offeringCoin',
-  bench_seat: 'benchSit',
   biting_stool: 'benchSit',
   throw_dart: 'dartThunk',
   hearth: 'propNoticed',

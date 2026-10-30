@@ -26,6 +26,7 @@ import { deinonychusExplainerEntry } from '../src/ui/screens/dialogs/deinonychus
 import { getDeinonychusStats, DEINONYCHUS_MAX_LEVEL } from '../src/abilities/deinonychus.js';
 import type { DeinonychusStage } from '../src/sprites/deinonychusSprite.js';
 import { PetNameBook } from '../src/core/party/petNames.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 interface Fit {
   readonly caption: string;
@@ -40,7 +41,6 @@ const FITS: readonly Fit[] = [
   { caption: 'phone landscape 844×390', width: 844, height: 390, density: 'touch' },
 ];
 
-const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 /** Long enough for the overlay's open and page-turn tweens to settle before a moment is timed. */
 const SETTLE_MS = 1000;
@@ -145,7 +145,10 @@ function drawCell(
   clock = SETTLE_MS;
   root.frame(ctx);
   const pageShownAt = page === 0 ? 0 : SETTLE_MS;
-  clock = Math.max(SETTLE_MS, pageShownAt + (momentFrames / FRAMES_PER_SECOND) * MS_PER_SECOND);
+  clock = Math.max(
+    SETTLE_MS,
+    pageShownAt + (momentFrames / WORLD_TICKS_PER_SECOND) * MS_PER_SECOND,
+  );
   ctx.clearRect(0, 0, fit.width, fit.height);
   root.frame(ctx);
 }

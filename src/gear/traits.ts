@@ -14,7 +14,7 @@
 
 import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import type { AbilityId } from '../core/skills/AbilityManager';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { WEAPON_FAMILY_LABELS, type MeleeWeaponFamily } from '../core/items/equipment/weapons';
 import { applyChillOnly } from '../core/combat/frostStatus';
 import {
@@ -43,7 +43,6 @@ import type { GearItemState } from './gearState';
 
 /** Multiplier→percentage conversion for generated lines. */
 const PERCENT = 100;
-const FRAMES_PER_SECOND = 60;
 const HALF_TILE = TILE_SIZE / 2;
 
 function percent(fraction: number): number {
@@ -51,7 +50,7 @@ function percent(fraction: number): number {
 }
 
 function seconds(frames: number): number {
-  return Math.round(frames / FRAMES_PER_SECOND);
+  return Math.round(frames / WORLD_TICKS_PER_SECOND);
 }
 
 /** The statuses a blow can carry onto what it hits. */
@@ -94,6 +93,16 @@ export type BaseGearTrait =
     }
   | { readonly kind: 'stillnessRegen'; readonly afterFrames: number; readonly multiplier: number }
   | { readonly kind: 'unseenStrike'; readonly multiplier: number }
+  /**
+   * An enemy not yet fighting the wearer notices her only within
+   * `noticeShare` of its usual range, and the same holds for the other
+   * crawler while within `partnerRangeTiles` of her.
+   */
+  | {
+      readonly kind: 'quietPaws';
+      readonly noticeShare: number;
+      readonly partnerRangeTiles: number;
+    }
   | { readonly kind: 'vanishOnKill'; readonly durationFrames: number }
   | {
       readonly kind: 'lastStand';
@@ -588,6 +597,12 @@ function isDown(crawler: Player): boolean {
   return !crawler.isAlive || crawler.isKnockedOut;
 }
 
+/** Narrows how far away enemies notice `crawler` this tick; the narrowest hush wins. */
+function hushNotice(crawler: Player, noticeShare: number): void {
+  const live = crawler.gear.live;
+  live.noticeRangeShare = Math.min(live.noticeRangeShare, noticeShare);
+}
+
 function abilityName(ability: AbilityId): string {
   return ABILITY_DEFS[ability].name;
 }
@@ -726,6 +741,20 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
     describe: (t) => `×${t.multiplier} damage on enemies that have not noticed you`,
     score: (t) => (t.multiplier - 1) * SCORE_PER_MULTIPLIER_STEP,
     strikeMultiplier: (ctx, t, strike) => (strike.mob.hasNoticed(ctx.wearer) ? 1 : t.multiplier),
+  },
+  quietPaws: {
+    describe: (t) =>
+      `Enemies notice you, and your partner within ${t.partnerRangeTiles} tiles, only at ${percent(t.noticeShare)}% of their range`,
+    score: () => SCORE_SIGNATURE_MECHANIC,
+    onTick: (ctx, t, tick) => {
+      const { wearer } = ctx;
+      if (isDown(wearer)) return;
+      hushNotice(wearer, t.noticeShare);
+      const partner = tick.partner;
+      if (partner === null || isDown(partner)) return;
+      const apart = Math.hypot(partner.x - wearer.x, partner.y - wearer.y);
+      if (apart <= t.partnerRangeTiles * TILE_SIZE) hushNotice(partner, t.noticeShare);
+    },
   },
   vanishOnKill: {
     describe: (t) => `A kill hides you from enemies for ${seconds(t.durationFrames)}s`,

@@ -178,7 +178,7 @@ export const FIXTURES: readonly DialogFixture[] = [
       buildingEntryPromptSurface('building-entry', () => ({
         menuEntry: shown() ? TAVERN : null,
         enterActiveBuilding: noop,
-        closeMenu: noop,
+        declineEntry: noop,
       })),
     ],
   },

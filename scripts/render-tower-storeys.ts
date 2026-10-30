@@ -72,6 +72,8 @@ const { drawSightFan } = await import('../src/ui/world/worldSightFan.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { WaterAnimationSystem } = await import('../src/systems/WaterAnimationSystem.js');
+const { sluiceWorksFigure, SLUICE_PRESSES } =
+  await import('../src/systems/tower/TowerStoreysSystem.js');
 const { drawTownInteriorGroundProps, townInteriorPropFigures } =
   await import('../src/systems/townInteriorPropFigures.js');
 const { EventBus } = await import('../src/core/EventBus.js');
@@ -199,7 +201,13 @@ function standWorks(
     mechanisms,
     split,
     addMob: (mob) => mobs.push(mob),
+    removeMob: (mob) => {
+      const index = mobs.indexOf(mob);
+      if (index >= 0) mobs.splice(index, 1);
+    },
     presentCrawlers: () => [],
+    presentCompanions: () => [],
+    regroupCompanions: () => undefined,
     setPartyDown: () => undefined,
     toast: () => undefined,
   };
@@ -245,7 +253,7 @@ function standWorks(
   works?.enter?.(frameCtx);
   for (let frame = 0; frame < WORKS_FRAMES_BEFORE_SNAPSHOT; frame++) works?.update(frameCtx);
   for (let step = 0; step <= SENSE_FADE_STEPS; step++) {
-    senses.update(cat, step * SENSE_FADE_STEP_MS);
+    senses.update(cat, step * SENSE_FADE_STEP_MS, true);
   }
   return { works, senses, mechanisms, mobs };
 }
@@ -297,7 +305,6 @@ for (const storey of TOWER_STOREY_IDS) {
         camY: 0,
         width: worldPx(viewW),
         height: worldPx(viewH),
-        nowMs: 0,
       });
     }
     map.renderDecorationsOverlay(gameCtx, {
@@ -312,6 +319,9 @@ for (const storey of TOWER_STOREY_IDS) {
       ...stood.mechanisms.sortedFigures(),
       ...(stood.works?.roomFigures?.() ?? []),
       ...stood.mobs,
+      ...(storey === 'cistern'
+        ? [sluiceWorksFigure(() => (conditions.conduit === 'shut' ? SLUICE_PRESSES : 0))]
+        : []),
     ].sort((a, b) => (a.depthY ?? a.y) - (b.depthY ?? b.y));
     for (const figure of figures) figure.render(gameCtx, 0, 0, TILE_SIZE);
     stood.works?.renderEffects?.(gameCtx, 0, 0);

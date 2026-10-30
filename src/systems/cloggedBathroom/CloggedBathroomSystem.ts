@@ -1403,7 +1403,11 @@ export class CloggedBathroomSystem
   trackerEntries(): ReadonlyArray<TrackerEntry> {
     const copy = this.guideCopy();
     if (copy === null) return [];
-    const base = { id: CLOGGED_BATHROOM_QUEST_ID, name: CLOGGED_BATHROOM_QUEST_NAME };
+    const base = {
+      kind: 'single',
+      id: CLOGGED_BATHROOM_QUEST_ID,
+      name: CLOGGED_BATHROOM_QUEST_NAME,
+    } as const;
     switch (this.phase) {
       case 'unmet':
         return [

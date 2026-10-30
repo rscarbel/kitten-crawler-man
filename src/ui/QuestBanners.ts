@@ -7,12 +7,11 @@
 
 import type { TopBandEntry } from './hud/topBand';
 import { stackedBandEntry, TOP_BAND_WIDTH, type BandRow, type BandTone } from './hud/topBandStack';
-
-const FRAMES_PER_SECOND = 60;
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Stage-banner display time. */
 const BANNER_SECONDS = 4;
-export const QUEST_BANNER_FRAMES = BANNER_SECONDS * FRAMES_PER_SECOND;
+export const QUEST_BANNER_FRAMES = BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
 const BANNER_FADE_FRAMES = 60;
 
 export interface QuestBannerOptions {

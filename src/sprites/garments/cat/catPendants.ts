@@ -5,9 +5,10 @@
  * over her bib; from behind only the chain shows across her nape. It swings a
  * little with her sway.
  *
- * At the tile a pendant is a few pixels, so the four are told apart by
+ * At the tile a pendant is a few pixels, so they are told apart by
  * silhouette and metal before detail: the moth's wide pale wings, the stone's
- * big grey lump on dark leather, and the two round lockets, gold and silver.
+ * big grey lump on dark leather, the two round lockets, gold and silver, and
+ * the brass bell on its broad red ribbon.
  *
  * Painted on her neck, after her body and before her head, so her chin and
  * cheek ruffs fall over the chain as they would over a collar.
@@ -22,7 +23,7 @@ import {
   withViewFallback,
   type WornGarmentDef,
 } from '../garmentDef';
-import { GOLD, metalFill, paintGlint, SILVER, type MetalRamp } from './metalInk';
+import { BRASS, GOLD, metalFill, paintGlint, SILVER, type MetalRamp } from './metalInk';
 
 type Ctx = CanvasRenderingContext2D;
 type Pt = { readonly x: number; readonly y: number };
@@ -69,6 +70,8 @@ const PROFILE_SQUASH = 0.6;
 /** The moth's wings spread far wider than a locket: edge-on they would stand off her chest. */
 const MOTH_PROFILE_SQUASH = 0.35;
 const GLINT_REACH = 0.02;
+/** A bell is round from every side, so edge-on it narrows far less than a flat pendant. */
+const BELL_PROFILE_SQUASH = 0.9;
 
 const SILVER_CHAIN: Cord = { colour: SILVER.light, under: SILVER.shadow, width: 0.014 };
 const GOLD_CHAIN: Cord = { colour: GOLD.base, under: GOLD.shadow, width: 0.014 };
@@ -281,6 +284,61 @@ function paintMoonLocket(ctx: Ctx): void {
   paintGlint(ctx, SILVER, -LOCKET_RADIUS / 2, cy - LOCKET_RADIUS / 2, GLINT_REACH);
 }
 
+/** A cat bell's ribbon: wider than a chain, so it reads as a ribbon collar and not jewellery. */
+const BELL_RIBBON: Cord = { colour: '#c4362e', under: '#3a0c0a', width: 0.02 };
+const BELL_RADIUS = 0.04;
+const BELL_RIM_WIDTH = 0.01;
+/** The slot across the bell's lower half, and the hole at its foot. */
+const BELL_SLOT_DROP = 0.35;
+const BELL_SLOT_HALF_SPAN = 0.7;
+const BELL_SLOT_WIDTH = 0.009;
+const BELL_HOLE_DROP = 0.62;
+const BELL_HOLE_RADIUS = 0.008;
+/** The twist of grey fur the cats packed into its clapper, standing out of the slot. */
+const BELL_FUR = '#c9c4bb';
+const BELL_FUR_SHADE = '#6e6a63';
+const BELL_FUR_RADIUS = 0.013;
+const BELL_FUR_OUT = 0.3;
+
+function paintHushedBell(ctx: Ctx): void {
+  paintBail(ctx, BRASS);
+  const cy = BAIL_RADIUS * 2 + BELL_RADIUS;
+  ctx.beginPath();
+  ctx.arc(0, cy, BELL_RADIUS, 0, FULL_TURN);
+  ctx.fillStyle = metalFill(
+    ctx,
+    BRASS,
+    -BELL_RADIUS,
+    cy - BELL_RADIUS,
+    BELL_RADIUS,
+    cy + BELL_RADIUS,
+  );
+  ctx.fill();
+  ctx.strokeStyle = BRASS.shadow;
+  ctx.lineWidth = BELL_RIM_WIDTH;
+  ctx.stroke();
+  const slotY = cy + BELL_RADIUS * BELL_SLOT_DROP;
+  ctx.beginPath();
+  ctx.moveTo(-BELL_RADIUS * BELL_SLOT_HALF_SPAN, slotY);
+  ctx.lineTo(BELL_RADIUS * BELL_SLOT_HALF_SPAN, slotY);
+  ctx.strokeStyle = BRASS.shadow;
+  ctx.lineWidth = BELL_SLOT_WIDTH;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, cy + BELL_RADIUS * BELL_HOLE_DROP, BELL_HOLE_RADIUS, 0, FULL_TURN);
+  ctx.fillStyle = BRASS.shadow;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(BELL_RADIUS * BELL_FUR_OUT, slotY, BELL_FUR_RADIUS, 0, FULL_TURN);
+  ctx.fillStyle = BELL_FUR;
+  ctx.fill();
+  ctx.strokeStyle = BELL_FUR_SHADE;
+  ctx.lineWidth = BAIL_WIDTH;
+  ctx.stroke();
+  paintGlint(ctx, BRASS, -BELL_RADIUS / 2, cy - BELL_RADIUS / 2, GLINT_REACH);
+}
+
 /** The point on the band at `angle`, in pose space. */
 function bandPoint(frame: CatNeckFrame, angle: number): Pt {
   const { band, tilt } = frame;
@@ -450,5 +508,12 @@ export const CAT_PENDANT_GARMENTS: Readonly<Record<CatPendantGarmentId, WornGarm
     cord: SILVER_CHAIN,
     paint: paintMoonLocket,
     profileSquash: PROFILE_SQUASH,
+  }),
+  cat_hushed_bell: definePendant({
+    id: 'cat_hushed_bell',
+    name: 'Hushed Bell',
+    cord: BELL_RIBBON,
+    paint: paintHushedBell,
+    profileSquash: BELL_PROFILE_SQUASH,
   }),
 };

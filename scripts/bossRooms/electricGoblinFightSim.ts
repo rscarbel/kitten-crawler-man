@@ -14,7 +14,7 @@
  */
 
 import { EventBus } from '../../src/core/EventBus.js';
-import { TILE_SIZE } from '../../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants.js';
 import { referenceStats } from '../../src/core/party/referenceCrawler.js';
 import {
   CHARGED_PUDDLE_ATTACK_TYPE,
@@ -45,7 +45,6 @@ import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 export const SIM_PARTY_LEVEL = 8;
 /** Longest a fight may run before the sim calls it a stall, in frames (ten minutes). */
 const SIM_FRAME_CEILING = 36000;
-const FRAMES_PER_SECOND = 60;
 
 /** How far inside the doorway the crawler starts, so the room seals on the first frame. */
 const START_DEPTH_TILES = 2;
@@ -269,7 +268,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
   return {
     seed: options.seed,
     side: options.side,
-    timeToKillSeconds: fightFrames / FRAMES_PER_SECOND,
+    timeToKillSeconds: fightFrames / WORLD_TICKS_PER_SECOND,
     killed: !boss.isAlive,
     started,
     hits,

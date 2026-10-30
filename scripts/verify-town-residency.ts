@@ -41,6 +41,7 @@ import type { Scene } from '../src/core/Scene.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { installBrowserShim, ShimEvent } from './browserShim.js';
 import { asGameContext, gameContext } from './nodeGameContext.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 const RETINA_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: RETINA_DEVICE_PIXEL_RATIO } as const;
@@ -102,8 +103,7 @@ const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js')
 useDevPlayerIdentity();
 
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
+const FRAME_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /** Frames the boot's loading screen may take before the run calls it hung. */
 const MAX_ARRIVAL_FRAMES = 4000;
 /** Tiles inside the village's north wall the far stand is taken at. */

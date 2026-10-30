@@ -4,7 +4,7 @@ import { Mob, type BlockableProjectile } from './Mob';
 import { SoundCueQueue, type ElectricGoblinSoundCue } from './creatureSoundCues';
 import { liveExplosives } from './explosiveAwareness';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from './mobLevelScaling';
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { makeElectrified } from '../core/combat/StatusEffect';
 import { settings } from '../core/input/Settings';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
@@ -46,7 +46,6 @@ const AGGRO_RANGE_TILES = 12;
 /** He fights from range, closing only to here before he stops and works. */
 const PREFERRED_RANGE_TILES = 3.5;
 
-const FRAMES_PER_SECOND = 60;
 const HALF = 0.5;
 
 // ── Difficulty ───────────────────────────────────────────────────────────────
@@ -357,7 +356,7 @@ const FLEE_CANCELS: ReadonlySet<ActionKind> = new Set([
 ]);
 
 function ticksPerPaintedFrame(fps: number): number {
-  return FRAMES_PER_SECOND / fps;
+  return WORLD_TICKS_PER_SECOND / fps;
 }
 
 /**
@@ -1343,12 +1342,12 @@ export class ElectricGoblin extends Mob {
       return { row, frame: Math.floor(phase * spec.frames) % spec.frames };
     }
     const idle = ELECTRIC_GOBLIN_ROWS.idle;
-    const frame = Math.floor((this.idleFrames * idle.fps) / FRAMES_PER_SECOND) % idle.frames;
+    const frame = Math.floor((this.idleFrames * idle.fps) / WORLD_TICKS_PER_SECOND) % idle.frames;
     return { row: 'idle', frame };
   }
 
   private tellFrame(row: 'plunge_tell' | 'slam_tell', elapsed: number): number {
-    const painted = Math.floor((elapsed * ELECTRIC_GOBLIN_ROWS[row].fps) / FRAMES_PER_SECOND);
+    const painted = Math.floor((elapsed * ELECTRIC_GOBLIN_ROWS[row].fps) / WORLD_TICKS_PER_SECOND);
     return electricGoblinTellFrame(row, painted);
   }
 

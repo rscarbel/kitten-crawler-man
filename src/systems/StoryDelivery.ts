@@ -23,6 +23,7 @@ import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { CutsceneDirector } from './cutscene/CutsceneDirector';
+import { pinMatchesEntry, resolvePinnedEntry, type TrackerEntry } from './questTracker';
 import type { CutsceneScript, CutsceneStep, WalkToStep } from './cutscene/cutsceneSteps';
 
 /** A moment Dave is standing in front of the party for. */
@@ -115,6 +116,56 @@ export function partyIsEngaged(
   });
 }
 
+/** What the Journal says the party is about, as an arrival weighs whether to walk them up to Dave. */
+export interface ArrivalJournal {
+  readonly entries: ReadonlyArray<TrackerEntry>;
+  readonly pinnedId: string | null;
+}
+
+/** The quest Dave and Caroline steer a fresh party toward on arrival, and whether it is already taken up. */
+export interface ArrivalSteerQuest {
+  readonly trackerId: string;
+  readonly started: boolean;
+}
+
+/**
+ * Whether a safe room arrival may walk the party up to Dave and have Caroline
+ * brief what is next, unasked. That steers a party with nothing to do toward
+ * the quest it offers, so it stands down once that quest is taken up, and
+ * while the Journal is following another quest, as a lead overheard in the
+ * street makes it. A quest under way that the Journal is not following is no
+ * business of the party's yet. Only the walk and the unasked brief stand
+ * down: what Dave has to tell waits behind his `!` for the player.
+ */
+export function arrivalFetchesParty(journal: ArrivalJournal, steersTo: ArrivalSteerQuest): boolean {
+  if (steersTo.started) return false;
+  const followed = resolvePinnedEntry(journal.pinnedId, journal.entries);
+  return followed === null || pinMatchesEntry(steersTo.trackerId, followed);
+}
+
+/** How a safe room arrival reaches the party: Dave walks them up and talks, or waits for the player to come over. */
+export type ArrivalStaging = 'fetch_party' | 'wait_for_player';
+
+/** A safe room arrival with Dave in the room: what he tells, and what follows his talk. */
+export interface DaveArrival {
+  /** The arrival as it stands when his talk starts: a boss may have fallen since the party walked in. */
+  readonly event: () => Extract<StoryEvent, { kind: 'safeRoomArrival' }>;
+  /** The walk up to him, for an arrival that fetches the party. */
+  readonly walkUp: () => WalkToStep | null;
+  /** What he says after his beat in the same conversation; see {@link DaveMoment.extra}. */
+  readonly extra: (pageBudget: number) => DaveTalkExtra | null;
+  /**
+   * Runs once his talk is over, however it was started. `walkUp` is the walk
+   * a talk following straight on should open with: the arrival's own when it
+   * fetched the party, none when the player walked over.
+   */
+  readonly afterTalk: (walkUp: () => WalkToStep | null) => void;
+  /** Runs after `afterTalk` only when the arrival fetched the party: Caroline's word on what is next. */
+  readonly afterFetchedTalk: () => void;
+}
+
+const NO_WALK_UP = (): null => null;
+
 /**
  * About three seconds of play between one story talk and the next message,
  * so two never land back to back. Her answer to a beat is the exception.
@@ -137,6 +188,8 @@ export function storyFloorOf(levelId: LevelId): StoryFloor | null {
 export class StoryDelivery {
   private readonly queue: QueuedMessage[] = [];
   private momentsRunning = 0;
+  /** The arrival Dave waits behind his `!` with, for the player to come and hear. */
+  private heldArrival: DaveArrival | null = null;
   /** Frames of play since the last talk or message ended; starts quiet, so the first can show at once. */
   private framesSinceTalk = QUIET_AFTER_TALK_FRAMES;
 
@@ -145,6 +198,63 @@ export class StoryDelivery {
   /** Whether a moment with Dave is still playing out; Caroline's queue waits for it. */
   get isTellingDaveMoment(): boolean {
     return this.momentsRunning > 0;
+  }
+
+  /**
+   * Dave has arrived in the safe room the party is in. Fetching the party,
+   * he walks them up and tells what is due at once; waiting, he holds it for
+   * {@link tellHeldArrival}. Either replaces any arrival held before.
+   */
+  meetArrival(arrival: DaveArrival, staging: ArrivalStaging): void {
+    this.heldArrival = null;
+    switch (staging) {
+      case 'fetch_party':
+        this.playDaveMoment({
+          event: arrival.event(),
+          walkUp: arrival.walkUp,
+          extra: arrival.extra,
+          leavesAfter: false,
+          onDone: () => {
+            arrival.afterTalk(arrival.walkUp);
+            arrival.afterFetchedTalk();
+          },
+        });
+        return;
+      case 'wait_for_player':
+        this.heldArrival = arrival;
+        return;
+      default: {
+        const unhandled: never = staging;
+        throw new Error(`unhandled arrival staging ${String(unhandled)}`);
+      }
+    }
+  }
+
+  /** Whether Dave holds a story beat from an arrival for the player to come and hear: one of his `!`s. */
+  get holdsArrivalBeat(): boolean {
+    const held = this.heldArrival;
+    return held !== null && this.daveBeatDue(held.event());
+  }
+
+  /**
+   * The player has spoken to Dave: tells the beat his arrival held, with no
+   * walk up, and what follows it. Returns whether a held beat was due; when
+   * none is, the press is for his other answers.
+   */
+  tellHeldArrival(): boolean {
+    const held = this.heldArrival;
+    if (held === null) return false;
+    const event = held.event();
+    if (!this.daveBeatDue(event)) return false;
+    this.heldArrival = null;
+    this.playDaveMoment({
+      event,
+      walkUp: NO_WALK_UP,
+      extra: held.extra,
+      leavesAfter: false,
+      onDone: () => held.afterTalk(NO_WALK_UP),
+    });
+    return true;
   }
 
   /**
@@ -267,6 +377,10 @@ export class StoryDelivery {
       this.framesSinceTalk = 0;
       next.onShown();
     });
+  }
+
+  private daveBeatDue(event: DaveStoryEvent): boolean {
+    return this.deps.director.dueBeats(event).some((id) => storyBeat(id).speaker === 'dave');
   }
 
   private daveScript(

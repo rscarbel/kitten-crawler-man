@@ -796,7 +796,7 @@ export class BountySystem implements GameSystem {
    * another mark.
    */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
-    const base = { id: BOUNTY_TRACKER_ID, name: 'Shady’s Bounties' };
+    const base = { kind: 'single', id: BOUNTY_TRACKER_ID, name: 'Shady’s Bounties' } as const;
     const markName = this.progress.currentName ?? 'the mark';
 
     if (this.progress.phase === 'available') {

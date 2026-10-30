@@ -26,6 +26,8 @@ export function residentActorId(resident: ResidentId): ResidentActorId {
 interface InteriorWorldActionPayloads {
   /** Stands the steered crawler on `tile` and the other beside them, without a sound or a step. */
   readonly setPartyDown: { readonly tile: CutsceneTile };
+  /** Swings the room's cellar lid open or shut; a room has the one. */
+  readonly cellarHatch: { readonly swing: 'open' | 'shut' };
 }
 
 type InteriorWorldActionKind = keyof InteriorWorldActionPayloads;

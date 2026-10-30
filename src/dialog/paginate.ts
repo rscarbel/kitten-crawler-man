@@ -5,9 +5,11 @@
  * node and shared by anything that draws pages (`DialogBox`).
  *
  * Break preference, in order: every paragraph boundary is a forced page
- * break; within a paragraph, lines fill greedily by word and a page cuts at
- * the last sentence end that fits; failing that, at the last word boundary;
- * failing that (a single word wider than the box), by grapheme cluster.
+ * break; within a paragraph, lines fill greedily by word and a page holds
+ * every line the box has room for, cutting at the last word boundary that
+ * fits; failing that (a single word wider than the box), by grapheme cluster.
+ * A page never cuts back to an earlier sentence end: that would leave lines
+ * of the box empty and page text that was never going to overflow.
  */
 
 import type { NonEmpty, Paragraphs } from './line';
@@ -31,8 +33,7 @@ const MIN_SENTENCE_WORD_LEN = 3;
 /**
  * Splits `text` into sentences, each ending at real punctuation or at the end
  * of `text` itself. Every sentence's characters concatenate back to `text`
- * exactly, so a caller can measure "how much of `text` is complete sentences"
- * as `text.length` minus the last entry's length.
+ * exactly, so a sentence-by-sentence reveal joins back to the page it came from.
  */
 export function splitSentences(text: string): NonEmpty<string> {
   const sentences: string[] = [];
@@ -181,20 +182,28 @@ function requireSpan(spans: readonly LineSpan[], index: number): LineSpan {
   return spans[index];
 }
 
-/** How many characters of `windowText` (already known to fit within the line budget) belong on this page. */
-function bestCutLength(windowText: string): number {
-  const sentences = splitSentences(windowText);
-  if (sentences.length > 1) {
-    const lastSentence = sentences[sentences.length - 1];
-    const completeLength = windowText.length - lastSentence.length;
-    if (completeLength > 0) return completeLength;
-  }
-  const lastSpace = windowText.lastIndexOf(' ');
-  if (lastSpace > 0) return lastSpace;
-  // No sentence end and no word boundary: `windowText` is entirely the
-  // character-fragments of one word `computeLineSpans` already hard-broke,
-  // so taking the whole window is itself the character-level break.
-  return windowText.length;
+/**
+ * The separators a page cut consumes rather than carrying to the top of the
+ * next page. `\r\n` is consumed whole: leaving its `\n` behind would open
+ * the next page on a blank line.
+ */
+const PAGE_CUT_SEPARATORS: readonly string[] = [' ', '\r\n', '\n'];
+
+function separatorLengthAt(text: string, index: number): number {
+  const separator = PAGE_CUT_SEPARATORS.find((candidate) => text.startsWith(candidate, index));
+  return separator?.length ?? 0;
+}
+
+/**
+ * Where a page holding `windowLast` as its last line ends in `remaining`.
+ * Never zero, so every page moves the cut forward: a window whose last line is
+ * empty and is followed by no separator would otherwise cut nothing, forever.
+ */
+function pageCutLength(remaining: string, windowLast: LineSpan): number {
+  const windowEnd = windowLast.offset + windowLast.length;
+  if (windowEnd > 0 || separatorLengthAt(remaining, 0) > 0) return windowEnd;
+  const [firstCluster = remaining] = graphemes(remaining);
+  return firstCluster.length;
 }
 
 function paginateParagraph(
@@ -217,18 +226,14 @@ function paginateParagraph(
       pages.push({ text: remaining, startOffset: paragraphSourceOffset + consumed });
       return;
     }
-    const windowLast = requireSpan(spans, maxLines - 1);
-    const windowText = remaining.slice(0, windowLast.offset + windowLast.length);
-    const cutLength = bestCutLength(windowText);
+    // Every span ends on a word end (or inside a word too wide for any
+    // line, already hard-broken), so the full window is itself the cut.
+    const cutLength = pageCutLength(remaining, requireSpan(spans, maxLines - 1));
     pages.push({
       text: remaining.slice(0, cutLength),
       startOffset: paragraphSourceOffset + consumed,
     });
-    // A cut that lands exactly on a chunk boundary an embedded '\n' forced
-    // leaves that '\n' sitting unread at the front of `remaining` — it would
-    // reappear as an empty line at the top of the next page. Skip over it
-    // here, the same way the paragraph-to-paragraph join already does.
-    consumed += remaining.charAt(cutLength) === '\n' ? cutLength + 1 : cutLength;
+    consumed += cutLength + separatorLengthAt(remaining, cutLength);
   }
 }
 

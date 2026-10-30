@@ -242,6 +242,22 @@ ramp. Face dressing comes from the room or hallway character the face looks onto
 - `verify:floor-sweep` holds each dungeon floor's wall _face_ at least
   `MIN_WALL_FLOOR_SEPARATION` darker than every one of its floors.
 
+## Shorelines: cached rim pieces, never a computed waterline
+
+Where water meets dry ground, draw a crisp rim from a small set of cached pieces
+chosen by neighbour mask, over flat water that ends on the tile edge.
+`src/map/tiles/dungeonWaterShore.ts` is the model: each kerb or waterline piece
+is painted once per theme, and a shore tile costs one `drawImage` in the chunk
+bake and nothing per frame.
+
+Use a soft, computed shoreline (a waterline wandering across tiles from a
+per-pixel field, soaked floor, laps animated along it) very sparingly, if ever.
+It is extremely computationally expensive: every shore tile needs its own
+painted masks and animation frames, every water change repaints them per pixel,
+and every frame composites each visible shore tile through a scratch canvas. On
+a map with as much shoreline as the sewer, that cost makes the game unplayably
+slow.
+
 ## Palettes
 
 `src/map/tilegen/palette.ts`. Anchor new ramps to colours sampled from art that

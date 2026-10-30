@@ -25,10 +25,10 @@ import {
 import { LANE_PALETTES } from '../../../sprites/art/keyboardHeroLanePalettes';
 import { worldText } from '../../world/worldText';
 import type { IllustrationRect } from './illustration';
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const MS_PER_FRAME = MS_PER_SECOND / FRAMES_PER_SECOND;
+const MS_PER_FRAME = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 const NOTE_CYCLE_MS = 1800;
 const BOARD_BED_ALPHA = 1;
 const BOARD_HIT_LINE_SCALE = 1;

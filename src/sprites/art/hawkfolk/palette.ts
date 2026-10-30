@@ -88,21 +88,25 @@ export const GOLDENBARRED: PlumagePattern = {
  */
 export const STREETTOUGH_MARKING: Ramp = ramp('#3a0a18', '#7c1032', '#a82442');
 
-export const PLUMAGE_PATTERNS: readonly PlumagePattern[] = [
-  HAWKBROWN,
-  DOVEGREY,
-  CORVIDBLACK,
-  SPARROWFLECK,
-  GOLDENBARRED,
-];
+/** Aviel's flight-feather grey, the mid of his body ramp; the dropped feather is painted in it too. */
+export const AVIEL_FEATHER_GREY = '#8d929a';
 
-export type PlumageId = (typeof PLUMAGE_PATTERNS)[number]['id'];
-
-export function plumageById(id: PlumageId): PlumagePattern {
-  const found = PLUMAGE_PATTERNS.find((pattern) => pattern.id === id);
-  if (found === undefined) throw new Error(`no Hawkfolk plumage pattern "${id}"`);
-  return found;
-}
+/**
+ * Deacon Aviel's own plumage, worn by no one else: the grey of the flight
+ * feather by the millstones, so the deacon at his altar and the winged thief
+ * over the roofs are plainly one bird once the party knows to look. The thief
+ * paints its wings from `body`. The barring stays, a darker slate in place of
+ * the noble rust, so he still reads as an elder rather than a plain clerk in
+ * dove grey.
+ */
+export const AVIEL_GREY: PlumagePattern = {
+  id: 'aviel_grey',
+  body: ramp('#4e535c', AVIEL_FEATHER_GREY, '#b9bec5'),
+  breast: ramp('#8a8f97', '#b4b9c0', '#d8dce1'),
+  marking: ramp('#2a2d33', '#3e424a', '#585d66'),
+  markingStrength: 0.6,
+  markingStyle: 'barring',
+};
 
 // ── Bare parts ───────────────────────────────────────────────────────────────
 

@@ -407,7 +407,6 @@ export const USE_LINES = {
   offering_bowl: [
     narrator.bark('You lay a coin in the bowl. It rings once against the others already there.'),
   ],
-  bench_seat: [narrator.bark('You sit a moment. The bench takes your weight without complaint.')],
   hearth: [narrator.bark('You hold your hands out to the fire and let the warmth settle in.')],
   grindstone: [
     narrator.bark('You lean an edge against the stone. It flares white for a moment, then cools.'),

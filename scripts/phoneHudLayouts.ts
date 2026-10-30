@@ -43,6 +43,8 @@ export interface HudState {
   readonly width: number;
   readonly height: number;
   readonly density: Density;
+  /** CSS pixels per UI unit on this screen. */
+  readonly uiScale: number;
   readonly label: string;
   readonly geometry: HudGeometry;
   readonly pieces: readonly HudPiece[];
@@ -66,6 +68,7 @@ const BAND_ENTRY_HEIGHTS: Readonly<Record<TopBandPriority, number>> = {
   encounter: 66,
   countdown: 56,
   banner: 40,
+  arrival: 40,
 };
 
 /**
@@ -77,6 +80,7 @@ const COMPACT_BAND_ENTRY_HEIGHTS: Readonly<Record<TopBandPriority, number>> = {
   encounter: 72,
   countdown: 56,
   banner: 36,
+  arrival: 36,
 };
 
 const BAND_ENTRY_WIDTHS: Readonly<Record<TopBandPriority, number>> = {
@@ -84,6 +88,7 @@ const BAND_ENTRY_WIDTHS: Readonly<Record<TopBandPriority, number>> = {
   encounter: TOP_BAND_WIDTH.regular,
   countdown: TOP_BAND_WIDTH.narrow,
   banner: TOP_BAND_WIDTH.wide,
+  arrival: TOP_BAND_WIDTH.regular,
 };
 
 /** The top band holding `priorities`, one representative bar each, laid out as the HUD lays it out. */
@@ -111,6 +116,35 @@ export function representativeTopBand(
     rect: slot.rect,
     mayOverlap: ['minimap'],
   }));
+}
+
+/**
+ * A fight's card with `riderRows` one-line rows folded into it
+ * (`foldRidersIntoFightCard`: a downed teammate's countdown), laid out as the
+ * HUD lays it out.
+ */
+export function representativeFightCard(geometry: HudGeometry, riderRows: number): HudPiece[] {
+  const { theme } = geometry;
+  const bossHeight = (geometry.size === 'compact' ? COMPACT_BAND_ENTRY_HEIGHTS : BAND_ENTRY_HEIGHTS)
+    .boss;
+  const riderRowHeight = theme.type.label.lineHeight + theme.space.xs;
+  const area = geometry.topBand;
+  const slots = layoutTopBand(
+    area,
+    [
+      {
+        id: 'band-boss',
+        priority: 'boss',
+        w: Math.min(BAND_ENTRY_WIDTHS.boss, area.w),
+        h: bossHeight + riderRows * riderRowHeight,
+      },
+    ],
+    geometry.topBandObstacles,
+    theme.space.sm,
+    geometry.topBandFloor,
+    geometry.topBandKeepClear,
+  );
+  return slots.map((slot) => ({ name: slot.id, kind: 'surface', rect: slot.rect }));
 }
 
 /** The HUD's tap targets and minimap for one layout. */
@@ -167,6 +201,7 @@ export function hudStates(
         width,
         height,
         density,
+        uiScale: resolved.uiScale,
         label,
         geometry,
         pieces: [...hudPieces(geometry), ...representativeTopBand(geometry, LEADING_BARS)],

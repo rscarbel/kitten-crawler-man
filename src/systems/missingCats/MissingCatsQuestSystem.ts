@@ -16,10 +16,12 @@
  * split (`splitWholePartyIfOwed`).
  *
  * On the human's side, the cellar elf waits at the storm-drain grate once
- * asked, and opens it for a human who has brought a partner. Once the cats
- * walk home, each one is about her own door again.
+ * asked, and opens it for a human who has brought a partner. The only cat
+ * the street ever shows is Penny on the store's step through the stakeout:
+ * every other cat at home is indoors, in her own building's room.
  */
 
+import type { CrawlerPair } from '../../core/progression/awardXp';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import { QuestManager, type QuestStatus } from '../../core/quests/QuestManager';
@@ -34,28 +36,40 @@ import {
   missingTownCats,
   phaseReached,
   townCatsHome,
+  MISSING_CATS_CLUE_SITES,
+  type MissingCatsClueId,
   type MissingCatsClueSite,
   type MissingCatsPhase,
   type MissingCatsProgress,
 } from '../../core/quests/missingCatsProgress';
-import { TOWN_CAT_IDS, type TownCatId } from '../../core/state/townCatIds';
+import {
+  CLUE_PLACES,
+  nextClueAtSite,
+  nextInvestigationClue,
+} from '../../core/quests/missingCatsLeads';
+import type { TownCatId } from '../../core/state/townCatIds';
 import type { MercenaryTemplateId } from '../../core/party/mercenaryTemplates';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
+import type { CrawlerBarkSystem } from '../CrawlerBarkSystem';
 import type { Conversation } from '../../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../../dialog/line';
 import type { ConversationHandle } from '../../dialog/request';
 import {
   CELLAR_ELF_OPENS_THE_GRATE,
   CELLAR_ELF_WANTS_A_PARTNER,
+  innWallSitterLines,
+  INN_WALL_SITTER_PROMPT,
   INVESTIGATION_SOLVED,
+  LEADS_ONWARD,
   NOTICES_READ,
   SCENT_TRAIL_ENDS,
   TOWER_DOOR_SEEKER_HINT,
   THIEF_LANDED,
   THIEF_LANDED_REMARK,
-  THIEF_SAW_YOU,
-  THIEF_SWOOPED,
+  THIEF_FIRST_SPOTTED,
+  THIEF_SPOTTED_AGAIN,
+  THIEF_TOOK_PENNY,
   THIEF_WAITING,
 } from '../../dialog/scripts/scenes/missingCats';
 import type { AudioManager } from '../../audio/AudioManager';
@@ -71,14 +85,19 @@ import { STORM_DRAIN_ID, TOWN_TOWER_ID, type BuildingId } from '../../map/buildi
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';
-import { drawWingedThief, drawWingedThiefShadow } from '../../sprites/art/missingCatsArt';
+import {
+  drawWingedThief,
+  drawWingedThiefShadow,
+  prewarmWingedThief,
+  WINGED_THIEF_SIZE_TILES,
+} from '../../sprites/art/wingedThiefFigure';
 import { worldPalette } from '../../ui/theme/worldInk';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import { doorwayBeaconTarget } from '../objectiveBeaconTargets';
 import type { TrackerEntry, TrackerTarget } from '../questTracker';
 import type { ConeShape } from '../stealthKeySnatch/detection';
 import type { ScentTrail, SenseLayer, SenseSourceHandle } from '../senses/SenseLayer';
-import { TOWN_CATS, TownCats } from '../critters/TownCats';
+import { TownCats } from '../critters/TownCats';
 import type { CutsceneActor } from '../cutscene/cutsceneActors';
 import type { CutsceneScript } from '../cutscene/cutsceneSteps';
 import type { SplitDirector } from '../partySplit/SplitDirector';
@@ -89,8 +108,16 @@ import {
   type CaptureScriptActorId,
 } from './captureCutscene';
 import { GrateMeeting } from './grateMeeting';
-import { towerStep, type TowerStepPlace } from './towerSteps';
-import { TUNA_TIN_ITEM } from '../tower/kitchenWorks';
+import {
+  INN_WALL_SITTER_TALK_RANGE_TILES,
+  InnWallSitter,
+  innWallSitterTile,
+} from './innWallSitter';
+import type { OverheadIcon } from '../../sprites/overheadIcon';
+import type { TownPropRenderable } from '../townPropRenderable';
+import { towerStep, towerStepTarget, type TowerStepCarried } from './towerSteps';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
+import { tunaHolder } from '../tower/kitchenWorks';
 import { beginCaptivity, splitWholePartyIfOwed, type WholePartyFound } from './missingCatsSplit';
 import { tileStoodOn } from '../partySplit/partyTransfer';
 import { MISSING_CATS_COMPLETION_XP, MISSING_CATS_COMPLETION_COINS } from './missingCatsRewards';
@@ -98,6 +125,7 @@ import { DuskGrade } from './duskGrade';
 import {
   enterMissingCatsPhase,
   findMissingCatsClue,
+  leadOnwardLines,
   MISSING_CATS_QUEST_ID,
   missingCatsSiteStepId,
 } from './missingCatsPhase';
@@ -118,24 +146,6 @@ const STORE: BuildingId = 'taloncrest_general_store';
 const TEMPLE: BuildingId = 'taloncrest_temple';
 const LODGE: BuildingId = 'taloncrest_garrison_lodge';
 
-/**
- * The door a tower step sends the Journal's arrow to from the street. The
- * tower's own front door never opens, so a step in the tower points at the
- * storm drain, the only way in.
- */
-const TOWER_STEP_DOORS = {
-  tower: STORM_DRAIN_ID,
-  store: STORE,
-} as const satisfies Record<TowerStepPlace, BuildingId>;
-
-/** Which house each investigation site is, for the Journal's arrow. */
-const SITE_BUILDINGS = {
-  inn: INN,
-  cottage: 'taloncrest_old_lady_cottage',
-  apothecary: 'taloncrest_apothecary',
-  mill: 'taloncrest_mill_farm',
-} as const satisfies Record<MissingCatsClueSite, BuildingId>;
-
 const SITE_STEP_NAMES = {
   inn: 'The Sleeping Cat Inn',
   cottage: "Old Lori's cottage",
@@ -153,20 +163,40 @@ const TRAIL_END_OFFSET: TilePoint = { x: 6, y: 3 };
 const TRAIL_SEARCH_TILES = 4;
 /** How close to the trail's end Belle's feet must come for it to have run out under her. */
 const TRAIL_END_REACH_TILES = 1.2;
+/**
+ * Within this many tiles of any point of the trail, Belle has it on screen:
+ * the scent itself is the way, so the Journal points nowhere while she does.
+ */
+const TRAIL_IN_VIEW_TILES = 14;
 
-/** How close to the fountain's centre Belle must sit for the bait to be laid. */
+/** How close to the fountain's centre Belle must sit for the bait to be laid, and the steered crawler come for it to start. */
 const FOUNTAIN_REACH_TILES = 2.5;
+/** Belle only walks herself onto the rim from this close: a Belle left further off has to be brought. */
+const BELLE_JOINS_BAIT_WITHIN_TILES = 8;
+
+/** Belle's seat on the fountain's rim, and the tile she walks to first when she is not on it yet. */
+interface BaitSeat {
+  readonly at: { readonly x: number; readonly y: number };
+  readonly walk: TilePoint | null;
+}
+
+/** A body's distance from the fountain's centre, in tiles, measured between tile centres. */
+function tilesFromFountain(
+  body: { readonly x: number; readonly y: number },
+  fountain: TilePoint,
+): number {
+  const dx = body.x + HALF_TILE - (fountain.x * TILE_SIZE + HALF_TILE);
+  const dy = body.y + HALF_TILE - (fountain.y * TILE_SIZE + HALF_TILE);
+  return Math.hypot(dx, dy) / TILE_SIZE;
+}
 
 /** Where Penny sits: the store's step, and how far she wanders on it. */
 const PENNY_ROAM_TILES = 0;
-/** Home again, each cat keeps to the street this far south of her own door. */
-const HOME_STREET_ROWS_SOUTH = 1;
 
 /** The thief is drawn this many pixels above its shadow, over the roofs. */
 const THIEF_FLIGHT_HEIGHT_TILES = 2.5;
 const THIEF_FLIGHT_HEIGHT_PX = TILE_SIZE * THIEF_FLIGHT_HEIGHT_TILES;
-const THIEF_SIZE_TILES = 1.4;
-const THIEF_SIZE_PX = TILE_SIZE * THIEF_SIZE_TILES;
+const THIEF_SIZE_PX = TILE_SIZE * WINGED_THIEF_SIZE_TILES;
 /** It is heard passing over within this many tiles of the steered crawler, no oftener than this. */
 const FLYBY_TILES = 6;
 const FLYBY_COOLDOWN_FRAMES = 240;
@@ -189,11 +219,15 @@ export interface MissingCatsQuestDeps {
   readonly loops: Pick<AudioScope, 'startLoop' | 'stopLoop' | 'setAmbientLoopVolume'> | null;
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
+  /** The crawlers whose bags are the party's right now, indoors or out, which the Journal reads. */
+  readonly partyOnShow: () => CrawlerPair;
   /** The crawler being played right now. */
   readonly steered: () => HumanPlayer | CatPlayer;
   /** Every crawler on this map, which the thief may see. */
   readonly present: () => readonly (HumanPlayer | CatPlayer)[];
   readonly announce: (message: string) => void;
+  /** Lines a crawler says over their own head, which the world does not stop for. */
+  readonly barks: Pick<CrawlerBarkSystem, 'say'>;
   /** The plaza notice board's tile, or null on a map without one. */
   readonly noticeBoardTile: () => TilePoint | null;
   /** Whether the notice board's postings are up on screen, which a beat owed on the street waits out. */
@@ -213,6 +247,12 @@ export interface MissingCatsQuestDeps {
   readonly split: SplitDirector;
   /** The hire under contract with the party, if any: the human's partner below the tower. */
   readonly hire: () => MercenaryTemplateId | null;
+  /**
+   * Points the Journal at a quest the party has just been told about, the
+   * way starting one does, asking first when that would take the arrow off
+   * another quest still under way.
+   */
+  readonly followQuest: (questId: typeof MISSING_CATS_QUEST_ID) => void;
 }
 
 /** One missing cat's notice on the plaza board. */
@@ -239,7 +279,7 @@ export class MissingCatsQuestSystem {
   private captureUnderWay = false;
   private staging: CaptureStaging | null = null;
   private readonly grate: GrateMeeting | null;
-  private catsHomePlaced = false;
+  private readonly innWallSitter: InnWallSitter | null;
 
   constructor(private readonly deps: MissingCatsQuestDeps) {
     this.questManager.register({
@@ -264,6 +304,10 @@ export class MissingCatsQuestSystem {
           );
     const grateDoor = this.doorOf(STORM_DRAIN_ID);
     this.grate = grateDoor === null ? null : new GrateMeeting(map, grateDoor);
+    const inn = map.buildingEntries.find((entry) => entry.id === INN);
+    const sitterTile = inn === undefined ? null : innWallSitterTile(map, inn);
+    this.innWallSitter =
+      sitterTile === null ? null : new InnWallSitter(sitterTile, () => this.innWallSitterIcon());
   }
 
   get status(): QuestStatus {
@@ -305,7 +349,8 @@ export class MissingCatsQuestSystem {
     if (progress.phase !== 'posters_up') return;
     playMissingCatsCue(this.deps.audio, 'noticesRead');
     enterMissingCatsPhase(progress, 'investigating', bus);
-    this.owedBeats.push(NOTICES_READ);
+    const lead = nextInvestigationClue(progress);
+    this.owedBeats.push(lead === null ? NOTICES_READ : [...NOTICES_READ, ...LEADS_ONWARD[lead]]);
   }
 
   /** The board's glyph while the notices are waiting to be read. */
@@ -322,7 +367,6 @@ export class MissingCatsQuestSystem {
     this.syncScentTrail();
     this.checkTrailEnd(steered);
     this.syncPenny();
-    this.syncCatsHome();
     this.cats.update();
     this.staging?.update();
     this.splitIfOwed();
@@ -353,13 +397,13 @@ export class MissingCatsQuestSystem {
       case 'returned':
         return;
       case 'spotted':
-        this.deps.announce(THIEF_SAW_YOU);
+        this.answerSpotted();
         return;
       case 'swooped':
         this.cats.remove(STAKEOUT_CAT);
         playMissingCatsCue(audio, 'catSnatched', at);
         playMissingCatsCue(audio, 'thiefTakeoff', at);
-        this.deps.announce(THIEF_SWOOPED);
+        this.owedBeats.push(THIEF_TOOK_PENNY);
         enterMissingCatsPhase(progress, 'chase', bus);
         this.thiefPhase = 'chase';
         return;
@@ -374,6 +418,23 @@ export class MissingCatsQuestSystem {
     }
   }
 
+  /**
+   * The first sighting is talked through, so the party learns the stakeout is
+   * watched from hiding; every later one is only a bark over the steered
+   * crawler, which the world does not stop for.
+   */
+  private answerSpotted(): void {
+    const { progress } = this.deps;
+    if (!progress.thiefSpottedParty) {
+      progress.thiefSpottedParty = true;
+      this.owedBeats.push(THIEF_FIRST_SPOTTED);
+      return;
+    }
+    const steered = this.deps.steered();
+    const bark = steered === this.deps.cat ? THIEF_SPOTTED_AGAIN.cat : THIEF_SPOTTED_AGAIN.human;
+    this.deps.barks.say(steered, bark.paragraphs);
+  }
+
   private syncThief(): void {
     const { phase } = this.deps.progress;
     const wanted = phase === 'stakeout' || phase === 'chase' ? phase : null;
@@ -383,13 +444,18 @@ export class MissingCatsQuestSystem {
       wanted === null || this.stakeout === null
         ? null
         : new RooftopThief(this.stakeout, this.route, wanted === 'chase');
+    if (this.thief !== null) prewarmWingedThief();
   }
 
+  /**
+   * Penny is out on the store's step only through the stakeout, the bait the
+   * thief comes down for; every other night she is indoors, and every cat
+   * lives in her own home's room rather than on the street.
+   */
   private syncPenny(): void {
-    if (townCatsHome(this.deps.progress)) return;
     const onStep =
       this.stakeout !== null &&
-      !phaseReached(this.deps.progress, 'chase') &&
+      this.deps.progress.phase === 'stakeout' &&
       (this.thief?.catOnStep ?? true);
     const placed = this.cats.cat(STAKEOUT_CAT) !== null;
     if (onStep && !placed) {
@@ -401,24 +467,6 @@ export class MissingCatsQuestSystem {
       );
     }
     if (!onStep && placed) this.cats.remove(STAKEOUT_CAT);
-  }
-
-  /** Once the cats have walked home, each is about her own door, a row out into the street. */
-  private syncCatsHome(): void {
-    if (this.catsHomePlaced || !townCatsHome(this.deps.progress)) return;
-    this.catsHomePlaced = true;
-    for (const id of TOWN_CAT_IDS) {
-      const door = this.doorOf(TOWN_CATS[id].home);
-      if (door === null) continue;
-      const street = findNearbyWalkableTile(
-        this.deps.map,
-        door.x,
-        door.y + HOME_STREET_ROWS_SOUTH,
-        TRAIL_SEARCH_TILES,
-      );
-      if (street === null) continue;
-      this.cats.placeAtHome(id, { x: street.x * TILE_SIZE, y: street.y * TILE_SIZE });
-    }
   }
 
   private syncMusic(): void {
@@ -533,37 +581,89 @@ export class MissingCatsQuestSystem {
     const distance = Math.hypot(steered.x + HALF_TILE - end.x, steered.y + HALF_TILE - end.y);
     if (distance > TRAIL_END_REACH_TILES * TILE_SIZE) return;
     playMissingCatsCue(this.deps.audio, 'scentTrailEnds', end);
-    const finding = findMissingCatsClue(this.deps.progress, 'inn_scent_trail', this.deps.bus);
-    this.owedBeats.push(SCENT_TRAIL_ENDS);
+    const { progress, bus } = this.deps;
+    const finding = findMissingCatsClue(progress, 'inn_scent_trail', bus);
+    this.owedBeats.push([
+      ...SCENT_TRAIL_ENDS,
+      ...leadOnwardLines(progress, 'inn_scent_trail', finding),
+    ]);
     if (finding === 'investigation_solved') this.owedBeats.push(INVESTIGATION_SOLVED);
   }
 
   // ── The bait ───────────────────────────────────────────────────────────
 
+  /**
+   * The party reaching the fountain lays the bait, whichever crawler is
+   * steered: the player is never asked to switch to Belle for it. With the
+   * human steered she walks herself onto the rim before the carrier comes.
+   */
   private checkBait(steered: HumanPlayer | CatPlayer): void {
-    const { progress, map } = this.deps;
+    const { progress, map, cat } = this.deps;
     if (!progress.daveRefusedBait || this.captureUnderWay) return;
     const fountain = map.fountainCentre;
-    if (fountain === undefined || !(steered instanceof CatPlayer)) return;
-    const dx = steered.x + HALF_TILE - (fountain.x * TILE_SIZE + HALF_TILE);
-    const dy = steered.y + HALF_TILE - (fountain.y * TILE_SIZE + HALF_TILE);
-    if (Math.hypot(dx, dy) > FOUNTAIN_REACH_TILES * TILE_SIZE) return;
+    if (fountain === undefined || !this.deps.present().includes(cat) || cat.isKnockedOut) return;
+    if (tilesFromFountain(steered, fountain) > FOUNTAIN_REACH_TILES) return;
+    if (tilesFromFountain(cat, fountain) > BELLE_JOINS_BAIT_WITHIN_TILES) return;
+    const seat = this.baitSeat(fountain);
+    if (seat === null) return;
     this.captureUnderWay = true;
-    this.playCapture(steered);
+    this.playCapture(seat);
+  }
+
+  /**
+   * Where Belle sits for the bait: where she already is when she is on the
+   * rim, otherwise the open tile within the fountain's reach nearest her.
+   */
+  private baitSeat(fountain: TilePoint): BaitSeat | null {
+    const { cat, map } = this.deps;
+    if (tilesFromFountain(cat, fountain) <= FOUNTAIN_REACH_TILES) {
+      return { at: { x: cat.x, y: cat.y }, walk: null };
+    }
+    const catTile = tileStoodOn(cat);
+    const reach = Math.ceil(FOUNTAIN_REACH_TILES);
+    let best: TilePoint | null = null;
+    let bestDistance = Infinity;
+    for (let y = fountain.y - reach; y <= fountain.y + reach; y++) {
+      for (let x = fountain.x - reach; x <= fountain.x + reach; x++) {
+        const withinReach = Math.hypot(x - fountain.x, y - fountain.y) <= FOUNTAIN_REACH_TILES;
+        if (!withinReach || !map.isWalkable(x, y, cat.mobility)) continue;
+        const distance = Math.hypot(x - catTile.x, y - catTile.y);
+        if (distance < bestDistance) {
+          best = { x, y };
+          bestDistance = distance;
+        }
+      }
+    }
+    if (best === null) return null;
+    return { at: { x: best.x * TILE_SIZE, y: best.y * TILE_SIZE }, walk: best };
   }
 
   /** The capture at the fountain, played as a cutscene; the split follows it. */
-  private playCapture(belle: CatPlayer): void {
+  private playCapture(seat: BaitSeat): void {
     const { progress } = this.deps;
     const towerDoor = this.doorOf(TOWN_TOWER_ID);
-    const at = { x: belle.x, y: belle.y };
+    const at = seat.at;
     this.staging = new CaptureStaging(at);
-    const script = captureScript({
+    const capture = captureScript({
       belle: at,
       towerDoor:
         towerDoor === null ? at : { x: towerDoor.x * TILE_SIZE, y: towerDoor.y * TILE_SIZE },
       choice: madeAvielChoice(progress),
     });
+    const script: CutsceneScript<never, CaptureScriptActorId> =
+      seat.walk === null
+        ? capture
+        : [
+            {
+              kind: 'walkTo',
+              who: 'cat',
+              tile: seat.walk,
+              pace: 'stroll',
+              face: 'up',
+              then: 'waitForArrival',
+            },
+            ...capture,
+          ];
     this.deps.playCutscene(script, () => this.enterCaptured());
   }
 
@@ -654,6 +754,68 @@ export class MissingCatsQuestSystem {
     });
   }
 
+  // ── The regular outside the inn ────────────────────────────────────────
+
+  /** The `!` while nobody has asked at the inn and the regular has not yet told the party. */
+  innWallSitterIcon(): OverheadIcon {
+    const { progress } = this.deps;
+    const worthHearing = progress.phase === 'not_started' && !progress.innWallSitterHeard;
+    return worthHearing ? 'exclamation' : 'none';
+  }
+
+  /** Whether a press from `active` would reach the regular. */
+  wouldTalkToInnWallSitter(active: { readonly x: number; readonly y: number }): boolean {
+    return this.innWallSitter?.inReach(active) === true && !this.deps.conversation.isOpen;
+  }
+
+  /** The regular's link in the interact chain. Returns whether it took the press. */
+  tryTalkToInnWallSitter(active: HumanPlayer | CatPlayer): boolean {
+    const sitter = this.innWallSitter;
+    if (sitter === null || !this.wouldTalkToInnWallSitter(active)) return false;
+    const { progress } = this.deps;
+    const sitterLines = innWallSitterLines(sitter.speechStyle);
+    const line = townCatsHome(progress) ? sitterLines.catHome : sitterLines.catMissing;
+    const heard = (): void => this.innWallSitterHeard();
+    this.handle = this.deps.conversation.open({
+      lines: [line],
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'close', onClosed: heard },
+      dismiss: { kind: 'allowed', onDismissed: heard },
+      haltsWorld: false,
+      anchor: {
+        position: () => ({ x: sitter.x, y: sitter.y }),
+        talkRangeTiles: INN_WALL_SITTER_TALK_RANGE_TILES,
+      },
+      locksKeyboard: false,
+    });
+    return true;
+  }
+
+  /** Told the innkeeper's cat is missing before anyone asked at the inn, the party is pointed at Ossie. */
+  private innWallSitterHeard(): void {
+    const { progress } = this.deps;
+    if (progress.phase !== 'not_started' || progress.innWallSitterHeard) return;
+    progress.innWallSitterHeard = true;
+    this.deps.followQuest(MISSING_CATS_QUEST_ID);
+  }
+
+  /** The prompt over the regular when a press from `promptFor` would reach them. */
+  renderInnWallSitterPrompt(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    promptFor: HumanPlayer | CatPlayer | undefined,
+  ): void {
+    if (promptFor === undefined || !this.wouldTalkToInnWallSitter(promptFor)) return;
+    this.innWallSitter?.renderPrompt(ctx, camX, camY, INN_WALL_SITTER_PROMPT);
+  }
+
+  /** What this system stands in the scene's Y-sorted pass. */
+  sortedFigures(): readonly TownPropRenderable[] {
+    return this.innWallSitter === null ? [] : [this.innWallSitter];
+  }
+
   get isDialogOpen(): boolean {
     return this.handle !== null && this.deps.conversation.isActive(this.handle);
   }
@@ -739,7 +901,7 @@ export class MissingCatsQuestSystem {
     if (pose === null) return;
     ctx.save();
     ctx.translate(pose.x - camX, pose.y - camY - THIEF_FLIGHT_HEIGHT_PX);
-    drawWingedThief(ctx, THIEF_SIZE_PX, pose.heading, pose.flap, pose.carrying);
+    drawWingedThief(ctx, THIEF_SIZE_PX, pose.heading, pose.wingbeat, pose.carrying);
     ctx.restore();
   }
 
@@ -753,6 +915,7 @@ export class MissingCatsQuestSystem {
   }
 
   dispose(): void {
+    this.innWallSitter?.dispose();
     this.dusk.release();
     this.cats.clear();
   }
@@ -781,10 +944,7 @@ export class MissingCatsQuestSystem {
   }
 
   private featherHeld(): boolean {
-    return (
-      this.deps.human.inventory.countOf(FEATHER_ITEM) > 0 ||
-      this.deps.cat.inventory.countOf(FEATHER_ITEM) > 0
-    );
+    return this.partyCarries(FEATHER_ITEM);
   }
 
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
@@ -802,6 +962,7 @@ export class MissingCatsQuestSystem {
       target: TrackerTarget | undefined,
       hint?: string,
     ): TrackerEntry => ({
+      kind: 'single',
       id: MISSING_CATS_QUEST_ID,
       name,
       status: 'active',
@@ -813,6 +974,7 @@ export class MissingCatsQuestSystem {
       case 'not_started':
         return [
           {
+            kind: 'single',
             id: MISSING_CATS_QUEST_ID,
             name,
             status: 'available',
@@ -846,9 +1008,9 @@ export class MissingCatsQuestSystem {
         if (!lodgeCellarHeld(progress)) {
           return [
             entry(
-              'Hold the lodge cellar lid with the elves',
+              'Hold the lodge cellar lid',
               this.doorTarget(LODGE),
-              'Something is climbing the cistern under the Lodge. The elves came up to hold it back.',
+              'Ghouls are climbing the old cistern into Blackwood Lodge. The elves came in from the alley drain to hold the lid with you.',
             ),
           ];
         }
@@ -862,9 +1024,9 @@ export class MissingCatsQuestSystem {
       case 'stakeout':
         return [
           entry(
-            'Hide near the General Store and watch its cat, Penny',
+            'Watch Penny at the General Store from a hiding spot',
             this.doorTarget(STORE),
-            'Penny is the last cat in town, so the thief will come for her next. Wait in a hiding spot; if it sees you, it flies off and comes back later.',
+            "Penny is the last cat in town, so the thief will come for her next. Stand in a marked hiding spot where it can't see you. If it spots you it flies off, and comes back later.",
           ),
         ];
       case 'chase': {
@@ -875,9 +1037,9 @@ export class MissingCatsQuestSystem {
             : { x: Math.floor(pose.x / TILE_SIZE), y: Math.floor(pose.y / TILE_SIZE) };
         return [
           entry(
-            'Follow the thief over the rooftops',
+            'Follow the flying thief over the rooftops',
             tile,
-            'It took Penny. Wherever it lands is where the cats have been going.',
+            "It took Penny. Don't fight it: keep up with it from the street below and see where it lands. That's where the cats have been going.",
           ),
         ];
       }
@@ -893,7 +1055,7 @@ export class MissingCatsQuestSystem {
           : [
               entry(
                 "Fetch the grey feather from Miller's Farm",
-                this.doorTarget(SITE_BUILDINGS.mill),
+                this.doorTarget(CLUE_PLACES.mill_hayloft_feather.building),
                 "The thief landed on Deacon Aviel's temple. Bring the feather to show him; it's back beside the millstones.",
               ),
             ];
@@ -920,13 +1082,14 @@ export class MissingCatsQuestSystem {
           entry(
             'Bring Belle to the plaza fountain',
             fountain === undefined ? undefined : { x: fountain.x, y: fountain.y },
-            'Belle offered to be the bait. Switch to her and sit her on the fountain; the carrier comes for her at dusk.',
+            'Belle offered to be the bait. Bring her to the fountain and she will sit on the rim; the carrier comes for her at dusk.',
           ),
         ];
       }
       case 'complete':
         return [
           {
+            kind: 'single',
             id: MISSING_CATS_QUEST_ID,
             name,
             status: 'completed',
@@ -959,17 +1122,20 @@ export class MissingCatsQuestSystem {
       case 'bell_storey':
       case 'ascent':
       case 'ritual': {
-        const step = towerStep(progress.phase, progress, this.tunaCarried());
-        return [entry(step.objective, this.doorTarget(TOWER_STEP_DOORS[step.place]), step.hint)];
+        const step = towerStep(progress.phase, progress, this.towerItemsCarried());
+        const target = towerStepTarget(step.place, (building) => this.doorTarget(building));
+        return [entry(step.objective, target, step.hint)];
       }
     }
   }
 
-  private tunaCarried(): boolean {
-    return (
-      this.deps.human.inventory.countOf(TUNA_TIN_ITEM) > 0 ||
-      this.deps.cat.inventory.countOf(TUNA_TIN_ITEM) > 0
-    );
+  private towerItemsCarried(): TowerStepCarried {
+    return { tuna: tunaHolder(this.deps.partyOnShow()) !== null };
+  }
+
+  private partyCarries(item: ItemId): boolean {
+    const { human, cat } = this.deps.partyOnShow();
+    return human.inventory.countOf(item) > 0 || cat.inventory.countOf(item) > 0;
   }
 
   /** The way in, one step at a time: the elf's road, a partner to walk it with, and the grate. */
@@ -1009,37 +1175,52 @@ export class MissingCatsQuestSystem {
     entry: (objective: string, target: TrackerTarget | undefined, hint?: string) => TrackerEntry,
   ): TrackerEntry[] {
     const { progress } = this.deps;
-    const sites: readonly MissingCatsClueSite[] = ['inn', 'cottage', 'apothecary', 'mill'];
-    const open = sites.filter((site) => !clueSiteSolved(progress, site));
-    const solved = sites.length - open.length;
-    const firstOpen = open[0];
-    const header = entry(
-      `Find out where the cats went (${solved}/${sites.length})`,
-      open.length === 0 ? undefined : this.siteTarget(firstOpen),
-    );
+    const open = MISSING_CATS_CLUE_SITES.filter((site) => !clueSiteSolved(progress, site));
+    const solved = MISSING_CATS_CLUE_SITES.length - open.length;
+    const scentLeads = this.scentInBelleView();
+    const targetOf = (clue: MissingCatsClueId | null): TrackerTarget | undefined =>
+      clue === null || scentLeads ? undefined : this.clueTarget(clue);
+    const header: TrackerEntry = {
+      ...entry(
+        `Find out where the cats went (${solved}/${MISSING_CATS_CLUE_SITES.length})`,
+        targetOf(nextInvestigationClue(progress)),
+      ),
+      kind: 'header',
+      pinLeadsTo: 'header',
+    };
     const steps = open.map((site): TrackerEntry => ({
       id: missingCatsSiteStepId(site),
+      kind: 'step',
       parentId: MISSING_CATS_QUEST_ID,
       name: SITE_STEP_NAMES[site],
       status: 'active',
       objective: this.siteObjective(site),
       hint: this.siteHint(site),
-      ...this.optionalTarget(this.siteTarget(site)),
+      ...this.optionalTarget(targetOf(nextClueAtSite(progress, site))),
     }));
     return [header, ...steps];
   }
 
-  private siteTarget(site: MissingCatsClueSite): TrackerTarget | undefined {
-    const { progress } = this.deps;
-    if (site === 'inn') {
-      const start = this.scent?.points[0];
-      return start === undefined
-        ? this.doorTarget(INN)
-        : { x: Math.floor(start.x / TILE_SIZE), y: Math.floor(start.y / TILE_SIZE) };
+  /** Where a clue is found: the trail's start for the inn's scent, its place's door otherwise. */
+  private clueTarget(clue: MissingCatsClueId): TrackerTarget | undefined {
+    const building = CLUE_PLACES[clue].building;
+    if (clue !== 'inn_scent_trail') return this.doorTarget(building);
+    const start = this.scent?.points[0];
+    return start === undefined
+      ? this.doorTarget(building)
+      : { x: Math.floor(start.x / TILE_SIZE), y: Math.floor(start.y / TILE_SIZE) };
+  }
+
+  /** Whether Belle is steered with the scent trail laid and on her screen. */
+  private scentInBelleView(): boolean {
+    const steered = this.deps.steered();
+    if (this.scentHandle === null || this.scent === null || !(steered instanceof CatPlayer)) {
+      return false;
     }
-    if (site === 'apothecary' && progress.clues.has('apothecary_tuna_dish'))
-      return this.doorTarget(STORE);
-    return this.doorTarget(SITE_BUILDINGS[site]);
+    const reach = TRAIL_IN_VIEW_TILES * TILE_SIZE;
+    const feetX = steered.x + HALF_TILE;
+    const feetY = steered.y + HALF_TILE;
+    return this.scent.points.some((point) => Math.hypot(point.x - feetX, point.y - feetY) <= reach);
   }
 
   /** Why this house is worth a visit: what its notice, its owner or the last clue there said. */
@@ -1051,7 +1232,7 @@ export class MissingCatsQuestSystem {
       case 'cottage':
         return clues.has('cottage_owner_heard')
           ? 'Lori latched it before bed and found it open in the morning.'
-          : "Lori's notice says Thimble went out a window nobody could climb to.";
+          : "Lori's notice says Thimble went out a window nobody walked up to.";
       case 'apothecary':
         if (!clues.has('apothecary_owner_heard')) {
           return "Baggi's notice says someone left a dish of fish in the back room.";

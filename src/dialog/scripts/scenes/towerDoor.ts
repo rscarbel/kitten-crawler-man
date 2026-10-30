@@ -11,6 +11,7 @@ import { speakerLines } from '../../line';
 import type { BarkLine, DialogLine, NonEmpty } from '../../line';
 
 const guard = speakerLines('towerGuard');
+const humanCrawler = speakerLines('human_crawler');
 
 /** Which side of the tower's door a guard is posted on. */
 export type TowerDoorPost = 'west' | 'east';
@@ -23,9 +24,7 @@ export type TowerDoorPost = 'west' | 'east';
 export type TowerDoorStanding = 'barred' | 'bellsStopped' | 'closedByOrder';
 
 /** One of these per talk, by the guard's post and what the door answers with. */
-export const TOWER_DOOR_GUARD_LINES: Readonly<
-  Record<TowerDoorPost, Readonly<Record<TowerDoorStanding, NonEmpty<DialogLine>>>>
-> = {
+export const TOWER_DOOR_GUARD_LINES = {
   west: {
     barred: [
       guard.line("The tower's shut to the public. It's been shut as long as I've worn this."),
@@ -66,14 +65,26 @@ export const TOWER_DOOR_GUARD_LINES: Readonly<
       guard.line("A new order came down this morning. Tower's closed. It wasn't signed."),
     ],
   },
-};
+} as const satisfies Record<TowerDoorPost, Record<TowerDoorStanding, NonEmpty<DialogLine>>>;
+
+/**
+ * The human walks out of the tower's front door past its guards, who never
+ * saw him go in, and talks his way past them.
+ */
+export const TOWER_DOOR_WALK_OUT: NonEmpty<DialogLine> = [
+  guard.line('Hey! How did you get in there?'),
+  humanCrawler.line(
+    'Uhh... I was bringing in an extra order of tuna. Boss said we needed a little extra right now.',
+  ),
+  guard.line('Okay. Just make sure our manager knows so he can tell us next time.'),
+];
 
 /** The toast the tower's front door answers a crawler with. */
-export const TOWER_DOOR_REFUSALS: Readonly<Record<TowerDoorStanding, string>> = {
-  barred: 'The tower door is barred from inside.',
+export const TOWER_DOOR_REFUSALS = {
+  barred: "The door is locked and magically sealed. There's no getting through.",
   bellsStopped: 'The tower door is barred from inside. Above it, the bells are silent.',
   closedByOrder: 'The tower door is barred. A fresh notice on it reads: Closed by order.',
-};
+} as const satisfies Record<TowerDoorStanding, string>;
 
 /** Speech-bubble reactions to a blow, said by any tower guard. */
 export const TOWER_GUARD_HIT_BARKS: NonEmpty<BarkLine> = [

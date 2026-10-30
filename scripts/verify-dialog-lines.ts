@@ -56,7 +56,7 @@ interface Declaration {
 interface ScriptPropertyTarget extends Declaration {
   /** Dotted path from the exported object's own name, e.g. "BRAMBLEWICK.firstMeeting". */
   readonly path: string;
-  /** A registry object's own top-level entry (`RESIDENT_LINES.old_lori`) — its key, not the lines under it. */
+  /** A registry object's entry at a level read through dynamic lookups (`RESIDENT_LINES.old_lori`) — its key, not the lines under it. */
   readonly isRegistryEntry: boolean;
 }
 
@@ -97,7 +97,7 @@ function propertyNameText(name: ts.PropertyName): string | null {
 interface ExportedObject {
   readonly name: string;
   readonly objectExpr: ts.ObjectLiteralExpression;
-  /** `true` for an `X satisfies Record<SomeId, SomeLines>` registry — see {@link isReadByComputedLookup}. */
+  /** `true` for an `X satisfies Record<SomeId, SomeLines>` registry — see {@link computedLookupDepth}. */
   readonly isRegistry: boolean;
 }
 
@@ -142,44 +142,58 @@ function isLiteralKey(node: ts.Expression): boolean {
 }
 
 /**
- * Whether `objectName` is ever read through a computed lookup with a
- * *dynamic* key (`REGISTRY[id]`) anywhere in the project. An id-keyed
- * registry read this way makes every one of its top-level entries reachable
- * through the id union it `satisfies`, even though no entry's own key is
- * ever written as a literal property access — the generic lookup this design
- * allows in place of one. A literal-keyed access (`REGISTRY['bramblewick']`,
- * `REGISTRY[0]`) is a reference to that one entry, not proof the whole
- * registry is read generically, so it does not count here. Text-name
- * matching rather than symbol resolution, since these registry names are
- * unique across the project by convention.
+ * How many levels deep `node` reads `objectName` through a chain of
+ * dynamic-keyed lookups: 1 for `REGISTRY[id]`, 2 for `REGISTRY[post][standing]`,
+ * 0 when `node` is no such chain. A literal key anywhere in the chain
+ * (`REGISTRY['bramblewick'][id]`) breaks it, since it names one entry
+ * rather than reading them all.
  */
-/** Whether `node`, or anything under it, is a dynamic-keyed `objectName[...]` element access. */
-function hasDynamicElementAccess(node: ts.Node, objectName: string): boolean {
-  if (
-    ts.isElementAccessExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === objectName &&
-    !isLiteralKey(node.argumentExpression)
-  ) {
-    return true;
+function dynamicLookupChainDepth(node: ts.Node, objectName: string): number {
+  let depth = 0;
+  let current: ts.Node = node;
+  while (ts.isElementAccessExpression(current)) {
+    if (isLiteralKey(current.argumentExpression)) return 0;
+    depth++;
+    current = current.expression;
   }
-  return (
-    ts.forEachChild(node, (child) =>
-      hasDynamicElementAccess(child, objectName) ? true : undefined,
-    ) === true
-  );
+  return ts.isIdentifier(current) && current.text === objectName ? depth : 0;
 }
 
-function isReadByComputedLookup(
+/** The deepest dynamic-keyed lookup chain into `objectName` anywhere under `node`. */
+function deepestDynamicLookup(node: ts.Node, objectName: string): number {
+  let deepest = dynamicLookupChainDepth(node, objectName);
+  ts.forEachChild(node, (child) => {
+    deepest = Math.max(deepest, deepestDynamicLookup(child, objectName));
+  });
+  return deepest;
+}
+
+/**
+ * How many levels of `objectName` are read through computed lookups with
+ * *dynamic* keys anywhere in the project. An id-keyed registry read as
+ * `REGISTRY[id]` makes every one of its top-level entries reachable through
+ * the id union it `satisfies`, even though no entry's own key is ever written
+ * as a literal property access — the generic lookup this design allows in
+ * place of one; a registry of registries read as `REGISTRY[post][standing]`
+ * reaches every entry two levels down the same way. A literal-keyed access
+ * (`REGISTRY['bramblewick']`, `REGISTRY[0]`) is a reference to that one entry,
+ * not proof the whole registry is read generically, so it does not count
+ * here. Text-name matching rather than symbol resolution, since these
+ * registry names are unique across the project by convention.
+ */
+function computedLookupDepth(
   program: ts.Program,
   fileNames: ReadonlyArray<string>,
   objectName: string,
-): boolean {
+): number {
+  let deepest = 0;
   for (const fileName of fileNames) {
     const sourceFile = program.getSourceFile(fileName);
-    if (sourceFile !== undefined && hasDynamicElementAccess(sourceFile, objectName)) return true;
+    if (sourceFile !== undefined) {
+      deepest = Math.max(deepest, deepestDynamicLookup(sourceFile, objectName));
+    }
   }
-  return false;
+  return deepest;
 }
 
 /**
@@ -187,15 +201,17 @@ function isReadByComputedLookup(
  * a property whose value is itself a plain object literal (a grouping of
  * related lines) but not into arrays — a pool or tuple's elements have no
  * name of their own for a reference check to be asked about, only the pool
- * property itself does.
+ * property itself does. The top `lookedUpLevels` levels are registry entries
+ * read through dynamic lookups (see {@link computedLookupDepth}).
  */
 function collectPropertyTargets(
   objectExpr: ts.ObjectLiteralExpression,
   fileName: string,
   pathPrefix: string,
   out: ScriptPropertyTarget[],
-  entriesAreRegistryKeys = false,
+  lookedUpLevels: number,
 ): void {
+  const entriesAreRegistryKeys = lookedUpLevels > 0;
   for (const prop of objectExpr.properties) {
     if (!ts.isPropertyAssignment(prop)) continue;
     const name = propertyNameText(prop.name);
@@ -209,7 +225,7 @@ function collectPropertyTargets(
     });
     const inner = unwrapInitializer(prop.initializer);
     if (ts.isObjectLiteralExpression(inner)) {
-      collectPropertyTargets(inner, fileName, path, out);
+      collectPropertyTargets(inner, fileName, path, out, Math.max(0, lookedUpLevels - 1));
     }
   }
 }
@@ -531,8 +547,8 @@ function runEngine(
     const sourceFile = program.getSourceFile(file);
     if (sourceFile === undefined) continue;
     for (const { name, objectExpr, isRegistry } of collectExportedObjects(sourceFile)) {
-      const readGenerically = isRegistry && isReadByComputedLookup(program, projectFiles, name);
-      collectPropertyTargets(objectExpr, file, name, scriptTargets, readGenerically);
+      const lookedUpLevels = isRegistry ? computedLookupDepth(program, projectFiles, name) : 0;
+      collectPropertyTargets(objectExpr, file, name, scriptTargets, lookedUpLevels);
     }
   }
 
@@ -784,6 +800,33 @@ function writeFixtures(dir: string): Fixtures {
     '}',
   ]);
 
+  // A registry of registries read two keys deep, REG_TWO_DEEP[post][standing],
+  // reaches every entry at both levels — neither nested line is read by name.
+  const twoDeepRegistryFile = write('registryTwoDeep.ts', [
+    'export const REG_TWO_DEEP = {',
+    "  west: { calm: 'w-calm', alarmed: 'w-alarmed' },",
+    "  east: { calm: 'e-calm', alarmed: 'e-alarmed' },",
+    "} as const satisfies Record<'west' | 'east', Record<'calm' | 'alarmed', string>>;",
+  ]);
+  write('twoDeepReader.ts', [
+    "import { REG_TWO_DEEP } from './registryTwoDeep';",
+    "export function pickTwoDeep(post: 'west' | 'east', standing: 'calm' | 'alarmed'): string {",
+    '  return REG_TWO_DEEP[post][standing];',
+    '}',
+  ]);
+
+  // The same shape with no dynamic lookup at all: one nested line is read by
+  // name, and the one beside it nobody reads must still fail.
+  const unindexedNestedRegistryFile = write('registryNestedUnindexed.ts', [
+    'export const REG_NESTED_UNINDEXED = {',
+    "  north: { calm: 'n-calm', alarmed: 'n-alarmed' },",
+    "} as const satisfies Record<'north', Record<'calm' | 'alarmed', string>>;",
+  ]);
+  write('unindexedNestedReader.ts', [
+    "import { REG_NESTED_UNINDEXED } from './registryNestedUnindexed';",
+    'export const readCalm = REG_NESTED_UNINDEXED.north.calm;',
+  ]);
+
   const scriptFiles = [
     unreferencedFile,
     directFile,
@@ -797,6 +840,8 @@ function writeFixtures(dir: string): Fixtures {
     neverLookedUpRegistryFile,
     literalRegistryFile,
     nestedRegistryFile,
+    twoDeepRegistryFile,
+    unindexedNestedRegistryFile,
   ];
   const registryFiles = [registryFile];
   const allFiles = [
@@ -811,6 +856,8 @@ function writeFixtures(dir: string): Fixtures {
     join(dir, 'computedReader.ts'),
     join(dir, 'literalReader.ts'),
     join(dir, 'nestedReader.ts'),
+    join(dir, 'twoDeepReader.ts'),
+    join(dir, 'unindexedNestedReader.ts'),
   ];
   return { rolesFile, scriptFiles, registryFiles, allFiles };
 }
@@ -931,15 +978,39 @@ function runSelfTests(): void {
       "self-test: REG_LITERAL.s is reported dead — REG_LITERAL['r'] elsewhere does not exempt it",
     );
 
-    // A registry read by a dynamic key exempts its own top-level entry, but
-    // not a nested property inside that entry's own object literal.
+    // A registry read one key deep exempts its own top-level entry, but not
+    // a nested property inside that entry's own object literal.
     check(
       !result.scriptPropertiesUnreferenced.some((entry) => entry.endsWith('REG_NESTED.t.live')),
       'self-test: REG_NESTED.t.live, read directly, passes',
     );
     check(
       result.scriptPropertiesUnreferenced.some((entry) => entry.endsWith('REG_NESTED.t.dead')),
-      'self-test: REG_NESTED.t.dead, nested inside a dynamically-looked-up entry, is still reported dead',
+      'self-test: REG_NESTED.t.dead, nested inside an entry looked up only one key deep, is still reported dead',
+    );
+
+    for (const path of [
+      'REG_TWO_DEEP.west.calm',
+      'REG_TWO_DEEP.west.alarmed',
+      'REG_TWO_DEEP.east.calm',
+      'REG_TWO_DEEP.east.alarmed',
+    ]) {
+      check(
+        !result.scriptPropertiesUnreferenced.some((entry) => entry.endsWith(path)),
+        `self-test: ${path}, reached only by REG_TWO_DEEP[post][standing], passes`,
+      );
+    }
+    check(
+      !result.scriptPropertiesUnreferenced.some((entry) =>
+        entry.endsWith('REG_NESTED_UNINDEXED.north.calm'),
+      ),
+      'self-test: REG_NESTED_UNINDEXED.north.calm, read by name, passes',
+    );
+    check(
+      result.scriptPropertiesUnreferenced.some((entry) =>
+        entry.endsWith('REG_NESTED_UNINDEXED.north.alarmed'),
+      ),
+      'self-test: REG_NESTED_UNINDEXED.north.alarmed, in a registry never looked up by a dynamic key, is reported dead',
     );
   } finally {
     rmSync(fixtureDir, { recursive: true, force: true });

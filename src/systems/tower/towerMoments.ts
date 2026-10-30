@@ -8,6 +8,7 @@
  * progress first, so a hook that missed the event still finds the record.
  */
 
+import type { KitchenStage } from '../../core/quests/missingCatsProgress';
 import type { TownCatId } from '../../core/state/townCatIds';
 
 export type TowerMoment =
@@ -19,26 +20,30 @@ export type TowerMoment =
   | { readonly kind: 'cellmate_freed' }
   /** The keeper saw a paw at a latch. */
   | { readonly kind: 'latch_seen' }
+  /** The keeper caught Belle out of her cage and shut her back in it (`crawlerCatUncaged` cleared). */
+  | { readonly kind: 'crawler_cat_recaged' }
   /** Belle has come down into the archive while its wards still burn solid: the cattery is behind her. */
   | { readonly kind: 'cattery_exit_reached' }
   /** The key ring went into the archive's hatch (`keyRingSent`). */
   | { readonly kind: 'key_ring_sent' }
   /** A warden caught a crawler in the archive, which was set back at its stair. */
   | { readonly kind: 'archive_caught' }
+  /** A warden called by the dumbwaiter's bell has reached the hatch and is peering in, its room left empty. */
+  | { readonly kind: 'archive_bell_answered' }
   /** Belle has come down out of the archive onto the bell storey before the reunion: the archive is crossed. */
   | { readonly kind: 'archive_crossed' }
-  /** The human has taken the key ring out of the dumbwaiter's foot. */
-  | { readonly kind: 'key_ring_taken' }
-  /** The larder is unlocked (`larderOpened`). */
-  | { readonly kind: 'larder_opened' }
+  /**
+   * The kitchen has come to `stage` (`kitchen`): the step just done, or the
+   * kitchen's first step as the human first steps into it. `tunaInHand` is
+   * whether a crawler there had a tin of tuna to send up then.
+   */
+  | {
+      readonly kind: 'kitchen_stage_reached';
+      readonly stage: KitchenStage;
+      readonly tunaInHand: boolean;
+    }
   /** The portcullis chain was pulled while the portcullis is held from above. */
   | { readonly kind: 'portcullis_chain_held' }
-  /** The dumbwaiter's bell was rung, from either end. */
-  | { readonly kind: 'dumbwaiter_bell_rung' }
-  /** The cellmate's note has come down the dumbwaiter. */
-  | { readonly kind: 'note_arrived' }
-  /** The tuna has gone up the dumbwaiter (`tunaSent`). */
-  | { readonly kind: 'tuna_sent' }
   /** The cellmate has sat down on a counterweight plate. */
   | { readonly kind: 'cellmate_holding_plate' }
   /** The counterweight has fallen and the kitchen's portcullis is up (`portcullisRaised`). */

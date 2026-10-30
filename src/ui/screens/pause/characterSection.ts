@@ -364,6 +364,17 @@ function mercenaryRows(stats: GameStats): StatRow[] {
   ];
 }
 
+/** A pet tally gets its row once the party has given one, as the mercenaries' rows wait on a hire. */
+function petRows(stats: GameStats): StatRow[] {
+  const tallies = [
+    { label: 'Cows Petted', count: stats.cowPets },
+    { label: 'Cats Petted', count: stats.townCatPets },
+  ];
+  return tallies
+    .filter((tally) => tally.count > 0)
+    .map((tally) => ({ label: tally.label, value: `${tally.count}`, role: 'success' }));
+}
+
 function statRows(stats: GameStats, floorNumber: number): StatRow[] {
   return [
     ...timeRows(stats, floorNumber),
@@ -375,6 +386,7 @@ function statRows(stats: GameStats, floorNumber: number): StatRow[] {
     { label: 'Potions Used', value: `${stats.potionsUsed}`, role: 'success' },
     { label: 'Gold Earned', value: `${stats.goldEarned}`, role: 'accent' },
     ...mercenaryRows(stats),
+    ...petRows(stats),
   ];
 }
 
@@ -389,7 +401,6 @@ function valueRow(layout: SectionLayout, label: string, value: string, role: Tex
   });
 }
 
-/** The pets given are left for the run-complete screen, where they land as a surprise. */
 function renderStats(layout: SectionLayout, ctx: PauseContext): void {
   const stats = ctx.gameStats;
   for (const row of statRows(stats, ctx.floorNumber)) {

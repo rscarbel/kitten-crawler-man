@@ -2,7 +2,7 @@ import { ASTAR_FAILURE_BACKOFF_FRAMES, ASTAR_MAX_DENIED_FRAMES, Mob } from './Mo
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { deinonychusEyePlacement } from '../sprites/art/deinonychusFigure';
 import type { DamageOptions, DamageSource, Player } from '../Player';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   DEINONYCHUS_HEAD_CLEARANCE_TILES,
   DEINONYCHUS_MAX_WALK_RADIANS_PER_TICK,
@@ -116,10 +116,9 @@ const POUNCE_MIN_TILES = 2.0;
 const POUNCE_MAX_TILES = 4.2;
 const POUNCE_COOLDOWN_FRAMES = 220;
 const POUNCE_LANDING_RANGE_TILES = 1.1;
-const FRAMES_PER_SECOND = 60;
 /** Standing by this long makes the next fight a fresh one worth announcing. */
 const IDLE_BEFORE_CHITTER_SECONDS = 5;
-const IDLE_BEFORE_CHITTER_FRAMES = IDLE_BEFORE_CHITTER_SECONDS * FRAMES_PER_SECOND;
+const IDLE_BEFORE_CHITTER_FRAMES = IDLE_BEFORE_CHITTER_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * How much faster than his walk he travels through the airborne window.
  *
@@ -259,6 +258,11 @@ export class Deinonychus extends Mob {
   owner: Player;
   /** All mobs in the scene — set each frame by `DeinonychusSystem`. */
   allMobs: Mob[] = [];
+  /**
+   * Set while his system walks him along the party's trail: he neither picks a
+   * fight nor walks himself anywhere, and stands where the trail puts him.
+   */
+  walksTrail = false;
 
   /**
    * Damage he has landed that has not been paid out as ability XP yet.
@@ -629,6 +633,12 @@ export class Deinonychus extends Mob {
     if (this.collapsing) {
       this.isMoving = false;
       if (!this.animator.isPlaying) this.beginRecall();
+      return;
+    }
+
+    if (this.walksTrail) {
+      this.target = null;
+      this.following = false;
       return;
     }
 

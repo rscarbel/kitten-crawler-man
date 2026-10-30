@@ -1,7 +1,7 @@
 import { Mob, TACTICAL_RETREAT_MAX_SPEED } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
-import { drawKrasueSprite } from '../sprites/krasueSprite';
+import { drawKrasueSprite, KRASUE_FLOAT_RADIANS_PER_FRAME } from '../sprites/krasueSprite';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticalMove } from './tactics/tacticalFrame';
@@ -18,10 +18,21 @@ const ATTACK_ANIM_FRAMES = 22;
 /** Fraction of attack range within which the strike is attempted. */
 const ATTACK_ENGAGE_FRACTION = 1.15;
 
-/** Erratic drift added to the direct pursuit path — perpendicular wobble. */
-const WOBBLE_FREQUENCY = 0.09;
+/**
+ * Erratic drift added to the direct pursuit path — perpendicular wobble. It
+ * weaves once every two bobs: any faster and the sideways push flips sign
+ * every couple of frames, which reads as a shiver rather than a weave.
+ */
+const WOBBLE_TURNS_PER_BOB = 0.5;
 const WOBBLE_AMOUNT = 0.65;
-const FLOAT_PHASE_SPEED = 0.12;
+/**
+ * How far off straight up or down a krasue must be heading, as a share of its
+ * step, before it turns to face that side; and how far to one side its target
+ * must be, in tiles, while it holds still to strike. Without them a head
+ * rising or sinking straight at its prey mirrors itself every frame.
+ */
+const FACING_TURN_SHARE = 0.25;
+const FACING_TURN_TILES = 0.25;
 const KRASUE_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /** Drawn only face-on, so in profile it still shows that face. */
@@ -88,7 +99,7 @@ export class Krasue extends Mob {
 
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
-    this.floatPhase += FLOAT_PHASE_SPEED;
+    this.floatPhase += KRASUE_FLOAT_RADIANS_PER_FRAME;
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
@@ -132,7 +143,7 @@ export class Krasue extends Mob {
       this.driftToward(this.lastKnownTargetX, this.lastKnownTargetY);
     } else {
       this.isMoving = false;
-      this.facingX = this.lastKnownTargetX >= this.x ? 1 : -1;
+      this.faceTowardX(this.lastKnownTargetX - this.x);
     }
 
     if (
@@ -153,14 +164,20 @@ export class Krasue extends Mob {
     const d = Math.hypot(dx, dy) || 1;
     const dirX = dx / d;
     const dirY = dy / d;
-    const wobble = Math.sin(this.floatPhase / WOBBLE_FREQUENCY) * WOBBLE_AMOUNT;
+    const wobble = Math.sin(this.floatPhase * WOBBLE_TURNS_PER_BOB) * WOBBLE_AMOUNT;
     const moveX = dirX - dirY * wobble;
     const moveY = dirY + dirX * wobble;
     const moveLen = Math.hypot(moveX, moveY) || 1;
     this.moveWithCollision((moveX / moveLen) * this.speed, (moveY / moveLen) * this.speed);
     this.isMoving = true;
-    this.facingX = dirX >= 0 ? 1 : -1;
+    if (Math.abs(dirX) > FACING_TURN_SHARE) this.facingX = dirX > 0 ? 1 : -1;
     this.facingY = dirY;
+  }
+
+  /** Turns to face a target `dx` pixels to one side, once it is clearly to that side. */
+  private faceTowardX(dx: number): void {
+    if (Math.abs(dx) <= this.tileSize * FACING_TURN_TILES) return;
+    this.facingX = dx > 0 ? 1 : -1;
   }
 
   /**
@@ -176,13 +193,13 @@ export class Krasue extends Mob {
     const remaining = distance - move.stopPx;
     if (remaining <= 0) {
       this.isMoving = false;
-      this.facingX = this.lastKnownTargetX >= this.x ? 1 : -1;
+      this.faceTowardX(this.lastKnownTargetX - this.x);
       return;
     }
     const step = Math.min(this.speed, TACTICAL_RETREAT_MAX_SPEED, remaining);
     this.moveWithCollision((dx / distance) * step, (dy / distance) * step);
     this.isMoving = true;
-    this.facingX = dx >= 0 ? 1 : -1;
+    if (Math.abs(dx / distance) > FACING_TURN_SHARE) this.facingX = dx > 0 ? 1 : -1;
     this.facingY = dy / distance;
   }
 

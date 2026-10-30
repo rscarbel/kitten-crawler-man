@@ -18,7 +18,7 @@
  *   makes a sound; on screen both do.
  */
 
-import { TILE_SIZE } from '../../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { OVERHEAL_STATUS } from '../../src/core/combat/StatusEffect';
 import { REFERENCE_CRAWLERS, referenceStats } from '../../src/core/party/referenceCrawler';
 import type { Mob } from '../../src/creatures/Mob';
@@ -67,7 +67,6 @@ import {
 } from '../../src/systems/fairyAudioCues';
 import { harnessHit } from '../crawlerHitHarness';
 
-const FRAMES_PER_SECOND = 60;
 const HEALER_TILE = 8;
 /**
  * A wall column between the healer and one wounded ally, rows 1..`WALL_ROWS`:
@@ -419,7 +418,7 @@ function bossCeilingRun(makeBoss: (s: ReturnType<typeof healStage>) => Mob): Bos
   let worst = '';
   const holdX = boss.x;
   const holdY = boss.y;
-  for (let frame = 0; frame < FRAMES_PER_SECOND * BOSS_HEAL_SECONDS; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * BOSS_HEAL_SECONDS; frame++) {
     const hpBefore = boss.hp;
     boss.updateAI([]);
     // Held beside the healer: a boss with nobody to fight wanders, and a run
@@ -548,7 +547,7 @@ function referencePartyDamagePerSecond(partyLevel: number): number {
     const { attackCycle } = referenceStats(crawler, partyLevel);
     const damage = attackCycle.reduce((sum, attack) => sum + attack.damage, 0);
     const frames = attackCycle.reduce((sum, attack) => sum + attack.frames, 0);
-    perSecond += (damage / frames) * FRAMES_PER_SECOND;
+    perSecond += (damage / frames) * WORLD_TICKS_PER_SECOND;
   }
   return perSecond;
 }
@@ -577,7 +576,10 @@ function worstShare(rate: HealRate): { share: number; where: string } {
 
 /** The heal rate with its level cap taken away: a share of any target's max HP, however big. */
 const uncappedRate: HealRate = (level, maxHp, isBoss) =>
-  (maxHp * HEAL_FRACTION_OF_TARGET_MAX_HP * (isBoss ? BOSS_HEAL_SCALE : 1) * FRAMES_PER_SECOND) /
+  (maxHp *
+    HEAL_FRACTION_OF_TARGET_MAX_HP *
+    (isBoss ? BOSS_HEAL_SCALE : 1) *
+    WORLD_TICKS_PER_SECOND) /
   healingFairyCooldownFrames(level);
 
 function checkHealRate(report: FairyGateReport): void {
@@ -651,7 +653,7 @@ function measuredHealRate(make?: HealerFactory): {
     warmedUp = healOnce() > 0;
   }
   let restored = 0;
-  for (let frame = 0; frame < FRAMES_PER_SECOND * MEASURED_RATE_SECONDS; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * MEASURED_RATE_SECONDS; frame++) {
     restored += healOnce();
   }
   const published = healingFairyHealPerSecond(

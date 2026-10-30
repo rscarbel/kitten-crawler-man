@@ -264,7 +264,7 @@ function tick(scene: Scene, frames: number): void {
 
 /** Presses Space at the scene's interact chain from where the active crawler stands. */
 function press(scene: Scene): boolean {
-  return scene['tryWalkedUpToInteraction'](scene.pm.active(), false);
+  return scene['tryWalkedUpToInteraction'](scene.pm.active(), false, scene['interactionStance']());
 }
 
 /** Pages through whatever conversation is open until it closes. */

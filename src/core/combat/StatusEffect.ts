@@ -19,6 +19,7 @@ import {
   HAMBURGER_FED_DURATION_SECONDS,
   HAMBURGER_MELEE_BONUS,
 } from '../items/consumables/foodEffects';
+import { WORLD_TICKS_PER_SECOND } from '../constants';
 
 /**
  * Every status the game can put on a body. A new status is added here first;
@@ -968,7 +969,6 @@ export const STAT_BOON_BONUSES: ReadonlyMap<StatusId, StatBoon> = new Map(
   }),
 );
 
-const TICKS_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 
 /**
@@ -978,7 +978,8 @@ const SECONDS_PER_MINUTE = 60;
  */
 export const ROOM_BOON_DURATION_MINUTES = 8;
 
-export const ROOM_BOON_TICKS = ROOM_BOON_DURATION_MINUTES * SECONDS_PER_MINUTE * TICKS_PER_SECOND;
+export const ROOM_BOON_TICKS =
+  ROOM_BOON_DURATION_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 
 const WELL_RESTED_STATUS = 'well_rested' as const satisfies StatusId;
 const HEARTH_WARMED_STATUS = 'hearth_warmed' as const satisfies StatusId;
@@ -1025,7 +1026,7 @@ export function makeDeepSlumber(): StatusEffect {
 /** The Melee bonus a Hamburger lends; see {@link makeHamburgerFed}. */
 export const HAMBURGER_FED_STATUS = 'hamburger_fed' as const satisfies StatusId;
 
-export const HAMBURGER_FED_TICKS = HAMBURGER_FED_DURATION_SECONDS * TICKS_PER_SECOND;
+export const HAMBURGER_FED_TICKS = HAMBURGER_FED_DURATION_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * Hamburger Fed: a short melee boon. Eating another while fed refreshes the
@@ -1052,7 +1053,7 @@ export const REFRESHED_SPEED_FACTOR = 1.1;
 
 export const REFRESHED_DURATION_SECONDS = 150;
 
-export const REFRESHED_DURATION_TICKS = REFRESHED_DURATION_SECONDS * TICKS_PER_SECOND;
+export const REFRESHED_DURATION_TICKS = REFRESHED_DURATION_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * Refreshed: a mild walking-speed boon from using a bathroom stall. Using a

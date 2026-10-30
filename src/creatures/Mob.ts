@@ -2676,6 +2676,11 @@ export abstract class Mob extends Player {
    * sight test, which is the expensive one. `forceAggro` bypasses range and
    * sight both, so a scripted encounter engages whether or not the target is seen.
    *
+   * A target whose gear hushes her is first noticed only within her
+   * `noticeRangeShare` of the range, unless she or a packmate's shout has
+   * already alerted this mob to her: a mob she has hurt answers from as far
+   * as it would answer anyone.
+   *
    * A defend target is refused outright, ahead of `accept` and of `forceAggro`.
    * A quest-critical bystander such as the defend quest's NPC must stay out
    * of reach even if one is ever added to a target list; the single mob that *does* fight one goes through its own
@@ -2702,7 +2707,10 @@ export abstract class Mob extends Player {
         continue;
       }
       const isEngagedTarget = target === engagedTarget;
-      if (dist >= (isEngagedTarget ? persistRangePx : aggroRangePx)) continue;
+      const noticeRangePx = this.alertedTo.has(target)
+        ? aggroRangePx
+        : aggroRangePx * target.gear.live.noticeRangeShare;
+      if (dist >= (isEngagedTarget ? persistRangePx : noticeRangePx)) continue;
       if (!isEngagedTarget && !this.canNotice(target)) continue;
       nearestDist = dist;
       nearest = target;

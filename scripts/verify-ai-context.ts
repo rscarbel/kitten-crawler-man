@@ -594,6 +594,7 @@ function verifyPlayerNameStaysFenced(): void {
     scene.live.crawlers.human = readCrawler(pm.human, 'human');
     scene.session.activeQuests = readActiveQuests([
       {
+        kind: 'single',
         id: FENCED_QUEST_ID,
         name: `${HOSTILE_PLAYER_NAME}'s Errand`,
         aiName: `${HUMAN_CRAWLER_AI_NAME}'s Errand`,

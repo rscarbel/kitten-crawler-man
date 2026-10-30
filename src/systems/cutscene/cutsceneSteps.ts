@@ -48,8 +48,15 @@ export type CutsceneActorRef<ActorId extends string = never> = typeof ACTIVE_CRA
 export type CutsceneMoveThen = 'waitForArrival' | 'carryOn';
 
 /**
+ * How a walk goes: at the actor's own easy pace, or hurried along in their
+ * quickest gait. An actor with only the one gait walks both at it, the active
+ * crawler included: the player's own body always moves at the player's speed.
+ */
+export type CutscenePace = 'stroll' | 'hurry';
+
+/**
  * Walk an actor to `tile` by the pathfinder, with their own mobility class,
- * then turn them to `face`. The active crawler is the player's own body and is
+ * at `pace`, then turn them to `face`. The active crawler is the player's own body and is
  * never teleported: blocked or out of time, they stop where they stand. Every
  * other actor is set down on the tile instead, so a script never hangs on a
  * walk.
@@ -58,6 +65,7 @@ export interface WalkToStep<ActorId extends string = never> {
   readonly kind: 'walkTo';
   readonly who: CutsceneActorRef<ActorId>;
   readonly tile: CutsceneTile;
+  readonly pace: CutscenePace;
   readonly face: CutsceneFacing;
   readonly then: CutsceneMoveThen;
 }
@@ -124,8 +132,14 @@ export type CutsceneStep<
    * scene change it hands over to, then clears on its own.
    */
   | { readonly kind: 'fade'; readonly to: number; readonly frames: number }
-  /** Starts `cue` from its top and restarts its clock, then moves straight on. */
-  | { readonly kind: 'playCue'; readonly cue: CutsceneTimedCue }
+  /**
+   * Starts `cue` and restarts its clock, then moves straight on. It plays
+   * from `fromS` seconds into the recording (its top when left out), and its
+   * clock reads that position from the start, so `waitForCue` marks stay in
+   * seconds of the recording: a script that starts a cue late, to put a hit
+   * a set time after a moment the player decides, keeps every later mark.
+   */
+  | { readonly kind: 'playCue'; readonly cue: CutsceneTimedCue; readonly fromS?: number }
   /**
    * Holds the script until `cue`, started by a `playCue` step, has played
    * `atS` seconds, read off the audio clock so a step lands on a hit in the

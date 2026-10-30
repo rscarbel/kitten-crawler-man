@@ -1851,7 +1851,8 @@ export class GameMap {
   /**
    * One section of the sewer, the `sectionIndex`-th of `plan.sections`, built
    * tile for tile from its parse: brick walls, stone walkways and every
-   * channel as its dry bed. The section's system floods the channels.
+   * channel as its dry bed, its drain mouths shut to every body. The
+   * section's system floods the channels.
    *
    * Arrival is the foot of the street grate's ladder. A section has no exit
    * tile: every way out is a connection the section's system stands up as an
@@ -1871,6 +1872,7 @@ export class GameMap {
     );
     this.structure = grid;
     this.rebuildBlockedMasks();
+    for (const drain of section.drains) this.blockTilePermanently(drain.x, drain.y);
     this.startTile = { x: section.ladder.x, y: section.ladder.y };
     this.setStairwellTiles([]);
     this.buildingEntries = [];

@@ -45,7 +45,7 @@ import { AIChallengeSystem } from '../src/systems/AIChallengeSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import {
   makeBurn,
   makeDoubleDamage,
@@ -212,8 +212,6 @@ const CHALLENGE_RATS = 4;
 const CHALLENGE_KILLS = 2;
 const CHALLENGE_SECONDS = 60;
 const CHALLENGE_SHORT_SECONDS = 20;
-/** One gameplay second, in update frames. */
-const UPDATE_FRAMES_PER_SECOND = 60;
 const HURT_HP = 1;
 
 // ── Registry shape ──────────────────────────────────────────────────────────
@@ -561,7 +559,7 @@ function pumpStage(world: FakeWorld): void {
   }
   const running = (): boolean => world.challenges.current !== null;
   const ctx = systemContextOf(world);
-  for (let frame = 0; frame < FRAMES_PER_STEP * UPDATE_FRAMES_PER_SECOND && running(); frame++) {
+  for (let frame = 0; frame < FRAMES_PER_STEP * WORLD_TICKS_PER_SECOND && running(); frame++) {
     world.challenges.update(ctx);
   }
 }
@@ -1378,7 +1376,7 @@ section('interactions: achievements, questions and every challenge template');
   // untouched: won by lasting the clock, lost to a scratch.
   offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS });
   world.stage.acceptChallenge();
-  runFrames(CHALLENGE_SHORT_SECONDS * UPDATE_FRAMES_PER_SECOND);
+  runFrames(CHALLENGE_SHORT_SECONDS * WORLD_TICKS_PER_SECOND);
   check(wonAnother(), 'lasting the clock wins an untouched challenge');
   offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS });
   world.stage.acceptChallenge();
@@ -1400,7 +1398,7 @@ section('interactions: achievements, questions and every challenge template');
   // slay: lost to the clock.
   offer('slay', { count: CHALLENGE_KILLS, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.stage.acceptChallenge();
-  runFrames(CHALLENGE_SECONDS * UPDATE_FRAMES_PER_SECOND);
+  runFrames(CHALLENGE_SECONDS * WORLD_TICKS_PER_SECOND);
   check(lostAnother(), 'running out of time fails a kill challenge');
 
   // cat_finishes: the human stealing the kill fails it.

@@ -29,6 +29,7 @@ import { minimapFrame } from './minimapFrame';
 import { renderNowPlaying, type NowPlayingCard } from './nowPlaying';
 import { renderToasts, type HudToasts } from './toasts';
 import { renderTopBand, type TopBandEntry } from './topBand';
+import { foldRidersIntoFightCard } from './topBandStack';
 import { unitFrame } from './unitFrame';
 
 export interface HudHost {
@@ -60,6 +61,38 @@ export interface HudFrame {
   readonly dock: ReadonlyMap<DockButtonId, Rect>;
   /** The skill-point badges drawn on the level discs. */
   readonly skillBadges: readonly Rect[];
+  /** Deinonychus's Summon card as drawn, or null when it was not. */
+  readonly summon: Rect | null;
+  /** The hotbar's strip as drawn, or null when the scene had no hotbar to show. */
+  readonly hotbar: Rect | null;
+}
+
+/** The chrome one HUD frame drew, in UI units, as far as a prompt floated over the world cares. */
+export interface DrawnHudChrome {
+  /** The unit frames and the coin pill. */
+  readonly framesBlock: Rect;
+  /** The minimap's frame, or null when there was no minimap to show. */
+  readonly miniMap: Rect | null;
+  /** Every dock button drawn. */
+  readonly dock: readonly Rect[];
+  /** Deinonychus's Summon card, or null when it was not drawn. */
+  readonly summon: Rect | null;
+  /** The hotbar's strip, or null when it was not drawn. */
+  readonly hotbar: Rect | null;
+  /** Every top-band entry where it landed. */
+  readonly band: readonly Rect[];
+}
+
+/**
+ * Everything in `chrome` a prompt floated over the world keeps clear of, since
+ * the HUD draws over it. The HUD and the phone HUD gate both read keep-outs
+ * from here, so a piece the HUD starts drawing is kept clear of in both.
+ */
+export function promptKeepOutsOf(chrome: DrawnHudChrome): Rect[] {
+  const miniMap = chrome.miniMap === null ? [] : [chrome.miniMap];
+  const summon = chrome.summon === null ? [] : [chrome.summon];
+  const hotbar = chrome.hotbar === null ? [] : [chrome.hotbar];
+  return [chrome.framesBlock, ...miniMap, ...chrome.dock, ...summon, ...hotbar, ...chrome.band];
 }
 
 function crawlerColor(ui: Ui, id: CrawlerId): string {
@@ -103,6 +136,8 @@ export class HudSurface implements Surface {
   private lastBand: readonly TopBandEntry[] = [];
   /** Where the top band's entries landed last frame, by entry id. */
   private lastBandSlots: readonly BandSlot[] = [];
+  /** The minimap's frame as last drawn, or null when the scene had no minimap to show. */
+  private drawnMiniMap: Rect | null = null;
 
   constructor(private readonly host: HudHost) {
     this.id = host.id ?? HUD_SURFACE_ID;
@@ -140,6 +175,43 @@ export class HudSurface implements Surface {
   /** Every top-band entry as last drawn, in UI units: what a card floated over play keeps clear of. */
   get bandRects(): readonly Rect[] {
     return this.lastBandSlots.map((slot) => slot.rect);
+  }
+
+  /**
+   * The band's cards across the top of the screen as last drawn, in UI
+   * units: what a camera keeps the world out from under. Arrival news (a
+   * room's name) is left out, since it fades on its own, and so is a card a
+   * compact screen hung below the box the player is held in, which covers
+   * nothing at the top.
+   */
+  get standingBandRects(): readonly Rect[] {
+    const arrivalIds = new Set(
+      this.lastBand.filter((entry) => entry.priority === 'arrival').map((entry) => entry.id),
+    );
+    const keepClear = this.drawn?.geometry.topBandKeepClear ?? [];
+    const belowPlayer = (rect: Rect): boolean => keepClear.some((box) => rect.y >= box.y);
+    return this.lastBandSlots
+      .filter((slot) => !arrivalIds.has(slot.id) && !belowPlayer(slot.rect))
+      .map((slot) => slot.rect);
+  }
+
+  /**
+   * The chrome the HUD is drawing that a prompt keeps clear of, in UI units
+   * (`promptKeepOutsOf`). The world band draws before the HUD, so these are
+   * the rects of the HUD's previous frame; empty while the HUD is hidden, whose
+   * last frame is no longer on screen, and before the first frame.
+   */
+  get promptKeepOuts(): readonly Rect[] {
+    const frame = this.drawn;
+    if (frame === null || !this.host.visible()) return [];
+    return promptKeepOutsOf({
+      framesBlock: frame.geometry.framesBlock,
+      miniMap: this.drawnMiniMap,
+      dock: [...frame.dock.values()],
+      summon: frame.summon,
+      hotbar: frame.hotbar,
+      band: this.bandRects,
+    });
   }
 
   /** The active crawler's skill-point badge as last drawn, in CSS pixels, or null while hidden. */
@@ -190,9 +262,11 @@ export class HudSurface implements Surface {
     if (model.minimap !== null) {
       minimapFrame(ui, geometry.miniMap, model.minimap, { touch: ui.density === 'touch' });
     }
+    this.drawnMiniMap = model.minimap === null ? null : geometry.miniMap;
     const docked = dock(ui, geometry.buttons, model.dock, {
       keyHints: ui.density === 'pointer',
     });
+    const summonRect = model.summon === null ? null : geometry.buttons.summon;
     if (model.summon !== null) summonCard(ui, geometry.buttons.summon, model.summon);
     const bandEntries = topBandEntries(model, geometry.levelTimerChip === null);
     if (this.host.liftTopBand?.() !== true) {
@@ -206,7 +280,16 @@ export class HudSurface implements Surface {
       );
     }
     if (model.hotbar !== null) hotbar(ui, geometry.hotbar, model.hotbar);
-    this.drawn = { geometry, uiScale: ui.uiScale, coins, dock: docked, skillBadges };
+    const hotbarRect = model.hotbar === null ? null : geometry.hotbar.strip;
+    this.drawn = {
+      geometry,
+      uiScale: ui.uiScale,
+      coins,
+      dock: docked,
+      skillBadges,
+      summon: summonRect,
+      hotbar: hotbarRect,
+    };
     this.lastBand = bandEntries;
   }
 
@@ -260,11 +343,12 @@ export class HudSurface implements Surface {
 
 /**
  * The scene's bars, the level timer's card where it is not a chip, then the
- * safe room's call to collect, the band's lowest.
+ * safe room's call to collect, the band's lowest; a rider rides in the
+ * fight's card.
  */
 function topBandEntries(model: HudModel, timerInBand: boolean): TopBandEntry[] {
   const timer = model.levelTimer;
   const timerCard =
     timer !== null && timerInBand ? [levelTimerEntry(timer.frames, timer.paused)] : [];
-  return [...model.topBand, ...timerCard];
+  return foldRidersIntoFightCard([...model.topBand, ...timerCard]);
 }

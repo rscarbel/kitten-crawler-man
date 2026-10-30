@@ -1,10 +1,9 @@
 import { isNonNegativeFinite, isRecord, parseEvery } from '../util/guards';
+import { WORLD_TICKS_PER_SECOND } from '../constants';
 
 /** A saved kill tally is a `[displayName, count]` pair. */
 const KILL_ENTRY_LENGTH = 2;
 
-/** The fixed update rate the scene loop steps at, which is what a played frame is worth. */
-const UPDATE_FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 const CLOCK_FIELD_WIDTH = 2;
@@ -21,7 +20,7 @@ const CLOCK_FIELD_WIDTH = 2;
  * a death that undid its own tally would make every death free. Whether the
  * party has heard the shield-fairy ward explainer, or the cat-senses one, is
  * run history too: a one-time hint that a death replayed would no longer be one-time. So is every
- * pet given to Deinonychus or a cow: the player did it, and no rewind takes it back.
+ * pet given to Deinonychus, a cow or a town cat: the player did it, and no rewind takes it back.
  * The current floor's time played is run history for the same reason as the
  * total: only taking the stairs to a new floor starts it again.
  */
@@ -42,6 +41,7 @@ export class GameStats {
   private _deinonychusPets = 0;
   private _cowPets = 0;
   private _midgePets = 0;
+  private _townCatPets = 0;
 
   recordKill(displayName: string, isBoss = false): void {
     this._killsByType.set(displayName, (this._killsByType.get(displayName) ?? 0) + 1);
@@ -108,6 +108,10 @@ export class GameStats {
   recordCowPetted(isMidge: boolean): void {
     this._cowPets++;
     if (isMidge) this._midgePets++;
+  }
+
+  recordTownCatPetted(): void {
+    this._townCatPets++;
   }
 
   recordWardExplainerHeard(): void {
@@ -206,6 +210,10 @@ export class GameStats {
     return this._midgePets;
   }
 
+  get townCatPets(): number {
+    return this._townCatPets;
+  }
+
   /** Point-in-time copy of every tally, for a checkpoint capture or a save. */
   snapshot(): GameStatsSnapshot {
     return {
@@ -225,6 +233,7 @@ export class GameStats {
       deinonychusPets: this._deinonychusPets,
       cowPets: this._cowPets,
       midgePets: this._midgePets,
+      townCatPets: this._townCatPets,
     };
   }
 
@@ -256,6 +265,7 @@ export class GameStats {
     stats._deinonychusPets = snapshot.deinonychusPets;
     stats._cowPets = snapshot.cowPets;
     stats._midgePets = snapshot.midgePets;
+    stats._townCatPets = snapshot.townCatPets;
     return stats;
   }
 
@@ -273,6 +283,7 @@ export class GameStats {
     this._deinonychusPets = Math.max(this._deinonychusPets, live._deinonychusPets);
     this._cowPets = Math.max(this._cowPets, live._cowPets);
     this._midgePets = Math.max(this._midgePets, live._midgePets);
+    this._townCatPets = Math.max(this._townCatPets, live._townCatPets);
   }
 }
 
@@ -294,6 +305,7 @@ export interface GameStatsSnapshot {
   deinonychusPets: number;
   cowPets: number;
   midgePets: number;
+  townCatPets: number;
 }
 
 function parseKillEntry(value: unknown): [string, number] | undefined {
@@ -324,6 +336,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     deinonychusPets,
     cowPets,
     midgePets,
+    townCatPets,
   } = value;
   if (
     killsByType === undefined ||
@@ -341,7 +354,8 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     typeof catSensesExplained !== 'boolean' ||
     !isNonNegativeFinite(deinonychusPets) ||
     !isNonNegativeFinite(cowPets) ||
-    !isNonNegativeFinite(midgePets)
+    !isNonNegativeFinite(midgePets) ||
+    !isNonNegativeFinite(townCatPets)
   ) {
     return undefined;
   }
@@ -362,12 +376,13 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     deinonychusPets,
     cowPets,
     midgePets,
+    townCatPets,
   };
 }
 
 /** `h:mm:ss` for a count of played frames. */
 export function formatPlayTime(frames: number): string {
-  const totalSeconds = Math.floor(frames / UPDATE_FRAMES_PER_SECOND);
+  const totalSeconds = Math.floor(frames / WORLD_TICKS_PER_SECOND);
   const hours = Math.floor(totalSeconds / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR));
   const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE) % MINUTES_PER_HOUR;
   const seconds = totalSeconds % SECONDS_PER_MINUTE;

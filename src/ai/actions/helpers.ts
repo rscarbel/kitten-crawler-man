@@ -1,5 +1,5 @@
 import { crawlerAIName, crawlerDisplayName } from '../../characters/characters';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { ITEM_DEF, itemAIName } from '../../core/items/defs/ItemDefs';
 import type { Rarity } from '../../core/items/defs/rarity';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -125,11 +125,10 @@ export function snakeToWords(id: string): string {
 }
 
 const SECONDS_PER_MINUTE = 60;
-export const FRAMES_PER_SECOND = 60;
 export const MS_PER_SECOND = 1000;
 
 export function secondsToFrames(seconds: number): number {
-  return Math.round(seconds * FRAMES_PER_SECOND);
+  return Math.round(seconds * WORLD_TICKS_PER_SECOND);
 }
 
 export function formatSeconds(seconds: number): string {

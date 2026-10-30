@@ -25,6 +25,7 @@ import { installBrowserShim } from './browserShim.js';
 import type { PreviewControl } from '../src/scenes/PreviewScene.js';
 import type { WorldGesture } from '../src/ui/core/UiRoot.js';
 import type { GestureKind } from '../src/ui/core/pointer.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 const PHONE_VIEWPORT = { width: 375, height: 667, devicePixelRatio: 1 } as const;
 installBrowserShim(PHONE_VIEWPORT);
@@ -371,8 +372,7 @@ useDevPlayerIdentity();
 
 /** Long enough for the live script to stow, draw and strike with the weapon picked. */
 const HUMAN_SCRIPT_WATCH_SECONDS = 6;
-const TICKS_PER_SECOND = 60;
-const HUMAN_SCRIPT_WATCH_TICKS = HUMAN_SCRIPT_WATCH_SECONDS * TICKS_PER_SECOND;
+const HUMAN_SCRIPT_WATCH_TICKS = HUMAN_SCRIPT_WATCH_SECONDS * WORLD_TICKS_PER_SECOND;
 
 class HumanProbe extends HumanPreviewScene {
   private readonly ctx = asGameContext(

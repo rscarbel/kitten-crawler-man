@@ -662,6 +662,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     // not even Fenna's offer, which she will not make until the fight is over.
     // Every open row says why, including those whose target is a town away.
     return {
+      kind: 'single',
       id: entry.id,
       name: entry.name,
       status: entry.status,
@@ -672,7 +673,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
 
   /** The row for the current step, before the siege has its say. */
   private stepEntry(): TrackerEntry | null {
-    const base = { id: BLUEPRINTS_QUEST_ID, name: BLUEPRINTS_QUEST_NAME } as const;
+    const base = { kind: 'single', id: BLUEPRINTS_QUEST_ID, name: BLUEPRINTS_QUEST_NAME } as const;
     const fenna = (): TrackerTarget | undefined => this.villagerTarget('fenna');
     const merrit = (): TrackerTarget | undefined => this.villagerTarget('merrit');
     switch (this.phase) {

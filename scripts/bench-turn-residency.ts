@@ -25,7 +25,7 @@
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants.js';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { TOOL_TIER_BASIC, type WorkingTool } from '../src/core/items/gathering/toolTiers.js';
@@ -64,7 +64,6 @@ import { mulberry32 } from '../src/sprites/person/rng.js';
 
 installCanvasGlobals();
 
-const UPDATES_PER_SECOND = 60;
 const DEGREES_PER_TURN = 360;
 const QUARTER_TURN_DEGREES = 90;
 const HALF_TURN_DEGREES = 180;
@@ -72,21 +71,21 @@ const EAST = 0;
 const SOUTH = 90;
 const NORTH = 270;
 /** Longer than the release window at the slowest rendered rate, so a view he left is swept. */
-const DWELL_TICKS = IDLE_FRAMES_BEFORE_RELEASE + 2 * UPDATES_PER_SECOND;
+const DWELL_TICKS = IDLE_FRAMES_BEFORE_RELEASE + 2 * WORLD_TICKS_PER_SECOND;
 const AFTER_TURN_SECONDS = 4;
-const AFTER_TURN_TICKS = AFTER_TURN_SECONDS * UPDATES_PER_SECOND;
+const AFTER_TURN_TICKS = AFTER_TURN_SECONDS * WORLD_TICKS_PER_SECOND;
 const CIRCLE_SECONDS = 20;
-const CIRCLE_TICKS = CIRCLE_SECONDS * UPDATES_PER_SECOND;
+const CIRCLE_TICKS = CIRCLE_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A full circle a second, and one every two seconds. */
-const FAST_CIRCLE_DEGREES_PER_TICK = DEGREES_PER_TURN / UPDATES_PER_SECOND;
+const FAST_CIRCLE_DEGREES_PER_TICK = DEGREES_PER_TURN / WORLD_TICKS_PER_SECOND;
 const SLOW_CIRCLE_DEGREES_PER_TICK = FAST_CIRCLE_DEGREES_PER_TICK / 2;
 /** Snapping between the four keyboard headings, moving for most of each hold. */
-const KEYBOARD_HOLD_TICKS = UPDATES_PER_SECOND / 2;
+const KEYBOARD_HOLD_TICKS = WORLD_TICKS_PER_SECOND / 2;
 /** The last stretch of each hold he stands still, as a player lets go of the key between turns. */
 const KEYBOARD_STANDING_TICKS = 10;
 const KEYBOARD_MOVING_TICKS = KEYBOARD_HOLD_TICKS - KEYBOARD_STANDING_TICKS;
 const KEYBOARD_FIGHT_SECONDS = 30;
-const KEYBOARD_FIGHT_TICKS = KEYBOARD_FIGHT_SECONDS * UPDATES_PER_SECOND;
+const KEYBOARD_FIGHT_TICKS = KEYBOARD_FIGHT_SECONDS * WORLD_TICKS_PER_SECOND;
 const KEYBOARD_HEADINGS = [EAST, SOUTH, HALF_TURN_DEGREES, NORTH] as const;
 /** Long enough for a scene's warm-up queue to drain before the turns start, on node's slow bakes. */
 const WARM_UP_RELEASE_WINDOWS = 8;
@@ -129,17 +128,17 @@ function harvestStart(name: string, heading: number): Scenario {
 }
 
 const HARVEST_SECONDS = 5;
-const HARVEST_TICKS = HARVEST_SECONDS * UPDATES_PER_SECOND;
+const HARVEST_TICKS = HARVEST_SECONDS * WORLD_TICKS_PER_SECOND;
 const HARVEST_TOOL: WorkingTool = { kind: 'axe', tier: TOOL_TIER_BASIC };
 /**
  * Cold cells are counted once she has carried the thing this long: the
  * carrying rows are asked for as it reaches her jaws, and the first frames
  * of them are drawn cold. Nothing in play puts a thing in her jaws yet.
  */
-const PICK_UP_SETTLE_TICKS = UPDATES_PER_SECOND;
+const PICK_UP_SETTLE_TICKS = WORLD_TICKS_PER_SECOND;
 /** Walking off after putting down what she carried, long enough for every view to come round. */
 const AFTER_DROP_SECONDS = 4;
-const AFTER_DROP_TICKS = AFTER_DROP_SECONDS * UPDATES_PER_SECOND;
+const AFTER_DROP_TICKS = AFTER_DROP_SECONDS * WORLD_TICKS_PER_SECOND;
 
 function snap(name: string, from: number, by: number, moving: boolean): Scenario {
   return {
@@ -151,15 +150,15 @@ function snap(name: string, from: number, by: number, moving: boolean): Scenario
 }
 
 /** Standing about before a menu opens, so the scene's warm-up is behind him. */
-const SETTLE_TICKS = UPDATES_PER_SECOND;
+const SETTLE_TICKS = WORLD_TICKS_PER_SECOND;
 /** A menu held open past the release window: the views he is not drawn in are swept. */
 const HALT_PAST_WINDOW_SECONDS = 5;
-const HALT_TICKS = IDLE_FRAMES_BEFORE_RELEASE + HALT_PAST_WINDOW_SECONDS * UPDATES_PER_SECOND;
+const HALT_TICKS = IDLE_FRAMES_BEFORE_RELEASE + HALT_PAST_WINDOW_SECONDS * WORLD_TICKS_PER_SECOND;
 const HALT_ENDS = SETTLE_TICKS + HALT_TICKS;
 /** Running before the flush, and after it long enough for the rewarm to land on node's bakes. */
-const FLUSH_TICK = 2 * UPDATES_PER_SECOND;
+const FLUSH_TICK = 2 * WORLD_TICKS_PER_SECOND;
 const REWARM_SECONDS = 8;
-const FLUSH_SNAP_TICK = FLUSH_TICK + REWARM_SECONDS * UPDATES_PER_SECOND;
+const FLUSH_SNAP_TICK = FLUSH_TICK + REWARM_SECONDS * WORLD_TICKS_PER_SECOND;
 
 const SCENARIOS: readonly Scenario[] = [
   {
@@ -315,7 +314,7 @@ setFigureBakeClock(realNow);
 
 /** One rendered frame of the display being simulated. */
 function renderFrame(framesPerUpdate: number): void {
-  simulatedMs += MS_PER_SECOND / (UPDATES_PER_SECOND * framesPerUpdate);
+  simulatedMs += MS_PER_SECOND / (WORLD_TICKS_PER_SECOND * framesPerUpdate);
   beginFigureFrame();
 }
 

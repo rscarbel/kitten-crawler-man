@@ -13,9 +13,9 @@
  */
 
 import { crawlerDisplayName } from '../../characters/characters';
-import { speakerLines } from '../line';
+import { speakerLines, type BarkLine, type NonEmpty } from '../line';
 import type { MercenaryLines } from '../roles';
-import type { MercenaryVoice } from '../../creatures/mercenaries/mercenaryVoices';
+import type { ErrandVoice, MercenaryVoice } from '../../creatures/mercenaries/mercenaryVoices';
 
 /** A quarryman: few words, all of them load-bearing. */
 const crush = speakerLines('crush');
@@ -418,11 +418,215 @@ export const TUMBLEDOWN_ACTIONS = {
   ],
 } satisfies MercenaryLines;
 
-export const CRUSH = { lines: CRUSH_LINES } satisfies MercenaryVoice;
-export const HAMMER_HANDS = { lines: HAMMER_HANDS_LINES } satisfies MercenaryVoice;
-export const IVY_ASHGROVE = { lines: IVY_ASHGROVE_LINES } satisfies MercenaryVoice;
-export const BROTHER_ANSELM = { lines: BROTHER_ANSELM_LINES } satisfies MercenaryVoice;
+/**
+ * What each hire says on the tower errand in place of its small talk: the
+ * cats, the climb and the Warden, and nothing about its own life. While the
+ * cat is held in the tower the hire talks of getting her back; once she has
+ * rejoined, of the climb with her to the cats still held at the top.
+ */
+const CRUSH_TOWER_TALK = [
+  crush.bark('You find the cats. I keep things off you.'),
+  crush.bark('The Warden is at the top. We go up.'),
+  crush.bark('Stay close. This place was built to keep people out.'),
+] as const satisfies NonEmpty<BarkLine>;
+
+const CRUSH_TOWER_ERRAND = {
+  cat_taken: {
+    lines: {
+      hired: [
+        crush.bark('Under the tower, then up. Lead on.'),
+        crush.bark(() => `We get ${crawlerDisplayName('cat')} back. Then the rest.`),
+      ],
+      idle: [
+        crush.bark('Cats are up there somewhere. Keep moving.'),
+        crush.bark('Stairs go up. So do we.'),
+        crush.bark(() => `${crawlerDisplayName('cat')} is waiting. Not far now.`),
+      ],
+      talk: CRUSH_TOWER_TALK,
+    },
+  },
+  party_whole: {
+    lines: {
+      hired: [
+        crush.bark('Both of you, then. Good. Up we go.'),
+        crush.bark(() => `${crawlerDisplayName('cat')} is back. Now the rest of the cats.`),
+      ],
+      idle: [
+        crush.bark('The other cats are still up there. Keep moving.'),
+        crush.bark('Stairs go up. So do we.'),
+        crush.bark(() => `Stay near, ${crawlerDisplayName('cat')}. Not losing you twice.`),
+      ],
+      talk: CRUSH_TOWER_TALK,
+    },
+  },
+} satisfies ErrandVoice;
+
+const HAMMER_HANDS_TOWER_TALK = [
+  hammerHands.bark("You lead us to the cats. I'll keep you standing."),
+  hammerHands.bark("Whoever this Warden is, I'd like a word."),
+  hammerHands.bark("Mind your step. This tower doesn't want us here."),
+] as const satisfies NonEmpty<BarkLine>;
+
+const HAMMER_HANDS_TOWER_ERRAND = {
+  cat_taken: {
+    lines: {
+      hired: [
+        hammerHands.bark("The tower it is. Let's fetch those cats home."),
+        hammerHands.bark(() => `Let's go get ${crawlerDisplayName('cat')}. I'll keep you warded.`),
+      ],
+      idle: [
+        hammerHands.bark('Cats first. Sightseeing later.'),
+        hammerHands.bark('Every floor up is one closer to the cats.'),
+        hammerHands.bark(() => `Hang on, ${crawlerDisplayName('cat')}. We're coming.`),
+      ],
+      talk: HAMMER_HANDS_TOWER_TALK,
+    },
+  },
+  party_whole: {
+    lines: {
+      hired: [
+        hammerHands.bark("Both of you in one piece. Let's fetch the rest of those cats."),
+        hammerHands.bark(
+          () => `Good to see you, ${crawlerDisplayName('cat')}. I'll keep you both warded.`,
+        ),
+      ],
+      idle: [
+        hammerHands.bark('Cats first. Sightseeing later.'),
+        hammerHands.bark('Every floor up is one closer to the cats.'),
+        hammerHands.bark(
+          () => `Glad you're back with us, ${crawlerDisplayName('cat')}. Now for the others.`,
+        ),
+      ],
+      talk: HAMMER_HANDS_TOWER_TALK,
+    },
+  },
+} satisfies ErrandVoice;
+
+const IVY_ASHGROVE_TOWER_TALK = [
+  ivyAshgrove.bark("You find the cats. I'll cover you."),
+  ivyAshgrove.bark("The Warden's at the top. I'd like a clear shot."),
+  ivyAshgrove.bark('Quiet steps. No sense telling the tower we are here.'),
+] as const satisfies NonEmpty<BarkLine>;
+
+const IVY_ASHGROVE_TOWER_ERRAND = {
+  cat_taken: {
+    lines: {
+      hired: [
+        ivyAshgrove.bark("The tower, is it? Fine. Let's go get the cats."),
+        ivyAshgrove.bark(
+          () => `${crawlerDisplayName('cat')}'s up there? Then that's where we're going.`,
+        ),
+      ],
+      idle: [
+        ivyAshgrove.bark("Keep going. The cats won't free themselves."),
+        ivyAshgrove.bark("Up's the way. I'll watch behind."),
+        ivyAshgrove.bark(() => `We'll find ${crawlerDisplayName('cat')}. Keep moving.`),
+      ],
+      talk: IVY_ASHGROVE_TOWER_TALK,
+    },
+  },
+  party_whole: {
+    lines: {
+      hired: [
+        ivyAshgrove.bark("Both of you? Good. Let's go get the rest of the cats."),
+        ivyAshgrove.bark(() => `Welcome back, ${crawlerDisplayName('cat')}. Now we go up.`),
+      ],
+      idle: [
+        ivyAshgrove.bark("Keep going. The cats won't free themselves."),
+        ivyAshgrove.bark("Up's the way. I'll watch behind."),
+        ivyAshgrove.bark(() => `Eyes open, ${crawlerDisplayName('cat')}. They took you once.`),
+      ],
+      talk: IVY_ASHGROVE_TOWER_TALK,
+    },
+  },
+} satisfies ErrandVoice;
+
+const BROTHER_ANSELM_TOWER_TALK = [
+  brotherAnselm.bark('Go to the cats. I will keep you mended on the way.'),
+  brotherAnselm.bark('Whatever the Warden wants with them, the Warden will not keep them.'),
+  brotherAnselm.bark('We rest when we are out. Not before.'),
+] as const satisfies NonEmpty<BarkLine>;
+
+const BROTHER_ANSELM_TOWER_ERRAND = {
+  cat_taken: {
+    lines: {
+      hired: [
+        brotherAnselm.bark('The tower, then. Let us bring the cats home.'),
+        brotherAnselm.bark(() => `We will find ${crawlerDisplayName('cat')}. Lead on.`),
+      ],
+      idle: [
+        brotherAnselm.bark('Somewhere above us, the cats are waiting.'),
+        brotherAnselm.bark('One storey at a time. We will get there.'),
+        brotherAnselm.bark(() => `Courage. ${crawlerDisplayName('cat')} is not far.`),
+      ],
+      talk: BROTHER_ANSELM_TOWER_TALK,
+    },
+  },
+  party_whole: {
+    lines: {
+      hired: [
+        brotherAnselm.bark('Together again. Let us bring the other cats home.'),
+        brotherAnselm.bark(
+          () => `Thank heaven, ${crawlerDisplayName('cat')}. Lead on, both of you.`,
+        ),
+      ],
+      idle: [
+        brotherAnselm.bark('Somewhere above us, the other cats are waiting.'),
+        brotherAnselm.bark('One storey at a time. We will get there.'),
+        brotherAnselm.bark(
+          () => `Stay close, ${crawlerDisplayName('cat')}. We go up together now.`,
+        ),
+      ],
+      talk: BROTHER_ANSELM_TOWER_TALK,
+    },
+  },
+} satisfies ErrandVoice;
+
+const TUMBLEDOWN_TOWER_ERRAND = {
+  cat_taken: {
+    lines: {},
+    actions: {
+      hired: [tumbledown.bark('Tumbledown lumbers into step behind you, facing the tower.')],
+      talk: [
+        tumbledown.bark('Tumbledown looks up, toward the top of the tower.'),
+        tumbledown.bark('Tumbledown waits for you to lead on.'),
+      ],
+    },
+  },
+  party_whole: {
+    lines: {},
+    actions: {
+      hired: [
+        tumbledown.bark(
+          'Tumbledown lumbers into step behind the two of you, facing the stairs up.',
+        ),
+      ],
+      talk: [
+        tumbledown.bark('Tumbledown looks up, toward the top of the tower.'),
+        tumbledown.bark('Tumbledown looks down at the cat, then waits for you to lead on.'),
+      ],
+    },
+  },
+} satisfies ErrandVoice;
+
+export const CRUSH = {
+  lines: CRUSH_LINES,
+  towerErrand: CRUSH_TOWER_ERRAND,
+} satisfies MercenaryVoice;
+export const HAMMER_HANDS = {
+  lines: HAMMER_HANDS_LINES,
+  towerErrand: HAMMER_HANDS_TOWER_ERRAND,
+} satisfies MercenaryVoice;
+export const IVY_ASHGROVE = {
+  lines: IVY_ASHGROVE_LINES,
+  towerErrand: IVY_ASHGROVE_TOWER_ERRAND,
+} satisfies MercenaryVoice;
+export const BROTHER_ANSELM = {
+  lines: BROTHER_ANSELM_LINES,
+  towerErrand: BROTHER_ANSELM_TOWER_ERRAND,
+} satisfies MercenaryVoice;
 export const TUMBLEDOWN_BASE = {
   lines: {},
   actions: TUMBLEDOWN_ACTIONS,
+  towerErrand: TUMBLEDOWN_TOWER_ERRAND,
 } satisfies MercenaryVoice;

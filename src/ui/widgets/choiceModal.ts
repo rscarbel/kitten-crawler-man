@@ -26,7 +26,8 @@ import {
   layoutCarolineText,
   paintCarolineLines,
 } from './carolineFrame';
-import { fillRounded, roundRectPath, type PaintTarget } from './paint';
+import { fillRounded, type PaintTarget } from './paint';
+import { roundRectPath } from './roundRect';
 import {
   panel,
   panelBodyMaxHeight,

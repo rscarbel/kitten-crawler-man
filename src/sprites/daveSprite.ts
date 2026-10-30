@@ -9,12 +9,11 @@
  * mid-teleport allocates nothing and stores no frames of its own.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { allocCanvas, releaseSurface, surfaceContext } from '../core/rendering/canvasSurface';
 import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { humanFigureFor } from './art/human/appearance';
 import { WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
-import { TICKS_PER_SECOND } from './art/human/timing';
 import { HUMAN_ROW_TABLE, type HumanRowName, ORIGIN_Y, type ViewRows } from './art/humanFigure';
 import type { CardinalView } from './facingView';
 import { selectCardinalFacing } from './facingView';
@@ -240,7 +239,7 @@ const DAVE_TELEPORT_FIGURE: TeleportFigure<number> = {
 
 function idleTicks(state: DaveSpriteState): number {
   return Math.floor(
-    (performance.now() / MS_PER_SECOND + state.idleOffsetSeconds) * TICKS_PER_SECOND,
+    (performance.now() / MS_PER_SECOND + state.idleOffsetSeconds) * WORLD_TICKS_PER_SECOND,
   );
 }
 const MS_PER_SECOND = 1000;

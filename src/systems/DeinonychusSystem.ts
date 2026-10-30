@@ -1,6 +1,6 @@
 import { displayHp } from '../core/party/crawlerFormulas';
 import { activeRunStats } from '../core/progression/GameStats';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { Deinonychus } from '../creatures/Deinonychus';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { HumanPlayer } from '../creatures/HumanPlayer';
@@ -24,6 +24,14 @@ import { getDeinonychusStats, DEINONYCHUS_DAMAGE_PER_XP } from '../abilities/dei
 import { drawDeinonychusIcon, prewarmDeinonychusPet } from '../sprites/deinonychusSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { CarriedCompanion } from './companionCarry';
+import {
+  canWalkTrail,
+  trailGroundOn,
+  type PartyLine,
+  type PartyLineLink,
+  type TrailFollowSwitch,
+  type TrailStance,
+} from './partyTrail';
 import type { AbilityManager } from '../core/skills/AbilityManager';
 import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
 import type { SummonModel } from '../ui/hud/hudModel';
@@ -149,7 +157,6 @@ const RECOVERY_TOAST: ToastOptions = {
   durationTicks: RECOVERY_TOAST_FRAMES,
 };
 const HEALING_RULE_TOAST: ToastOptions = { tone: 'info', icon: 'heart' };
-const FRAMES_PER_SECOND = 60;
 /** Decimals on the toast's seconds. One kill is worth well under a second. */
 const RECOVERY_TOAST_DECIMALS = 1;
 
@@ -166,6 +173,15 @@ export function deinonychusXpFraction(abilityManager: AbilityManager): number {
   return Math.max(0, Math.min(1, state.xp / state.xpToNextLevel));
 }
 
+/** He is never downed: a beating ends in a collapse and a recall, which take him home. */
+function deinonychusTrailStance(deinonychus: Deinonychus): TrailStance {
+  return {
+    isAlive: deinonychus.isAlive,
+    standing: true,
+    retreating: deinonychus.recalling || deinonychus.collapsing,
+  };
+}
+
 /**
  * A point-in-time copy of the pet's scene-level state, for the in-run safe-room
  * checkpoint. His HP and the summon lock are durable and travel with
@@ -175,7 +191,7 @@ export interface DeinonychusCheckpoint {
   unlocked: boolean;
 }
 
-export class DeinonychusSystem implements GameSystem {
+export class DeinonychusSystem implements GameSystem, TrailFollowSwitch {
   /** Whether Deinonychus has joined the party: the reward for the party's two-hundredth dungeon kill. */
   unlocked = false;
 
@@ -193,6 +209,9 @@ export class DeinonychusSystem implements GameSystem {
    * start a retreat, which has to shake off everything targeting him.
    */
   private retreatMobs: Mob[] = [];
+  /** His place on the party's line, while a room wants him there. */
+  private trailLink: PartyLineLink | null = null;
+  private trailMap: GameMap | null = null;
 
   /**
    * Whether the "he only heals while recalled" line has been said in this scene.
@@ -376,6 +395,27 @@ export class DeinonychusSystem implements GameSystem {
     return this.spawnAt(spawn, cat, gameMap);
   }
 
+  /**
+   * Puts him in his place on the party's line, or (null) hands him back to
+   * his own feet. On the line he does not fight; a recall still sends him home.
+   */
+  setTrailFollow(line: PartyLine | null): void {
+    this.trailLink =
+      line?.join(
+        'deinonychus',
+        trailGroundOn(() => this.trailMap),
+        () => this.trailWalker(),
+      ) ?? null;
+    if (line === null && this.deinonychus !== null) this.deinonychus.walksTrail = false;
+  }
+
+  /** Him, while he is walking the line. */
+  private trailWalker(): Deinonychus | null {
+    const deinonychus = this.deinonychus;
+    if (deinonychus?.walksTrail !== true) return null;
+    return canWalkTrail(deinonychusTrailStance(deinonychus)) ? deinonychus : null;
+  }
+
   /** Him, as one of the companions a scene moves with the party. */
   asCarriedCompanion(cat: CatPlayer): CarriedCompanion {
     return {
@@ -507,7 +547,7 @@ export class DeinonychusSystem implements GameSystem {
     this.retreatMobs = mobs;
 
     this.speech.tick();
-    this.emotes.update(1 / FRAMES_PER_SECOND);
+    this.emotes.update(1 / WORLD_TICKS_PER_SECOND);
 
     if (!this.deinonychus) {
       // Also here, not only from `onLevelUp`: `setGodModeMinLevel` moves the
@@ -541,11 +581,26 @@ export class DeinonychusSystem implements GameSystem {
     // across the room. Nothing is lost — the collapse always ends in a recall,
     // and `runHome` re-latches within a couple of seconds if he really is stuck.
     const midAnimation = this.deinonychus.recallArrived || this.deinonychus.collapsing;
-    const stranded = this.deinonychus.needsRescue && !midAnimation;
+    // With the cat on another map of a split, a landing beside her would be
+    // searched on a map she is not on.
+    const stranded = this.deinonychus.needsRescue && !midAnimation && !cat.isAway;
     if (stranded && this.rescue(this.deinonychus, cat, gameMap, mobs, mobGrid)) return true;
+
+    this.walkTrail(this.deinonychus, ctx);
 
     if (this.deinonychus.despawnComplete) return this.finishDespawn(mobs, mobGrid);
     return false;
+  }
+
+  /** A step along the party's line, while he is on it and not running home. */
+  private walkTrail(deinonychus: Deinonychus, ctx: SystemContext): void {
+    const trailLink = this.trailLink;
+    const onTrail =
+      trailLink !== null && canWalkTrail(deinonychusTrailStance(deinonychus)) && !ctx.cat.isAway;
+    deinonychus.walksTrail = onTrail;
+    if (!onTrail) return;
+    this.trailMap = ctx.gameMap;
+    trailLink.step(deinonychus, ctx, ctx.roster.grid);
   }
 
   /**
@@ -629,7 +684,7 @@ export class DeinonychusSystem implements GameSystem {
   private pushRecoveryToast(framesSaved: number): void {
     const continuesShownTotal = this.toasts.isShowing(RECOVERY_TOAST_KEY);
     this.recoveryToastFrames = (continuesShownTotal ? this.recoveryToastFrames : 0) + framesSaved;
-    const secondsSaved = this.recoveryToastFrames / FRAMES_PER_SECOND;
+    const secondsSaved = this.recoveryToastFrames / WORLD_TICKS_PER_SECOND;
     this.toasts.post(
       `${this.words.opening} is recovering −${secondsSaved.toFixed(RECOVERY_TOAST_DECIMALS)}s`,
       RECOVERY_TOAST,
@@ -1032,7 +1087,7 @@ export class DeinonychusSystem implements GameSystem {
       maxHp: this.maxHp,
       xpFraction: this.petXpFraction(),
       cooldown: totalFrames > 0 ? Math.min(1, Math.max(0, waitFrames / totalFrames)) : 0,
-      cooldownSeconds: Math.ceil(waitFrames / FRAMES_PER_SECOND),
+      cooldownSeconds: Math.ceil(waitFrames / WORLD_TICKS_PER_SECOND),
       paintIcon: (ctx, rect) =>
         drawDeinonychusIcon(
           ctx,

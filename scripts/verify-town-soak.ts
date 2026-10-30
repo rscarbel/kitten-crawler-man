@@ -37,6 +37,7 @@
 import type { Scene } from '../src/core/Scene.js';
 import type { BuildingEntry } from '../src/map/buildingEntry.js';
 import { installBrowserShim, ShimEvent } from './browserShim.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 /**
  * A Retina display by default, as the game is played on: below a ratio of 2
@@ -85,8 +86,7 @@ const DEFAULT_TRIPS = 20;
 const CYCLES =
   cyclesArg === undefined ? DEFAULT_TRIPS : Number(cyclesArg.slice('--cycles='.length));
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
+const FRAME_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /** Frames a loading screen may stay up before the soak calls it hung. */
 const MAX_ARRIVAL_FRAMES = 3000;
 /** Frames of play after the arrival settles, before the first trip. */

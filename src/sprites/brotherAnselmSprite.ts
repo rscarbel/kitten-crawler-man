@@ -15,7 +15,6 @@ import type { CardinalView } from './facingView';
 import { prewarmFigureState } from './figure/figureFrameCache';
 import { carriedGripOf } from './art/human/carry';
 import { TILE_SCALE } from './art/human/figureScale';
-import { TICKS_PER_SECOND } from './art/human/timing';
 import { humanFigureWithRows } from './art/human/appearance';
 import {
   staffAmbleRow,
@@ -55,6 +54,7 @@ import {
   ANSELM_TILES_PER_WALK_CYCLE,
   ANSELM_WALK_FRAMES,
 } from './brotherAnselmTiming';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** The rows he plays that the crawler never does, in sheet order after the crawler's. */
 const ANSELM_OWN_ROW_NAMES = [
@@ -242,7 +242,7 @@ export const ANSELM_EYES: ViewedEyePlacement = {
 
 const MS_PER_SECOND = 1000;
 const ANSELM_DEATH_TICKS = Math.round(
-  (ANSELM_DEATH_DURATION_MS * TICKS_PER_SECOND) / MS_PER_SECOND,
+  (ANSELM_DEATH_DURATION_MS * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND,
 );
 
 /** The rows walking away from the Barracks desk needs, in every view: he stands, then follows. */

@@ -39,7 +39,7 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { mulberry32 } from '../src/sprites/person/rng.js';
 import { isRecord } from '../src/core/util/guards.js';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants.js';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants.js';
 import {
   BigRooster,
   CLUB_ATTACK_TYPE,
@@ -101,7 +101,6 @@ const MAX_STUCK_SECONDS_PER_MINUTE = 1.6;
 
 /** The longest a reload may take from anywhere in the room. */
 const RELOAD_LOOP_MAX_SECONDS = 6;
-const FRAMES_PER_SECOND = 60;
 /** How many reload limits a reload sample is run for before it is called a failure. */
 const RELOAD_RUN_HEADROOM = 2;
 /** Reload start points: every this many tiles across the room's open floor. */
@@ -208,7 +207,7 @@ for (const side of SIDES) {
       let frames = 0;
       let seeking = false;
       let elapsed = 0;
-      const limit = RELOAD_LOOP_MAX_SECONDS * FRAMES_PER_SECOND * RELOAD_RUN_HEADROOM;
+      const limit = RELOAD_LOOP_MAX_SECONDS * WORLD_TICKS_PER_SECOND * RELOAD_RUN_HEADROOM;
       while (!bigRooster.heldDumbbell && elapsed < limit) {
         elapsed++;
         gym.update(env.frame);
@@ -220,13 +219,13 @@ for (const side of SIDES) {
       samples++;
       worstFrames = Math.max(worstFrames, frames);
       check(
-        bigRooster.heldDumbbell && frames <= RELOAD_LOOP_MAX_SECONDS * FRAMES_PER_SECOND,
-        `door ${side}: from ${x},${y} he took ${(frames / FRAMES_PER_SECOND).toFixed(1)}s to reach a rack`,
+        bigRooster.heldDumbbell && frames <= RELOAD_LOOP_MAX_SECONDS * WORLD_TICKS_PER_SECOND,
+        `door ${side}: from ${x},${y} he took ${(frames / WORLD_TICKS_PER_SECOND).toFixed(1)}s to reach a rack`,
       );
     }
   }
   note(
-    `door ${side}: ${samples} starts, slowest reload ${(worstFrames / FRAMES_PER_SECOND).toFixed(2)}s`,
+    `door ${side}: ${samples} starts, slowest reload ${(worstFrames / WORLD_TICKS_PER_SECOND).toFixed(2)}s`,
   );
 }
 
@@ -484,7 +483,7 @@ console.log('5. console, boombox, chalk, benches');
       human.facingX = -towardX;
       human.facingY = -towardY;
       human.triggerAttack();
-      for (let frame = 0; frame < FRAMES_PER_SECOND; frame++) {
+      for (let frame = 0; frame < WORLD_TICKS_PER_SECOND; frame++) {
         human.updateAttack();
         gym.update(env.frame);
       }
@@ -612,7 +611,7 @@ for (const side of SIDES) {
 
 /** How long each close and far crawler is watched, in seconds. */
 const MATCHUP_SECONDS = 10;
-const MATCHUP_FRAMES = MATCHUP_SECONDS * FRAMES_PER_SECOND;
+const MATCHUP_FRAMES = MATCHUP_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * The close crawler's distance from him, in tiles: inside club reach, and just
  * outside where the slam answers, so the club is the blow that reach invites.
@@ -716,7 +715,7 @@ for (const side of SIDES) {
   let threwAt: number | null = null;
   let reloadedAt: number | null = null;
   let threwFromBand = false;
-  const limit = THROW_THEN_RELOAD_MAX_SECONDS * FRAMES_PER_SECOND;
+  const limit = THROW_THEN_RELOAD_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
   for (let frame = 0; frame < limit && reloadedAt === null; frame++) {
     gym.update(env.frame);
     bigRooster.updateAI([crawler]);
@@ -740,8 +739,8 @@ for (const side of SIDES) {
   );
   if (threwAt !== null && reloadedAt !== null) {
     note(
-      `door ${side}: threw at ${(threwAt / FRAMES_PER_SECOND).toFixed(2)}s, ` +
-        `reloaded at ${(reloadedAt / FRAMES_PER_SECOND).toFixed(2)}s`,
+      `door ${side}: threw at ${(threwAt / WORLD_TICKS_PER_SECOND).toFixed(2)}s, ` +
+        `reloaded at ${(reloadedAt / WORLD_TICKS_PER_SECOND).toFixed(2)}s`,
     );
   }
 }

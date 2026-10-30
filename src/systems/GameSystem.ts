@@ -58,11 +58,11 @@ export interface GameSystem {
  * stands on a plate, who is lit, who swings. `human` and `cat` on their own
  * are the roster, for rewards and the save.
  */
-export function presentCrawlers(party: {
-  readonly human: HumanPlayer;
-  readonly cat: CatPlayer;
-}): Array<HumanPlayer | CatPlayer> {
-  const present: Array<HumanPlayer | CatPlayer> = [];
+export function presentCrawlers<
+  Human extends { readonly isAway: boolean } = HumanPlayer,
+  Cat extends { readonly isAway: boolean } = CatPlayer,
+>(party: { readonly human: Human; readonly cat: Cat }): Array<Human | Cat> {
+  const present: Array<Human | Cat> = [];
   if (!party.human.isAway) present.push(party.human);
   if (!party.cat.isAway) present.push(party.cat);
   return present;

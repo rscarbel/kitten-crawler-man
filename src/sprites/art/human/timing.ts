@@ -3,11 +3,7 @@
  * hit ticks from these, so they live in one module every consumer imports.
  */
 
-/**
- * The game's fixed update rate, which every row hold below is counted in:
- * `Scene` ticks the world sixty times a second whatever the display runs at.
- */
-export const TICKS_PER_SECOND = 60;
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 /**
  * The standing breath. A resting adult breathes every three to four seconds;
@@ -68,7 +64,7 @@ export const IDLE_BREATH_TICKS = heldLength(IDLE_FRAME_TICKS);
 
 /** How far into its current breath a free-running clock `seconds` in is, in ticks. */
 function ticksIntoBreath(seconds: number): number {
-  const ticks = seconds * TICKS_PER_SECOND;
+  const ticks = seconds * WORLD_TICKS_PER_SECOND;
   return ((ticks % IDLE_BREATH_TICKS) + IDLE_BREATH_TICKS) % IDLE_BREATH_TICKS;
 }
 

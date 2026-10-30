@@ -66,6 +66,7 @@ import {
   drawPulseTelegraph,
   drawRaiseSigil,
 } from '../sprites/necromancerTelegraphs';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 // ── Body ─────────────────────────────────────────────────────────────────────
 
@@ -188,8 +189,7 @@ const SIEGE_RAISE_KINDS: readonly NecromancerTroopKind[] = [
 export const NECRO_ESCORT_CAP = NECRO_SIEGE_TROOPS_PER_RAISE + NECRO_SIEGE_BULLS_PER_RAISE;
 /** How long he waits after every body from his last raise is dead before raising again. */
 const NECRO_RAISE_REARM_SECONDS = 5;
-const FRAMES_PER_SECOND = 60;
-export const NECRO_RAISE_REARM_FRAMES = NECRO_RAISE_REARM_SECONDS * FRAMES_PER_SECOND;
+export const NECRO_RAISE_REARM_FRAMES = NECRO_RAISE_REARM_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Corpses within this many tiles rise first. */
 const NECRO_CORPSE_SEARCH_TILES = 10;
 /** Graves are ruins tiles within this many tiles of him. */

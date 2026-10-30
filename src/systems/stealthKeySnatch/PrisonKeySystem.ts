@@ -21,7 +21,7 @@
 
 import type { Camera } from '../../core/rendering/camera';
 import type { AudioManager } from '../../audio/AudioManager';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { drawAreaHighlight } from '../../ui/AreaHighlight';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -62,7 +62,6 @@ import {
   type StealthKeySnatchVisit,
 } from './stealthKeySnatchVisit';
 
-const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const TILE_CENTRE = 0.5;
 /** Where in its tile the pedestal's base stands, so its shadow sits on the tile rather than the wall above. */
@@ -72,7 +71,7 @@ const LABEL_ABOVE_KEY_TILES = 1.35;
 /** Chebyshev tiles from the pedestal within which a crawler walking up lifts the key. */
 const REACH_TILES = 1;
 /** How long the held-key card glows after the key lands in it. */
-const LANDING_GLOW_FRAMES = FRAMES_PER_SECOND;
+const LANDING_GLOW_FRAMES = WORLD_TICKS_PER_SECOND;
 /** The key's pool of light while it is on the pedestal, in tiles, at the low and high of its pulse. */
 const KEY_LIGHT_RADIUS_TILES = { min: 3.2, max: 4 } as const;
 /** The empty pedestal's dim lamp, in tiles. */
@@ -198,7 +197,7 @@ export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationMo
   }
 
   private get seconds(): number {
-    return this.ticks / FRAMES_PER_SECOND;
+    return this.ticks / WORLD_TICKS_PER_SECOND;
   }
 
   /** The section the tile lies in, or null between sections. */

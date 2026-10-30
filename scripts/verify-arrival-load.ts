@@ -32,6 +32,7 @@
 import { fileURLToPath } from 'node:url';
 import { runUnitsInChildren } from './childUnits.js';
 import type { GameplayScene } from '../src/scenes/GameplayScene.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 const ENVIRONMENTS = [
   'tutorial',
@@ -134,8 +135,7 @@ const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js')
 useDevPlayerIdentity();
 
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
+const FRAME_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /** Frames of play measured after the loading screen closes. */
 const PLAY_FRAMES = 120;
 

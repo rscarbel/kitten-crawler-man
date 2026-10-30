@@ -144,7 +144,7 @@ export function workOrderNotice(state: WorkOrderNoticeState): Notice {
 const MISSING_CAT_DESCRIPTIONS = {
   taloncrest_inn_cat: 'Fat ginger cat. Sleeps on the end of the bar. Never misses supper.',
   taloncrest_old_lady_cottage_cat:
-    'Tiny and grey, with four white socks. Went out through a high window that nobody could climb to.',
+    'Tiny and grey, with four white socks. Went out through the back window, and nobody walked through the garden to reach it.',
   taloncrest_apothecary_cat:
     'Lean silver tabby, green eyes. Smells faintly of mint. The night she went, somebody left a dish of fish in our back room.',
   taloncrest_flagon_tavern_cat:

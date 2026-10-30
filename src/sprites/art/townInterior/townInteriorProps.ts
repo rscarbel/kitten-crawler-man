@@ -55,6 +55,7 @@ import {
   type RGB,
   type TownRampId,
 } from '../town/townPalette';
+import type { ToppleHeading } from '../../../map/interiorMechanisms';
 import { paintPlankBoard, paintStoneCourses, paintGlazing } from '../town/townMaterials';
 import { mulberry32 } from '../../person/rng';
 import type { AnchorKind } from '../../../systems/InteriorOccupantSystem';
@@ -224,9 +225,9 @@ import {
   LODGE_STOVE_FLAMES,
   paintLodgeKitPegs,
   paintKesslerFootlocker,
-  paintCellarTrapdoor,
   LODGE_BUNK_VARIANTS,
 } from './rooms/blackwoodLodge';
+import { paintCellarTrapdoor } from './rooms/cellarHatch';
 import {
   paintWheelBuildStand,
   paintTimberRack,
@@ -317,6 +318,8 @@ import {
   paintLarderDoor,
   paintLooseKeyRing,
   paintLooseShelfBoard,
+  paintFallenShelfBoard,
+  paintShelfBoardToppling,
   paintPortcullisChain,
   paintWardStone,
 } from './rooms/towerWorks';
@@ -328,6 +331,7 @@ import {
 } from '../../../core/rendering/canvasSurface';
 import { RecentSurfaceCache } from '../../../core/rendering/recentSurfaceCache';
 import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
+import { NOMINAL_RENDER_FRAMES_PER_SECOND } from '../../../core/rendering/renderFrameClock';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -477,7 +481,6 @@ export type TownInteriorSearchId = 'chest' | 'coat_hook' | 'drawer_unit' | 'open
 export type TownInteriorUseId =
   | 'shop_bell'
   | 'offering_bowl'
-  | 'bench_seat'
   | 'hearth'
   | 'grindstone'
   | 'wheelwright_stand'
@@ -499,7 +502,37 @@ export type TownInteriorInteraction =
   | ({ readonly kind: 'examine'; readonly id: TownInteriorExamineId } & PerformedBy)
   | ({ readonly kind: 'search'; readonly id: TownInteriorSearchId } & PerformedBy)
   | ({ readonly kind: 'use'; readonly id: TownInteriorUseId } & PerformedBy)
-  | { readonly kind: 'knock_off'; readonly performer: InteractionPerformer };
+  | {
+      readonly kind: 'knock_off';
+      readonly performer: InteractionPerformer;
+      readonly motion: KnockOffMotion;
+    };
+
+/**
+ * How a knocked prop goes down: lobbed off its ledge in a spinning arc, as
+ * its own art turned, or toppled over where it stands by a painter that draws
+ * it at any point of its fall.
+ */
+export type KnockOffMotion =
+  { readonly kind: 'lobbed' } | { readonly kind: 'toppled'; readonly paint: ToppledPropPainter };
+
+/**
+ * Paints a toppling prop placed on `tile` in `variant`, falling along its
+ * placement's `toward`, `fallen` (0 standing, 1 lying flat) of the way over,
+ * in world pixels offset by the camera.
+ */
+export type ToppledPropPainter = (
+  ctx: Ctx,
+  tile: { readonly x: number; readonly y: number },
+  variant: number,
+  toward: ToppleHeading,
+  fallen: number,
+  camX: number,
+  camY: number,
+  tileSize: number,
+) => void;
+
+const LOBBED: KnockOffMotion = { kind: 'lobbed' };
 
 /** The interactions answered with a line in the room's conversation, rather than by moving the prop. */
 export type TownInteriorDialogInteraction = Exclude<TownInteriorInteraction, { kind: 'knock_off' }>;
@@ -2569,7 +2602,8 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   portcullis_chain: 1.9,
   ward_stone: 0.9,
   knockable_key_ring: 1.0,
-  knockable_shelf_board: 0.8,
+  knockable_shelf_board: 3.2,
+  fallen_shelf_board: 3.8,
   ritual_circle: 0,
   binding_pillar: 1.0,
 };
@@ -4204,9 +4238,8 @@ export const TOWN_INTERIOR_PROPS = {
   stool: def('stool', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintStool, {
     destructible: DESTRUCTIBLE_STOOL,
   }),
-  bench_seat: def('bench_seat', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintBenchSeat, {
-    interaction: { kind: 'use', id: 'bench_seat' },
-  }),
+  // Plain seating takes no Space press, so a fight beside a bench always gets the swing.
+  bench_seat: def('bench_seat', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintBenchSeat),
   shelving_unit: def(
     'shelving_unit',
     ONE_BY_ONE,
@@ -5789,7 +5822,7 @@ export const TOWN_INTERIOR_PROPS = {
     paintLooseJar,
     {
       destructible: DESTRUCTIBLE_JARS,
-      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM },
+      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM, motion: LOBBED },
     },
   ),
   /** A ring of keys on a shelf top, a cat's paw away from the floor; a variant per `LOOSE_THING_VARIANT`. */
@@ -5802,10 +5835,10 @@ export const TOWN_INTERIOR_PROPS = {
     2,
     paintLooseKeyRing,
     {
-      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM },
+      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM, motion: LOBBED },
     },
   ),
-  /** A loose shelf board on a shelf top; knocked over, it lies across a hole. A variant per `LOOSE_THING_VARIANT`. */
+  /** A tall loose shelf board leaning on the wall; knocked over, it falls across a hole. A variant per `LOOSE_THING_VARIANT`. */
   knockable_shelf_board: def(
     'knockable_shelf_board',
     ONE_BY_ONE,
@@ -5815,8 +5848,26 @@ export const TOWN_INTERIOR_PROPS = {
     2,
     paintLooseShelfBoard,
     {
-      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM },
+      interaction: {
+        kind: 'knock_off',
+        performer: CLIMBERS_PERFORM,
+        motion: { kind: 'toppled', paint: paintShelfBoardToppling },
+      },
     },
+  ),
+  /**
+   * The shelf board where it fell, its foot on this tile and its length lying
+   * north across the hole: flat, so it draws with the floor. A variant per
+   * `LOOSE_THING_VARIANT`, for where its foot rests.
+   */
+  fallen_shelf_board: def(
+    'fallen_shelf_board',
+    ONE_BY_ONE,
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    2,
+    paintFallenShelfBoard,
   ),
   /** Set into a side wall, the floor before it open; a variant per `WALL_FITTING_VARIANT`. */
   dumbwaiter_hatch: def(
@@ -5959,6 +6010,21 @@ export type KnockableTownInteriorPropId = {
     : never;
 }[TownInteriorPropId];
 
+/** Knockable props a cat bats off a ledge in an arc. */
+export type LobbedKnockableTownInteriorPropId = Exclude<
+  KnockableTownInteriorPropId,
+  ToppledKnockableTownInteriorPropId
+>;
+
+/** Knockable props a cat pushes over where they stand. */
+export type ToppledKnockableTownInteriorPropId = {
+  [K in TownInteriorPropId]: TownInteriorPropTable[K] extends {
+    readonly interaction: { readonly motion: { readonly kind: 'toppled' } };
+  }
+    ? K
+    : never;
+}[TownInteriorPropId];
+
 export function isTownInteriorPropId(value: string): value is TownInteriorPropId {
   return Object.prototype.hasOwnProperty.call(TOWN_INTERIOR_PROPS, value);
 }
@@ -5983,7 +6049,6 @@ const PROP_FRAME_BUDGET_MEGABYTES = 8;
 const PROP_FRAME_PROTECTED_FRAMES = 1;
 
 const PROP_FRAME_IDLE_RELEASE_SECONDS = 30;
-const PROP_FRAME_IDLE_FRAMES_PER_SECOND = 60;
 /**
  * Idle frames a baked prop frame is kept undrawn. The idle clock stands still
  * while the party is indoors, so this is half a minute back outside: a door
@@ -5992,7 +6057,7 @@ const PROP_FRAME_IDLE_FRAMES_PER_SECOND = 60;
  * full 8 MB at Briar Hollow, 35 seconds' wait later, without it.
  */
 const PROP_FRAME_IDLE_RELEASE_FRAMES =
-  PROP_FRAME_IDLE_RELEASE_SECONDS * PROP_FRAME_IDLE_FRAMES_PER_SECOND;
+  PROP_FRAME_IDLE_RELEASE_SECONDS * NOMINAL_RENDER_FRAMES_PER_SECOND;
 
 const frameCache = new RecentSurfaceCache<CachedPropFrame>(
   PROP_FRAME_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE,

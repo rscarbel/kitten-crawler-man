@@ -17,7 +17,7 @@
  */
 
 import type { Camera } from '../../core/rendering/camera';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -122,12 +122,11 @@ const WORKING_REACH_TILES = HARVEST_REACH_TILES;
 
 /** How long a chop or mine counter stays up after the last gain, before the plain prompt returns. */
 const RECENT_HARVEST_GRACE_SECONDS = 4;
-const TICKS_PER_SECOND = 60;
-const RECENT_HARVEST_GRACE_TICKS = RECENT_HARVEST_GRACE_SECONDS * TICKS_PER_SECOND;
+const RECENT_HARVEST_GRACE_TICKS = RECENT_HARVEST_GRACE_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** How often the nearest fence segment is re-picked, so walking near a second one doesn't flicker the highlight. */
 const FENCE_REPICK_INTERVAL_SECONDS = 1;
-const FENCE_REPICK_INTERVAL_TICKS = FENCE_REPICK_INTERVAL_SECONDS * TICKS_PER_SECOND;
+const FENCE_REPICK_INTERVAL_TICKS = FENCE_REPICK_INTERVAL_SECONDS * WORLD_TICKS_PER_SECOND;
 
 const TILE_CENTRE = 0.5;
 

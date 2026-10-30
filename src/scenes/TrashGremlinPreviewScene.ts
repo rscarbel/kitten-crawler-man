@@ -14,7 +14,7 @@ import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { TRASH_GREMLIN_FIGURE } from '../sprites/art/trashGremlinFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { drawFigureCached } from '../sprites/figure/figureFrameCache';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   SUMMON_WINDUP_FRAMES,
   TRASH_GREMLIN_SPEED,
@@ -51,10 +51,9 @@ interface RowSpec {
   readonly gameFrames: number;
 }
 
-const GAME_FRAMES_PER_SECOND = 60;
 /** The idle runs on the wrapper's own clock. */
 const IDLE_GAME_FRAMES = Math.round(
-  (TRASH_GREMLIN_IDLE_FRAMES / TRASH_GREMLIN_IDLE_FPS) * GAME_FRAMES_PER_SECOND,
+  (TRASH_GREMLIN_IDLE_FRAMES / TRASH_GREMLIN_IDLE_FPS) * WORLD_TICKS_PER_SECOND,
 );
 /**
  * One scurry cycle at its normal speed, the walk phase paced by the ground the

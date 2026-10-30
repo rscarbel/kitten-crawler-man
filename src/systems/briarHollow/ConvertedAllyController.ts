@@ -16,7 +16,7 @@
  * to kill.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { Player } from '../../Player';
 import type { Mob } from '../../creatures/Mob';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';
@@ -24,7 +24,6 @@ import { isUndeadConvertible } from '../../creatures/convertibleMobs';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { AudioManager } from '../../audio/AudioManager';
 import { VILLAGE_CUES } from '../../audio/villageSoundCues';
-import { UPDATES_PER_SECOND } from './structureRules';
 import { drawConvertFlash, drawCrumble, drawPartyMarker } from '../../sprites/art/siegeEffectsArt';
 
 /** A converted ally picks fights with hostiles this close. */
@@ -33,7 +32,8 @@ export const CONVERTED_AGGRO_TILES = 8;
 export const CONVERTED_RALLY_TILES = 4;
 /** How long a conversion lasts before the ally crumbles. */
 const CONVERTED_ALLY_LIFETIME_SECONDS = 120;
-export const CONVERTED_ALLY_LIFETIME_FRAMES = CONVERTED_ALLY_LIFETIME_SECONDS * UPDATES_PER_SECOND;
+export const CONVERTED_ALLY_LIFETIME_FRAMES =
+  CONVERTED_ALLY_LIFETIME_SECONDS * WORLD_TICKS_PER_SECOND;
 
 const FLASH_FRAMES = 28;
 const CRUMBLE_FRAMES = 40;

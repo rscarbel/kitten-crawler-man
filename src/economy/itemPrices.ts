@@ -142,6 +142,7 @@ export const ITEM_PRICES = {
   sequin_tailcoat:          gearPrice('sequin_tailcoat', 1),
   gilded_monocle:           gearPrice('gilded_monocle', 1),
   grinning_mask:            gearPrice('grinning_mask', 1),
+  hushed_bell:              gearPrice('hushed_bell', 1),
   nimble_bangle:            gearPrice('nimble_bangle', 1),
   lucky_penny:              gearPrice('lucky_penny', 1),
   fang_charm:               gearPrice('fang_charm', 1),

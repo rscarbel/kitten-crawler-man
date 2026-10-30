@@ -15,7 +15,7 @@
  */
 
 import { EventBus } from '../../src/core/EventBus.js';
-import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants.js';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants.js';
 import { referenceStats } from '../../src/core/party/referenceCrawler.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
@@ -38,11 +38,10 @@ import { gymRoom } from './gym.js';
 import { harnessHit } from '../crawlerHitHarness';
 import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 /** A fight that has not ended by then is reported as a stalemate, not run forever. */
 const MAX_FIGHT_SECONDS = 360;
-const MAX_FIGHT_FRAMES = MAX_FIGHT_SECONDS * FRAMES_PER_SECOND;
+const MAX_FIGHT_FRAMES = MAX_FIGHT_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** His level on the floor's own spawn rule's floor, the weakest Big Rooster a crawler meets. */
 const SIM_BIG_ROOSTER_LEVEL = 3;
@@ -64,7 +63,7 @@ const MELEE_HOLD_SHARE = 0.8;
 const REPATH_FRAMES = 15;
 
 /** A window this long in which he moves less than {@link STUCK_TRAVEL_PX} is a stuck second. */
-const STUCK_WINDOW_FRAMES = FRAMES_PER_SECOND;
+const STUCK_WINDOW_FRAMES = WORLD_TICKS_PER_SECOND;
 const STUCK_TRAVEL_TILES = 0.5;
 const STUCK_TRAVEL_PX = TILE_SIZE * STUCK_TRAVEL_TILES;
 const TRAVEL_STATES: ReadonlySet<BigRoosterState> = new Set(['seeking_dumbbell', 'pursuing']);
@@ -251,7 +250,7 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
   let reloadStartedAt: number | null = null;
   let wasHolding = bigRooster.heldDumbbell;
 
-  for (let frameIndex = 0; frameIndex < MAX_FIGHT_FRAMES + FRAMES_PER_SECOND; frameIndex++) {
+  for (let frameIndex = 0; frameIndex < MAX_FIGHT_FRAMES + WORLD_TICKS_PER_SECOND; frameIndex++) {
     const crawler = centreOf(human);
     const boss = centreOf(bigRooster);
     let move = { dx: 0, dy: 0 };
@@ -341,7 +340,7 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
       reloadStartedAt = frameIndex;
     }
     if (bigRooster.heldDumbbell && !wasHolding && reloadStartedAt !== null) {
-      reloads.push((frameIndex - reloadStartedAt) / FRAMES_PER_SECOND);
+      reloads.push((frameIndex - reloadStartedAt) / WORLD_TICKS_PER_SECOND);
       reloadStartedAt = null;
     }
     wasHolding = bigRooster.heldDumbbell;
@@ -368,9 +367,9 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
   }
 
   return {
-    fightSeconds: fightFrames / FRAMES_PER_SECOND,
+    fightSeconds: fightFrames / WORLD_TICKS_PER_SECOND,
     killed: !bigRooster.isAlive,
-    stuckSeconds: stuckFrames / FRAMES_PER_SECOND,
+    stuckSeconds: stuckFrames / WORLD_TICKS_PER_SECOND,
     maxReloadSeconds: reloads.length === 0 ? 0 : Math.max(...reloads),
     roomHazardHits,
   };

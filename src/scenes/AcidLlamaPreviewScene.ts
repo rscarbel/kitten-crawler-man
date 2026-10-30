@@ -29,6 +29,7 @@ import { drawAcidBolt, drawAcidBurst, drawAcidPuddle } from '../sprites/acidGlob
 import { ACID_LLAMA_FIGURE } from '../sprites/art/acidLlamaFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawAcidLlamaSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -103,7 +104,6 @@ const OVERHANG_TILES = 3.5;
 /** Where a cell's llama stands, as a fraction of the cell's height. */
 const GROUND_FRACTION = 0.9;
 const CELL_TEXT_INSET = 4;
-const FRAMES_PER_SECOND = 60;
 
 /** Frames the projectile strip's burst and puddle demos run before repeating. */
 const BURST_DEMO_FRAMES = 26;
@@ -146,7 +146,7 @@ export class AcidLlamaPreviewScene extends PreviewScene {
 
   /** Which frame of a row is showing right now, at the chosen playback speed. */
   private frameOf(row: RowSpec): number {
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(row.probeState);
   }
 

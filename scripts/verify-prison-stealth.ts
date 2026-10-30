@@ -3,8 +3,9 @@
  *
  * Patrols and spotlights are periodic, so `prisonStealthSolver.ts` can search
  * every (tile, moment of the cycle) with the game's own detection functions
- * and the crawlers' real walking speed, the follower one tile behind on the
- * leader's trail. For every layout × difficulty this proves:
+ * and the crawlers' real walking speed, the party's line in single file on
+ * the leader's trail, each follower one tile behind the body ahead. For every
+ * layout × difficulty this proves:
  *
  * - **Solvable**: a route to the key and a route from the key back to the exit
  *   on which no light sees either crawler on any frame — zero suspicion grace,
@@ -20,7 +21,13 @@
  * - **The tower's gatehouse**, which reuses the prison's guards on its own
  *   floor: from the cellar stair's landing to the stair up unseen at every
  *   difficulty, the shortest walk caught from normal up, and the same noise
- *   answers.
+ *   answers. The search is shown able to say no: with the landing's guard
+ *   posted for good over the stair up's landing, it must find no route. Its
+ *   guards catch at a glance: the human in full view within
+ *   `CAUGHT_AFTER_SEEN_SECONDS`, a companion in a look raising only an orange
+ *   alert, and on orange any sight of the human being the catch. The route
+ *   found, replayed frame by frame with his hire and his cow in single file
+ *   on his trail, keeps both out of every look.
  *
  *   npx tsx scripts/verify-prison-stealth.ts [--fault=<name>]
  *
@@ -28,7 +35,8 @@
  * turn it red.
  */
 
-import { TILE_SIZE } from '../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants.js';
+import { PARTY_TRAIL_SPACING_TILES, type PartyLinePlace } from '../src/systems/partyTrail.js';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import {
   PRISON_LAYOUTS,
@@ -46,6 +54,7 @@ import {
 import {
   guardCone,
   compilePrisonWithTuning,
+  compileStealthFloor,
   guardPoseAt,
   tileCentrePx,
   type CompiledGuard,
@@ -56,18 +65,28 @@ import {
   compileGatehouseWatch,
   gatehouseCellarLanding,
   gatehouseStairUpLanding,
+  gatehouseStealthFloor,
   GATEHOUSE_TUNING,
+  type GatehouseGuardId,
 } from '../src/systems/tower/gatehouseWatch.js';
+import type { TowerConditions } from '../src/map/town/interiors/townCenterTower.js';
 import {
   everyTowerConditions,
   towerConditionsKey,
+  towerStoreyPlan,
   towerStoreyStateKey,
 } from '../src/map/town/interiors/townCenterTower.js';
 import { MISSING_CATS_PHASES } from '../src/core/quests/missingCatsProgress.js';
 import {
   bodyTouchesGuard,
+  CAUGHT_AFTER_SEEN_FRAMES,
+  CAUGHT_AFTER_SEEN_SECONDS,
   lightCoversPoint,
+  stepSuspicion,
+  SUSPICION_CAPTURE,
+  SUSPICION_ORANGE_ALERT,
   type PrisonPoint,
+  type Sighting,
 } from '../src/systems/stealthKeySnatch/detection.js';
 import {
   investigationPoseAt,
@@ -87,8 +106,10 @@ import {
   sectionBlocker,
   shortestWalk,
   solve,
+  solverLine,
   startState,
   walkPathWithSuspicion,
+  walkRouteWithSuspicion,
 } from './prisonStealthSolver.js';
 
 const FAULTS = [
@@ -104,6 +125,10 @@ const FAULTS = [
   'blast-unseen',
   /** The tile-in-front catch ignores walls, so a guard catches round a corner. */
   'touch-round-corners',
+  /** The gatehouse's guards fill their suspicion slowly, as the prison's do, instead of catching at a glance. */
+  'slow-glance',
+  /** The companions crossing the gatehouse straggle far behind the human instead of keeping to his trail. */
+  'companion-straggles',
 ] as const;
 type Fault = (typeof FAULTS)[number];
 
@@ -129,6 +154,19 @@ function parseArgs(): Fault | null {
 const fault = parseArgs();
 
 const DIFFICULTIES: ReadonlyArray<Difficulty> = ['easy', 'normal', 'hard'];
+
+/** The prison admits the crawlers alone: the one not steered walks the leader's trail. */
+const PRISON_LINE = solverLine(1);
+/**
+ * The human's line across the gatehouse in his chapter of the split: his
+ * hire, and his attack cow, who follows him wherever he is. Belle and her
+ * pet are on her side of the tower.
+ */
+const GATEHOUSE_LINE_PLACES = [
+  'hire',
+  'attack_cow',
+] as const satisfies ReadonlyArray<PartyLinePlace>;
+const GATEHOUSE_LINE = solverLine(GATEHOUSE_LINE_PLACES.length);
 /** How many escaping start frames a failure lists. */
 const REPORTED_ESCAPES = 8;
 /** The straight walk is set off at every frame of the cycle, so no escape window is narrow enough to slip between tries. */
@@ -223,12 +261,13 @@ function checkStealth(compiled: CompiledPrison, label: string): void {
   const toKey = solve(
     compiled,
     lit,
-    [startState(compiled, lit, parsed.entry)],
+    [startState(compiled, lit, parsed.entry, PRISON_LINE)],
     [parsed.pedestalFront],
+    PRISON_LINE,
   );
   check(toKey.found, `${label}: no unseen route from the entry to the key`);
   if (toKey.found) {
-    const back = solve(compiled, lit, toKey.goalStates, parsed.exits);
+    const back = solve(compiled, lit, toKey.goalStates, parsed.exits, PRISON_LINE);
     check(back.found, `${label}: no unseen route from the key back to the exit`);
     console.log(
       `    ${label}: unseen to the key in ${toKey.frames} frames, back out in ${back.frames} frames`,
@@ -435,6 +474,7 @@ const GATEHOUSE_STRAIGHT_CAUGHT_FROM: ReadonlyArray<Difficulty> = ['normal', 'ha
 
 function gatehouseTuningFor(difficulty: Difficulty): PrisonDifficultyTuning {
   const tuning = GATEHOUSE_TUNING[difficulty];
+  if (fault === 'slow-glance') return { ...tuning, suspicion: PRISON_TUNING[difficulty].suspicion };
   if (fault !== 'floodlit') return tuning;
   return {
     ...tuning,
@@ -446,6 +486,19 @@ function gatehouseTuningFor(difficulty: Difficulty): PrisonDifficultyTuning {
   };
 }
 
+/** How far each straggling companion of the `companion-straggles` fault walks behind the one ahead, in tiles of the human's trail. */
+const STRAGGLING_COMPANION_TILES = 4;
+
+/**
+ * How far behind the human, along his trail, each body of his line crosses
+ * the gatehouse: each one link behind the body ahead of it.
+ */
+function gatehouseLineTrailTiles(): number[] {
+  const link =
+    fault === 'companion-straggles' ? STRAGGLING_COMPANION_TILES : PARTY_TRAIL_SPACING_TILES;
+  return GATEHOUSE_LINE_PLACES.map((_, index) => (index + 1) * link);
+}
+
 function checkGatehouse(
   compiled: CompiledStealth,
   start: PrisonTile,
@@ -454,9 +507,26 @@ function checkGatehouse(
 ): void {
   const timeline = buildTimeline(compiled);
   const lit = buildLitTables(timeline);
-  const across = solve(compiled, lit, [startState(compiled, lit, start)], goals);
+  const across = solve(
+    compiled,
+    lit,
+    [startState(compiled, lit, start, GATEHOUSE_LINE)],
+    goals,
+    GATEHOUSE_LINE,
+  );
   check(across.found, `${label}: no unseen route from the cellar stair to the stair up`);
   if (across.found) console.log(`    ${label}: unseen across in ${across.frames} frames`);
+  if (across.found) {
+    const withCompanions = walkRouteWithSuspicion(
+      timeline,
+      across.route,
+      gatehouseLineTrailTiles(),
+    );
+    check(
+      !withCompanions.caught && withCompanions.companionSeenFrame === null,
+      `${label}: the unseen route, walked with his line in single file on his trail, keeps it out of every look (${withCompanions.caught ? `caught by ${withCompanions.by ?? 'a guard'} on frame ${withCompanions.frame}` : 'uncaught'}, a companion first seen on frame ${withCompanions.companionSeenFrame ?? 'none'})`,
+    );
+  }
   if (!GATEHOUSE_STRAIGHT_CAUGHT_FROM.includes(compiled.difficulty)) return;
   const straight = goals.length === 0 ? null : shortestWalk(compiled, start, goals[0]);
   check(straight !== null, `${label}: the stair up cannot be walked to at all`);
@@ -470,6 +540,120 @@ function checkGatehouse(
     `${label}: walking straight across escapes capture when setting off at frame(s) ${escapes.slice(0, REPORTED_ESCAPES).join(', ')}`,
   );
 }
+
+/** The guard the blocked-gatehouse control posts over the stair up for good. */
+const GATEHOUSE_BLOCKING_GUARD: GatehouseGuardId = 'gatehouse-landing';
+/** Where it is posted: the tile north of the stair up, looking south over the stair and its landing. */
+const GATEHOUSE_BLOCKING_POINT = 'blocking_post';
+const ONE_ROW_NORTH = 1;
+const GATEHOUSE_BLOCKING_TILE = gatehouseBlockingTile();
+/** Its hold, which with the loop's padding keeps it facing south for the whole cycle. */
+const GATEHOUSE_BLOCKING_HOLD_FRAMES = 60;
+
+/** The tile row just north of the stair up's north-west tile, read from the gatehouse's own plan. */
+function gatehouseBlockingTile(): PrisonTile {
+  const { stairUp } = towerStoreyPlan('gatehouse');
+  if (stairUp === null) throw new Error('the gatehouse has no stair up to post a guard over');
+  return { x: stairUp.x, y: stairUp.y - ONE_ROW_NORTH };
+}
+
+/**
+ * The gatehouse with its landing guard posted for good where it sees the
+ * whole stair-up landing. No route may survive that: a search that still
+ * finds one is not reading the guards at all.
+ */
+function checkGatehouseBlockable(
+  conditions: TowerConditions,
+  difficulty: Difficulty,
+  start: PrisonTile,
+  goals: ReadonlyArray<PrisonTile>,
+  label: string,
+): void {
+  const floor = gatehouseStealthFloor(conditions);
+  const posted = floor.layout.guards.map((guard) =>
+    guard.id === GATEHOUSE_BLOCKING_GUARD
+      ? { ...guard, script: `${GATEHOUSE_BLOCKING_POINT} fS p${GATEHOUSE_BLOCKING_HOLD_FRAMES}` }
+      : guard,
+  );
+  check(
+    posted.some((guard) => guard.id === GATEHOUSE_BLOCKING_GUARD),
+    `${label}: the gatehouse has no ${GATEHOUSE_BLOCKING_GUARD} guard to post`,
+  );
+  const waypoints = new Map(floor.waypoints);
+  waypoints.set(GATEHOUSE_BLOCKING_POINT, GATEHOUSE_BLOCKING_TILE);
+  const blocked = compileStealthFloor(
+    { ...floor, layout: { ...floor.layout, guards: posted }, waypoints },
+    difficulty,
+    gatehouseTuningFor(difficulty),
+    'eyes',
+  );
+  const lit = buildLitTables(buildTimeline(blocked));
+  const across = solve(
+    blocked,
+    lit,
+    [startState(blocked, lit, start, GATEHOUSE_LINE)],
+    goals,
+    GATEHOUSE_LINE,
+  );
+  check(
+    !across.found,
+    `${label}: with ${GATEHOUSE_BLOCKING_GUARD} posted over the stair up for good, a route was still found`,
+  );
+}
+
+/** How long a watcher is kept looking: long past any catch the edge of a look builds to. */
+const NOTICE_WATCH_SECONDS = 10;
+const NOTICE_WATCH_FRAMES = NOTICE_WATCH_SECONDS * WORLD_TICKS_PER_SECOND;
+/** A sighting at a look's full weight. */
+const FULL_VIEW = 1;
+
+/** Frames of `sighting` held on a guard from no suspicion until it catches, or null within the watch. */
+function framesToCatch(tuning: PrisonDifficultyTuning, sighting: Sighting): number | null {
+  let value = 0;
+  for (let frame = 1; frame <= NOTICE_WATCH_FRAMES; frame++) {
+    value = stepSuspicion(value, 'cone', sighting, tuning.suspicion);
+    if (value >= SUSPICION_CAPTURE) return frame;
+  }
+  return null;
+}
+
+/**
+ * The gatehouse's guards catch at a glance, at every difficulty: the human in
+ * full view within {@link CAUGHT_AFTER_SEEN_SECONDS}, never sooner than its
+ * last frame; at the edge of a look only an alert builds; a companion in the
+ * look puts a guard on orange alert and never further; and on orange, the
+ * human seen at all is caught that frame.
+ */
+function checkGatehouseNotice(difficulty: Difficulty): void {
+  const label = `gatehouse ${difficulty}`;
+  const tuning = gatehouseTuningFor(difficulty);
+  const edge = tuning.suspicion.coneEdgeWeight;
+  const inFullView = framesToCatch(tuning, { crawler: FULL_VIEW, companion: 0 });
+  check(
+    inFullView === CAUGHT_AFTER_SEEN_FRAMES,
+    `${label}: the human in a guard's full view is caught on frame ${CAUGHT_AFTER_SEEN_FRAMES} (${CAUGHT_AFTER_SEEN_SECONDS} s), not ${inFullView ?? 'never'}`,
+  );
+  const atTheEdge = framesToCatch(tuning, { crawler: edge, companion: 0 });
+  check(
+    atTheEdge !== null && atTheEdge > CAUGHT_AFTER_SEEN_FRAMES,
+    `${label}: the human at the edge of a look builds an alert before the catch (${atTheEdge ?? 'never'} frames)`,
+  );
+  let alert = 0;
+  for (let frame = 0; frame < NOTICE_WATCH_FRAMES; frame++) {
+    alert = stepSuspicion(alert, 'cone', { crawler: 0, companion: FULL_VIEW }, tuning.suspicion);
+  }
+  check(
+    alert === SUSPICION_ORANGE_ALERT,
+    `${label}: a companion in a guard's look raises it to orange alert and no further (${alert})`,
+  );
+  const glimpsed = stepSuspicion(alert, 'cone', { crawler: edge, companion: 0 }, tuning.suspicion);
+  check(
+    glimpsed >= SUSPICION_CAPTURE,
+    `${label}: on orange alert, the human seen at the very edge of a look is caught that frame`,
+  );
+}
+
+for (const difficulty of DIFFICULTIES) checkGatehouseNotice(difficulty);
 
 const gatehouseStates = new Map(
   everyTowerConditions(MISSING_CATS_PHASES).map((conditions) => [
@@ -485,6 +669,7 @@ for (const conditions of gatehouseStates.values()) {
     const watch = compileGatehouseWatch(conditions, difficulty, gatehouseTuningFor(difficulty));
     const compiled = fault === 'empty-prison' ? { ...watch, guards: [] } : watch;
     checkGatehouse(compiled, start, goals, label);
+    checkGatehouseBlockable(conditions, difficulty, start, goals, label);
     checkNoise(compiled, label);
   }
 }

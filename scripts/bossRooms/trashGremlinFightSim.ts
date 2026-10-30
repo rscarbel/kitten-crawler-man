@@ -14,7 +14,7 @@
  */
 
 import { EventBus } from '../../src/core/EventBus.js';
-import { TILE_SIZE } from '../../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants.js';
 import {
   DIFFICULTY_PROFILES,
   applySpawnDifficulty,
@@ -58,9 +58,8 @@ import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 // ── The scripted crawler ─────────────────────────────────────────────────────
 
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
-const FRAMES_PER_MINUTE = FRAMES_PER_SECOND * SECONDS_PER_MINUTE;
+const FRAMES_PER_MINUTE = WORLD_TICKS_PER_SECOND * SECONDS_PER_MINUTE;
 
 /** The party level the floor's boss is levelled against: mid floor one. */
 const SIM_PARTY_LEVEL = 3;
@@ -81,10 +80,10 @@ const SIM_PATH_MAX_TILES = 40;
 
 /** The longest a fight is run before it is called unfinished. */
 const FIGHT_CAP_SECONDS = 180;
-export const FIGHT_CAP_FRAMES = FIGHT_CAP_SECONDS * FRAMES_PER_SECOND;
+export const FIGHT_CAP_FRAMES = FIGHT_CAP_SECONDS * WORLD_TICKS_PER_SECOND;
 /** The chase that measures its flight: two minutes of being run down. */
 const CHASE_SECONDS = 120;
-export const CHASE_FRAMES = CHASE_SECONDS * FRAMES_PER_SECOND;
+export const CHASE_FRAMES = CHASE_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** It is pinned when it moves less than this in a window while fleeing. */
 const PINNED_WINDOW_FRAMES = 60;
@@ -446,12 +445,12 @@ export function simulateTrashGremlinFight(
     }
     const minutes = frames / FRAMES_PER_MINUTE;
     return {
-      timeToKillSeconds: frames / FRAMES_PER_SECOND,
+      timeToKillSeconds: frames / WORLD_TICKS_PER_SECOND,
       killed: !fight.trashGremlin.isAlive,
       attacksPerMinute: minutes > 0 ? watch.attacks / minutes : 0,
       hitsOnCrawler: fight.crawler.hits,
       roomHazardHits: fight.crawler.roomHazardHits,
-      pinnedSeconds: watch.pinnedFrames / FRAMES_PER_SECOND,
+      pinnedSeconds: watch.pinnedFrames / WORLD_TICKS_PER_SECOND,
       hitsBySource: fight.crawler.hitsBySource,
       towersToppled: towersDown(fight),
     };
@@ -536,8 +535,8 @@ export function simulateTrashGremlinChase(
     if (breakOffLeft === 0) chaseLengths.push(CHASE_FRAMES - chaseStart);
     const reengagements = chaseLengths.slice(1);
     return {
-      pinnedSeconds: watch.pinnedFrames / FRAMES_PER_SECOND,
-      reengageSeconds: mean(reengagements) / FRAMES_PER_SECOND,
+      pinnedSeconds: watch.pinnedFrames / WORLD_TICKS_PER_SECOND,
+      reengageSeconds: mean(reengagements) / WORLD_TICKS_PER_SECOND,
     };
   });
 }

@@ -435,6 +435,20 @@ export function takeExchangeItems(state: PartySplitState, at: ExchangePointId): 
   return taken;
 }
 
+/** Takes every load of `item` waiting at a point, leaving the rest there; the loads taken. */
+export function takeExchangeItemsOf(
+  state: PartySplitState,
+  at: ExchangePointId,
+  item: ItemId,
+): ExchangeItem[] {
+  const isLoad = (entry: ExchangeItem): boolean => entry.to === at && entry.item === item;
+  const taken = state.exchange.items.filter(isLoad);
+  if (taken.length === 0) return taken;
+  const items = state.exchange.items.filter((entry) => !isLoad(entry));
+  state.exchange = { ...state.exchange, items };
+  return taken;
+}
+
 export function itemsWaitingAt(
   state: PartySplitState,
   at: ExchangePointId,
@@ -445,6 +459,15 @@ export function itemsWaitingAt(
 export function setExchangeFlag(state: PartySplitState, flag: ExchangeFlagId): void {
   if (state.exchange.flags.includes(flag)) return;
   state.exchange = { ...state.exchange, flags: [...state.exchange.flags, flag] };
+}
+
+/** Lowers a flag that was raised, so whoever reads it next finds it down. */
+export function clearExchangeFlag(state: PartySplitState, flag: ExchangeFlagId): void {
+  if (!state.exchange.flags.includes(flag)) return;
+  state.exchange = {
+    ...state.exchange,
+    flags: state.exchange.flags.filter((raised) => raised !== flag),
+  };
 }
 
 export function exchangeFlagSet(state: PartySplitState, flag: ExchangeFlagId): boolean {

@@ -9,7 +9,7 @@
 
 import type { Camera } from '../core/rendering/camera';
 import type { QuestId } from '../core/quests/QuestManager';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import { SpiderLabDressing, type SpiderLabQuestView } from './bossRooms/SpiderLabDressing';
 import type { DressingRenderable } from './bossRooms/BossRoomDressing';
@@ -209,7 +209,6 @@ const SCIENTIST_FOOTPRINT_DEPTH_TILES = 0.5;
 const SPIDER_LAB_ENTRY_HP_THRESHOLD = 0.3;
 /** How long an aborted fight has to stay aborted before the boss track is handed back. */
 const BOSS_MUSIC_ABORT_GRACE_FRAMES = 90;
-const FRAMES_PER_SECOND = 60;
 
 // Additional rendering constants
 const TILE_CENTER_OFFSET_PX = 0.5; // for tile/sprite centering
@@ -923,7 +922,7 @@ export class SpiderQuestSystem implements GameSystem {
    */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
     if (this.phase === 'inactive' || this.roomData === null) return [];
-    const base = { id: SPIDER_QUEST_ID, name: SPIDER_QUEST_NAME };
+    const base = { kind: 'single', id: SPIDER_QUEST_ID, name: SPIDER_QUEST_NAME } as const;
     const labTile = {
       x: this.roomData.computerTile.x,
       y: this.roomData.computerTile.y,
@@ -2970,7 +2969,7 @@ export class SpiderQuestSystem implements GameSystem {
   /** How long the sealed lab still lets a straggler in, while that window is open. */
   topBandEntry(): TopBandEntry | null {
     if (!this._roomLocked || this.roomData === null || this._entryWindowTimer <= 0) return null;
-    const seconds = Math.ceil(this._entryWindowTimer / FRAMES_PER_SECOND);
+    const seconds = Math.ceil(this._entryWindowTimer / WORLD_TICKS_PER_SECOND);
     return stackedBandEntry({
       id: 'spider-entry-window',
       priority: 'countdown',

@@ -13,8 +13,8 @@
  * (the thing found, and a ring round it while it is worth looking at), taken
  * by the room's interact press through {@link tryInteract}.
  *
- * After the Warden: a cat whose home this is is back in it, and in the
- * Sleeping Cat Inn's taproom Pumpkin walks in on Dave, which completes the
+ * A cat whose home this is lives in it whenever she is not missing, and can
+ * be petted there (`HomeCats`). After the Warden, in the Sleeping Cat Inn's taproom Pumpkin walks in on Dave, which completes the
  * questline. From then on she lives there, whether he is in or not.
  */
 
@@ -25,13 +25,13 @@ import {
   lodgeCellarHeld,
   phaseReached,
   pumpkinLivesAtTheInn,
-  townCatsHome,
   type AvielChoice,
   type MissingCatsClueId,
   type MissingCatsClueSite,
   type MissingCatsProgress,
 } from '../../core/quests/missingCatsProgress';
 import type { ResidentId } from '../../core/state/residentIds';
+import type { MercenaryTemplateId } from '../../core/party/mercenaryTemplates';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
@@ -52,7 +52,11 @@ import {
   AVIEL_NO_FEATHER,
   BELLE_VOLUNTEERS,
   CELLAR_ELF_EXPLAINS,
+  DAVE_HEARS_THE_PLAN,
   CELLAR_ELF_OFFERS_THE_DRAIN,
+  CELLAR_LID_LET_DOWN,
+  cellarShaftClimbing,
+  elvesComeInFromTheAlley,
   FEATHER_FOUND_AGAIN,
   INVESTIGATION_SOLVED,
   PUMPKIN_AT_HOME_LINES,
@@ -71,7 +75,6 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { MusicClaims } from '../../audio/AudioScope';
 import type { CatAllyId } from '../../core/party/partySplit';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
-import { TOWN_CAT_IDS } from '../../core/state/townCatIds';
 import type { BuildingId } from '../../map/buildingIds';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { GameMap } from '../../map/GameMap';
@@ -90,13 +93,18 @@ import type { ResidentQuestHook } from '../residentQuestHooks';
 import { residentById } from '../townResidents';
 import { STORE_ORDER_BOOK_ID } from '../townReadables';
 import type { PlacedReadable } from '../InteriorReadableSystem';
-import { TOWN_CATS, TownCats } from '../critters/TownCats';
+import { HomeCats } from './homeCats';
 import type { CutsceneActor } from '../cutscene/cutsceneActors';
-import type { CutsceneScript } from '../cutscene/cutsceneSteps';
+import type { CutsceneScript, CutsceneStep, WalkToStep } from '../cutscene/cutsceneSteps';
+import { DAVE_ADVICE } from '../../dialog/scripts/dave';
+import type { InteriorActorId, InteriorWorldAction } from '../../scenes/interiorCutscene';
+import { residentActorId } from '../../scenes/interiorCutscene';
+import { CELLAR_HATCH_SWING_FRAMES, LodgeCellarHatch, type RoomStanding } from './lodgeCellarHatch';
 import {
   enterMissingCatsPhase,
   findMissingCatsClue,
   type ClueFinding,
+  leadOnwardLines,
   missingCatsSiteTracked,
 } from './missingCatsPhase';
 import { completeMissingCats } from './missingCatsRewards';
@@ -184,7 +192,16 @@ const HOOK_GIVER: ResidentId = 'innkeep_ossie';
 const FUR_SHOWER: ResidentId = 'sgt_kessler';
 const CELLAR_ELF: ResidentId = 'taloncrest_lodge_cellar_elf';
 const CONFESSOR: ResidentId = 'deacon_aviel';
+const LOAN_DESK = 'sydney' as const satisfies ResidentId;
 const MILL_OWNER: ResidentId = 'marta_miller';
+
+const LODGE: BuildingId = 'taloncrest_garrison_lodge';
+/** Kessler bends to the hasp and works the padlock off before he heaves. */
+const KESSLER_UNLOCKS_FRAMES = 30;
+/** He keeps hold of the lid this long into its swing before he steps back from it. */
+const KESSLER_HOLDS_LID_FRAMES = 14;
+/** The swing finishes, and the room hears the shaft, before anyone speaks. */
+const SHAFT_LISTEN_FRAMES = 30;
 
 /** The room Pumpkin walks back into, and lives in afterwards. */
 const PUMPKIN_HOME: BuildingId = 'taloncrest_inn';
@@ -193,8 +210,6 @@ export const PUMPKIN_ACTOR_ID = 'tower_cattery_cellmate' as const satisfies CatA
 /** She settles this many tiles east of where Dave stands. */
 const PUMPKIN_TILES_EAST_OF_DAVE = 1;
 const PUMPKIN_SEARCH_TILES = 3;
-/** A cat home again sits about this far from the middle of her room. */
-const HOME_CAT_SEARCH_TILES = 4;
 /** How long the reunion jingle rings before the talk starts. */
 const REUNION_JINGLE_LEAD_FRAMES = 90;
 /** The song under the reunion fades out this slowly once the talk is over. */
@@ -229,9 +244,13 @@ export interface MissingCatsInteriorDeps {
   readonly conversation: Conversation;
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
+  /** Everyone standing in the room, moved off the lodge's cellar well when it opens under them. */
+  readonly standingInRoom: () => RoomStanding;
   readonly audio: AudioManager | null;
   /** The voice the resident's figure in this room was drawn with, or null when they are not here. */
   readonly speechStyleOf: (residentId: ResidentId) => CitizenSpeechStyle | null;
+  /** Warms the gait the resident hurries in, ahead of a script that hurries them; nothing when they are not here. */
+  readonly prewarmHurryOf: (residentId: ResidentId) => void;
   /** Stands the lodge cellar's defence up on this storey. */
   readonly startCellarDefence: () => void;
   /** Whether Dave's own box is up, so a beat that follows his line waits for it to close. */
@@ -242,7 +261,7 @@ export interface MissingCatsInteriorDeps {
   readonly onItemGranted: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
   /** Plays a cutscene through the room's director, calling `onComplete` once it has run. */
   readonly playCutscene: (
-    script: CutsceneScript<never, typeof PUMPKIN_ACTOR_ID>,
+    script: CutsceneScript<InteriorWorldAction, InteriorActorId>,
     onComplete: () => void,
   ) => void;
   /** Whether Dave and the steered crawler are both in this room's safe room, with nothing else going on. */
@@ -251,6 +270,8 @@ export interface MissingCatsInteriorDeps {
   readonly daveHome: () => TilePoint | null;
   /** The Journal's pinned entry id, which decides whether this room's clues are marked. */
   readonly pinnedTrackerId: () => string | null;
+  /** The hire under contract with the party, if any: who goes under the tower with the human. */
+  readonly hire: () => MercenaryTemplateId | null;
   /** Where the readable with this id lies in this room, or null in a room without it. */
   readonly readableNamed: (readableId: string) => PlacedReadable | null;
   /** The room's music claims; null with no audio. */
@@ -267,11 +288,16 @@ interface PlacedSpot {
 export class MissingCatsInteriorSystem implements ResidentQuestHook {
   private handle: ConversationHandle | null = null;
   private readonly spots: PlacedSpot[] = [];
-  private belleVolunteerOwed = false;
+  /** Dave's talk about the bait plan is playing, so it is not owed a second time over it. */
+  private daveHearingThePlan = false;
   private cellarExplanationOwed = false;
-  private ledgerReadOwed = false;
+  private elvesArrivalOwed = false;
+  /** Blackwood Lodge's cellar hatch, in the one room that has it. */
+  private readonly hatch: LodgeCellarHatch | null;
+  /** The party's reading of the order book, owed once the book itself is shut. */
+  private ledgerLines: NonEmpty<DialogLine> | null = null;
   private investigationSummaryOwed = false;
-  private readonly homeCats: TownCats;
+  private readonly homeCats: HomeCats;
   private pumpkin: PumpkinAtHome | null = null;
   private reunionUnderWay = false;
   private pumpkinTalks = 0;
@@ -280,8 +306,16 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
 
   private constructor(private readonly deps: MissingCatsInteriorDeps) {
     const { map } = deps;
-    this.homeCats = new TownCats((x, y) => map.isWalkable(x, y, 'walker'), Math.random);
-    if (townCatsHome(deps.progress)) this.placeHomeCats();
+    this.hatch =
+      deps.buildingId === LODGE
+        ? LodgeCellarHatch.inRoom(
+            map,
+            deps.audio,
+            deps.standingInRoom,
+            this.cellarDefenceOwedOnEntry,
+          )
+        : null;
+    this.homeCats = new HomeCats(deps);
     if (pumpkinLivesAtTheInn(deps.progress) && deps.buildingId === PUMPKIN_HOME) {
       const at = this.pumpkinRestingTile();
       if (at !== null) this.pumpkin = this.pumpkinAt(at);
@@ -309,7 +343,7 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
   get cellarDefenceOwedOnEntry(): boolean {
     const { progress } = this.deps;
     return (
-      this.deps.buildingId === 'taloncrest_garrison_lodge' &&
+      this.deps.buildingId === LODGE &&
       progress.phase === 'blame' &&
       progress.kesslerShowedFur &&
       !lodgeCellarHeld(progress)
@@ -334,12 +368,29 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
    */
   get daveRefusalOwed(): boolean {
     const { progress } = this.deps;
-    return progress.phase === 'bait' && !progress.daveRefusedBait && !this.belleVolunteerOwed;
+    return progress.phase === 'bait' && !progress.daveRefusedBait && !this.daveHearingThePlan;
   }
 
-  /** Dave has said his refusal: Belle volunteers once his box closes. */
-  daveRefused(): void {
-    this.belleVolunteerOwed = true;
+  /**
+   * One talk: the party tells Dave the plan, he answers with how he lost
+   * Pumpkin, and Belle volunteers anyway. `walkUp` brings the crawler to him
+   * first when the talk is his to start rather than the player's.
+   */
+  tellDaveThePlan(walkUp: WalkToStep | null, onHeard: () => void): void {
+    this.daveHearingThePlan = true;
+    const talk: CutsceneStep<InteriorWorldAction, InteriorActorId> = {
+      kind: 'conversation',
+      request: {
+        lines: [DAVE_HEARS_THE_PLAN, DAVE_ADVICE.missing_cats_bait, ...BELLE_VOLUNTEERS],
+        reward: null,
+        questRelated: true,
+      },
+    };
+    this.deps.playCutscene(walkUp === null ? [talk] : [walkUp, talk], () => {
+      this.daveHearingThePlan = false;
+      this.deps.progress.daveRefusedBait = true;
+      onHeard();
+    });
   }
 
   /**
@@ -350,20 +401,33 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
     this.cellarExplanationOwed = true;
   }
 
+  /** The elves are through the lodge's door: they say why as soon as the box is free. */
+  elvesArrived(): void {
+    this.elvesArrivalOwed = true;
+  }
+
+  /** Swings the cellar lid, for a cutscene in which someone heaves it. */
+  swingCellarHatch(swing: 'open' | 'shut'): void {
+    if (swing === 'open') this.hatch?.open();
+    else this.hatch?.close();
+  }
+
   update(): void {
+    this.hatch?.update();
     this.homeCats.update();
     this.pumpkin?.update();
     this.startReunionIfDue();
     const beatOwed =
-      this.belleVolunteerOwed ||
+      this.elvesArrivalOwed ||
       this.cellarExplanationOwed ||
-      this.ledgerReadOwed ||
+      this.ledgerLines !== null ||
       this.investigationSummaryOwed;
     if (!beatOwed) return;
     if (this.deps.daveTalking() || this.deps.conversation.isOpen || this.deps.readingOpen()) return;
-    if (this.ledgerReadOwed) {
-      this.ledgerReadOwed = false;
-      this.open(this.allowed(LEDGER_READ, () => undefined));
+    if (this.ledgerLines !== null) {
+      const lines = this.ledgerLines;
+      this.ledgerLines = null;
+      this.open(this.allowed(lines, () => undefined));
       return;
     }
     if (this.investigationSummaryOwed) {
@@ -371,17 +435,15 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       this.open(this.allowed(INVESTIGATION_SOLVED, () => undefined));
       return;
     }
-    if (this.cellarExplanationOwed) {
-      this.cellarExplanationOwed = false;
-      this.playCellarElfExplains();
+    if (this.elvesArrivalOwed) {
+      this.elvesArrivalOwed = false;
+      this.open(this.blocked(elvesComeInFromTheAlley(this.voiceOf(FUR_SHOWER)), () => undefined));
       return;
     }
-    this.belleVolunteerOwed = false;
-    this.open(
-      this.blocked(BELLE_VOLUNTEERS, () => {
-        this.deps.progress.daveRefusedBait = true;
-      }),
-    );
+    if (!this.cellarExplanationOwed) return;
+    this.cellarExplanationOwed = false;
+    this.hatch?.close();
+    this.playCellarElfExplains([...CELLAR_LID_LET_DOWN, ...CELLAR_ELF_EXPLAINS]);
   }
 
   markerFor(residentId: ResidentId): NPCMarkerType | null {
@@ -402,11 +464,26 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       if (progress.phase === 'seeking_entry' && !progress.elfWaitsAtGrate) return 'exclamation';
       return progress.phase === 'blame' && lodgeCellarHeld(progress) ? 'exclamation' : null;
     }
+    if (residentId === LOAN_DESK) {
+      return this.hireOwedForTheDrain() ? 'exclamation' : null;
+    }
     if (residentId === CONFESSOR) {
       if (progress.phase === 'confession') return this.featherHeld() ? 'question' : 'exclamation';
       return progress.phase === 'choice' ? 'exclamation' : null;
     }
     return null;
+  }
+
+  /**
+   * Whether the elf is waiting at the grate for a human who still has nobody
+   * to bring: the step the Barracks desk answers. Her `!` takes no press of
+   * its own, so talking to her opens the desk as it always does.
+   */
+  private hireOwedForTheDrain(): boolean {
+    const { progress } = this.deps;
+    return (
+      progress.phase === 'seeking_entry' && progress.elfWaitsAtGrate && this.deps.hire() === null
+    );
   }
 
   tryOpenDialog(residentId: ResidentId, _talker: Player): boolean {
@@ -431,11 +508,10 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       return true;
     }
     if (residentId === FUR_SHOWER) {
+      // His talk runs long enough for the run row to bake before he sets off for the lid.
+      this.deps.prewarmHurryOf(residentId);
       this.open(
-        this.blocked(kesslerShowsFur(this.voiceOf(residentId)), () => {
-          progress.kesslerShowedFur = true;
-          this.deps.startCellarDefence();
-        }),
+        this.blocked(kesslerShowsFur(this.voiceOf(residentId)), () => this.kesslerOpensTheLid()),
       );
       return true;
     }
@@ -448,7 +524,7 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       return true;
     }
     if (residentId === CELLAR_ELF) {
-      this.playCellarElfExplains();
+      this.playCellarElfExplains(CELLAR_ELF_EXPLAINS);
       return true;
     }
     if (residentId === CONFESSOR) {
@@ -458,10 +534,64 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
     return false;
   }
 
-  private playCellarElfExplains(): void {
+  /**
+   * Kessler hurries to the hatch, works the padlock off and heaves the lid up,
+   * stepping back as it swings; the room hears what is on the ladder, and
+   * only then does the fight start.
+   */
+  private kesslerOpensTheLid(): void {
+    const { progress } = this.deps;
+    const startTheFight = (): void => {
+      progress.kesslerShowedFur = true;
+      this.deps.startCellarDefence();
+    };
+    const hatch = this.hatch;
+    if (hatch === null) {
+      startTheFight();
+      return;
+    }
+    const kessler = residentActorId(FUR_SHOWER);
+    this.deps.playCutscene(
+      [
+        {
+          kind: 'walkTo',
+          who: kessler,
+          tile: hatch.liftTile,
+          pace: 'hurry',
+          face: 'up',
+          then: 'waitForArrival',
+        },
+        { kind: 'wait', frames: KESSLER_UNLOCKS_FRAMES },
+        { kind: 'run', action: { kind: 'cellarHatch', swing: 'open' } },
+        { kind: 'wait', frames: KESSLER_HOLDS_LID_FRAMES },
+        {
+          kind: 'walkTo',
+          who: kessler,
+          tile: hatch.standBackTile,
+          pace: 'hurry',
+          face: 'right',
+          then: 'carryOn',
+        },
+        { kind: 'wait', frames: CELLAR_HATCH_SWING_FRAMES - KESSLER_HOLDS_LID_FRAMES },
+        { kind: 'awaitActor', who: kessler },
+        { kind: 'wait', frames: SHAFT_LISTEN_FRAMES },
+        {
+          kind: 'conversation',
+          request: {
+            lines: cellarShaftClimbing(this.voiceOf(FUR_SHOWER)),
+            reward: null,
+            questRelated: true,
+          },
+        },
+      ],
+      startTheFight,
+    );
+  }
+
+  private playCellarElfExplains(lines: NonEmpty<DialogLine>): void {
     const { progress, bus } = this.deps;
     this.open(
-      this.blocked(CELLAR_ELF_EXPLAINS, () => {
+      this.blocked(lines, () => {
         enterMissingCatsPhase(progress, 'stakeout', bus);
       }),
     );
@@ -522,8 +652,9 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
    */
   onReadableOpened(readableId: string): void {
     if (readableId !== STORE_ORDER_BOOK_ID || !this.orderBookWorthReading()) return;
-    this.clueFound(findMissingCatsClue(this.deps.progress, 'store_tuna_ledger', this.deps.bus));
-    this.ledgerReadOwed = true;
+    const finding = findMissingCatsClue(this.deps.progress, 'store_tuna_ledger', this.deps.bus);
+    this.clueFound(finding);
+    this.ledgerLines = this.withLeadOnward(LEDGER_READ, 'store_tuna_ledger', finding);
   }
 
   /** Whether the order book still holds the clue: the dish has sent the party here, and it is not yet read. */
@@ -564,7 +695,7 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
     };
   }
 
-  /** An interact press beside a clue spot worth looking at. True when one took it. */
+  /** An interact press beside a clue spot worth looking at, or a cat at home. True when one took it. */
   tryInteract(active: HumanPlayer | CatPlayer): boolean {
     if (this.deps.conversation.isOpen) return false;
     if (this.pumpkinInReach(active)) {
@@ -575,7 +706,7 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       return true;
     }
     const spot = this.spotInReach(active);
-    if (spot === null) return false;
+    if (spot === null) return this.homeCats.tryPet(active);
     const { progress, bus } = this.deps;
     const def: ClueSpotDef = CLUE_SPOTS[spot.id];
     const at = { x: spot.tile.x * TILE_SIZE + HALF_TILE, y: spot.tile.y * TILE_SIZE + HALF_TILE };
@@ -583,16 +714,27 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       const again = progress.clues.has(def.clue);
       this.grantFeather(at);
       playMissingCatsCue(this.deps.audio, 'featherPickup', at);
+      const finding = findMissingCatsClue(progress, def.clue, bus);
       const lines = again ? FEATHER_FOUND_AGAIN : featherFound(this.voiceOf(MILL_OWNER));
-      this.open(this.allowed(lines, () => undefined));
-      this.clueFound(findMissingCatsClue(progress, def.clue, bus));
+      this.open(this.allowed(this.withLeadOnward(lines, def.clue, finding), () => undefined));
+      this.clueFound(finding);
       return true;
     }
     playMissingCatsCue(this.deps.audio, 'clueExamined', at);
+    const finding = findMissingCatsClue(progress, def.clue, bus);
     const lines = spot.id === 'cottage_latch' ? LATCH_EXAMINED : TUNA_DISH_EXAMINED;
-    this.open(this.allowed(lines, () => undefined));
-    this.clueFound(findMissingCatsClue(progress, def.clue, bus));
+    this.open(this.allowed(this.withLeadOnward(lines, def.clue, finding), () => undefined));
+    this.clueFound(finding);
     return true;
+  }
+
+  /** A clue's own lines, then whatever sends the party on to the next clue's place. */
+  private withLeadOnward(
+    lines: NonEmpty<DialogLine>,
+    clue: MissingCatsClueId,
+    finding: ClueFinding,
+  ): NonEmpty<DialogLine> {
+    return [...lines, ...leadOnwardLines(this.deps.progress, clue, finding)];
   }
 
   /** The last clue owes the party's summing-up, once whatever the clue itself says has been read. */
@@ -671,7 +813,13 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
   }
 
   /** The clue things on the floor, under the figures, and a prompt over the one in reach. */
-  renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+  renderObjects(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: HumanPlayer | CatPlayer,
+  ): void {
+    this.hatch?.renderGround(ctx, camX, camY);
     const pulse =
       RING_ALPHA_BASE +
       RING_ALPHA_AMPLITUDE *
@@ -706,7 +854,10 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
       return;
     }
     const inReach = this.spotInReach(active);
-    if (inReach === null) return;
+    if (inReach === null) {
+      this.homeCats.renderPrompt(ctx, camX, camY, active);
+      return;
+    }
     const sx = inReach.tile.x * TILE_SIZE - camX;
     const sy = inReach.tile.y * TILE_SIZE - camY;
     const label = inReach.id === 'mill_hayloft_feather' ? PICK_UP_LABEL : EXAMINE_LABEL;
@@ -714,19 +865,6 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
   }
 
   // ── After the Warden ────────────────────────────────────────────────────
-
-  /** Every cat whose home this is, back in it. */
-  private placeHomeCats(): void {
-    const { map, buildingId } = this.deps;
-    const centreX = Math.floor((map.structure[0]?.length ?? 0) / 2);
-    const centreY = Math.floor(map.structure.length / 2);
-    for (const id of TOWN_CAT_IDS) {
-      if (TOWN_CATS[id].home !== buildingId) continue;
-      const tile = findNearbyWalkableTile(map, centreX, centreY, HOME_CAT_SEARCH_TILES);
-      if (tile === null) continue;
-      this.homeCats.placeAtHome(id, { x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE });
-    }
-  }
 
   /** The tile beside Dave's spot that Pumpkin settles on, or null in a room with no safe room. */
   private pumpkinRestingTile(): TilePoint | null {
@@ -793,6 +931,7 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
           kind: 'walkTo',
           who: PUMPKIN_ACTOR_ID,
           tile: beside,
+          pace: 'stroll',
           face: 'left',
           then: 'waitForArrival',
         },
@@ -831,18 +970,22 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
 
   /** The cats about the room and Pumpkin, for the room's depth-sorted pass. */
   sortedFigures(): readonly InteriorFigure[] {
-    const cats: InteriorFigure[] = this.homeCats.cats.map((homeCat) => ({
-      y: homeCat.y,
-      render: (ctx, camX, camY, tileSize) => homeCat.draw(ctx, camX, camY, tileSize),
-    }));
-    const figures: InteriorFigure[] = this.pumpkin === null ? cats : [...cats, this.pumpkin];
+    const cats = this.homeCats.sortedFigures();
+    const figures: InteriorFigure[] = this.pumpkin === null ? [...cats] : [...cats, this.pumpkin];
     const bookMark = this.orderBookMark();
     if (bookMark !== null) figures.push(bookMark);
+    const lid = this.hatch?.sortedFigure() ?? null;
+    if (lid !== null) figures.push(lid);
     return figures;
   }
 
+  /** Over every body: the hearts off a petted cat. */
+  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.homeCats.renderAbove(ctx, camX, camY);
+  }
+
   dispose(): void {
-    this.homeCats.clear();
+    this.homeCats.dispose();
     this.pumpkin?.release();
     this.pumpkin = null;
   }

@@ -4,7 +4,7 @@ import { BOSS_IDENTITY_COLOR, SEALED_ROOM_BORDER_COLOR } from '../sprites/bossRo
 import type { GauntletBossType } from '../map/bossRoomSizes';
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
-import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
+import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
@@ -297,7 +297,6 @@ const ADJACENT_TILE_OFFSETS = [
 const PUDDLE_FADE_FRAMES = 300;
 
 const BOSS_MIDLINE_FRACTION = 0.5;
-const FRAMES_PER_SECOND = 60;
 const BOSS_LABEL_BASELINE_FRACTION = 0.65;
 const BOSS_LABEL_SIZE = 10;
 const BOSS_LABEL_ASCENT_OFFSET = 8;
@@ -371,7 +370,7 @@ function bossRoomStatusRow(
     return { kind: 'text', text: BOSS_HEALER_ALIVE_NOTICE, role: 'label', tone: 'danger' };
   }
   if (state.locked && state.entryWindowTimer > 0) {
-    const seconds = Math.ceil(state.entryWindowTimer / FRAMES_PER_SECOND);
+    const seconds = Math.ceil(state.entryWindowTimer / WORLD_TICKS_PER_SECOND);
     return {
       kind: 'text',
       text: `Entry closes in ${seconds}s`,

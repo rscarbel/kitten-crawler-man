@@ -54,7 +54,6 @@ import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 /** Briar Hollow stands on floor 3's overworld, so its map is that floor's size. */
 export const SIEGE_MAP_SIZE = level3.mapSize;
-export const UPDATES_PER_SECOND = 60;
 const QUEST_REWARD_SURFACE_ID = 'quest-reward';
 /** The desktop window the quest-complete screen is driven at. */
 const QUEST_REWARD_UI_W = 1280;

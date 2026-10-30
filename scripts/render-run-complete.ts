@@ -68,6 +68,7 @@ const FULL_RUN: RunSummary = {
   deinonychusPets: 48,
   cowPets: 37,
   midgePets: 12,
+  townCatPets: 21,
   topKills: [
     ['Goblin', 402],
     ['Rat-kin Skirmisher', 211],
@@ -88,6 +89,7 @@ const LEAN_RUN: RunSummary = {
   deinonychusPets: 0,
   cowPets: 0,
   midgePets: 0,
+  townCatPets: 0,
 };
 
 const outFlag = process.argv.find((arg) => arg.startsWith('--out-dir='));

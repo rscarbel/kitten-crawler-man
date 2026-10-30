@@ -13,7 +13,7 @@
  * held ground: no bed, no creaks.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
@@ -41,7 +41,6 @@ import type { Camera } from '../../core/rendering/camera';
 type Ctx = CanvasRenderingContext2D;
 type Rand = () => number;
 
-const FRAMES_PER_SECOND = 60;
 const HALF = 0.5;
 const TWO_PI = Math.PI * 2;
 
@@ -222,7 +221,7 @@ const CREAK_VOLUME = 0.55;
 const SHARD_PILE_REACH_TILES = 0.6;
 /** Never two crunches closer together than this, however many piles are crossed. */
 const CRUNCH_MIN_GAP_S = 6;
-const CRUNCH_MIN_GAP_FRAMES = CRUNCH_MIN_GAP_S * FRAMES_PER_SECOND;
+const CRUNCH_MIN_GAP_FRAMES = CRUNCH_MIN_GAP_S * WORLD_TICKS_PER_SECOND;
 const CRUNCH_VOLUME = 0.5;
 /** The tube is heard stuttering from this far, in tiles. */
 const TUBE_EARSHOT_TILES = 12;
@@ -379,7 +378,7 @@ export class LabHallwayAtmosphere {
     camY: number,
     tileSize: number,
   ): void {
-    const period = COCOON_TWITCH_PERIOD_S * FRAMES_PER_SECOND;
+    const period = COCOON_TWITCH_PERIOD_S * WORLD_TICKS_PER_SECOND;
     const beat = (this.frame + index * Math.floor(period * HALF)) % period;
     const frame = beat < COCOON_TWITCH_FRAMES ? COCOON_TWITCH_FRAME : COCOON_IDLE_FRAME;
     const size = tileSize * COCOON_SCALE[cocoon.size];
@@ -484,7 +483,7 @@ export class LabHallwayAtmosphere {
 
   private nextCreakGap(): number {
     const seconds = CREAK_GAP_MIN_S + this.random() * (CREAK_GAP_MAX_S - CREAK_GAP_MIN_S);
-    return Math.round(seconds * FRAMES_PER_SECOND);
+    return Math.round(seconds * WORLD_TICKS_PER_SECOND);
   }
 
   private creakNear(worldX: number, worldY: number): void {

@@ -66,6 +66,7 @@ import { skinsFor } from '../src/ui/theme/skins.js';
 import { itemSlot } from '../src/ui/widgets/itemSlot.js';
 import { renderTopBand, type TopBandEntry } from '../src/ui/hud/topBand.js';
 import { stackedBandEntry } from '../src/ui/hud/topBandStack.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -2462,8 +2463,7 @@ section('the poker table: after the player acts, real-time frames play the hand 
   const STALL_REVIEW_SEED = 0x0c4a5d1a;
   const SHUFFLE_SALT = 0x5e47;
   const MS_PER_SECOND = 1000;
-  const FRAMES_PER_SECOND = 60;
-  const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
+  const FRAME_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
   /** Every regular may think for the longest a decision takes; a street still finishes well inside this. */
   const PLAY_ON_WITHIN_SECONDS = 60;
   const PLAY_ON_WITHIN_MS = PLAY_ON_WITHIN_SECONDS * MS_PER_SECOND;

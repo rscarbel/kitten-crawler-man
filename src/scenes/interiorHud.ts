@@ -19,6 +19,11 @@ import { towerStoreyLabel } from '../map/town/interiors/townCenterTower';
 
 const ROOM_NAME_ENTRY_ID = 'room-name';
 
+/** How long a room's name holds after the party comes in: it is arrival news, not a standing label. */
+const ROOM_NAME_HOLD_FRAMES = 240;
+/** How long it then takes to fade out. */
+const ROOM_NAME_FADE_FRAMES = 45;
+
 /** The name a room's banner shows: the building's, plus the storey inside the tower. */
 export function interiorRoomTitle(buildingId: BuildingId, towerFloor: number | null): string {
   const displayName = buildingDisplayName(buildingId);
@@ -32,19 +37,28 @@ function roomNameHeight(theme: Theme, size: SizeClass): number {
 }
 
 /**
- * The room's name, the lowest-priority bar in the top band, so a fight's bars
- * stack above it. One line, cut short with an ellipsis, so the camera can
- * frame the room around it before it is drawn ({@link roomNameSlot}).
+ * The room's name as arrival news, `framesSinceArrival` after the party came
+ * onto the floor: held, faded out, then gone. It is the band's `arrival`
+ * entry, so any other card takes the band from it. One line, cut short with
+ * an ellipsis, so the camera can frame the room around it before it is drawn
+ * ({@link roomNameSlot}). Null once it has faded.
  */
-export function roomNameEntry(title: string): TopBandEntry {
+export function roomNameEntry(title: string, framesSinceArrival: number): TopBandEntry | null {
+  const framesIntoFade = framesSinceArrival - ROOM_NAME_HOLD_FRAMES;
+  if (framesIntoFade >= ROOM_NAME_FADE_FRAMES) return null;
+  const alpha = framesIntoFade <= 0 ? 1 : 1 - framesIntoFade / ROOM_NAME_FADE_FRAMES;
   return {
     id: ROOM_NAME_ENTRY_ID,
-    priority: 'banner',
+    priority: 'arrival',
     maxWidth: TOP_BAND_WIDTH.regular,
     height: (ui) => roomNameHeight(ui.theme, ui.size),
     render: (ui, rect) => {
+      const { ctx } = ui;
+      ctx.save();
+      ctx.globalAlpha *= alpha;
       const inner = topBandCard(ui, rect);
       text(ui, inner, { text: `Inside: ${title}`, role: 'label', align: 'center' });
+      ctx.restore();
     },
   };
 }
@@ -71,7 +85,7 @@ export function roomNameSlot(geometry: HudGeometry): Rect | null {
     [
       {
         id: ROOM_NAME_ENTRY_ID,
-        priority: 'banner',
+        priority: 'arrival',
         w: Math.min(TOP_BAND_WIDTH.regular, area.w),
         h: height,
       },
@@ -90,7 +104,9 @@ export function roomNameSlot(geometry: HudGeometry): Rect | null {
  * the camera already takes its band off the bottom of the view. Nor is the
  * achievement chip, which only shows until the player reads what it
  * announces; reframing the room around it would shift the view each time one
- * was earned.
+ * was earned. The room-name slot stays here after the name has faded, so
+ * its going never reframes the room; the cards a fight stacks in the band
+ * are the camera's top inset instead (`TopBandReach`).
  */
 export function interiorHudOccluders(
   geometry: HudGeometry,

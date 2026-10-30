@@ -13,6 +13,14 @@ import type { Player } from '../Player';
 import { hirelingDownedArrowCandidate, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
 import type { ArrowCandidate } from '../ui/WorldArrow';
 import type { CarriedCompanion } from './companionCarry';
+import {
+  canWalkTrail,
+  trailGroundOn,
+  type PartyLine,
+  type PartyLineLink,
+  type TrailFollowSwitch,
+  type TrailStance,
+} from './partyTrail';
 import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { findSpawnTile } from './MercenarySystem';
@@ -55,6 +63,31 @@ const SILENT_FEEDBACK: AttackCowFeedback = {
 };
 
 /**
+ * Her stance on the line, from her phase. Not through the bounce of being
+ * stood back up, which plays where she was revived.
+ */
+function attackCowTrailStance(cow: AttackCow): TrailStance {
+  const phase = cow.phase;
+  switch (phase) {
+    case 'follow':
+    case 'fight':
+      return { isAlive: cow.isAlive, standing: true, retreating: false };
+    case 'downed':
+    case 'reviving':
+      return { isAlive: cow.isAlive, standing: false, retreating: false };
+    case 'limping':
+      return { isAlive: cow.isAlive, standing: true, retreating: true };
+    case 'lying_down':
+    case 'resting':
+      return { isAlive: cow.isAlive, standing: false, retreating: true };
+    default: {
+      const unhandled: never = phase;
+      throw new Error(`unhandled attack cow phase ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
+/**
  * The human crawler's attack cow, modelled on `DeinonychusSystem` and `MercenarySystem`.
  *
  * Each scene — a floor or a building's interior — builds one from the shared
@@ -70,13 +103,16 @@ const SILENT_FEEDBACK: AttackCowFeedback = {
  * Her taunt lives here too: every frame the hostiles near her that can see her
  * are pointed at her through `Mob.tauntedBy`, and let go once they are not.
  */
-export class AttackCowSystem implements GameSystem {
+export class AttackCowSystem implements GameSystem, TrailFollowSwitch {
   cow: AttackCow | null = null;
   /** Hostiles currently pointed at her, so a lapsed taunt can be let go. */
   private readonly taunted = new Set<Mob>();
   private readonly tauntQuery = new Set<Mob>();
   private sceneMobs: readonly Mob[] = [];
   private crawlers: readonly Player[] = [];
+  /** Her place on the party's line, while a room wants her there. */
+  private trailLink: PartyLineLink | null = null;
+  private trailMap: GameMap | null = null;
 
   /**
    * @param floorNumber the floor she fights on, which levels her.
@@ -140,10 +176,37 @@ export class AttackCowSystem implements GameSystem {
     this.state.scaledAgainstMaxHp = null;
   }
 
+  /**
+   * Puts her in her place on the party's line, or (null) hands her back to
+   * her own feet. On the line she does not fight.
+   */
+  setTrailFollow(line: PartyLine | null): void {
+    this.trailLink =
+      line?.join(
+        'attack_cow',
+        trailGroundOn(() => this.trailMap),
+        () => this.trailWalker(),
+      ) ?? null;
+    if (line === null && this.cow !== null) this.cow.walksTrail = false;
+  }
+
+  /** Her, while she is walking the line. */
+  private trailWalker(): AttackCow | null {
+    const cow = this.cow;
+    if (cow?.walksTrail !== true) return null;
+    return canWalkTrail(attackCowTrailStance(cow)) ? cow : null;
+  }
+
   update(ctx: SystemContext): void {
     this.sceneMobs = ctx.roster.mobs;
     this.crawlers = presentCrawlers(ctx);
     const owner = ctx.human;
+    // With the human crawler on another map of a split, she stays where he
+    // left her: neither stood up nor caught up on a map he is not on.
+    if (owner.isAway) {
+      if (this.cow !== null) this.cow.walksTrail = false;
+      return;
+    }
     if (this.cow === null) {
       const due = this.admitted && this.state.owned && !this.state.restingUntilFull;
       if (due) this.spawn(owner, ctx.gameMap, ctx.roster);
@@ -159,7 +222,18 @@ export class AttackCowSystem implements GameSystem {
     } else {
       this.releaseTaunts();
     }
+    this.walkTrail(cow, ctx);
     this.recordState(cow);
+  }
+
+  /** A step along the party's line, while she is on it and on her feet. */
+  private walkTrail(cow: AttackCow, ctx: SystemContext): void {
+    const trailLink = this.trailLink;
+    const onTrail = trailLink !== null && canWalkTrail(attackCowTrailStance(cow));
+    cow.walksTrail = onTrail;
+    if (!onTrail) return;
+    this.trailMap = ctx.gameMap;
+    trailLink.step(cow, ctx, ctx.roster.grid);
   }
 
   /**

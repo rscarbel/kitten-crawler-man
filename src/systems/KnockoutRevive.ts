@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
 import type { EventBus } from '../core/EventBus';
 import type { Player } from '../Player';
@@ -20,7 +20,6 @@ import { palette } from '../ui/theme/tokens';
  * by the same 5-second stand-close everywhere.
  */
 
-const FRAMES_PER_SECOND = 60;
 /** Seconds left on a bleed-out clock at which the countdown turns red. */
 const CRITICAL_SECONDS_LEFT = 10;
 
@@ -48,7 +47,7 @@ export function knockoutPulse(): number {
 
 /** Whole seconds left on a bleed-out clock of `totalFrames`, `elapsedFrames` in. */
 export function knockoutSecondsLeft(totalFrames: number, elapsedFrames: number): number {
-  return Math.max(0, Math.ceil((totalFrames - elapsedFrames) / FRAMES_PER_SECOND));
+  return Math.max(0, Math.ceil((totalFrames - elapsedFrames) / WORLD_TICKS_PER_SECOND));
 }
 
 /** Amber with time to spare, red once the clock is nearly out. */
@@ -196,32 +195,27 @@ export function downedCompanionArrowCandidate(
 }
 
 /**
- * The knocked-out warning, the bleed-out clock and, once someone is in range,
- * the revive's progress, as a top-band entry. The arrow pointing at the downed
- * teammate is drawn separately, through {@link downedCompanionArrowCandidate}
- * and the shared arrow arbiter.
+ * The knocked-out warning and the bleed-out clock on one line and, once
+ * someone is in range, the revive's progress, as a compact top-band entry
+ * that rides inside a fight's card while one is up, so the fight's news
+ * stays one card and the room stays in view. The
+ * arrow pointing at the downed teammate is drawn separately, through
+ * {@link downedCompanionArrowCandidate} and the shared arrow arbiter.
  */
 export function knockedOutBandEntry(inactive: Player | null): TopBandEntry | null {
   if (inactive?.isKnockedOut !== true) return null;
 
   const pulse = knockoutPulse();
   const secondsLeft = knockoutSecondsLeft(KNOCKOUT_TIMEOUT_FRAMES, inactive.knockedOutFrames);
+  const critical = secondsLeft <= CRITICAL_SECONDS_LEFT;
   const rows: BandRow[] = [
     {
       kind: 'text',
-      text: 'Revive your teammate!',
-      role: 'title',
-      tone: 'danger',
-      wrap: true,
-      maxLines: 2,
-      alpha: pulse,
-    },
-    {
-      kind: 'text',
-      text: `${secondsLeft}s`,
-      role: 'heading',
-      tone: secondsLeft <= CRITICAL_SECONDS_LEFT ? 'danger' : 'warning',
+      text: `Revive your teammate! ${secondsLeft}s`,
+      role: 'label',
+      tone: critical ? 'danger' : 'warning',
       tabular: true,
+      wrap: false,
       alpha: pulse,
     },
   ];
@@ -243,6 +237,7 @@ export function knockedOutBandEntry(inactive: Player | null): TopBandEntry | nul
     priority: 'countdown',
     maxWidth: TOP_BAND_WIDTH.regular,
     accentTone: 'danger',
+    ridesFightCard: true,
     rows,
   });
 }

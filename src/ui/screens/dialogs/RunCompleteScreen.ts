@@ -70,6 +70,7 @@ export interface RunSummary {
   readonly deinonychusPets: number;
   readonly cowPets: number;
   readonly midgePets: number;
+  readonly townCatPets: number;
   readonly topKills: ReadonlyArray<readonly [string, number]>;
 }
 
@@ -240,6 +241,7 @@ function partyRows(summary: RunSummary): StatRow[] {
     },
     { label: 'Cows petted', value: summary.cowPets, format: 'count', tone: 'success' },
     { label: 'Midge petted', value: summary.midgePets, format: 'count', tone: 'success' },
+    { label: 'Cats petted', value: summary.townCatPets, format: 'count', tone: 'success' },
   ];
   rows.push(...petRows.filter((row) => row.value > 0));
   return rows;

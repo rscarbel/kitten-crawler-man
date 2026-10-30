@@ -61,7 +61,6 @@ export class RoomMechanisms {
     });
     this.knockOffs = new KnockOffSystem({
       map: options.map,
-      bus: options.bus,
       shatter: options.shatter,
       conveyors: this.conveyors,
       playSound: options.playSound,

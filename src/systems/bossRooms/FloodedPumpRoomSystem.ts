@@ -1,11 +1,10 @@
 import type { Camera } from '../../core/rendering/camera';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
 import { settings } from '../../core/input/Settings';
 import { KRAKEN_BOSS_TYPE } from '../../core/mobs/bossTypes';
 import type { SoundId } from '../../audio/sounds';
 import { MS_PER_SECOND } from '../../audio/voiceFades';
-import { TICKS_PER_SECOND } from '../../sprites/art/human/timing';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { Kraken } from '../../creatures/Kraken';
@@ -1401,7 +1400,7 @@ export class FloodedPumpRoomSystem
               camX,
               camY,
               artTop: sy - PUMP_ART_RISE_PX,
-              timeMs: (this.frame / TICKS_PER_SECOND) * MS_PER_SECOND,
+              timeMs: (this.frame / WORLD_TICKS_PER_SECOND) * MS_PER_SECOND,
             },
             paint,
           );

@@ -40,7 +40,7 @@ import {
 } from '../sprites/deinonychusAttackTiming';
 import { previewInk } from '../ui/theme/previewInk';
 import { deinonychusStageSpeed } from '../abilities/deinonychus';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawDeinonychusSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -124,7 +124,6 @@ const OVERHANG_TILES = 3;
 /** Where a cell's Deinonychus stands, as a fraction of the cell's height. */
 const GROUND_FRACTION = 0.88;
 const CELL_TEXT_INSET = 4;
-const FRAMES_PER_SECOND = 60;
 /**
  * How fast the walk loop plays for a stage, in sprite frames per second.
  *
@@ -135,7 +134,7 @@ const FRAMES_PER_SECOND = 60;
 function walkFps(stage: DeinonychusStage): number {
   const radiansPerTick =
     deinonychusStageSpeed(stage) * deinonychusWalkRadiansPerPixel(stage, TILE_SIZE);
-  return (radiansPerTick / (Math.PI * 2)) * DEINONYCHUS_WALK_FRAMES * FRAMES_PER_SECOND;
+  return (radiansPerTick / (Math.PI * 2)) * DEINONYCHUS_WALK_FRAMES * WORLD_TICKS_PER_SECOND;
 }
 const IDLE_FPS = 7;
 const IDLE_FRAME_COUNT = 8;
@@ -240,7 +239,7 @@ export class DeinonychusPreviewScene extends PreviewScene {
     const progress = action === null ? 0 : elapsed / deinonychusActionDuration(action);
     const loopFps = row.kind === 'walk' ? walkFps(this.stage) : IDLE_FPS;
     const loopCount = row.kind === 'walk' ? DEINONYCHUS_WALK_FRAMES : IDLE_FRAME_COUNT;
-    const loopFrame = Math.floor((this.clock / FRAMES_PER_SECOND) * loopFps) % loopCount;
+    const loopFrame = Math.floor((this.clock / WORLD_TICKS_PER_SECOND) * loopFps) % loopCount;
     const onImpact = row.impactFrame !== null && elapsed === row.impactFrame;
 
     worldText(ctx, row.kind, {

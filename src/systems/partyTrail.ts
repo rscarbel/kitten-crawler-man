@@ -13,6 +13,16 @@ import type { Footing, MobilityClass } from '../map/mobility';
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 
+/**
+ * A party-side system whose follower can be given a place on the party's
+ * {@link PartyLine}, or (null) handed back to its own feet. Every companion
+ * that can stand where a watcher looks answers it, so a scene puts the whole
+ * party on one line through one list.
+ */
+export interface TrailFollowSwitch {
+  setTrailFollow(line: PartyLine | null): void;
+}
+
 /** A body the trail reads or places: top-left world position, the same frame of reference the crawlers use. */
 export interface TrailBody {
   x: number;
@@ -98,10 +108,10 @@ export function trailGroundOn(map: () => GameMap | null): TrailGround {
 }
 
 /**
- * How far behind the leader, along the leader's own trail, a follower walks
- * wherever the route the player chose has to decide every body's ground (the
- * prison's lights, the flooded pump room's shark). One tile keeps the
- * follower exactly where the leader stood one step ago.
+ * How far behind the body ahead of it, along that body's own trail, each body
+ * on the party's line walks wherever the route the player chose has to decide
+ * every body's ground (the prison's lights, the flooded pump room's shark).
+ * One tile keeps each body exactly where the one ahead stood one step ago.
  */
 export const PARTY_TRAIL_SPACING_TILES = 1;
 
@@ -315,5 +325,154 @@ export class PartyTrail {
       };
     }
     return null;
+  }
+}
+
+/**
+ * Every place on the party's line, front to back. Each body walks the trail of
+ * the nearest body walking ahead of it, so the party strings out along the
+ * route the leader walked rather than piling onto one point behind it.
+ *
+ * The order is the one the scenes run their systems in (an encounter's cat
+ * ally before the scene's own companions), so every body steps after the one
+ * it trails and each link keeps its spacing exactly rather than a stride long.
+ */
+export const PARTY_LINE_ORDER = [
+  'partner_crawler',
+  'cat_ally',
+  'deinonychus',
+  'hire',
+  'attack_cow',
+] as const;
+export type PartyLinePlace = (typeof PARTY_LINE_ORDER)[number];
+
+/** What decides whether a body may take its place on the line this frame. */
+export interface TrailStance {
+  readonly isAlive: boolean;
+  /** On its feet and free to walk: not lying down, knocked out, held still or being stood back up. */
+  readonly standing: boolean;
+  /** Leaving the party on its own feet: a recall, a collapse, a limp off to rest. */
+  readonly retreating: boolean;
+}
+
+/**
+ * The one rule every body on the line keeps: only a body on its feet, alive
+ * and not heading off walks the trail. Anything else lies or leaves where its
+ * own state puts it, and the bodies behind it close up on the next one ahead.
+ */
+export function canWalkTrail(stance: TrailStance): boolean {
+  return stance.isAlive && stance.standing && !stance.retreating;
+}
+
+/** A crawler as the line reads one. */
+export interface LineCrawler extends TrailBody {
+  readonly isAlive: boolean;
+  readonly isKnockedOut: boolean;
+  readonly canAct: boolean;
+  readonly isAway: boolean;
+}
+
+/** A crawler's stance on the line: on its feet while neither knocked out nor held by a status. */
+export function crawlerTrailStance(crawler: LineCrawler): TrailStance {
+  return {
+    isAlive: crawler.isAlive,
+    standing: !crawler.isKnockedOut && crawler.canAct,
+    retreating: false,
+  };
+}
+
+/** The crawlers of the live group: the one being steered and, when here, the other. */
+export interface PartyLineCrawlers {
+  readonly active: TrailBody;
+  readonly partner: LineCrawler | null;
+}
+
+/**
+ * The crawler the companions' end of the line starts behind: the partner
+ * while it stands to lead, else the crawler being steered. A knocked-out
+ * partner is lying on the floor, and a line parked beside it would leave the
+ * party out of cover while the active crawler moves on.
+ */
+export function partyLineHead(crawlers: PartyLineCrawlers): TrailBody {
+  const partner = crawlers.partner;
+  if (partner === null || partner.isAway) return crawlers.active;
+  return canWalkTrail(crawlerTrailStance(partner)) ? partner : crawlers.active;
+}
+
+/** The part of a spatial index a trail step keeps current. */
+export interface TrailGrid<T> {
+  move(entity: T, oldX: number, oldY: number): void;
+}
+
+/**
+ * The party walking in single file along the route the steered crawler
+ * chose, each body {@link spacingPx} of walked distance behind the one ahead.
+ * A scene makes one while a room wants the party there and hands it to every
+ * party-side system; each system's body {@link join}s it at its own place.
+ */
+export class PartyLine {
+  /** Front to back, in {@link PARTY_LINE_ORDER}; bodies of one kind in the order they joined. */
+  private readonly links: PartyLineLink[] = [];
+
+  constructor(readonly spacingPx: number) {}
+
+  /**
+   * Takes a place on the line for one body. `walking` names the body while it
+   * is walking the line this frame and null otherwise, so the bodies behind
+   * it know whether to trail it or the next one ahead.
+   */
+  join(place: PartyLinePlace, ground: TrailGround, walking: () => TrailBody | null): PartyLineLink {
+    const link = new PartyLineLink(this, place, new PartyTrail(this.spacingPx, ground), walking);
+    const rank = PARTY_LINE_ORDER.indexOf(place);
+    const firstBehind = this.links.findIndex(
+      (other) => PARTY_LINE_ORDER.indexOf(other.place) > rank,
+    );
+    if (firstBehind < 0) this.links.push(link);
+    else this.links.splice(firstBehind, 0, link);
+    return link;
+  }
+
+  /**
+   * The body `link` walks behind this frame. The partner crawler walks behind
+   * the steered one; every other body behind the nearest body walking ahead
+   * of it, and with none, behind the {@link partyLineHead}: a standing partner
+   * still leads the companions when no system walks it on the line.
+   */
+  leaderOf(link: PartyLineLink, crawlers: PartyLineCrawlers): TrailBody {
+    if (link.place === 'partner_crawler') return crawlers.active;
+    const index = this.links.indexOf(link);
+    for (let ahead = index - 1; ahead >= 0; ahead--) {
+      const body = this.links[ahead].walking();
+      if (body !== null) return body;
+    }
+    return partyLineHead(crawlers);
+  }
+}
+
+/** One body's place on a {@link PartyLine}, with the trail it walks there. */
+export class PartyLineLink {
+  constructor(
+    private readonly line: PartyLine,
+    readonly place: PartyLinePlace,
+    readonly trail: PartyTrail,
+    readonly walking: () => TrailBody | null,
+  ) {}
+
+  /**
+   * One step along the trail of whoever walks ahead. A body the scene indexes
+   * in `grid` is moved to its new cell here, because the trail places it
+   * directly rather than through its own movement, and a body left in its old
+   * cell is culled from drawing and missed by every query once that cell is
+   * off-screen.
+   */
+  step<T extends TrailFollowerBody>(
+    follower: T,
+    crawlers: PartyLineCrawlers,
+    grid: TrailGrid<T> | null,
+  ): void {
+    const fromX = follower.x;
+    const fromY = follower.y;
+    this.trail.tick(this.line.leaderOf(this, crawlers), follower);
+    grid?.move(follower, fromX, fromY);
   }
 }

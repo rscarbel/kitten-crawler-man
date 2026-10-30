@@ -26,9 +26,9 @@ import {
 import { measureText, tabularNumber } from '../widgets/text';
 import type { LevelTimerModel } from './hudModel';
 import type { TopBandEntry } from './topBand';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 const SECONDS_PER_MINUTE = 60;
-const FRAMES_PER_SECOND = 60;
 const TEN_MINUTES = 10;
 const FIVE_MINUTES = 5;
 const ONE_MINUTE = 1;
@@ -58,7 +58,7 @@ const TIMER_PAUSED_LABEL = 'TIMER PAUSED';
 export type LevelTimerCue = 'ten_minute_warning' | 'five_minute_warning' | 'final_minute_heartbeat';
 
 const secondsShown = (timerFrames: number): number =>
-  Math.max(0, Math.ceil(timerFrames / FRAMES_PER_SECOND));
+  Math.max(0, Math.ceil(timerFrames / WORLD_TICKS_PER_SECOND));
 
 /**
  * The audible cue owed for one frame of countdown, judged on the whole seconds
@@ -88,7 +88,7 @@ function clockText(totalSeconds: number): string {
 
 /** The final minute's readout: display-sized digits that swell on every second. */
 function criticalClockRow(clock: string, timerFrames: number, paused: boolean): BandRow {
-  const secondPhase = (timerFrames % FRAMES_PER_SECOND) / FRAMES_PER_SECOND;
+  const secondPhase = (timerFrames % WORLD_TICKS_PER_SECOND) / WORLD_TICKS_PER_SECOND;
   const pulse = paused ? 1 : 1 + CRITICAL_PULSE_AMPLITUDE * Math.sin(secondPhase * Math.PI);
   return {
     kind: 'custom',
@@ -120,7 +120,7 @@ const urgentThrob = (now: number): number =>
 function chipOpacity(ui: Ui, model: LevelTimerModel, totalSeconds: number): number {
   if (model.paused) return 1;
   if (totalSeconds <= ONE_MINUTE_CRITICAL_SECONDS) {
-    const secondPhase = (model.frames % FRAMES_PER_SECOND) / FRAMES_PER_SECOND;
+    const secondPhase = (model.frames % WORLD_TICKS_PER_SECOND) / WORLD_TICKS_PER_SECOND;
     const beat = Math.sin(secondPhase * Math.PI);
     return CRITICAL_CHIP_MIN_OPACITY + (1 - CRITICAL_CHIP_MIN_OPACITY) * beat;
   }

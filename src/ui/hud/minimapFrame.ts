@@ -12,7 +12,9 @@ import { inset, type Rect } from '../core/geom';
 import type { DragPoint, Ui } from '../core/UiRoot';
 import { UiStateSlot } from '../core/uiState';
 import { iconButton, iconButtonSize } from '../widgets/iconButton';
-import { fillRounded, roundRectPath, strokeRounded } from '../widgets/paint';
+import { strokeRounded } from '../widgets/paint';
+import { roundRectPath } from '../widgets/roundRect';
+import { fillShadowedRounded } from '../widgets/shadowedFill';
 import type { MinimapModel } from './hudModel';
 
 /** A finger travels this far on the expanded map before it pans, so a tap still collapses it. */
@@ -59,12 +61,7 @@ export function minimapFrame(
     focusable: false,
   });
 
-  ctx.save();
-  ctx.shadowColor = theme.elevation.hud.color;
-  ctx.shadowBlur = theme.elevation.hud.blur;
-  ctx.shadowOffsetY = theme.elevation.hud.offsetY;
-  fillRounded(ctx, rect, corner, theme.palette.surface.sunken);
-  ctx.restore();
+  fillShadowedRounded(ctx, rect, corner, theme.palette.surface.sunken, theme.elevation.hud);
   ctx.save();
   roundRectPath(ctx, rect, corner);
   ctx.clip();

@@ -18,17 +18,16 @@
  * pay for its upkeep at that cost.
  */
 
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { Camera } from '../core/rendering/camera';
 import { REFRESHED_SPEED_FACTOR } from '../core/combat/StatusEffect';
 import { SPEED_FIZZ_MULTIPLIER } from '../Player';
 import type { TileRect } from '../map/town/townPlan';
 
-const UPDATES_PER_SECOND = 60;
-
 /** The fastest a crawler walks without cheats: Speed Fizz on top of the stall's boon. */
 export const FASTEST_WALK_TILES_PER_SECOND =
-  (PLAYER_SPEED * SPEED_FIZZ_MULTIPLIER * REFRESHED_SPEED_FACTOR * UPDATES_PER_SECOND) / TILE_SIZE;
+  (PLAYER_SPEED * SPEED_FIZZ_MULTIPLIER * REFRESHED_SPEED_FACTOR * WORLD_TICKS_PER_SECOND) /
+  TILE_SIZE;
 
 /** Updates between decisions: often enough that the fastest walk moves under two tiles between them. */
 export const RESIDENCY_CHECK_INTERVAL_UPDATES = 10;

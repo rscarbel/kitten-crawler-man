@@ -27,7 +27,7 @@ import { level2 } from '../src/levels/level2';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob } from '../src/creatures/Mob';
@@ -1245,12 +1245,11 @@ console.log('\nthe first level-up is reachable');
   // *uninterrupted* biting from an animal who dies in a few hits. This bounds
   // the rate against that same arithmetic.
   const BITE_COOLDOWN_FRAMES = 46;
-  const FRAMES_PER_SECOND = 60;
   /** The first level-up has to land inside a single session of real use. */
   const MAX_ACCEPTABLE_SECONDS = 150;
 
   const damagePerSecond =
-    (getDeinonychusStats(1).biteDamage / BITE_COOLDOWN_FRAMES) * FRAMES_PER_SECOND;
+    (getDeinonychusStats(1).biteDamage / BITE_COOLDOWN_FRAMES) * WORLD_TICKS_PER_SECOND;
   const xpPerSecond = damagePerSecond / DEINONYCHUS_DAMAGE_PER_XP;
   const secondsOfBiting = DEINONYCHUS_DEF.baseXpToLevel2 / xpPerSecond;
   check(
@@ -1342,9 +1341,8 @@ console.log('\na full recovery never takes more than thirty seconds');
 {
   // Measured by running the tick rather than by reading the constants, so a
   // re-tune that keeps the interval but changes the rounding is caught too.
-  const FRAMES_PER_SECOND = 60;
   const MAX_RECOVERY_SECONDS = 30;
-  const maxRecoveryFrames = MAX_RECOVERY_SECONDS * FRAMES_PER_SECOND;
+  const maxRecoveryFrames = MAX_RECOVERY_SECONDS * WORLD_TICKS_PER_SECOND;
   let slowestFrames = 0;
   let slowestLevel = 0;
   let countdownAgrees = true;
@@ -1365,7 +1363,7 @@ console.log('\na full recovery never takes more than thirty seconds');
   }
   check(
     slowestFrames <= maxRecoveryFrames,
-    `empty to full takes at most ${(slowestFrames / FRAMES_PER_SECOND).toFixed(2)}s (level ${slowestLevel}; want <= ${MAX_RECOVERY_SECONDS}s)`,
+    `empty to full takes at most ${(slowestFrames / WORLD_TICKS_PER_SECOND).toFixed(2)}s (level ${slowestLevel}; want <= ${MAX_RECOVERY_SECONDS}s)`,
   );
   check(countdownAgrees, 'the countdown predicts the recovery the tick actually delivers');
 
@@ -1393,7 +1391,7 @@ console.log('\na full recovery never takes more than thirty seconds');
     }
     check(
       frames <= maxRecoveryFrames,
-      `knockout to full takes ${(frames / FRAMES_PER_SECOND).toFixed(2)}s including a ${(ranHomeFrames / FRAMES_PER_SECOND).toFixed(1)}s run home (want <= ${MAX_RECOVERY_SECONDS}s)`,
+      `knockout to full takes ${(frames / WORLD_TICKS_PER_SECOND).toFixed(2)}s including a ${(ranHomeFrames / WORLD_TICKS_PER_SECOND).toFixed(1)}s run home (want <= ${MAX_RECOVERY_SECONDS}s)`,
     );
   }
 }

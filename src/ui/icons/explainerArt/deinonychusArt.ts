@@ -10,7 +10,7 @@ import {
   DEINONYCHUS_GROUND_FROM_TILE_TOP,
   deinonychusHeadTopTiles,
 } from '../../../sprites/art/deinonychusFigure';
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import {
   DEINONYCHUS_BUTTON_LABELS,
   SUMMON_BUTTON_HEIGHT,
@@ -162,7 +162,6 @@ const FLINCH_HOLD_FRAMES = 2;
 const GOBLIN_STATES_DRAWN: readonly GoblinState[] = ['idle', 'attack_light', 'flinch'];
 
 const HALF = 0.5;
-const FRAMES_PER_SECOND = 60;
 /**
  * How many idle frames apart neighbouring goblins breathe. Any less than a
  * whole idle frame and the row shows the same frame and breathes in lockstep.
@@ -170,7 +169,7 @@ const FRAMES_PER_SECOND = 60;
 const GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES = 2;
 /** {@link GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES} in game frames, the clock each goblin is offset on. */
 const GOBLIN_IDLE_PHASE_STEP = Math.round(
-  (GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES * FRAMES_PER_SECOND) / GOBLIN_IDLE_FPS,
+  (GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES * WORLD_TICKS_PER_SECOND) / GOBLIN_IDLE_FPS,
 );
 const TWO_PI = Math.PI * 2;
 
@@ -567,7 +566,7 @@ function drawGoblin(
 
 /** The goblin's idle loop, from the frame clock. */
 function goblinIdleFrame(frame: number): number {
-  const idleFrames = (frame / FRAMES_PER_SECOND) * GOBLIN_IDLE_FPS;
+  const idleFrames = (frame / WORLD_TICKS_PER_SECOND) * GOBLIN_IDLE_FPS;
   return goblinFrame('idle', idleFrames);
 }
 
@@ -1155,7 +1154,7 @@ export function drawHealthPage(
   const sinceKill = frame - killLandsAt;
   if (sinceKill >= 0 && sinceKill < HEALTH_TOAST_FRAMES) {
     const t = sinceKill / HEALTH_TOAST_FRAMES;
-    const seconds = DEINONYCHUS_KILL_RECOVERY_FRAMES / FRAMES_PER_SECOND;
+    const seconds = DEINONYCHUS_KILL_RECOVERY_FRAMES / WORLD_TICKS_PER_SECOND;
     ctx.save();
     ctx.globalAlpha *= 1 - t * t;
     worldText(ctx, `-${seconds.toFixed(HEALTH_TOAST_DECIMALS)}s`, {

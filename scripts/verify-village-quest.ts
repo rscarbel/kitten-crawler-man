@@ -26,7 +26,7 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { setViewportSize } from '../src/core/rendering/Viewport';
 import type { ConversationRequest } from '../src/dialog/request';
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import {
   captureBriarHollowState,
   parseBriarHollowStateSnapshot,
@@ -108,7 +108,6 @@ function section(name: string): void {
 
 const SEED = 7919;
 const ASSAULT_LEVEL = 6;
-const UPDATES_PER_SECOND = 60;
 /** The request's numbers, written out so a drifted constant fails here. */
 const REQUEST_IMMINENT_SECONDS = 45;
 const REQUEST_BELL_HP = 120;
@@ -198,7 +197,7 @@ function stepFrames(frames: number): void {
 }
 
 function stepUntil(done: () => boolean, limitSeconds = STEP_LIMIT_SECONDS): boolean {
-  for (let i = 0; i < limitSeconds * UPDATES_PER_SECOND; i++) {
+  for (let i = 0; i < limitSeconds * WORLD_TICKS_PER_SECOND; i++) {
     if (done()) return true;
     rig.step();
   }
@@ -623,8 +622,8 @@ section('7. Summoned by the Mayor, and the countdown');
   check(!conversation.isOpen, 'choosing it closes the conversation and starts the siege directly');
   check(state.quest.phase === 'imminent', '"I\'m ready for the assault" starts the countdown');
   check(
-    state.quest.imminentCountdownFrames === REQUEST_IMMINENT_SECONDS * UPDATES_PER_SECOND &&
-      IMMINENT_FRAMES === REQUEST_IMMINENT_SECONDS * UPDATES_PER_SECOND,
+    state.quest.imminentCountdownFrames === REQUEST_IMMINENT_SECONDS * WORLD_TICKS_PER_SECOND &&
+      IMMINENT_FRAMES === REQUEST_IMMINENT_SECONDS * WORLD_TICKS_PER_SECOND,
     `${REQUEST_IMMINENT_SECONDS} seconds of it`,
   );
   check(kit.ambience.noticeBoard.callToArms, 'the call to arms goes up on the notice board');
@@ -647,7 +646,7 @@ section('7. Summoned by the Mayor, and the countdown');
 let breachedBeforeRetry = 0;
 section('8. A lost siege');
 {
-  stepFrames(FIRST_WAVE_SECONDS * UPDATES_PER_SECOND);
+  stepFrames(FIRST_WAVE_SECONDS * WORLD_TICKS_PER_SECOND);
   check(assault.spawnedTotal > 0, `the first wave came (${assault.spawnedTotal} spawned)`);
   const structuresBefore = JSON.stringify(state.structures);
   // Blow after blow until it gives: one blow may only take so much of the bell.
@@ -759,7 +758,7 @@ section('9. The retry and the turn-in');
     rig.bossIntros - introsBeforeRetry === 1,
     'his boss intro plays once in the siege, when he first comes',
   );
-  stepFrames(NECRO_WAVE_RUN_SECONDS * UPDATES_PER_SECOND);
+  stepFrames(NECRO_WAVE_RUN_SECONDS * WORLD_TICKS_PER_SECOND);
   const necro = assault.activeNecromancer;
   check(necro !== null, 'he is in the field');
   // A bounty mark's escort is never enlisted, but it is one of the siege's
@@ -780,7 +779,7 @@ section('9. The retry and the turn-in');
   check(state.quest.phase === 'victory', 'his death wins the siege');
   const xpAfterKill = partyXp();
   const coinsAfterKill = human.coins + cat.coins;
-  stepFrames(CRUMBLE_WAIT_SECONDS * UPDATES_PER_SECOND);
+  stepFrames(CRUMBLE_WAIT_SECONDS * WORLD_TICKS_PER_SECOND);
   check(
     living.every((mob) => !mob.isAlive),
     'every undead left standing crumbles',
@@ -881,7 +880,7 @@ section('10. A scene rebuilt in the middle of the siege');
   const first = buildSiegeRig({ seed: SEED, assaultLevel: ASSAULT_LEVEL });
   first.state.quest.phase = 'fortifying';
   first.kit.assault?.begin();
-  for (let i = 0; i < IMMINENT_FRAMES + UPDATES_PER_SECOND * 2; i++) first.step();
+  for (let i = 0; i < IMMINENT_FRAMES + WORLD_TICKS_PER_SECOND * 2; i++) first.step();
   const firstPhase = (): VillageQuestPhase => first.state.quest.phase;
   check(firstPhase() === 'assault', 'the first scene is in the assault');
   first.dispose();
@@ -892,7 +891,7 @@ section('10. A scene rebuilt in the middle of the siege');
     rebuilt.state.quest.phase === 'repelled_failed',
     `the rebuilt scene settles the siege as lost (phase "${rebuilt.state.quest.phase}")`,
   );
-  for (let i = 0; i < UPDATES_PER_SECOND * REBUILD_WATCH_SECONDS; i++) rebuilt.step();
+  for (let i = 0; i < WORLD_TICKS_PER_SECOND * REBUILD_WATCH_SECONDS; i++) rebuilt.step();
   const undead = rebuilt.world.roster.mobs.filter(
     (mob) => mob.isAlive && mob.isHostile && mob.siegeCapable !== null,
   ).length;
@@ -910,7 +909,7 @@ section('10. A scene rebuilt in the middle of the siege');
   const first = buildSiegeRig({ seed: SEED, assaultLevel: ASSAULT_LEVEL });
   first.state.quest.phase = 'fortifying';
   first.kit.assault?.begin();
-  for (let i = 0; i < UPDATES_PER_SECOND * REBUILD_INTO_COUNTDOWN_SECONDS; i++) first.step();
+  for (let i = 0; i < WORLD_TICKS_PER_SECOND * REBUILD_INTO_COUNTDOWN_SECONDS; i++) first.step();
   const framesLeft = first.state.quest.imminentCountdownFrames;
   first.dispose();
   const music: { current: MusicClaims | null } = { current: null };
@@ -949,7 +948,7 @@ section('10. A scene rebuilt in the middle of the siege');
   const live = buildSiegeRig({ seed: SEED, assaultLevel: ASSAULT_LEVEL });
   live.state.quest.phase = 'fortifying';
   live.kit.assault?.begin();
-  const toCheckpoint = IMMINENT_FRAMES + UPDATES_PER_SECOND * CHECKPOINT_INTO_ASSAULT_SECONDS;
+  const toCheckpoint = IMMINENT_FRAMES + WORLD_TICKS_PER_SECOND * CHECKPOINT_INTO_ASSAULT_SECONDS;
   for (let i = 0; i < toCheckpoint; i++) live.step();
   const siegeUndead = (): number =>
     live.world.roster.mobs.filter(
@@ -1028,7 +1027,7 @@ section('11. Bombers in the siege');
     };
 
     const stepBombRig = (done: () => boolean, limitSeconds: number): boolean => {
-      for (let i = 0; i < limitSeconds * UPDATES_PER_SECOND; i++) {
+      for (let i = 0; i < limitSeconds * WORLD_TICKS_PER_SECOND; i++) {
         if (done()) return true;
         bombRig.step();
       }
@@ -1054,7 +1053,7 @@ section('11. Bombers in the siege');
       );
     const fielded = stepBombRig(
       () => dynamiter() !== undefined,
-      IMMINENT_FRAMES / UPDATES_PER_SECOND + BOMBER_WAVE_WATCH_SECONDS,
+      IMMINENT_FRAMES / WORLD_TICKS_PER_SECOND + BOMBER_WAVE_WATCH_SECONDS,
     );
     check(fielded, 'the first wave fields a Dynamite Goblin');
     const landed = stepBombRig(

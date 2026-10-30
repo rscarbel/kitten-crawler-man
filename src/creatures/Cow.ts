@@ -20,7 +20,7 @@ import { Mob, type PlayerDamageType, type LootDrop } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LevelledCurve } from './mobLevelScaling';
 import type { Player } from '../Player';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   CALF_TILES_PER_TROT_CYCLE,
   CALF_TILES_PER_WALK_CYCLE,
@@ -64,8 +64,7 @@ import {
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 
-const UPDATES_PER_SECOND = 60;
-const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 const TWO_PI = Math.PI * 2;
 const TILE_CENTRE = 0.5;
 
@@ -292,7 +291,7 @@ function randomBetween(random: () => number, min: number, max: number): number {
 }
 
 function secondsToUpdates(seconds: number): number {
-  return Math.round(seconds * UPDATES_PER_SECOND);
+  return Math.round(seconds * WORLD_TICKS_PER_SECOND);
 }
 
 const COW_EYES: Readonly<Record<CowAge, EyePlacement>> = {

@@ -10,7 +10,7 @@
  * handled.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { GameMap } from '../map/GameMap';
 import type { Townsperson } from '../creatures/Townsperson';
@@ -110,14 +110,13 @@ export function startOccupantRoutine(
   }
 }
 
-const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const HALF = 0.5;
 
 /** Frames one play of `pose` lasts for this person's figure. */
 function poseFrames(person: Townsperson, pose: RoutinePoseId): number {
   const { durationMs } = townspersonRoutineTiming(person.body, pose);
-  return Math.max(1, Math.round((durationMs * FRAMES_PER_SECOND) / MS_PER_SECOND));
+  return Math.max(1, Math.round((durationMs * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND));
 }
 
 /**
@@ -405,7 +404,7 @@ function boltFigure(bolt: Bolt, targetFootY: number): InteriorFigure {
       const sx = bolt.x - camX;
       const sy = bolt.y - camY;
       if (bolt.stuckFrames === null) {
-        drawSteveBolt(ctx, sx, sy, tileSize, bolt.heading, bolt.ageFrames / FRAMES_PER_SECOND);
+        drawSteveBolt(ctx, sx, sy, tileSize, bolt.heading, bolt.ageFrames / WORLD_TICKS_PER_SECOND);
         return;
       }
       const fading = Math.max(0, bolt.stuckFrames - BOLT_STUCK_FRAMES);

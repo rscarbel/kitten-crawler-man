@@ -4,6 +4,10 @@
  * before, during and after the missing-cats questline: they never leave, never
  * path and are never fought. Talking to one gets a short refusal in his own
  * voice; the door itself refuses through {@link towerDoorRefusal}.
+ *
+ * The door never lets anyone in, but a party inside the tower can walk out
+ * of it. While the door is still barred the guards stop the human on the
+ * way out, once each time, and he talks his way past them.
  */
 
 import { TILE_SIZE } from '../../core/constants';
@@ -17,6 +21,7 @@ import { pickFreshLine } from '../../dialog/scripts/scenes/cloggedBathroom';
 import {
   TOWER_DOOR_GUARD_LINES,
   TOWER_DOOR_PROMPTS,
+  TOWER_DOOR_WALK_OUT,
   type TowerDoorPost,
   type TowerDoorStanding,
 } from '../../dialog/scripts/scenes/towerDoor';
@@ -24,7 +29,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { Point } from '../../map/roomDoorways';
 import type { TilePoint } from '../../map/town/townPlan';
 import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
-import type { GameSystem, SystemContext } from '../GameSystem';
+import { presentCrawlers, type GameSystem, type SystemContext } from '../GameSystem';
 import type { MobRoster } from '../kits/SceneWorld';
 
 export interface TowerDoorGuardDeps {
@@ -33,6 +38,8 @@ export interface TowerDoorGuardDeps {
   readonly conversation: Conversation;
   /** What the door and its guards answer with this frame; read on every talk. */
   readonly standing: () => TowerDoorStanding;
+  /** Whether the party has just walked out of the tower's front door, past the guards. */
+  readonly walkedOutOfTower: boolean;
 }
 
 /** How close, in tiles, a crawler must stand to talk to a door guard. */
@@ -64,10 +71,12 @@ export class TowerDoorGuardSystem implements GameSystem {
   private readonly guards: readonly PostedGuard[];
   private conversationHandle: ConversationHandle | null = null;
   private talkingTo: PostedGuard | null = null;
+  private walkOutChallengeOwed: boolean;
 
   constructor(private readonly deps: TowerDoorGuardDeps) {
     const posts = deps.gameMap.townPlan?.towerGuardPosts;
     this.guards = posts === undefined ? [] : POSTS.map((post) => this.postGuard(post, posts[post]));
+    this.walkOutChallengeOwed = deps.walkedOutOfTower;
   }
 
   private postGuard(post: TowerDoorPost, tile: TilePoint): PostedGuard {
@@ -77,10 +86,13 @@ export class TowerDoorGuardSystem implements GameSystem {
     return { post, mob, talks: 0, lastLine: null };
   }
 
-  private nearestGuard(active: { readonly x: number; readonly y: number }): PostedGuard | null {
+  private nearestGuard(
+    active: { readonly x: number; readonly y: number },
+    withinPx = TALK_RANGE_PX,
+  ): PostedGuard | null {
     const from = centreOf(active);
     let best: PostedGuard | null = null;
-    let bestDistance = TALK_RANGE_PX;
+    let bestDistance = withinPx;
     for (const guard of this.guards) {
       const at = centreOf(guard.mob);
       const distance = Math.hypot(at.x - from.x, at.y - from.y);
@@ -129,6 +141,36 @@ export class TowerDoorGuardSystem implements GameSystem {
     });
   }
 
+  /**
+   * The guards stop the human coming out of the door they never saw him go
+   * in by. Waits for the screen to be free of any other conversation; past
+   * the barred door's days nobody is left asking.
+   */
+  private challengeWalkOutIfOwed(ctx: SystemContext): void {
+    if (!this.walkOutChallengeOwed || this.deps.conversation.isOpen) return;
+    this.walkOutChallengeOwed = false;
+    const human = ctx.human;
+    const humanCameOut = presentCrawlers(ctx).some((crawler) => crawler === human);
+    if (!humanCameOut || this.deps.standing() !== 'barred') return;
+    const guard = this.nearestGuard(human, Infinity);
+    if (guard === null) return;
+    guard.mob.faceTile({
+      x: Math.round(human.x / TILE_SIZE),
+      y: Math.round(human.y / TILE_SIZE),
+    });
+    this.talkingTo = guard;
+    this.conversationHandle = this.deps.conversation.open({
+      lines: TOWER_DOOR_WALK_OUT,
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'close', onClosed: () => undefined },
+      dismiss: { kind: 'blocked' },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
   /** Whether the conversation on screen is one this system opened. */
   get isDialogOpen(): boolean {
     return (
@@ -136,7 +178,8 @@ export class TowerDoorGuardSystem implements GameSystem {
     );
   }
 
-  update(_ctx: SystemContext): void {
+  update(ctx: SystemContext): void {
+    this.challengeWalkOutIfOwed(ctx);
     const talking = this.isDialogOpen ? this.talkingTo : null;
     for (const guard of this.guards) {
       if (guard === talking) {

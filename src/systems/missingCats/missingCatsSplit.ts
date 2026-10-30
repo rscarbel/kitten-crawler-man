@@ -17,7 +17,7 @@
  * 3. Belle, `archive`: across the pulsing wards with the key ring sent down
  *    (`keyRingSent`), and onto the bell storey.
  * 4. The human, `gatehouse`: through the guards and into the kitchen, and the
- *    tuna sent up (`tunaSent`).
+ *    tuna sent up (`kitchen` at `tuna_sent`).
  * 5. Belle, `bell_storey`: the counterweight dropped (`portcullisRaised`),
  *    after which the party comes back together.
  */

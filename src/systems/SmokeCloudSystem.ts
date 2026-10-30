@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   allocCanvas,
   freshSurfaceContext,
@@ -17,8 +17,7 @@ const SMOKE_CLOUD_SECONDS = 6;
 /** How far the cloud reaches from where the bomb burst, in tiles. */
 const SMOKE_CLOUD_RADIUS_TILES = 4;
 
-const GAME_FRAMES_PER_SECOND = 60;
-const SMOKE_CLOUD_FRAMES = SMOKE_CLOUD_SECONDS * GAME_FRAMES_PER_SECOND;
+const SMOKE_CLOUD_FRAMES = SMOKE_CLOUD_SECONDS * WORLD_TICKS_PER_SECOND;
 const SMOKE_CLOUD_RADIUS_PX = SMOKE_CLOUD_RADIUS_TILES * TILE_SIZE;
 
 const TILE_CENTRE_FRACTION = 0.5;
@@ -219,7 +218,7 @@ export class SmokeCloudSystem {
       ctx.drawImage(cloud.texture, cx - half * pulse, cy - half * pulse, drawnSize, drawnSize);
       ctx.restore();
 
-      worldText(ctx, `${Math.ceil(cloud.framesLeft / GAME_FRAMES_PER_SECOND)}s`, {
+      worldText(ctx, `${Math.ceil(cloud.framesLeft / WORLD_TICKS_PER_SECOND)}s`, {
         x: cx,
         y: cy - SMOKE_CLOUD_RADIUS_PX - TIMER_Y_OFFSET,
         size: TIMER_TEXT_SIZE,

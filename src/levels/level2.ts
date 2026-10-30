@@ -1,11 +1,11 @@
 import type { EscortSpawnRule, ExtraSpawnOrigin, FairyRoomRate, LevelDef } from './types';
 import { FLOOR_TWO_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 const LEVEL2_NIGHTMARE_TIME_LIMIT_MINUTES = 60;
 export const LEVEL2_NIGHTMARE_TIME_LIMIT_FRAMES =
-  LEVEL2_NIGHTMARE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+  LEVEL2_NIGHTMARE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 
 /** Branch count leaving the start room toward the Current Goblin's gateway. */
 const ELECTRIC_GOBLIN_BRANCH_MIN = 2;

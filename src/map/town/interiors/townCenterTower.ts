@@ -41,6 +41,8 @@ import type { SoundId } from '../../../audio/sounds';
 import type { ItemId } from '../../../core/items/defs/ItemDefs';
 import {
   missingCatsProgressAt,
+  crawlerCatCageOpen,
+  larderUnlocked,
   phaseReached,
   type MissingCatsProgress,
 } from '../../../core/quests/missingCatsProgress';
@@ -50,6 +52,7 @@ import { TOWN_CAT_IDS, type TownCatId } from '../../../core/state/townCatIds';
 import {
   CAT_LEDGE,
   FLOOR_DROP,
+  FLOOR_DROP_SPANNED,
   FloorTypeValue,
   INTERIOR_BOARD_FLOOR,
   INTERIOR_FLAG_FLOOR,
@@ -62,10 +65,18 @@ import {
 import {
   LARDER_DOOR_VARIANT,
   LOOSE_THING_VARIANT,
+  SHELF_BOARD_FALLS,
   WALL_FITTING_VARIANT,
   WARD_STONE_VARIANT,
 } from '../../../sprites/art/townInterior/rooms/towerWorks';
-import { knockableProp, prop, statefulProp, tile, type TownInteriorLayoutEntry } from './types';
+import {
+  knockableProp,
+  prop,
+  statefulProp,
+  tile,
+  toppleableProp,
+  type TownInteriorLayoutEntry,
+} from './types';
 import type { StatelessTownInteriorPropId } from '../../../sprites/art/townInterior/townInteriorProps';
 
 // ── The storeys ──────────────────────────────────────────────────────────────
@@ -132,6 +143,12 @@ export interface TowerConditions {
   /** Whether the archivist's key ring has gone down the dumbwaiter, so its shelf top is bare. */
   readonly keyRingSent: boolean;
   readonly ritual: 'dark' | 'lit';
+  /**
+   * The cattery's keeper keeps its round until the party climbs together; its
+   * cover stands on the cattery floor only while it does, since the Warden's
+   * walls of fire need that floor open.
+   */
+  readonly keeper: 'on_watch' | 'gone';
   readonly openCages: ReadonlySet<CatteryCageOccupant>;
   /** Town cats bound to a pillar of the circle: every one nobody let out. */
   readonly boundCats: ReadonlySet<TownCatId>;
@@ -146,6 +163,17 @@ export const ARCHIVE_WARDS_BY_CONDUIT = {
   shut: 'pulsing',
 } as const satisfies Record<TowerConditions['conduit'], TowerWardState>;
 
+/**
+ * Whether the Warden is gone and the tower has stood down: its guards off
+ * the gatehouse, its bells still, its wards spent and its krasue gone, on
+ * every storey from the cattery to the street door. A storey built after this
+ * is built that way; one already standing when the Warden falls is stood
+ * down where it stands.
+ */
+export function towerStandsDown(progress: Pick<MissingCatsProgress, 'phase'>): boolean {
+  return phaseReached(progress, 'aftermath');
+}
+
 /** The tower as the questline leaves it. */
 export function towerConditionsFor(
   progress: Pick<
@@ -155,14 +183,13 @@ export function towerConditionsFor(
     | 'catsFreed'
     | 'crawlerCatUncaged'
     | 'cellmateFreed'
-    | 'larderOpened'
+    | 'kitchen'
     | 'portcullisRaised'
     | 'keyRingSent'
   >,
 ): TowerConditions {
-  const crawlerCatOut = phaseReached(progress, 'cistern');
   const reunited = phaseReached(progress, 'ascent');
-  const wardenGone = phaseReached(progress, 'aftermath');
+  const wardenGone = towerStandsDown(progress);
   const conduit = progress.conduitShut ? 'shut' : 'running';
   const wards: TowerWardState = wardenGone
     ? 'spent'
@@ -172,7 +199,7 @@ export function towerConditionsFor(
   const openCages = new Set<CatteryCageOccupant>(
     wardenGone ? [...TOWN_CAT_IDS, ...CAT_ALLY_IDS, 'crawler_cat'] : progress.catsFreed,
   );
-  if (crawlerCatOut || progress.crawlerCatUncaged) openCages.add('crawler_cat');
+  if (crawlerCatCageOpen(progress)) openCages.add('crawler_cat');
   if (progress.cellmateFreed) {
     for (const ally of CAT_ALLY_IDS) openCages.add(ally);
   }
@@ -182,11 +209,12 @@ export function towerConditionsFor(
   return {
     conduit,
     portcullis: reunited || progress.portcullisRaised ? 'raised' : 'shut',
-    larder: progress.larderOpened || reunited ? 'open' : 'locked',
+    larder: larderUnlocked(progress) || reunited ? 'open' : 'locked',
     wards,
     archiveFloor: phaseReached(progress, 'gatehouse') ? 'bridged' : 'holed',
     keyRingSent: progress.keyRingSent,
     ritual: reunited && !wardenGone ? 'lit' : 'dark',
+    keeper: reunited ? 'gone' : 'on_watch',
     openCages,
     boundCats,
   };
@@ -632,33 +660,27 @@ export const PORTCULLIS_CHAIN_TILE: TowerTile = { x: 18, y: 11 };
 export const ARCHIVE_KNOCKABLES = {
   /** The archivist's key ring, on the east shelf top above the hatch. */
   key_ring: { id: 'archive_key_ring', at: { x: 18, y: 7 } },
-  /** A loose board on the west room's south shelf top, over the hole. */
-  shelf_board: { id: 'archive_shelf_board', at: { x: 7, y: 8 } },
-  /** A jar on the west room's north shelf top, over the ward plate. */
+  /** A tall loose board stood on the west room's south shelf top, leaning on the filing wall beside the hole. */
+  shelf_board: { id: 'archive_shelf_board', at: { x: 8, y: 8 } },
+  /** A heavy jar on the west room's north shelf top, over the ward plate. */
   plate_jar: { id: 'archive_plate_jar', at: { x: 7, y: 1 } },
-  /** A jar on the east room's low shelf by the filing wall, which lands loudly. */
-  noise_jar: { id: 'archive_noise_jar', at: { x: 10, y: 13 } },
 } as const satisfies Record<string, { readonly id: string; readonly at: TowerTile }>;
 
 /** The archivist's key ring once it is off its shelf: the item that unlocks the kitchen's larder. */
 export const TOWER_KEY_RING_ITEM = 'quest_key_ring' as const satisfies ItemId;
 
-/** The plate that quenches the west ward while something weighs it down. */
+/** The plate that puts the west ward out for good the first time something weighs it down. */
 export const ARCHIVE_WARD_PLATE = { id: 'archive_ward_plate', at: { x: 7, y: 4 } } as const;
 
-/** The tiles of the hole the shelf board lies across once it is knocked over. */
-const ARCHIVE_BRIDGE_TILES: ReadonlyArray<TowerTile> = [
-  { x: 7, y: 7 },
-  { x: 7, y: 6 },
+/** The tiles of the hole the shelf board lies across once it is knocked over, nearest its foot first. */
+export const ARCHIVE_BRIDGE_TILES: ReadonlyArray<TowerTile> = [
+  { x: 8, y: 7 },
+  { x: 8, y: 6 },
 ];
-
-/** How far a knocked jar's landing is heard, in tiles: from the filing wall across the west room. */
-const NOISE_JAR_HEARD_TILES = 9;
 
 /** What each thing knocked off the archive's shelves sounds like landing. */
 export const ARCHIVE_LANDING_CUES = {
   jar: 'rock_thud_1',
-  loudJar: 'pans_clatter_2',
   board: 'raft_slam_wood_1',
   keyRing: 'chain_rattle_1',
 } as const satisfies Record<string, SoundId>;
@@ -674,8 +696,8 @@ export interface ArchiveFixedWard {
   readonly tiles: ReadonlyArray<TowerTile>;
   /**
    * Under burning-solid wards every one is solid. Once the conduit is shut,
-   * `conduit` wards pulse, a `plate` ward goes dark while its plate is held,
-   * and a `never` ward stays solid.
+   * `conduit` wards pulse, a `plate` ward goes dark for good once its plate is
+   * first weighed down, and a `never` ward stays solid.
    */
   readonly quench: ArchiveWardQuench;
 }
@@ -741,6 +763,19 @@ export const ARCHIVE_WARDEN_ROUNDS: ReadonlyArray<ReadonlyArray<TowerTile>> = [
     { x: 7, y: 13 },
     { x: 2, y: 13 },
   ],
+];
+
+/**
+ * The way a warden goes to answer the dumbwaiter's bell, from the corner of
+ * its round nearest the south doorway to the floor in front of the hatch:
+ * out through the doorway, never through the filing wall, and back the same
+ * way. Its last tile is where it hangs peering into the hatch.
+ */
+export const ARCHIVE_WARDEN_BELL_PATH: ReadonlyArray<TowerTile> = [
+  { x: 7, y: 10 },
+  { x: 8, y: 9 },
+  { x: 10, y: 9 },
+  { x: 16, y: 9 },
 ];
 
 /** Where the archive's krasue rise to fight once the Warden knows. */
@@ -825,6 +860,8 @@ export const GATEHOUSE_PATROL_POINTS = {
   c: { x: 13, y: 3 },
   d: { x: 13, y: 11 },
   e: { x: 6, y: 4 },
+  f: { x: 14, y: 4 },
+  g: { x: 14, y: 13 },
 } as const satisfies Record<string, TowerTile>;
 
 // ── Building a storey ────────────────────────────────────────────────────────
@@ -1112,7 +1149,9 @@ function furnishArchive(conditions: TowerConditions): TownInteriorLayoutEntry[] 
     prop(bell.x, bell.y, 'dumbwaiter_bell', WALL_FITTING_VARIANT.east_wall),
   );
   if (conditions.archiveFloor === 'bridged') {
-    for (const at of ARCHIVE_BRIDGE_TILES) entries.push(tile(at.x, at.y, ARCHIVE_PLAN.floor));
+    for (const at of ARCHIVE_BRIDGE_TILES) entries.push(tile(at.x, at.y, FLOOR_DROP_SPANNED));
+    const { at } = ARCHIVE_KNOCKABLES.shelf_board;
+    entries.push(prop(at.x, at.y, 'fallen_shelf_board', LOOSE_THING_VARIANT.shelf_top));
   }
   if (conditions.wards === 'sweeping' || conditions.wards === 'spent') {
     const stone =
@@ -1133,7 +1172,7 @@ function furnishArchive(conditions: TowerConditions): TownInteriorLayoutEntry[] 
 
 /** The things on the shelf tops, each with where it goes and what its landing does. */
 function archiveKnockables(conditions: TowerConditions): TownInteriorLayoutEntry[] {
-  const { key_ring, shelf_board, plate_jar, noise_jar } = ARCHIVE_KNOCKABLES;
+  const { key_ring, shelf_board, plate_jar } = ARCHIVE_KNOCKABLES;
   const onShelf = LOOSE_THING_VARIANT.shelf_top;
   const entries: TownInteriorLayoutEntry[] = [
     knockableProp(
@@ -1142,39 +1181,25 @@ function archiveKnockables(conditions: TowerConditions): TownInteriorLayoutEntry
       'knockable_jar',
       plate_jar.id,
       {
+        motion: 'lobbed',
         fall: { kind: 'direction', dx: 0, dy: 1, reachTiles: PLATE_JAR_DROP_TILES },
         landing: { kind: 'pressPlate' },
         landingCue: ARCHIVE_LANDING_CUES.jar,
       },
       onShelf,
     ),
-    knockableProp(
-      noise_jar.at.x,
-      noise_jar.at.y,
-      'knockable_jar',
-      noise_jar.id,
-      {
-        fall: { kind: 'direction', dx: 0, dy: 1, reachTiles: 1 },
-        landing: { kind: 'makeNoise', radiusTiles: NOISE_JAR_HEARD_TILES },
-        landingCue: ARCHIVE_LANDING_CUES.loudJar,
-      },
-      onShelf,
-    ),
   ];
   if (conditions.archiveFloor === 'holed') {
     entries.push(
-      knockableProp(
+      toppleableProp(
         shelf_board.at.x,
         shelf_board.at.y,
         'knockable_shelf_board',
         shelf_board.id,
         {
-          fall: { kind: 'direction', dx: 0, dy: -1, reachTiles: 1 },
-          landing: {
-            kind: 'bridge',
-            floorTileType: ARCHIVE_PLAN.floor,
-            spanTiles: SHELF_BOARD_SPAN_TILES,
-          },
+          motion: 'toppled',
+          toward: SHELF_BOARD_FALLS,
+          spanTiles: SHELF_BOARD_SPAN_TILES,
           landingCue: ARCHIVE_LANDING_CUES.board,
         },
         onShelf,
@@ -1189,6 +1214,7 @@ function archiveKnockables(conditions: TowerConditions): TownInteriorLayoutEntry
         'knockable_key_ring',
         key_ring.id,
         {
+          motion: 'lobbed',
           fall: { kind: 'direction', dx: 0, dy: 1, reachTiles: KEY_RING_DROP_TILES },
           landing: { kind: 'deliver', item: TOWER_KEY_RING_ITEM },
           landingCue: ARCHIVE_LANDING_CUES.keyRing,
@@ -1206,9 +1232,32 @@ const CATTERY_FURNITURE: ReadonlyArray<Placement> = [
   { at: { x: 8, y: 1 }, prop: 'sky_window' },
 ];
 
+/**
+ * The keeper's stores, heaped about the floor while it keeps its round: each
+ * stands tall enough to throw a shadow in its look, so Belle has somewhere to
+ * wait it out. Most stand south of where it floats; the two above the
+ * northern ends of the cage rows shadow those corners from a keeper come
+ * over to hunt a jostle it heard there, which the southern heaps cannot, and
+ * the one beside the west row's middle shadows the tiles behind it from a
+ * keeper hunting a jostle at the west cages, since it catches at a glance.
+ * All stand clear of the tiles straight out from the cages, of the stair's
+ * landing and of the lanes the freed cats bolt along.
+ */
+const CATTERY_KEEPER_COVER: ReadonlyArray<Placement> = [
+  { at: { x: 2, y: 6 }, prop: 'sack_pile' },
+  { at: { x: 5, y: 9 }, prop: 'cask_rack' },
+  { at: { x: 16, y: 5 }, prop: 'sack_pile' },
+  { at: { x: 5, y: 11 }, prop: 'sack_pile' },
+  { at: { x: 7, y: 11 }, prop: 'cask_rack' },
+  { at: { x: 11, y: 11 }, prop: 'cask_rack' },
+  { at: { x: 13, y: 11 }, prop: 'sack_pile' },
+  { at: { x: 16, y: 11 }, prop: 'sack_pile' },
+];
+
 function furnishCattery(conditions: TowerConditions): TownInteriorLayoutEntry[] {
   const ritual = RITUAL_VARIANT[conditions.ritual];
   const entries = placeAll(CATTERY_FURNITURE);
+  if (conditions.keeper === 'on_watch') entries.push(...placeAll(CATTERY_KEEPER_COVER));
   entries.push(
     prop(RITUAL_CIRCLE_TILE.x, RITUAL_CIRCLE_TILE.y, 'ritual_circle', ritual, {
       id: 'ritual_circle',
@@ -1266,7 +1315,7 @@ export function everyTowerState(
           if (worksDone) {
             progress.crawlerCatUncaged = true;
             progress.cellmateFreed = true;
-            progress.larderOpened = true;
+            progress.kitchen = 'tuna_sent';
             progress.portcullisRaised = true;
             progress.keyRingSent = true;
           }
@@ -1297,6 +1346,7 @@ export function towerConditionsKey(conditions: TowerConditions): string {
     `floor-${conditions.archiveFloor}`,
     `keyring-${conditions.keyRingSent ? 'sent' : 'shelved'}`,
     `ritual-${conditions.ritual}`,
+    `keeper-${conditions.keeper}`,
     `caged-${caged}`,
     `bound-${conditions.boundCats.size}`,
   ].join('_');
@@ -1320,7 +1370,7 @@ export function towerStoreyStateKey(storey: TowerStoreyId, conditions: TowerCond
       return `wards-${conditions.wards}_floor-${conditions.archiveFloor}_keyring-${conditions.keyRingSent ? 'sent' : 'shelved'}`;
     case 'cattery': {
       const caged = CATTERY_CAGE_OCCUPANTS.length - conditions.openCages.size;
-      return `ritual-${conditions.ritual}_caged-${caged}_bound-${conditions.boundCats.size}`;
+      return `ritual-${conditions.ritual}_keeper-${conditions.keeper}_caged-${caged}_bound-${conditions.boundCats.size}`;
     }
     default: {
       const unhandled: never = storey;

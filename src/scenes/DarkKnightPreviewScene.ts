@@ -41,6 +41,7 @@ import {
   darkKnightTelegraphFade,
 } from '../creatures/DarkKnight';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawDarkKnightSprite` picks each view. */
 interface ViewSpec {
@@ -126,7 +127,6 @@ const OVERHANG_TILES = 3.6;
 /** Where a cell's knight stands, as a fraction of the cell's height. */
 const GROUND_FRACTION = 0.92;
 const CELL_TEXT_INSET = 4;
-const FRAMES_PER_SECOND = 60;
 /** A one-shot row samples the middle of each frame, not its start. */
 const FRAME_MIDPOINT = 0.5;
 /** Gore needs a map to settle onto; a small empty one is enough for a preview. */
@@ -160,7 +160,7 @@ export class DarkKnightPreviewScene extends PreviewScene {
 
   /** Which frame of a row is showing right now, at the chosen playback speed. */
   private frameOf(row: RowSpec): number {
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(row.probeState);
   }
 

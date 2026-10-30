@@ -14,7 +14,7 @@
  * it lives, or until a crawler brings the node down under it.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
 import { type HarvestKind, thrallCount } from '../../core/labour/craftPerks';
@@ -51,10 +51,9 @@ type Crawler = HumanPlayer | CatPlayer;
 /** A thrall wears no gear, so nothing adds to what it gathers. */
 const THRALL_GEAR_YIELD_BONUS = 0;
 
-const TICKS_PER_SECOND = 60;
 /** How long a thrall works before it fades away. */
 export const THRALL_LIFETIME_SECONDS = 45;
-const THRALL_LIFETIME_TICKS = THRALL_LIFETIME_SECONDS * TICKS_PER_SECOND;
+const THRALL_LIFETIME_TICKS = THRALL_LIFETIME_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How far from where they were summoned thralls look for work, in tiles. */
 export const THRALL_SEARCH_RADIUS_TILES = 12;
 /** How fast a thrall glides to its node, px per tick: a little under a walking crawler. */
@@ -165,7 +164,7 @@ export class ThrallSystem {
       if (thrall.fadeTicks !== null) continue;
       most = Math.max(most, THRALL_LIFETIME_TICKS - thrall.ageTicks);
     }
-    return Math.ceil(most / TICKS_PER_SECOND);
+    return Math.ceil(most / WORLD_TICKS_PER_SECOND);
   }
 
   /** Where each thrall is and what it is doing, for headless verification. */

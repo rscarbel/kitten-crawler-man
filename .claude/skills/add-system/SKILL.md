@@ -157,7 +157,11 @@ face, then }` carries a body in a straight line in world pixels, through
   - **Timed to a cue.** `playCue { cue }` starts a jingle this instant through
     `AudioManager.playNow` and starts its clock; `waitForCue { cue, atS }`
     holds the script until the cue has played `atS` seconds on the audio
-    clock, so a drop lands on the recording's hit. Keep the marks as named
+    clock, so a drop lands on the recording's hit. `playCue { cue, fromS }`
+    starts it `fromS` seconds into the recording and dates its clock back to
+    the top, so marks stay in seconds of the recording: to land a hit a set
+    time after a moment the player decides (a talk closing), start the cue
+    there at `hit − delay` (the capture at the fountain). Keep the marks as named
     constants beside the cue's id. The cue's SFX group must be decoded where
     the script plays: a cue that cannot start this instant stays silent
     rather than late, and its waits count world ticks

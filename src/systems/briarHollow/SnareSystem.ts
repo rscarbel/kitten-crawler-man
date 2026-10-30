@@ -21,7 +21,7 @@
  * Holds are moments, not saved state: a door visit starts every snare set.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { Mob } from '../../creatures/Mob';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -39,16 +39,16 @@ import { UNTAGGED_HIT } from '../../core/combat/damageTags';
 import { type DefenseStructures, structureKey } from './DefenseStructures';
 import type { ConvertedAllyController } from './ConvertedAllyController';
 import type { StructureCallouts } from './structureCallouts';
-import { SNARE_HOLD_SECONDS, UPDATES_PER_SECOND } from './structureRules';
+import { SNARE_HOLD_SECONDS } from './structureRules';
 
 /** How long a snare holds what it catches. */
-export const SNARE_HOLD_FRAMES = SNARE_HOLD_SECONDS * UPDATES_PER_SECOND;
+export const SNARE_HOLD_FRAMES = SNARE_HOLD_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long it holds a boss: the same today, kept apart so bosses can be tuned alone. */
-export const SNARE_BOSS_HOLD_FRAMES = SNARE_HOLD_SECONDS * UPDATES_PER_SECOND;
+export const SNARE_BOSS_HOLD_FRAMES = SNARE_HOLD_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Chance each spring has of snapping the snare once its hold is done. */
 export const SNARE_BREAK_CHANCE = 0.25;
 /** Updates a snare that held without breaking takes to set itself again. */
-export const SNARE_REARM_FRAMES = UPDATES_PER_SECOND;
+export const SNARE_REARM_FRAMES = WORLD_TICKS_PER_SECOND;
 /** A spiked snare cuts its catch on the spring and again this far through the hold. */
 const SPIKE_SECOND_STRIKE_FRACTION = 0.5;
 
@@ -134,7 +134,7 @@ export class SnareSystem {
   }
 
   update(): void {
-    this.timeSeconds += 1 / UPDATES_PER_SECOND;
+    this.timeSeconds += 1 / WORLD_TICKS_PER_SECOND;
     const live = new Set<string>();
     for (const record of this.deps.defense.snares) {
       const key = structureKey(record.x, record.y);

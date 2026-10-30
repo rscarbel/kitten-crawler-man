@@ -53,7 +53,7 @@ export function cutsceneSoundPlayer(
  */
 export function cutsceneCueClock(audio: AudioManager | null): CutsceneCueClock {
   return {
-    start: (cue) => audio?.playNow(cue) ?? null,
+    start: (cue, fromS) => audio?.playNow(cue, { startOffset: fromS }) ?? null,
     nowS: () => (audio === null ? null : audio.clockSeconds),
   };
 }

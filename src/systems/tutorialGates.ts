@@ -12,7 +12,7 @@
  * enough, or a fence's or door's leaves far enough round, to walk through.
  */
 
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { Camera } from '../core/rendering/camera';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -107,14 +107,13 @@ interface GateState {
   rattleCooldown: number;
 }
 
-const FRAMES_PER_SECOND = 60;
 const HALF = 0.5;
 
 /** A portcullis winds up over half a second, fast at first and easing into the headbox. */
-const PORTCULLIS_RAISE_FRAMES = FRAMES_PER_SECOND * HALF;
+const PORTCULLIS_RAISE_FRAMES = WORLD_TICKS_PER_SECOND * HALF;
 /** The fence's leaves swing a touch slower: they are pushed, not winched. */
 const FENCE_SWING_SECONDS = 0.6;
-const FENCE_SWING_FRAMES = Math.round(FRAMES_PER_SECOND * FENCE_SWING_SECONDS);
+const FENCE_SWING_FRAMES = Math.round(WORLD_TICKS_PER_SECOND * FENCE_SWING_SECONDS);
 /** After reaching the top, the grille drops a little and settles back. */
 const SETTLE_FRAMES = 9;
 const SETTLE_DIP = 0.06;
@@ -131,7 +130,7 @@ const PORTCULLIS_PASSABLE_FRACTION = 0.8;
 const SWING_PASSABLE_FRACTION = 0.6;
 /** A heavy door swings open slower than the fence's light gate. */
 const DOOR_SWING_SECONDS = 0.8;
-const DOOR_SWING_FRAMES = Math.round(FRAMES_PER_SECOND * DOOR_SWING_SECONDS);
+const DOOR_SWING_FRAMES = Math.round(WORLD_TICKS_PER_SECOND * DOOR_SWING_SECONDS);
 /** Slack on top of the distance covered while the gate opens, so it is clear a step early. */
 const TRIGGER_MARGIN_TILES = 1;
 const TRIGGER_MARGIN_PX = TRIGGER_MARGIN_TILES * TILE_SIZE;

@@ -11,7 +11,7 @@
 
 import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type {
   ActiveContract,
@@ -76,8 +76,7 @@ import {
   type ContractContactPin,
 } from '../constructionContracts/contractContactPin';
 
-const UPDATES_PER_SECOND = 60;
-const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 const TILE_CENTRE = 0.5;
 const MS_PER_SECOND = 1000;
 
@@ -109,25 +108,25 @@ const MAX_EXTRA_STROLL_STOPS = 2;
 /** Seconds standing at the post before deciding again. */
 const POST_DWELL_MIN_SECONDS = 6;
 const POST_DWELL_MAX_SECONDS = 14;
-const POST_DWELL_MIN_FRAMES = POST_DWELL_MIN_SECONDS * UPDATES_PER_SECOND;
-const POST_DWELL_MAX_FRAMES = POST_DWELL_MAX_SECONDS * UPDATES_PER_SECOND;
+const POST_DWELL_MIN_FRAMES = POST_DWELL_MIN_SECONDS * WORLD_TICKS_PER_SECOND;
+const POST_DWELL_MAX_FRAMES = POST_DWELL_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Seconds lingering at a stroll stop. */
 const LINGER_MIN_SECONDS = 3;
 const LINGER_MAX_SECONDS = 8;
-const LINGER_MIN_FRAMES = LINGER_MIN_SECONDS * UPDATES_PER_SECOND;
-const LINGER_MAX_FRAMES = LINGER_MAX_SECONDS * UPDATES_PER_SECOND;
+const LINGER_MIN_FRAMES = LINGER_MIN_SECONDS * WORLD_TICKS_PER_SECOND;
+const LINGER_MAX_FRAMES = LINGER_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A villager who could not plan a route tries again after this long. */
-const RETRY_FRAMES = UPDATES_PER_SECOND;
+const RETRY_FRAMES = WORLD_TICKS_PER_SECOND;
 /** Nobody in shelter decides anything; they stay until the siege is over. */
 const SHELTER_HOLD_FRAMES = Number.MAX_SAFE_INTEGER;
 /** The village comes out of hiding over this long, not all at once. */
 const SIEGE_RETURN_SPREAD_SECONDS = 5;
-const SIEGE_RETURN_SPREAD_FRAMES = SIEGE_RETURN_SPREAD_SECONDS * UPDATES_PER_SECOND;
+const SIEGE_RETURN_SPREAD_FRAMES = SIEGE_RETURN_SPREAD_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** A crawler this close ahead of a walking villager is in the way. */
 const BLOCK_RADIUS_TILES = 0.75;
 /** A villager held up this long picks another way round. */
-const BLOCK_RETARGET_FRAMES = UPDATES_PER_SECOND;
+const BLOCK_RETARGET_FRAMES = WORLD_TICKS_PER_SECOND;
 
 /** How near the cat must pass for a child to take after her. */
 const FOLLOW_NOTICE_TILES = 4;
@@ -135,10 +134,10 @@ const FOLLOW_NOTICE_TILES = 4;
 const FOLLOW_KEEP_TILES = 1.2;
 /** The longest a child trails the cat. */
 const FOLLOW_MAX_SECONDS = 3;
-const FOLLOW_MAX_FRAMES = FOLLOW_MAX_SECONDS * UPDATES_PER_SECOND;
+const FOLLOW_MAX_FRAMES = FOLLOW_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Before the same child takes after her again. */
 const FOLLOW_COOLDOWN_SECONDS = 20;
-const FOLLOW_COOLDOWN_FRAMES = FOLLOW_COOLDOWN_SECONDS * UPDATES_PER_SECOND;
+const FOLLOW_COOLDOWN_FRAMES = FOLLOW_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** No villager barks more often than this. */
 export const BARK_COOLDOWN_SECONDS = 45;
@@ -150,7 +149,7 @@ export const STEW_NOTICE_TILES = 6;
 const AMBIENT_BARK_TILES = 4;
 /** On average, how long one of them waits in range before speaking up unprompted. */
 const AMBIENT_BARK_MEAN_WAIT_SECONDS = 4;
-const AMBIENT_BARK_CHANCE_PER_FRAME = 1 / (AMBIENT_BARK_MEAN_WAIT_SECONDS * UPDATES_PER_SECOND);
+const AMBIENT_BARK_CHANCE_PER_FRAME = 1 / (AMBIENT_BARK_MEAN_WAIT_SECONDS * WORLD_TICKS_PER_SECOND);
 
 const SIEGE_PHASES: ReadonlySet<VillageQuestPhase> = new Set(['imminent', 'assault']);
 
@@ -1367,7 +1366,7 @@ export class VillagerSystem {
 
   private speedPx(villager: Villager): number {
     const pace = villager.routine.speed * (villager.hurrying ? HURRY_FACTOR : 1);
-    return (pace * TILE_SIZE) / UPDATES_PER_SECOND;
+    return (pace * TILE_SIZE) / WORLD_TICKS_PER_SECOND;
   }
 
   private updateVillager(villager: Villager, frame: VillagerFrame): void {

@@ -1,15 +1,13 @@
 /**
- * What is said when something only Belle can perceive comes within her reach:
- * her own bark over her head (`CatSenseCue`), and the one-time narrator box
- * that explains how to use it.
+ * What Belle says over her head (`CatSenseCue`) when something only she can
+ * perceive comes within her reach. How to use it is the senses explainer's
+ * job (`catSensesExplainer.ts`).
  */
 
-import { crawlerDisplayName } from '../../characters/characters';
 import { speakerLines } from '../line';
-import type { BarkLine, DialogLine, NonEmpty } from '../line';
+import type { BarkLine, NonEmpty } from '../line';
 
 const belle = speakerLines('belle');
-const narrator = speakerLines('narrator');
 
 /** Belle noticing something, said each time it comes into her reach (after the first). */
 export const CAT_SENSE_BARKS: NonEmpty<BarkLine> = [
@@ -27,22 +25,3 @@ export const CAT_SENSE_FIRST_BARK = {
   /** She is already being steered: she says to follow her nose. */
   whileCatSteered: belle.bark('I can smell something only I can! Let me follow my nose.'),
 } as const satisfies Record<string, BarkLine>;
-
-export interface CatSenseExplainerInputs {
-  /** How the player switches crawlers, worded for their input as a sentence opening: "Press Tab". */
-  readonly switchHow: string;
-  /** Whether the human is the one being steered, so the box says to switch first. */
-  readonly humanSteered: boolean;
-}
-
-/** The one-time explainer, shown the first time a cat sense comes into reach in a run. */
-export function catSenseExplainer(inputs: CatSenseExplainerInputs): NonEmpty<DialogLine> {
-  const cat = crawlerDisplayName('cat');
-  const notice = `${cat} can sense something here that only she can perceive. Scent trails and ward lines show only while you play as her, and her portrait glows while one is near.`;
-  const alongTheScent =
-    'her along the scent and stop on its strongest patch: she puts her nose down and sniffs it. Ward lines glow for her where they cross the floor.';
-  const howTo = inputs.humanSteered
-    ? `${inputs.switchHow} to switch to ${cat}. Then walk ${alongTheScent}`
-    : `Walk ${alongTheScent}`;
-  return [narrator.line([notice, howTo])];
-}

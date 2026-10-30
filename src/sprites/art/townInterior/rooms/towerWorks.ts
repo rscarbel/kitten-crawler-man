@@ -7,11 +7,12 @@
  * rather than as placed props.
  *
  * Black iron and walnut, as the tower's other fittings are. Ward stones carry
- * the ward light's violet, kept away from red, which only ground about to hurt
- * may wear. A thing standing on a shelf top is drawn lifted by the ledge's
+ * the violet of the Warden's working, kept away from red, which only ground
+ * about to hurt may wear. A thing standing on a shelf top is drawn lifted by the ledge's
  * rise, so it sits on the shelf rather than on the floor under it.
  */
 
+import type { ToppleHeading } from '../../../../map/interiorMechanisms';
 import { LEDGE_RISE_TILES } from '../../../../map/mobility';
 import {
   footprintBox,
@@ -181,13 +182,12 @@ const KEYHOLE_TILES = 0.03;
 const OPEN_DOOR_EDGE_TILES = 0.16;
 const DOOR_PLANK_STOP = 0.55;
 const DOOR_SEAM_STOP = 0.15;
-const DARK_DOORWAY: RGB = [18, 14, 12];
 
 /**
  * The larder's oak door in its doorway. Variant 0 is shut on an iron lock
  * plate; 1 stands open, swung back against the jamb and seen edge-on, with
- * the dark of the larder beyond — an opened door has its own art, so the
- * doorway never reads as wall.
+ * nothing else in the doorway, so the larder's own floor shows through it.
+ * An opened door keeps its edge-on leaf so the doorway never reads as wall.
  */
 export function paintLarderDoor(ctx: Ctx, frame: TownPropFrame, variant: number): void {
   withFootprintClip(ctx, frame, () => {
@@ -196,8 +196,6 @@ export function paintLarderDoor(ctx: Ctx, frame: TownPropFrame, variant: number)
     const top = box.bottom - ts * DOOR_RISE_TILES;
     const height = box.bottom - top;
     if (variant === LARDER_DOOR_VARIANT.open) {
-      ctx.fillStyle = rgb(DARK_DOORWAY);
-      ctx.fillRect(box.left, top, box.width, height);
       const edge = ts * OPEN_DOOR_EDGE_TILES;
       slab(ctx, WALNUT, DOOR_PLANK_STOP, box.left, top, edge, height, ts);
       litEdge(ctx, WALNUT, box.left, top, edge, ts);
@@ -448,40 +446,233 @@ export function paintLooseKeyRing(ctx: Ctx, frame: TownPropFrame, variant: numbe
   });
 }
 
-const BOARD_LENGTH_TILES = 0.9;
-const BOARD_THICK_TILES = 0.16;
-const BOARD_RISE_TILES = 0.08;
-const BOARD_STOP = 0.6;
-const BOARD_GRAIN_STOP = 0.35;
-const BOARD_LEAN_SHARE = 0.25;
+/** The loose shelf board: long enough, fallen, to reach from the shelf top across a two-tile hole onto the floor beyond. */
+const PLANK_LENGTH_TILES = 3;
+const PLANK_WIDTH_TILES = 0.55;
+const PLANK_THICK_TILES = 0.12;
+/**
+ * How tall an upright span is drawn, as a share of the same span lying on the
+ * floor: the camera looks down at the room, so a board standing up is seen a
+ * little short and grows as it falls away from the viewer.
+ */
+const PLANK_RISE_SHARE = 0.8;
+/** Where the upright board's foot stands across its tile, as a share from the side away from the wall it leans on. */
+const PLANK_FOOT_ACROSS_SHARE = 0.36;
+/** How far back from the front of what it stands on the foot is set, so it stands on the top and not on the edge. */
+const PLANK_FOOT_BACK_TILES = 0.3;
+/** Its face is lit more as it tips back toward the light above. */
+const PLANK_FACE_UPRIGHT_STOP = 0.5;
+const PLANK_FACE_FLAT_STOP = 0.72;
+const PLANK_EDGE_STOP = 0.18;
+const PLANK_GRAIN_STOP = 0.3;
+const PLANK_GRAIN_ALPHA = 0.55;
+/** The grain lines run the board's length at these shares of its width. */
+const PLANK_GRAIN_SHARES = [0.3, 0.68] as const;
+const PLANK_NAIL_STOP = 0.15;
+const PLANK_NAIL_TILES = 0.035;
+/** Two old nail holes near each end, at this share of the length in from it. */
+const PLANK_NAIL_INSET_SHARE = 0.07;
+const PLANK_SHADOW_RADIUS_SHARE = 0.75;
+const QUARTER_TURN = Math.PI * HALF;
+
+/** A plank's pose in screen pixels: where its foot stands and how far it has fallen. */
+interface PlankPose {
+  /** The middle of its foot, where it stands and pivots as it falls. */
+  readonly footX: number;
+  readonly footY: number;
+  /** Which way along the floor it falls: north is `{ dx: 0, dy: -1 }`. */
+  readonly toward: ToppleHeading;
+  /** How far over it has gone: 0 upright, 1 lying flat. */
+  readonly fallen: number;
+  /** How far its top leans to the right of the way it falls, in radians, while upright; it straightens as it falls. */
+  readonly lean: number;
+  readonly ts: number;
+}
+
+/** The plank's length on screen once fallen, in pixels: how far its far end lies from its foot. */
+function plankLengthPx(ts: number): number {
+  return ts * PLANK_LENGTH_TILES;
+}
+
+interface ScreenPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+function quad(ctx: Ctx, corners: readonly ScreenPoint[], dx: number, dy: number): void {
+  ctx.beginPath();
+  corners.forEach((corner, index) => {
+    if (index === 0) ctx.moveTo(corner.x + dx, corner.y + dy);
+    else ctx.lineTo(corner.x + dx, corner.y + dy);
+  });
+  ctx.closePath();
+}
 
 /**
- * A loose shelf board leaning on a shelf top (variant 1) or lying on the
- * floor (0): long enough, knocked over, to lie across a hole in the boards.
+ * A long plank standing on its foot or anywhere on its way to lying flat:
+ * it pivots on its foot, tipping away along `toward`, its broad face turning
+ * from the viewer to the ceiling, and its thickness showing as end grain at
+ * the top while upright and at the near end once down.
+ */
+function drawPlank(ctx: Ctx, pose: PlankPose): void {
+  const { footX, footY, toward, ts } = pose;
+  const angle = Math.max(0, Math.min(1, pose.fallen)) * QUARTER_TURN;
+  const length = plankLengthPx(ts);
+  const across = { x: -toward.dy, y: toward.dx };
+  const upright = Math.cos(angle);
+  const sideways = length * Math.sin(pose.lean) * upright;
+  const height = length * Math.cos(pose.lean) * upright * PLANK_RISE_SHARE;
+  const along = length * Math.sin(angle);
+  const farX = footX + toward.dx * along + across.x * sideways;
+  const farY = footY + toward.dy * along + across.y * sideways - height;
+  const halfWidth = ts * PLANK_WIDTH_TILES * HALF;
+  const corners: ScreenPoint[] = [
+    { x: footX - across.x * halfWidth, y: footY - across.y * halfWidth },
+    { x: footX + across.x * halfWidth, y: footY + across.y * halfWidth },
+    { x: farX + across.x * halfWidth, y: farY + across.y * halfWidth },
+    { x: farX - across.x * halfWidth, y: farY - across.y * halfWidth },
+  ];
+  const thick = ts * PLANK_THICK_TILES;
+  const faceDx = -toward.dx * thick * upright;
+  const faceDy = -toward.dy * thick * upright - thick * Math.sin(angle) * PLANK_RISE_SHARE;
+  if (pose.fallen < 1) {
+    drawTownContactShadow(
+      ctx,
+      footX,
+      footY,
+      halfWidth * PLANK_SHADOW_RADIUS_SHARE * 2,
+      ts * CONTACT_SHADOW_Y_TILES,
+      CONTACT_SHADOW_ALPHA * upright,
+    );
+  }
+  ctx.fillStyle = rgb(sampleRamp(WALNUT, PLANK_EDGE_STOP));
+  quad(ctx, corners, 0, 0);
+  ctx.fill();
+  inkOutline(ctx, ts);
+  const faceStop =
+    PLANK_FACE_UPRIGHT_STOP + (PLANK_FACE_FLAT_STOP - PLANK_FACE_UPRIGHT_STOP) * (1 - upright);
+  ctx.fillStyle = rgb(sampleRamp(WALNUT, faceStop));
+  quad(ctx, corners, faceDx, faceDy);
+  ctx.fill();
+  inkOutline(ctx, ts);
+  const [footLeft, footRight, farRight, farLeft] = corners;
+  ctx.strokeStyle = rgba(sampleRamp(WALNUT, PLANK_GRAIN_STOP), PLANK_GRAIN_ALPHA);
+  ctx.lineWidth = Math.max(1, ts * PLANK_NAIL_TILES * HALF);
+  for (const share of PLANK_GRAIN_SHARES) {
+    ctx.beginPath();
+    ctx.moveTo(
+      footLeft.x + (footRight.x - footLeft.x) * share + faceDx,
+      footLeft.y + (footRight.y - footLeft.y) * share + faceDy,
+    );
+    ctx.lineTo(
+      farLeft.x + (farRight.x - farLeft.x) * share + faceDx,
+      farLeft.y + (farRight.y - farLeft.y) * share + faceDy,
+    );
+    ctx.stroke();
+  }
+  ctx.fillStyle = rgb(sampleRamp(WALNUT, PLANK_NAIL_STOP));
+  const nail = Math.max(1, ts * PLANK_NAIL_TILES);
+  for (const endShare of [PLANK_NAIL_INSET_SHARE, 1 - PLANK_NAIL_INSET_SHARE]) {
+    const x = footX + (farX - footX) * endShare + faceDx;
+    const y = footY + (farY - footY) * endShare + faceDy;
+    ctx.fillRect(x - nail * HALF, y - nail * HALF, nail, nail);
+  }
+}
+
+/**
+ * The way the archive's shelf board falls: north, away from the viewer, across
+ * the hole. Its standing and fallen art are drawn for this way alone, so the
+ * archive's placement takes its heading from here.
+ */
+export const SHELF_BOARD_FALLS = { dx: 0, dy: -1 } as const satisfies ToppleHeading;
+
+/** Where a plank's foot stands on its tile: on the shelf top when it is up on one. */
+function plankFoot(frame: TownPropFrame, variant: number): ScreenPoint {
+  const box = footprintBox(frame);
+  const ts = frame.tileScale;
+  return {
+    x: box.left + box.width * PLANK_FOOT_ACROSS_SHARE,
+    y: box.bottom - liftFor(variant, ts) - ts * PLANK_FOOT_BACK_TILES,
+  };
+}
+
+/**
+ * The lean that rests a plank standing at `foot` with its top against the
+ * wall on its tile's east side.
+ */
+function plankLeanAgainstEastWall(foot: ScreenPoint, wallX: number, ts: number): number {
+  const reach = wallX - ts * PLANK_WIDTH_TILES * HALF - foot.x;
+  return Math.asin(Math.max(0, Math.min(1, reach / plankLengthPx(ts))));
+}
+
+/**
+ * A tall loose shelf board standing on a shelf top (variant 1) or on the floor
+ * (0), leaning its top against the wall on its tile's east side: long enough,
+ * knocked over, to fall across a hole in the boards and be the way over it.
  */
 export function paintLooseShelfBoard(ctx: Ctx, frame: TownPropFrame, variant: number): void {
   withFootprintClip(ctx, frame, () => {
     const box = footprintBox(frame);
-    const ts = frame.tileScale;
-    const foot = box.bottom - liftFor(variant, ts);
-    const length = ts * BOARD_LENGTH_TILES;
-    const thick = ts * BOARD_THICK_TILES;
-    const top = foot - thick - ts * BOARD_RISE_TILES;
-    drawTownContactShadow(
-      ctx,
-      box.centreX,
-      foot,
-      length * HALF,
-      ts * CONTACT_SHADOW_Y_TILES,
-      CONTACT_SHADOW_ALPHA,
-    );
-    ctx.save();
-    ctx.translate(box.centreX, top + thick * HALF);
-    ctx.rotate(-BOARD_LEAN_SHARE);
-    slab(ctx, WALNUT, BOARD_STOP, -length * HALF, -thick * HALF, length, thick, ts);
-    ctx.fillStyle = rgb(sampleRamp(WALNUT, BOARD_GRAIN_STOP));
-    ctx.fillRect(-length * HALF, 0, length, 1);
-    ctx.restore();
+    const foot = plankFoot(frame, variant);
+    drawPlank(ctx, {
+      footX: foot.x,
+      footY: foot.y,
+      toward: SHELF_BOARD_FALLS,
+      fallen: 0,
+      lean: plankLeanAgainstEastWall(foot, box.right, frame.tileScale),
+      ts: frame.tileScale,
+    });
+  });
+}
+
+/**
+ * The same board once it has fallen from where it stood: lying north from its
+ * foot across whatever is there, which is all a hole needs to be crossed.
+ */
+export function paintFallenShelfBoard(ctx: Ctx, frame: TownPropFrame, variant: number): void {
+  withFootprintClip(ctx, frame, () => {
+    const foot = plankFoot(frame, variant);
+    drawPlank(ctx, {
+      footX: foot.x,
+      footY: foot.y,
+      toward: SHELF_BOARD_FALLS,
+      fallen: 1,
+      lean: 0,
+      ts: frame.tileScale,
+    });
+  });
+}
+
+/**
+ * The shelf board placed on `tile` in `variant`, falling along `toward`,
+ * `fallen` (0 to 1) of the way from leaning on its wall to lying across the
+ * hole, in world pixels offset by the camera.
+ */
+export function paintShelfBoardToppling(
+  ctx: Ctx,
+  tile: { readonly x: number; readonly y: number },
+  variant: number,
+  toward: ToppleHeading,
+  fallen: number,
+  camX: number,
+  camY: number,
+  ts: number,
+): void {
+  const frame: TownPropFrame = {
+    originX: tile.x * ts - camX,
+    originY: tile.y * ts - camY,
+    footprintW: 1,
+    footprintH: 1,
+    tileScale: ts,
+  };
+  const foot = plankFoot(frame, variant);
+  drawPlank(ctx, {
+    footX: foot.x,
+    footY: foot.y,
+    toward,
+    fallen,
+    lean: plankLeanAgainstEastWall(foot, footprintBox(frame).right, ts),
+    ts,
   });
 }
 
@@ -527,6 +718,7 @@ const BELL_MOUTH_SHARE = 0.5;
 const BELL_CROWN_SHARE = 0.22;
 const BELL_HEIGHT_SHARE = 0.72;
 const BELL_LIP_SHARE = 0.08;
+const HEADSTOCK_STOP = 0.6;
 const HEADSTOCK_SHARE = 0.9;
 const HEADSTOCK_THICK_SHARE = 0.09;
 const BELL_SHADE_STOP = 0.35;
@@ -560,7 +752,7 @@ export function drawSwingingBell(
   slab(
     ctx,
     WALNUT,
-    BOARD_STOP,
+    HEADSTOCK_STOP,
     pivotX - headstock * HALF,
     pivotY - thick * HALF,
     headstock,

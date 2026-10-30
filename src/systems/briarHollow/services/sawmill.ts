@@ -15,7 +15,7 @@
 
 import type { AudioManager } from '../../../audio/AudioManager';
 import type { SoundId } from '../../../audio/sounds';
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import type { EventBus } from '../../../core/EventBus';
 import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
@@ -50,8 +50,7 @@ import {
 export const PLAIN_SAWING_LOOP = 'loopable_sawing' satisfies SoundId;
 const PLAIN_ROPE_SOUND = 'rope_tightening' satisfies SoundId;
 
-const UPDATES_PER_SECOND = 60;
-const MANUAL_PROCESS_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * UPDATES_PER_SECOND);
+const MANUAL_PROCESS_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * WORLD_TICKS_PER_SECOND);
 
 /**
  * How far the worker may drift before the cut counts as abandoned. Measured

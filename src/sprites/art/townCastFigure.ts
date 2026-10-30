@@ -64,11 +64,12 @@ import { RIG_LOOK } from '../looks/humans/rig';
 import { RIG_GARMENT_CUT } from './biped/torso';
 import { WALK_FRAMES, IDLE_FRAMES, TALK_FRAMES, WORK_FRAMES } from './townCastFrameCounts';
 import {
-  BAR_STOOL_SEAT_HEIGHT_TILES,
+  SEAT_HEIGHT_TILES,
   SEAT_POSE_FRAMES,
   SEAT_POSES,
   SEAT_VIEWS,
   seatStateName,
+  type SeatKind,
 } from './seatPoses';
 import { SEATED_LAP_BELOW_HIP, seatedPose } from './human/seated';
 import { HIP_Y } from './biped/proportions';
@@ -489,14 +490,14 @@ function buildBipedFigure(look: TownCastLook & { painter: 'biped' }): FigureDef 
 }
 
 /**
- * The seated rows of a rig-painted look, on a club bar stool. Kept off the
- * look's own figure so the crowd's figure declares only what the street
- * plays; the seat height is in the look's own rig units, so a taller build
- * still sits on the same cushion.
+ * The seated rows of a rig-painted look, on `seat`. Kept off the look's own
+ * figure so the crowd's figure declares only what the street plays; the seat
+ * height is in the look's own rig units, so a taller build still sits on the
+ * same cushion.
  */
-function seatedRows(look: TownCastLook & { painter: 'biped' }): BipedRowSpec[] {
+function seatedRows(look: TownCastLook & { painter: 'biped' }, seat: SeatKind): BipedRowSpec[] {
   const unitPxY = lookPxPerUnit(castHumanLook(look), HUMAN_CELL_PX_PER_UNIT).y;
-  const seatHeight = (BAR_STOOL_SEAT_HEIGHT_TILES * CAST_TILE_SCALE) / unitPxY;
+  const seatHeight = (SEAT_HEIGHT_TILES[seat] * CAST_TILE_SCALE) / unitPxY;
   return SEAT_POSES.flatMap((seatPose) =>
     SEAT_VIEWS.map((view) => ({
       name: seatStateName(seatPose, view),
@@ -540,16 +541,17 @@ const ACCESSORY_CLIP_HEIGHT = 4;
 const SEATED_FIGURES_BY_LOOK = new Map<string, FigureDef>();
 
 /**
- * A look's seated figure, built the first time it is asked for: only the
- * handful of looks a club seats ever need one. A child look has no seated
- * rows and gets `undefined`.
+ * A look's figure seated on `seat`, built the first time it is asked for:
+ * only the handful of looks a club or a bench seats ever need one. A child
+ * look has no seated rows and gets `undefined`.
  */
-export function townCastSeatedFigure(look: TownCastLook): FigureDef | undefined {
+export function townCastSeatedFigure(look: TownCastLook, seat: SeatKind): FigureDef | undefined {
   if (look.painter !== 'biped') return undefined;
-  const known = SEATED_FIGURES_BY_LOOK.get(look.id);
+  const id = `human_${look.id}_seated_${seat}`;
+  const known = SEATED_FIGURES_BY_LOOK.get(id);
   if (known !== undefined) return known;
-  const figure = bipedFigureOf(look, { id: `human_${look.id}_seated`, rows: seatedRows(look) });
-  SEATED_FIGURES_BY_LOOK.set(look.id, figure);
+  const figure = bipedFigureOf(look, { id, rows: seatedRows(look, seat) });
+  SEATED_FIGURES_BY_LOOK.set(id, figure);
   return figure;
 }
 

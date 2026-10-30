@@ -1375,6 +1375,7 @@ section('meeting Dave and his farewell are story cutscenes the step waits on');
     kind: 'walkTo',
     who: 'activeCrawler',
     tile: { x: pixelToTile(human.x), y: pixelToTile(human.y) },
+    pace: 'stroll',
     face: 'up',
     then: 'waitForArrival',
   } as const;

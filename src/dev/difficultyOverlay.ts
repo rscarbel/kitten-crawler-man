@@ -19,6 +19,7 @@ import { inset, type Rect } from '../ui/core/geom';
 import { WORLD_TEXT } from '../ui/theme/worldInk';
 import { worldPlate } from '../ui/world/worldShapes';
 import { worldText } from '../ui/world/worldText';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 const PANEL_WIDTH = 660;
 const PANEL_MARGIN = 8;
@@ -46,8 +47,6 @@ const COLUMN_HP_NO_TRAIT = 590;
 /** A blank row's height between the segment table and the hunt-time footer. */
 const FOOTER_GAP_ROWS = 1;
 const FOOTER_HEADER_ROWS = 1;
-
-const FRAMES_PER_SECOND = 60;
 
 const HUNT_FLOOR_1 = 1;
 const HUNT_FLOOR_2 = 2;
@@ -158,7 +157,8 @@ function buildHuntRow(floorNumber: number): { label: string; seconds: string } {
   const frames = difficultyStats.stairwellHuntFramesFor(floorNumber);
   return {
     label: HUNT_FLOOR_LABELS[floorNumber] ?? `floor ${floorNumber}`,
-    seconds: frames === null ? NO_DATA : (frames / FRAMES_PER_SECOND).toFixed(SECONDS_DECIMALS),
+    seconds:
+      frames === null ? NO_DATA : (frames / WORLD_TICKS_PER_SECOND).toFixed(SECONDS_DECIMALS),
   };
 }
 

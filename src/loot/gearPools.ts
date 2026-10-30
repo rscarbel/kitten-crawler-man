@@ -155,7 +155,8 @@ export const GEAR_SOURCES: Readonly<Record<GearId, ReadonlyArray<GearSource>>> =
   showmans_top_hat: [{ kind: 'starlightTentChest' }],
   sequin_tailcoat: [{ kind: 'starlightTentChest' }],
   gilded_monocle: [{ kind: 'achievement', id: 'casino_jackpot' }],
-  grinning_mask: [{ kind: 'quest', quest: 'taloncrest_missing_cats' }],
+  grinning_mask: [{ kind: 'pool', floors: FLOOR_THREE }],
+  hushed_bell: [{ kind: 'quest', quest: 'taloncrest_missing_cats' }],
   nimble_bangle: [{ kind: 'shop', shop: 'armoury' }],
   lucky_penny: [
     { kind: 'achievement', id: 'bartenders_choice' },

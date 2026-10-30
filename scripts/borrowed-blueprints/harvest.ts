@@ -15,7 +15,7 @@ import {
   type BriarHollowState,
 } from '../../src/core/quests/briarHollowState';
 import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
-import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../../src/core/constants';
+import { MOB_GRID_CELL_SIZE, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { SpatialGrid } from '../../src/core/world/SpatialGrid';
 import { ITEM_DEF, QUEST_SLOT_IDX } from '../../src/core/items/defs/ItemDefs';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
@@ -23,7 +23,6 @@ import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import type { Mob } from '../../src/creatures/Mob';
 import { GameMap } from '../../src/map/GameMap';
 import type { BriarHollowSite } from '../../src/map/overworld/briarHollowSite';
-import { UPDATES_PER_SECOND } from '../../src/systems/briarHollow/structureRules';
 import {
   GRAIN_CUTS_TO_STUBBLE,
   GRAIN_PER_GOOD,
@@ -40,8 +39,8 @@ import type { Check } from './fenna';
 
 const HARVEST_MAP_SIZE = 280;
 const HARVEST_MAP_SEED = 1;
-const TICK_MS = 1000 / UPDATES_PER_SECOND;
-const SWING_TICKS = Math.round(SCYTHE_SWING_SECONDS * UPDATES_PER_SECOND);
+const TICK_MS = 1000 / WORLD_TICKS_PER_SECOND;
+const SWING_TICKS = Math.round(SCYTHE_SWING_SECONDS * WORLD_TICKS_PER_SECOND);
 /** A clock that starts well away from zero, as `performance.now()` does in a live tab. */
 const CLOCK_START_MS = 50_000;
 /** A press at the inner band's late edge, which a short stall pushes into the outer band if mis-graded. */
@@ -312,7 +311,7 @@ export function verifyHarvestRegrowth(check: Check): void {
     'a stubble stand is never picked for the next swing',
   );
 
-  const regrowTicks = GRAIN_REGROW_SECONDS * UPDATES_PER_SECOND;
+  const regrowTicks = GRAIN_REGROW_SECONDS * WORLD_TICKS_PER_SECOND;
   const thirdTicks = regrowTicks / 3;
   tick(rig, 2 * thirdTicks - 1);
   check(rig.harvest.stageAt(cutTile.x, cutTile.y) === 'stubble', 'still stubble at 20 s');

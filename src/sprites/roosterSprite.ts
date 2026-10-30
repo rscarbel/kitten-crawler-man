@@ -30,9 +30,9 @@ import {
   roosterStateName,
 } from './art/roosterFigure';
 import type { RoosterBuild, RoosterView } from './art/roosterArt';
-import { TICKS_PER_SECOND } from './art/human/timing';
 import { ROOSTER_IDLE_FPS } from './bigRoosterAttackTiming';
 import { drawRoosterDumbbell } from './roosterDumbbell';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 export type { RoosterBuild, RoosterRowBase };
 export { ROOSTER_ROW_TIMING };
@@ -282,7 +282,7 @@ export class RoosterAnimationClock {
     const teleported = movedTiles > TELEPORT_TILES_PER_TICK;
     const coveredTiles = teleported ? 0 : movedTiles;
     const cadence = enraged ? ENRAGED_IDLE_CADENCE : 1;
-    this.idleClockSeconds += cadence / TICKS_PER_SECOND;
+    this.idleClockSeconds += cadence / WORLD_TICKS_PER_SECOND;
 
     const walkCeiling = roosterGaitCeilingTilesPerTick(this.build, 'walk');
     const runThreshold = this.outpacingWalk ? walkCeiling * RUN_EXIT_SHARE : walkCeiling;

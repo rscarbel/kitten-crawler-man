@@ -290,7 +290,15 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-27, Caroline's message frame.
 
-## Combat
+### The run-complete screen is built but nothing in the game opens it
+
+- **Where:** `RunCompleteScreen` and `RunSummary` (`src/ui/screens/dialogs/RunCompleteScreen.ts`); its only callers are the UI gallery (`src/dev/uiGallery/dialogs/endScreens.ts`) and `scripts/render-run-complete.ts`.
+- **Problem:** no scene mounts the screen, so a run never ends on it. The stats it was meant to total (`townCatPets` among them) are shown in the pause menu's Stats tab instead, and the screen's own rows can drift from what the game counts without anything noticing.
+- **Cost:** a full modal surface with its own timeline, confetti and summary type is maintained, styled and rendered for review while no player can reach it; a change to `GameStats` has two places to land and only one is ever seen.
+- **Better shape:** decide what ends a run and have that scene mount the screen from `GameStats`, or delete the screen, its summary type, its gallery entry and its render script together.
+- **Until then:** don't add new run stats to `RunSummary` alone; a stat a player should see goes in the Stats tab first.
+- **Size:** M
+- **Found:** 2026-10-30, a review of the missing cats questline's docs.
 
 ## Audio
 
@@ -357,3 +365,13 @@ Entry shape:
 - **Until then:** use `crawlerLabel` rather than adding another inline mapping.
 - **Size:** S
 - **Found:** 2026-10-27, the cat throwing explosives.
+
+### The FNV-1a string hash is copied into each module that seeds from an id
+
+- **Where:** `hashText` in `src/core/util/textHash.ts` (the shared one), and private copies: `hashText` in `src/map/safeRoomId.ts`, `fnv1a` in `src/creatures/citizenFigure.ts`, `seedFromText` in `src/sprites/art/cowArt.ts`, and the FNV loops in `src/sprites/sheets/circusSheets.ts`, `src/sprites/sheets/villageSheets.ts`, `src/sprites/art/constructionContracts/contractArtCache.ts`, `src/systems/interiorPlacement.ts`, `src/systems/casino/poker/npc/personality.ts` and `src/dev/perfDuplicateCells.ts`.
+- **Problem:** the same string hash, with its own offset basis and prime constants, is written out in every module that needs a stable seed from a name.
+- **Cost:** each copy is its own place to get the arithmetic subtly wrong (one forgets `>>> 0`, another uses `*` instead of `Math.imul`), and the next module that needs one copies whichever it finds first.
+- **Better shape:** every caller imports `hashText` from `src/core/util/textHash.ts`; the copies are deleted. A copy whose output seeds persisted or baked art changes that art once when it moves, which is fine under the save rules.
+- **Until then:** import `hashText` rather than writing another FNV loop.
+- **Size:** S
+- **Found:** 2026-10-30, per-ward seeds for the ward walls.

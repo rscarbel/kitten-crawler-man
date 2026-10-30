@@ -109,6 +109,7 @@ import {
   setFigureWorldPixelRatio,
 } from '../src/sprites/figure/figureFrameCache.js';
 import { drawAngelSprite, prewarmAngel } from '../src/sprites/angelSprite.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 /** Decimal places for figure-unit measurements in gate messages. */
 const FINE_DIGITS = 4;
@@ -749,7 +750,6 @@ function gateContinuity(): string[] {
 
 /* ── G12 ───────────────────────────────────────────────────────────────── */
 
-const SIMULATED_FRAMES_PER_SECOND = 60;
 /** The in-game tile she is drawn at, as the club draws her. */
 const IN_GAME_TILE_PX = 32;
 const PERFORMANCE_CANVAS_TILES = 4;
@@ -787,7 +787,7 @@ function gateResidency(): string[] {
     let coldDraws = 0;
     const perform = (): void => {
       beginFigureFrame();
-      const seconds = tick / SIMULATED_FRAMES_PER_SECOND;
+      const seconds = tick / WORLD_TICKS_PER_SECOND;
       const { routine } = angelSequenceAt(angelSequenceFrameAtSeconds(seconds));
       if (counting && !isFigureStateWarm(ANGEL_FIGURE, routine)) coldDraws++;
       drawAngelSprite(
@@ -801,7 +801,7 @@ function gateResidency(): string[] {
     };
     const allWarm = (): boolean =>
       ANGEL_ROUTINES.every((routine) => isFigureStateWarm(ANGEL_FIGURE, routine));
-    while (!allWarm() && tick < WARM_UP_SECONDS_LIMIT * SIMULATED_FRAMES_PER_SECOND) perform();
+    while (!allWarm() && tick < WARM_UP_SECONDS_LIMIT * WORLD_TICKS_PER_SECOND) perform();
     if (!allWarm()) {
       failures.push(
         `G12: her routines were still not all warm after ${WARM_UP_SECONDS_LIMIT}s of performing`,
@@ -810,7 +810,7 @@ function gateResidency(): string[] {
     }
     counting = true;
     const loopTicks = Math.ceil(
-      (ANGEL_SEQUENCE_FRAMES / ANGEL_FRAMES_PER_SECOND) * SIMULATED_FRAMES_PER_SECOND,
+      (ANGEL_SEQUENCE_FRAMES / ANGEL_FRAMES_PER_SECOND) * WORLD_TICKS_PER_SECOND,
     );
     const performedTicks = loopTicks * LOOPS_PERFORMED;
     for (let i = 0; i < performedTicks; i++) perform();

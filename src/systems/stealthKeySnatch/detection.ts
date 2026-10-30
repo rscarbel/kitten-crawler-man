@@ -13,9 +13,14 @@
  * calls these exact functions.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { PRISON_TILE, prisonTileAt, type PrisonGrid } from '../../map/goblinPrisonPlan';
-import type { PrisonConeTuning, PrisonSuspicionTuning } from './prisonTuning';
+import type {
+  OnSightNoticeTuning,
+  PrisonConeTuning,
+  PrisonSuspicionTuning,
+  WatcherNoticeTuning,
+} from './prisonTuning';
 
 export interface PrisonPoint {
   readonly x: number;
@@ -366,11 +371,86 @@ export function lightSeesBody(
   return best;
 }
 
+/** The suspicion at which a capture starts. */
+export const SUSPICION_CAPTURE = 1;
+
 /**
- * One frame of a light's suspicion. `seenWeight` is the strongest
- * {@link lightSeesBody} over every crawler, 0 when it sees none.
+ * Whole frames a crawler in full view may take to raise an on-sight watcher
+ * to orange. At least one, so the rise always has a frame to spread over; a
+ * handful at most, because the tower's guards and krasue catch at a glance.
+ */
+type GlanceRiseFrames = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/** Frames a crawler in full view takes to raise an on-sight watcher to orange. */
+const FULL_VIEW_RISE_FRAMES: GlanceRiseFrames = 5;
+/** The frame after the rise to orange, on which the catch lands. */
+const CATCH_LANDS_FRAMES = 1;
+
+/**
+ * The longest a crawler may stand in an on-sight watcher's full view before
+ * the catch: a glance, not a stare.
+ */
+export const CAUGHT_AFTER_SEEN_FRAMES = FULL_VIEW_RISE_FRAMES + CATCH_LANDS_FRAMES;
+export const CAUGHT_AFTER_SEEN_SECONDS = CAUGHT_AFTER_SEEN_FRAMES / WORLD_TICKS_PER_SECOND;
+
+/**
+ * The suspicion at which an on-sight watcher is on orange alert: its fan has
+ * warmed half way to the full orange of a catch, and the next crawler it sees
+ * at all is caught that frame. A companion in its look, or a crawler at the edge of it, raises it
+ * this far and no further.
+ */
+export const SUSPICION_ORANGE_ALERT = 0.5;
+
+/** A sighting this strong is full view: inside the look and short of its soft edge. */
+const FULL_VIEW_WEIGHT = 1;
+
+/**
+ * What one watcher takes in this frame: the strongest {@link lightSeesBody}
+ * over the crawlers it is there to catch, and over the companions with them,
+ * each 0 when it sees none.
+ */
+export interface Sighting {
+  readonly crawler: number;
+  readonly companion: number;
+}
+
+/** A sighting of the crawlers alone, for a floor no companion walks. */
+export function crawlerSighting(crawler: number): Sighting {
+  return { crawler, companion: 0 };
+}
+
+/**
+ * One frame of a watcher's suspicion, by the rule its tuning names.
+ *
+ * - `gradual` (the prison's goblins): suspicion fills with how strongly a
+ *   crawler is seen and catches at full. Companions wait outside the prison,
+ *   so only crawlers are read.
+ * - `on_sight` (the tower's watchers): a crawler in full view raises it to
+ *   {@link SUSPICION_ORANGE_ALERT} over all but the last of
+ *   {@link CAUGHT_AFTER_SEEN_FRAMES}, so the catch lands on that last frame; a
+ *   crawler at the soft edge, or a companion anywhere in the look, raises it
+ *   toward orange more slowly or at once; and on orange, any sight of a
+ *   crawler is the catch.
  */
 export function stepSuspicion(
+  value: number,
+  kind: PrisonLightKind,
+  sighting: Sighting,
+  tuning: WatcherNoticeTuning,
+): number {
+  switch (tuning.kind) {
+    case 'gradual':
+      return stepGradual(value, kind, sighting.crawler, tuning);
+    case 'on_sight':
+      return stepOnSight(value, sighting, tuning);
+    default: {
+      const unhandled: never = tuning;
+      throw new Error(`unhandled notice rule ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
+function stepGradual(
   value: number,
   kind: PrisonLightKind,
   seenWeight: number,
@@ -384,8 +464,22 @@ export function stepSuspicion(
   return Math.min(SUSPICION_CAPTURE, value + rise);
 }
 
-/** The suspicion at which a capture starts. */
-export const SUSPICION_CAPTURE = 1;
+const FULL_VIEW_RISE = SUSPICION_ORANGE_ALERT / FULL_VIEW_RISE_FRAMES;
+
+function stepOnSight(value: number, sighting: Sighting, tuning: OnSightNoticeTuning): number {
+  const onAlert = value >= SUSPICION_ORANGE_ALERT;
+  if (sighting.crawler > 0 && onAlert) return SUSPICION_CAPTURE;
+  const companionAlert = sighting.companion > 0 ? SUSPICION_ORANGE_ALERT : 0;
+  if (sighting.crawler <= 0) {
+    const drained = Math.max(0, value - SUSPICION_CAPTURE / tuning.drainFrames);
+    return Math.max(drained, companionAlert);
+  }
+  const rise =
+    sighting.crawler >= FULL_VIEW_WEIGHT
+      ? FULL_VIEW_RISE
+      : (SUSPICION_ORANGE_ALERT / tuning.alertFillFrames) * sighting.crawler;
+  return Math.max(companionAlert, Math.min(SUSPICION_ORANGE_ALERT, value + rise));
+}
 
 /** A guard as touch sees it: where it stands and which way it faces (radians). */
 export interface GuardBody {

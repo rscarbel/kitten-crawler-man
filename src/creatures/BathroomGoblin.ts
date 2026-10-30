@@ -16,6 +16,7 @@ import { TimedSpeech, drawTimedSpeechBubble, type TimedBubbleStyle } from '../sp
 import { worldPalette } from '../ui/theme/worldInk';
 import type { BarkLine } from '../dialog/line';
 import { BATHROOM_HIT_BARKS, pickFreshLine } from '../dialog/scripts/scenes/cloggedBathroom';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Who a bathroom goblin is: one of the line, or the plumber at its head. */
 export type BathroomGoblinRole = 'queue' | 'plumber';
@@ -31,8 +32,7 @@ export type BathroomGoblinMarker = 'none' | 'exclamation' | 'question';
 const MINIMUM_LIVE_HP = 1;
 /** A goblin's own walking pace, in pixels per frame, matching the floor's hostile goblins. */
 const BATHROOM_GOBLIN_WALK_SPEED = 1.4;
-const FRAMES_PER_SECOND = 60;
-const SECONDS_PER_FRAME = 1 / FRAMES_PER_SECOND;
+const SECONDS_PER_FRAME = 1 / WORLD_TICKS_PER_SECOND;
 const MILLISECONDS_PER_SECOND = 1000;
 const HALF = 0.5;
 /** The goblin painter overhangs its tile like the hostile goblins' does. */

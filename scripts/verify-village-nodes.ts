@@ -14,7 +14,7 @@
  * Run: npx tsx scripts/verify-village-nodes.ts
  */
 
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { ASSET_GROUPS } from '../src/core/spriteAssets/assetGroups';
 import { createBriarHollowState, type HarvestNodeState } from '../src/core/quests/briarHollowState';
 import { getManifestEntry } from '../src/core/spriteAssets/SpriteLoader';
@@ -61,7 +61,6 @@ function section(name: string): void {
 
 // ── The design's numbers ─────────────────────────────────────────────
 
-const TICKS_PER_SECOND = 60;
 /** A Resourcing level below every capacity perk. */
 const UNPERKED_LEVEL = 1;
 /** What one harvest at base speed spends of a node: a whole unit of its capacity. */
@@ -70,19 +69,19 @@ const DEPOSIT_REGROW_SECONDS = 300;
 const GROVE_SAPLING_SECONDS = 80;
 const SAPLING_TO_TREE_SECONDS = 20;
 const RETRY_SECONDS = 10;
-const EXPECTED_DEPOSIT_REGROW_TICKS = DEPOSIT_REGROW_SECONDS * TICKS_PER_SECOND;
-const EXPECTED_GROVE_SAPLING_TICKS = GROVE_SAPLING_SECONDS * TICKS_PER_SECOND;
-const EXPECTED_SAPLING_TO_TREE_TICKS = SAPLING_TO_TREE_SECONDS * TICKS_PER_SECOND;
-const EXPECTED_RETRY_TICKS = RETRY_SECONDS * TICKS_PER_SECOND;
+const EXPECTED_DEPOSIT_REGROW_TICKS = DEPOSIT_REGROW_SECONDS * WORLD_TICKS_PER_SECOND;
+const EXPECTED_GROVE_SAPLING_TICKS = GROVE_SAPLING_SECONDS * WORLD_TICKS_PER_SECOND;
+const EXPECTED_SAPLING_TO_TREE_TICKS = SAPLING_TO_TREE_SECONDS * WORLD_TICKS_PER_SECOND;
+const EXPECTED_RETRY_TICKS = RETRY_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Slack for the tick a depletion is noticed on and the tree's half-second grow-in. */
 const SCHEDULING_SLACK_TICKS = 2;
-const GROW_IN_SLACK_TICKS = TICKS_PER_SECOND;
+const GROW_IN_SLACK_TICKS = WORLD_TICKS_PER_SECOND;
 /** Longer than anything in the village takes, for "never regrows". */
 const NEVER_SECONDS = 400;
-const NEVER_TICKS = NEVER_SECONDS * TICKS_PER_SECOND;
+const NEVER_TICKS = NEVER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Enough felling-animation ticks for any tree to finish coming down. */
 const FELLING_SECONDS_LIMIT = 10;
-const FELLING_TICKS_LIMIT = FELLING_SECONDS_LIMIT * TICKS_PER_SECOND;
+const FELLING_TICKS_LIMIT = FELLING_SECONDS_LIMIT * WORLD_TICKS_PER_SECOND;
 /** More harvests than any node holds, so a runaway spend loop still ends. */
 const SPEND_GUARD = 1000;
 /**

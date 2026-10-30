@@ -9,6 +9,9 @@
  * Threaded through `DungeonSceneOptions` by reference, exactly like the quest
  * progress objects, so it survives floor transitions and building entries.
  */
+
+import { WORLD_TICKS_PER_SECOND } from '../constants';
+
 export interface DeinonychusPetState {
   /** Current HP, carried across summons. Zero means he has to rest first. */
   hp: number;
@@ -216,8 +219,6 @@ export function advanceDeinonychusRecovery(
   return waitBefore - deinonychusFramesUntilReady(state, maxHp, minSummonHp);
 }
 
-const FRAMES_PER_SECOND = 60;
-
 /**
  * The longest he can ever be off duty: from zero — a knockout — to full.
  *
@@ -229,7 +230,7 @@ const DEINONYCHUS_FULL_RECOVERY_SECONDS = 30;
 /** How many regen ticks a full recovery is split into — the countdown's granularity. */
 const DEINONYCHUS_REGEN_TICKS_TO_FULL = 25;
 const DEINONYCHUS_REGEN_INTERVAL_FRAMES = Math.round(
-  (DEINONYCHUS_FULL_RECOVERY_SECONDS * FRAMES_PER_SECOND) / DEINONYCHUS_REGEN_TICKS_TO_FULL,
+  (DEINONYCHUS_FULL_RECOVERY_SECONDS * WORLD_TICKS_PER_SECOND) / DEINONYCHUS_REGEN_TICKS_TO_FULL,
 );
 const DEINONYCHUS_REGEN_PERCENT = 1 / DEINONYCHUS_REGEN_TICKS_TO_FULL;
 

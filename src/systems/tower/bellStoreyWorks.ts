@@ -31,9 +31,10 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
+import { cellmateFed } from '../../core/quests/missingCatsProgress';
 import { MUSIC_STEM_SETS, TOWER_SPLIT_BAR_S, TOWER_SPLIT_BEAT_S } from '../../audio/music/stemSets';
 import type { MusicBusId } from '../../audio/sounds';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import type { CatAlly } from '../../creatures/CatAlly';
 import {
@@ -42,6 +43,7 @@ import {
   BELL_STOREY_BEAMS,
   BELL_STOREY_BEAM_ROWS,
   BELL_STOREY_PLATES,
+  towerStandsDown,
   type TowerTile,
 } from '../../map/town/interiors/townCenterTower';
 import type { DamageSource, Player } from '../../Player';
@@ -82,6 +84,8 @@ const MOUTH_DROP_TILES = 4;
 const BELL_HANG_TILES = 2.2;
 const BELL_SIZE_TILES = 1.7;
 const BELL_SORT_ROW = BELL_STOREY_BEAM_ROWS.y1;
+/** A bell hanging straight down, as it hangs once the tower stands down. */
+const PLUMB_RADIANS = 0;
 
 const { west: WEST_BEAM, middle: MIDDLE_BEAM, east: EAST_BEAM } = BELL_STOREY_BEAMS;
 
@@ -109,8 +113,7 @@ type StrikeId = `${number}@${number}`;
 
 const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
-const FRAMES_PER_SECOND = 60;
-const FRAME_S = 1 / FRAMES_PER_SECOND;
+const FRAME_S = 1 / WORLD_TICKS_PER_SECOND;
 /** The most the swing's clock runs fast or slow while it catches up with the music, as a share of its pace. */
 const MAX_CATCH_UP_SHARE = 0.2;
 const MAX_CATCH_UP_S = FRAME_S * MAX_CATCH_UP_SHARE;
@@ -259,7 +262,17 @@ export class BellStoreyWorks extends StoreyWorks {
     return strikes;
   }
 
+  /** The bells hang still once the Warden is gone, wherever the storey was built. */
+  private get still(): boolean {
+    return towerStandsDown(this.deps.progress);
+  }
+
   update(ctx: SystemContext): void {
+    if (!this.still) this.swing();
+    this.seatCellmate(ctx);
+  }
+
+  private swing(): void {
     this.advanceSwingClock();
     const seconds = this.swingClockS;
     this.ringOnTheBeat(seconds);
@@ -267,10 +280,10 @@ export class BellStoreyWorks extends StoreyWorks {
       if (Math.abs(strike.inBeats) > STRIKE_HALF_WINDOW_BEATS) continue;
       for (const crawler of this.deps.presentCrawlers()) this.sweep(crawler, strike);
     }
-    this.seatCellmate(ctx);
   }
 
   renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.still) return;
     for (const strike of this.strikes(this.swingClockS)) {
       const flashing = strike.inBeats < 0 && strike.inBeats > -STRIKE_FLASH_BEATS;
       if (strike.inBeats > WARNING_LEAD_BEATS || (strike.inBeats < 0 && !flashing)) continue;
@@ -286,7 +299,7 @@ export class BellStoreyWorks extends StoreyWorks {
   }
 
   roomFigures(): InteriorFigure[] {
-    const angle = BellStoreyWorks.bellAngle(this.swingClockS);
+    const angle = this.still ? PLUMB_RADIANS : BellStoreyWorks.bellAngle(this.swingClockS);
     const bells = BELLS.map((bell): InteriorFigure => {
       const pivotX = pivotXTiles(bell) * TILE_SIZE;
       const pivotY = PIVOT_ROW_TILES * TILE_SIZE;
@@ -407,7 +420,7 @@ export class BellStoreyWorks extends StoreyWorks {
    */
   private seatCellmate(ctx: SystemContext): void {
     const { progress } = this.deps;
-    if (!progress.tunaSent || progress.portcullisRaised) return;
+    if (!cellmateFed(progress) || progress.portcullisRaised) return;
     const body = this.bellDeps.cellmate.body();
     if (body === null) return;
     const catFeet = tileOfBody(ctx.cat);

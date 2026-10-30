@@ -172,7 +172,7 @@ const LORI_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
     when: catsBeingTaken,
     lines: [
       lori.bark(
-        'I see a high window, dearie, and something with wings at it. The cards will not show me the rest.',
+        'I see a little window over a garden, dearie, and something with wings at it. The cards will not show me the rest.',
       ),
     ],
   },

@@ -194,6 +194,17 @@ function buildCastRows(look: HawkfolkLook): readonly CastRowSpec[] {
       pose: (f) => applyPosture(hawkfolkWalkPose(cyclePhase(f, WALK_FRAMES)), look.posture),
     });
   }
+  // Every look runs, not only the fightable ones: a cutscene hurries a citizen along in it.
+  for (const view of ALL_VIEWS) {
+    rows.push({
+      name: castStateName('run', view),
+      role: 'run',
+      view,
+      frameCount: RUN_FRAMES,
+      loops: true,
+      pose: (f) => applyPosture(hawkfolkRunPose(cyclePhase(f, RUN_FRAMES)), look.posture),
+    });
+  }
   for (const view of ALL_VIEWS) {
     rows.push({
       name: castStateName('idle', view),
@@ -245,14 +256,6 @@ function buildCastRows(look: HawkfolkLook): readonly CastRowSpec[] {
   }
   if (look.fightable) {
     for (const view of ALL_VIEWS) {
-      rows.push({
-        name: castStateName('run', view),
-        role: 'run',
-        view,
-        frameCount: RUN_FRAMES,
-        loops: true,
-        pose: (f) => applyPosture(hawkfolkRunPose(cyclePhase(f, RUN_FRAMES)), look.posture),
-      });
       rows.push({
         name: castStateName('strike', view),
         role: 'strike',

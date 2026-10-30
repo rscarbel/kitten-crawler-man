@@ -1,6 +1,7 @@
 import { worldPalette } from './theme/worldInk';
 import { worldPlate } from './world/worldShapes';
 import { worldText } from './world/worldText';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * The "you cannot use this yet" wipe: a dark panel that drains off the bottom of
@@ -10,7 +11,6 @@ import { worldText } from './world/worldText';
  */
 
 const COOLDOWN_OVERLAY_ALPHA = 0.65;
-const COOLDOWN_FRAMES_PER_SECOND = 60;
 /** Above this the number stops being a count and starts being a wall of digits. */
 const COOLDOWN_SECS_OVERFLOW = 99;
 const COOLDOWN_FONT_SCALE = 0.28;
@@ -44,7 +44,7 @@ export function drawCooldownOverlay(
     { fill: worldPalette.cooldownWash, alpha: COOLDOWN_OVERLAY_ALPHA },
   );
 
-  const seconds = Math.ceil(remainingFrames / COOLDOWN_FRAMES_PER_SECOND);
+  const seconds = Math.ceil(remainingFrames / WORLD_TICKS_PER_SECOND);
   const fontSize = Math.floor(Math.min(width, height) * COOLDOWN_FONT_SCALE);
   const topY =
     y + height / 2 + COOLDOWN_TEXT_Y_OFFSET - Math.round(fontSize * COOLDOWN_FONT_BASELINE);

@@ -10,6 +10,7 @@ import {
 import { settings } from '../core/input/Settings';
 import type { SoundId } from './sounds';
 import {
+  JINGLE_IDS,
   musicLoopStartS,
   ON_DEMAND_SOUND_IDS,
   SOUND_MANIFEST,
@@ -41,6 +42,7 @@ import {
   type Voice,
 } from './voiceFades';
 import { KRAKEN_BOSS_TYPE } from '../core/mobs/bossTypes';
+import { QUEST_TRAITS } from '../core/quests/QuestManager';
 
 /** Set by the bundler: true in `npm run serve` / `npm run dev` builds, absent under tsx. */
 declare const __DEV_BUILD__: boolean | undefined;
@@ -2355,9 +2357,7 @@ export class AudioManager {
       this.play('level_complete');
     });
 
-    bus.on('objectiveComplete', () => {
-      this.play('objective_complete');
-    });
+    this.wireObjectiveChime(bus);
 
     bus.on('achievementUnlocked', () => {
       this.play('achievement_unlocked');
@@ -2368,6 +2368,48 @@ export class AudioManager {
     bus.on('cowPetted', () => {
       this.play('happy_hearts');
     });
+  }
+
+  /**
+   * The objective chime waits out any conversation open as the objective
+   * completes, and plays once the box closes: a fanfare over a line of
+   * dialog steps on the line. Several objectives finished inside one
+   * conversation share one chime.
+   *
+   * The check runs a microtask after the event rather than inside it, so a
+   * step that completes an objective and opens a talk in the same frame (or
+   * closes one talk and opens the next) is seen with the talk open. A jingle
+   * sounding when the chime comes due already scores the moment, and the
+   * chime's duck would pull it down, so the chime is dropped instead.
+   */
+  private wireObjectiveChime(bus: EventBus): void {
+    // A count rather than a flag: a scene can hold more than one box, and
+    // one closing while another is still open must not let the chime in.
+    let conversationsOpen = 0;
+    let chimeOwed = false;
+    const playOwedChime = (): void => {
+      if (!chimeOwed || conversationsOpen > 0) return;
+      chimeOwed = false;
+      if (this.isJingleSounding()) return;
+      this.play('objective_complete');
+    };
+    bus.on('conversation', (e) => {
+      if (e.phase === 'started') {
+        conversationsOpen++;
+        return;
+      }
+      conversationsOpen = Math.max(0, conversationsOpen - 1);
+      queueMicrotask(playOwedChime);
+    });
+    bus.on('objectiveComplete', ({ questId }) => {
+      if (!QUEST_TRAITS[questId].chimesOnObjectives) return;
+      chimeOwed = true;
+      queueMicrotask(playOwedChime);
+    });
+  }
+
+  private isJingleSounding(): boolean {
+    return this.liveVoices.some((live) => !live.stopping && isJingleId(live.id));
   }
 
   /** Stop music and release the AudioContext. Call when the page/game is torn down. */
@@ -2384,4 +2426,8 @@ export class AudioManager {
     this.ctx.onstatechange = null;
     void this.ctx.close();
   }
+}
+
+function isJingleId(id: SoundId): boolean {
+  return JINGLE_IDS.some((jingle) => jingle === id);
 }

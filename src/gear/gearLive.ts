@@ -61,6 +61,9 @@ export type GearFxRequest =
       readonly rangePx: number;
     };
 
+/** An enemy's whole range: what a crawler nothing hushes is noticed at. */
+export const FULL_NOTICE_RANGE_SHARE = 1;
+
 /** The most requests one crawler can hold undrained, so a scene with no drainer cannot leak. */
 const MAX_PENDING_FX = 32;
 
@@ -81,6 +84,11 @@ export class GearLiveState {
   lastY: number | null = null;
   /** Frames she stays hidden from enemies after a kill. */
   vanishFrames = 0;
+  /**
+   * The share of an enemy's usual range at which it can first notice her,
+   * granted afresh each gear tick; 1 when nothing hushes her.
+   */
+  noticeRangeShare = FULL_NOTICE_RANGE_SHARE;
   /** Frames the world stays slowed by her last stand. */
   lastStandFrames = 0;
   /** Whether her partner piece is linked with the other crawler's this frame. */
@@ -126,6 +134,7 @@ export class GearLiveState {
     this.lastY = null;
     this.vanishFrames = 0;
     this.lastStandFrames = 0;
+    this.noticeRangeShare = FULL_NOTICE_RANGE_SHARE;
     this.partnerLinked = false;
     this.partnerLinkStatBonus = 0;
     this.partnerWasDown = false;

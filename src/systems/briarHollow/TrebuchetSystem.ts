@@ -26,7 +26,7 @@
  * afresh.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { Player, DamageSource } from '../../Player';
 import type { Mob } from '../../creatures/Mob';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -76,13 +76,14 @@ import {
 } from './DefenseStructures';
 import { StructureCallouts } from './structureCallouts';
 import { hollowBellCentre } from './hollowBell';
-import { TREBUCHET_MAX_AMMO, TREBUCHET_RANGE_TILES, UPDATES_PER_SECOND } from './structureRules';
+import { TREBUCHET_MAX_AMMO, TREBUCHET_RANGE_TILES } from './structureRules';
 
 // ── Firing ──────────────────────────────────────────────────────────────────
 
 const TREBUCHET_FIRE_INTERVAL_SECONDS = 3;
 /** Updates between two releases of one trebuchet. */
-export const TREBUCHET_FIRE_INTERVAL_FRAMES = TREBUCHET_FIRE_INTERVAL_SECONDS * UPDATES_PER_SECOND;
+export const TREBUCHET_FIRE_INTERVAL_FRAMES =
+  TREBUCHET_FIRE_INTERVAL_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A trebuchet cannot hit anything closer than this to its own footprint. */
 export const TREBUCHET_MIN_GAP_TILES = 1;
 /** Updates the arm spends swinging over before the boulder leaves the sling. */
@@ -169,7 +170,7 @@ const MOB_SHRAPNEL: DamageSource = { kind: 'siege', dodgeable: false };
 
 export const MIASMA_RADIUS_TILES = 1.5;
 const MIASMA_SECONDS = 6;
-export const MIASMA_FRAMES = MIASMA_SECONDS * UPDATES_PER_SECOND;
+export const MIASMA_FRAMES = MIASMA_SECONDS * WORLD_TICKS_PER_SECOND;
 export const MIASMA_TICK_FRAMES = 30;
 /** Flat per tick: it is a lingering nuisance on top of the boulder, not a second boulder. */
 export const MIASMA_DAMAGE = 2;
@@ -454,7 +455,7 @@ export class TrebuchetSystem {
 
   update(): void {
     this.frame++;
-    this.timeSeconds += 1 / UPDATES_PER_SECOND;
+    this.timeSeconds += 1 / WORLD_TICKS_PER_SECOND;
     this.trackHostiles();
     const live = new Set<string>();
     for (const record of this.deps.defense.trebuchets) {

@@ -11,8 +11,8 @@ import type { HotbarInput, HotbarSlotModel } from '../../ui/hud/hudModel';
 import type { ItemCooldown } from '../../ui/screens/inventory/inventoryTypes';
 import { activeInputMode } from '../../ui/core/inputMode';
 import { activateHotbarSlot, releaseChargedDynamite, type HotbarHost } from './hotbarActions';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
-const FRAMES_PER_SECOND = 60;
 /** Above this the number stops being a count and starts being a wall of digits. */
 const COOLDOWN_SECONDS_SHOWN_MAX = 99;
 const COOLDOWN_OVERFLOW_LABEL = '…';
@@ -36,7 +36,7 @@ export function hotbarSlotModels(
     // of its own — the Wayfinder's Anchor — wears the same sweep as an ability.
     const cd = item === null ? undefined : cooldowns.get(cooldownKeyOf(item));
     const remaining = cd === undefined || cd.max <= 0 ? 0 : Math.max(0, cd.current) / cd.max;
-    const seconds = cd === undefined ? 0 : Math.ceil(cd.current / FRAMES_PER_SECOND);
+    const seconds = cd === undefined ? 0 : Math.ceil(cd.current / WORLD_TICKS_PER_SECOND);
     return {
       item,
       equipped: item !== null && (item.id === heldItemId || inventory.hasEquipped(item.id)),

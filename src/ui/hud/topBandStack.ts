@@ -118,6 +118,13 @@ export interface StackedBandOptions {
   /** The whole entry's opacity, for an entry fading out. */
   readonly alpha?: number;
   readonly rows: readonly BandRow[];
+  /**
+   * While a fight's card (`boss`, else `encounter`) is up, these rows ride
+   * inside it rather than stack a card of their own under it, so a fight's
+   * news reads as one card and leaves the room in view: a downed teammate's
+   * countdown.
+   */
+  readonly ridesFightCard?: true;
 }
 
 const MARK_WIDTH = 1;
@@ -257,6 +264,7 @@ export function stackedBandEntry(opts: StackedBandOptions): TopBandEntry {
   return {
     id: opts.id,
     priority: opts.priority,
+    stack: opts,
     maxWidth: opts.maxWidth ?? TOP_BAND_WIDTH.regular,
     height: (ui, width) =>
       stackHeight(ui, topBandCardInnerWidth(ui, width), rows) + topBandCardPadding(ui),
@@ -278,4 +286,27 @@ export function stackedBandEntry(opts: StackedBandOptions): TopBandEntry {
       ctx.restore();
     },
   };
+}
+
+const FIGHT_CARD_PRIORITIES: readonly TopBandPriority[] = ['boss', 'encounter'];
+
+/**
+ * The band's entries with every rider (`ridesFightCard`) folded into the
+ * fight's card: the first `boss` stack, else the first `encounter` one. With
+ * no fight card up, every entry stands as it is.
+ */
+export function foldRidersIntoFightCard(entries: readonly TopBandEntry[]): TopBandEntry[] {
+  const host = FIGHT_CARD_PRIORITIES.map((priority) =>
+    entries.find((entry) => entry.priority === priority && entry.stack !== undefined),
+  ).find((entry) => entry !== undefined);
+  const hostStack = host?.stack;
+  if (host === undefined || hostStack === undefined) return [...entries];
+  const riders = entries.filter((entry) => entry.stack?.ridesFightCard === true);
+  if (riders.length === 0) return [...entries];
+  const riderRows = riders.flatMap((rider) => rider.stack?.rows ?? []);
+  const folded = stackedBandEntry({ ...hostStack, rows: [...hostStack.rows, ...riderRows] });
+  return entries.flatMap((entry) => {
+    if (entry === host) return [folded];
+    return riders.includes(entry) ? [] : [entry];
+  });
 }

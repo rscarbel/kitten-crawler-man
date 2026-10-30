@@ -1,7 +1,6 @@
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
-import { TICKS_PER_SECOND } from '../sprites/art/human/timing';
 import type { Missile } from '../sprites/catSprite';
 
 /*
@@ -25,7 +24,7 @@ const KALEIDOSCOPE_SEEK_RADIUS_PX = KALEIDOSCOPE_SEEK_RADIUS_TILES * TILE_SIZE;
  * all three would land on that enemy on the very next frame and never be seen.
  */
 const ARMING_SECONDS = 0.2;
-const ARMING_FRAMES = Math.round(ARMING_SECONDS * TICKS_PER_SECOND);
+const ARMING_FRAMES = Math.round(ARMING_SECONDS * WORLD_TICKS_PER_SECOND);
 /**
  * Radians a copy may turn per frame. Tighter than a homing missile's turn,
  * because a copy starts a tile from its quarry rather than a screen away, and
@@ -38,12 +37,12 @@ const COPY_TURN_RATE = 0.15;
  * otherwise orbit that enemy for ever.
  */
 const SEEK_LIMIT_SECONDS = 5;
-const SEEK_LIMIT_FRAMES = SEEK_LIMIT_SECONDS * TICKS_PER_SECOND;
+const SEEK_LIMIT_FRAMES = SEEK_LIMIT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long a copy circles the cat with nothing to chase before it fades. */
 const ORBIT_LIFETIME_SECONDS = 30;
-const ORBIT_LIFETIME_FRAMES = ORBIT_LIFETIME_SECONDS * TICKS_PER_SECOND;
+const ORBIT_LIFETIME_FRAMES = ORBIT_LIFETIME_SECONDS * WORLD_TICKS_PER_SECOND;
 const FADE_SECONDS = 0.5;
-const FADE_FRAMES = Math.round(FADE_SECONDS * TICKS_PER_SECOND);
+const FADE_FRAMES = Math.round(FADE_SECONDS * WORLD_TICKS_PER_SECOND);
 
 const ORBIT_RADIUS_TILES = 0.9;
 const ORBIT_RADIUS_PX = ORBIT_RADIUS_TILES * TILE_SIZE;
@@ -52,10 +51,11 @@ const ORBIT_VERTICAL_SQUASH = 0.55;
 /** The cat sits low in her tile; the ring circles her body, not her feet. */
 const ORBIT_CENTRE_LIFT_PX = 4;
 const ORBIT_PERIOD_SECONDS = 4;
-const ORBIT_TURN_PER_FRAME = (Math.PI * 2) / (ORBIT_PERIOD_SECONDS * TICKS_PER_SECOND);
+const ORBIT_TURN_PER_FRAME = (Math.PI * 2) / (ORBIT_PERIOD_SECONDS * WORLD_TICKS_PER_SECOND);
 const ORBIT_BOB_PX = 3;
 const ORBIT_BOB_PERIOD_SECONDS = 1.6;
-const ORBIT_BOB_TURN_PER_FRAME = (Math.PI * 2) / (ORBIT_BOB_PERIOD_SECONDS * TICKS_PER_SECOND);
+const ORBIT_BOB_TURN_PER_FRAME =
+  (Math.PI * 2) / (ORBIT_BOB_PERIOD_SECONDS * WORLD_TICKS_PER_SECOND);
 /**
  * Successive copies take ring slots a golden angle apart, which keeps any
  * number of them spread round her without re-spacing the ones already there.

@@ -19,14 +19,12 @@ import { RESOURCING_XP_PER_BASIC_HARVEST, THRALL_XP_FRACTION } from './CraftSkil
 import type { ItemId } from '../items/defs/ItemDefs';
 import type { ResourceId } from '../items/gathering/resourceIds';
 import type { ToolKind } from '../items/gathering/toolTiers';
+import { WORLD_TICKS_PER_SECOND } from '../constants';
 
 /** Seconds between wood awards at Resourcing speed factor 1 and no tool speed bonus. */
 export const WOOD_HARVEST_INTERVAL_SECONDS = 1.5;
 /** Seconds between stone awards at Resourcing speed factor 1 and no tool speed bonus. */
 export const STONE_HARVEST_INTERVAL_SECONDS = 2.75;
-
-/** The fixed update rate harvest intervals are counted in, so a doubled `Scene.loop` catch-up cannot speed them up. */
-const HARVEST_TICKS_PER_SECOND = 60;
 
 /** Which node family a tool works. */
 export function harvestKindForTool(tool: ToolKind): HarvestKind {
@@ -95,7 +93,7 @@ export function harvestIntervalTicks(
   level: number,
   toolSpeedBonus: number,
 ): number {
-  return harvestIntervalSeconds(kind, level, toolSpeedBonus) * HARVEST_TICKS_PER_SECOND;
+  return harvestIntervalSeconds(kind, level, toolSpeedBonus) * WORLD_TICKS_PER_SECOND;
 }
 
 /** One tick's award and the fractional remainder carried into the next. */

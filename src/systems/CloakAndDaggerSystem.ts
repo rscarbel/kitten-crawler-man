@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { GearOwnership } from './market/vendorMenu';
 import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
 import { playInteriorCue } from '../audio/interiorInteractionSoundCues';
@@ -25,7 +25,6 @@ import {
   type ClubStationId,
 } from '../core/club/clubLayout';
 import { CLUB_PROPS, propSortY, type ClubProp } from '../core/club/clubProps';
-import { CLUB_ANIM_FRAMES_PER_SECOND } from '../core/club/clubTiming';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { beginOverheadMeasure, endOverheadMeasure } from '../ui/world/overheadStack';
 import { drawClubCastFigure, type ClubFigureRef } from '../sprites/clubCastFigure';
@@ -82,7 +81,7 @@ const CASINO_MUSIC_CROSSFADE_MS = 800;
  * milliseconds so the two renderings of Deuce move at the same speed.
  */
 const MS_PER_SECOND = 1000;
-const MS_PER_FRAME = MS_PER_SECOND / CLUB_ANIM_FRAMES_PER_SECOND;
+const MS_PER_FRAME = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 
 function casinoTableSortY(): number {
   const table = CLUB_PROPS.find((prop) => prop.sprite === 'club_casino_table');
@@ -631,7 +630,7 @@ export class CloakAndDaggerSystem {
     const figures: InteriorFigure[] = CLUB_PROPS.map((prop) => ({
       y: propSortY(prop),
       render: (ctx: CanvasRenderingContext2D, camX: number, camY: number) =>
-        drawClubProp(ctx, prop, camX, camY, this.animTime / CLUB_ANIM_FRAMES_PER_SECOND),
+        drawClubProp(ctx, prop, camX, camY, this.animTime / WORLD_TICKS_PER_SECOND),
     }));
 
     CLUB_DANCER_TILES.forEach((tile, i) => figures.push(this.dancerFigure(tile, clubDancerAt(i))));
@@ -685,7 +684,7 @@ export class CloakAndDaggerSystem {
             walkPhase: 0,
             facingX,
             facingY: 1,
-            loopOffsetSeconds: seed / CLUB_ANIM_FRAMES_PER_SECOND,
+            loopOffsetSeconds: seed / WORLD_TICKS_PER_SECOND,
           });
           if (icon !== 'none') {
             const box = scaleHumanoidBox(sx, sy, tileSize);
@@ -739,7 +738,7 @@ export class CloakAndDaggerSystem {
           post.pole.x * TILE_SIZE - camX,
           post.pole.y * TILE_SIZE - camY - clubStageLiftPx(tileSize),
           tileSize,
-          this.animTime / CLUB_ANIM_FRAMES_PER_SECOND + offsetSeconds,
+          this.animTime / WORLD_TICKS_PER_SECOND + offsetSeconds,
         ),
     };
   }

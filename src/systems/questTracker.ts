@@ -23,6 +23,7 @@
  */
 import type { ObjectiveBeaconFootprint } from '../ui/ObjectiveBeacon';
 import type { BuildingId } from '../map/buildingIds';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 export type TrackerStatus = 'available' | 'active' | 'completed' | 'failed';
 
@@ -76,6 +77,13 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    */
   readonly building?: BuildingId;
   /**
+   * Where inside a building the step is done, for a target whose way in from
+   * the street is some other door (the tower is entered by the storm drain).
+   * Indoors in that building the party is led up or down its stairs to
+   * `storey` and then to `tile`, never back out.
+   */
+  readonly indoors?: TrackerIndoorPlace;
+  /**
    * The source paints its own route to this target, made of straight walkable
    * hops, so the generic route guide neither re-aims the arrow nor paints a
    * second trail over it.
@@ -83,12 +91,30 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
   readonly drawsOwnRoute?: boolean;
 }
 
+/**
+ * How the party is led to an indoor place once on its storey: by the arrow
+ * and trail along the walkable way, or only by the mark the storey itself
+ * paints over the place, for a way that runs through something a route
+ * cannot see past (a ward that will go out once a puzzle is solved), where
+ * an arrow would point straight into it.
+ */
+export type IndoorLead = 'route' | 'own_mark';
+
+/** A tile on one storey of a building, counted from its lowest storey. */
+interface TrackerIndoorPlace {
+  readonly building: BuildingId;
+  readonly storey: number;
+  readonly tile: { readonly x: number; readonly y: number };
+  readonly lead: IndoorLead;
+}
+
 /** A tile target for a character, which the scene will not stand the overlay beacon on. */
 export function characterTarget(tile: { readonly x: number; readonly y: number }): TrackerTarget {
   return { x: tile.x, y: tile.y, wearsOwnMarker: true };
 }
 
-export interface TrackerEntry {
+/** What every Journal line says, whatever its place among its quest's lines. */
+interface TrackerEntryFields {
   /** Stable across frames — this is what a pin is remembered by. */
   readonly id: string;
   readonly name: string;
@@ -105,15 +131,35 @@ export interface TrackerEntry {
   readonly hint?: string;
   /** Tile to point a chevron and the world arrow at. */
   readonly target?: TrackerTarget;
-  /**
-   * The id of this entry's quest header, when this entry is one of several
-   * live steps within a single quest. The Journal renders it indented under
-   * that header rather than as its own top-level row — the anchor questline is
-   * the source that needs this: with three shards outstanding it would
-   * otherwise print "The Anchor is Broken" three times.
-   */
-  readonly parentId?: string;
 }
+
+/**
+ * Where a line sits among its quest's lines. A quest with several live steps
+ * at once has a header over them, rendered first, and each step indented
+ * under it: the anchor questline needs this, since with three shards
+ * outstanding it would otherwise print "The Anchor is Broken" three times.
+ * A header must say what a pin on it leads to.
+ */
+export type TrackerEntryPlace =
+  | { readonly kind: 'single' }
+  | {
+      readonly kind: 'header';
+      /**
+       * `'nearest_step'` swaps the header for whichever of its outstanding
+       * steps is nearest, which suits steps that can be done in any order.
+       * `'header'` keeps the header's own target, for a quest whose header
+       * already names the step the story is on: a lead that sends the party
+       * from one house to the next must not be overruled by whichever other
+       * house happens to stand closer to the door they came out of.
+       */
+      readonly pinLeadsTo: TrackerPinLead;
+    }
+  | { readonly kind: 'step'; readonly parentId: string };
+
+export type TrackerEntry = TrackerEntryFields & TrackerEntryPlace;
+
+/** What a pin on a quest's header points at; see {@link TrackerEntryPlace}. */
+export type TrackerPinLead = 'nearest_step' | 'header';
 
 /** Anything the scene can ask for journal lines. */
 export interface TrackerSource {
@@ -167,7 +213,7 @@ export interface TilePosition {
 }
 
 /**
- * Among `header`'s own sub-steps (`parentId === header.id`), the followable one
+ * Among `header`'s own steps, the followable one
  * whose target sits closest to `fromTile` — squared distance, since only the
  * ordering matters. Null when the header has no followable sub-steps of its
  * own, which is what lets a plain (non-multi-step) pin fall through unchanged.
@@ -180,7 +226,8 @@ function nearestFollowableStep(
   let nearest: TrackerEntry | null = null;
   let nearestDistSq = Infinity;
   for (const entry of entries) {
-    if (entry.parentId !== header.id || !isFollowable(entry) || entry.target === undefined) {
+    const isOwnStep = entry.kind === 'step' && entry.parentId === header.id;
+    if (!isOwnStep || !isFollowable(entry) || entry.target === undefined) {
       continue;
     }
     const dx = entry.target.x - fromTile.x;
@@ -213,7 +260,8 @@ function nearestFollowableStep(
  * quest's header rather than one of its steps: the header itself is swapped
  * for whichever of its outstanding sub-steps is nearest, so the arrow, the
  * beacon and the minimap chevron all send the player somewhere reachable
- * rather than always the first step in authoring order. Every caller that
+ * rather than always the first step in authoring order, unless the header
+ * leads to itself. Every caller that
  * points at something should pass it; omitting it (as the "is this pin still
  * live" check does) just keeps the header as the answer.
  */
@@ -225,7 +273,8 @@ export function resolvePinnedEntry(
   if (pinnedId === null) return null;
   const pinned = entries.find((entry) => pinMatchesEntry(pinnedId, entry) && isFollowable(entry));
   if (pinned === undefined) return null;
-  if (fromTile === undefined) return pinned;
+  const leadsToNearestStep = pinned.kind === 'header' && pinned.pinLeadsTo === 'nearest_step';
+  if (fromTile === undefined || !leadsToNearestStep) return pinned;
   return nearestFollowableStep(pinned, entries, fromTile) ?? pinned;
 }
 
@@ -308,10 +357,7 @@ export function collectTrackerEntries(
   return entries;
 }
 
-/** Seconds a frame count stands for, for objective lines that count one down. */
-const FRAMES_PER_SECOND = 60;
-
 /** "18s" for a countdown stated in frames, so every objective line phrases one the same way. */
 export function secondsLabel(frames: number): string {
-  return `${Math.max(0, Math.ceil(frames / FRAMES_PER_SECOND))}s`;
+  return `${Math.max(0, Math.ceil(frames / WORLD_TICKS_PER_SECOND))}s`;
 }

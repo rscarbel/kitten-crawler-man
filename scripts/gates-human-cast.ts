@@ -514,7 +514,7 @@ function gateRelookOnPurge(): void {
 function gateSeated(): void {
   let measured = 0;
   for (const look of TOWN_CAST_LOOKS) {
-    const seated = townCastSeatedFigure(look);
+    const seated = townCastSeatedFigure(look, 'bar_stool');
     if (seated === undefined) continue;
     measured++;
     failures.push(...seatedFigureFailures(seated), ...seatedSeamFailures(seated));

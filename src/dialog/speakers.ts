@@ -18,7 +18,7 @@ import { motion } from '../ui/theme/tokens';
 import type { CarolineSpeakerRef } from './caroline';
 
 /** How a speaker's text is cased when it's drawn — a written-in rule instead of an author convention to remember. */
-export type TextCase = 'as-written' | 'upper' | 'lower';
+export type TextCase = 'as-written' | 'upper';
 
 /**
  * The face a speaker's words are set in: the UI face, or a terminal face for a
@@ -204,14 +204,22 @@ export const SPEAKERS = {
   /**
    * Pumpkin, Dave's lost cat: unhurried, unbothered, and interested in food
    * and doors and nothing else. Short sentences; no line of hers is excited.
-   * Lowercased by rule, so a line written with a capital still reads as hers.
    */
   pumpkin: {
     name: 'Pumpkin',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
-    textCase: 'lower',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+  /** Pumpkin in the cattery, before she has given Belle her name: her voice, under no name. */
+  tower_cattery_cellmate: {
+    name: 'Neighboring Cat',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 

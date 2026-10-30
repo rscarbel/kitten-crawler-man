@@ -31,6 +31,7 @@ import {
 } from '../sprites/rockGolemSprite';
 import { selectCardinalFacing } from '../sprites/facingView';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -96,7 +97,6 @@ const SPEED_QUARTER = 0.25;
 const SPEED_HALF = 0.5;
 const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
-const FRAMES_PER_SECOND = 60;
 
 /** The floors a golem is actually seen against, darkest first. */
 const BACKDROPS: ReadonlyArray<string> = previewInk.rockGolem.backdrops;
@@ -149,7 +149,7 @@ export class RockGolemPreviewScene extends PreviewScene {
 
   /** 0 → 1 through a one-shot row at the chosen playback speed. */
   private progressOf(row: RowSpec): number {
-    const cycleFrames = (FRAMES_PER_SECOND / row.fps) * ROW_CYCLE_FRAMES;
+    const cycleFrames = (WORLD_TICKS_PER_SECOND / row.fps) * ROW_CYCLE_FRAMES;
     return (this.clock % cycleFrames) / cycleFrames;
   }
 

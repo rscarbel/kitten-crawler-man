@@ -28,7 +28,6 @@ import {
 } from '@rscarbel/game-server-llm-sdk';
 import { AIAdapter, type AIClient } from '../src/ai/AIAdapter';
 import { ActionGovernor } from '../src/ai/actions/governor';
-import { FRAMES_PER_SECOND } from '../src/ai/actions/helpers';
 import type { AISceneContext } from '../src/ai/actions/types';
 import { CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
 import { describeDamageSource } from '../src/ai/context/eventMapping';
@@ -44,7 +43,7 @@ import type { AIReplayExpectation, AIReplayFixture } from '../src/ai/replay/aiRe
 import { AIInteractionStage } from '../src/ai/interactions/AIInteractionStage';
 import { AchievementManager } from '../src/core/progression/AchievementManager';
 import { AchievementAwards } from '../src/systems/AchievementAwards';
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -387,7 +386,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
         session.levelTimerSeconds = Math.max(0, session.levelTimerSeconds - ms / MS_PER_SECOND);
       }
       // The challenge clock runs on frames, so it is stepped through the time that passed.
-      const frames = Math.round((ms / MS_PER_SECOND) * FRAMES_PER_SECOND);
+      const frames = Math.round((ms / MS_PER_SECOND) * WORLD_TICKS_PER_SECOND);
       for (let frame = 0; frame < frames; frame++) challenges.update(frameContext);
       change?.();
       await settle();

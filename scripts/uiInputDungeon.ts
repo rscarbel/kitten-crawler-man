@@ -8,12 +8,19 @@
  *    menu, never the button drawn beneath its backdrop;
  *  - the bag's context menu does not survive under the pause menu;
  *  - a level-up raised while a finger rests on the hotbar does not let the
- *    release use the slot or answer the dialog.
+ *    release use the slot or answer the dialog;
+ *  - the interact press goes to quest business over a person in front of it,
+ *    and to a swing over both while a hostile attacks; in Blackwood Lodge, a
+ *    ghoul coming for the party keeps Sgt. Kessler's talk prompt and press
+ *    away even with him underfoot, and a ghoul in swing range keeps a press
+ *    made from his conversation from opening one with whoever the crawler
+ *    has stepped up to.
  *
- * Each case has a control that runs the same input with the fix taken away
- * (the menu mounted without its block, the overlay not raised) and checks the
- * click-through it guards against really happens there, so a probe that has
- * stopped seeing the bug fails instead of passing quietly.
+ * The click-through and interact-press cases above each have a control that
+ * runs the same input with the fix taken away (the menu mounted without its
+ * block, the overlay not raised, the stance read as clear) and checks the bug
+ * it guards against really happens there, so a probe that has stopped seeing
+ * the bug fails instead of passing quietly.
  *
  * It also checks the runtime half of `verify:menus`: whichever menu is on top
  * declares the keyboard focus ring the keyboard then drives.
@@ -70,6 +77,13 @@ const { ACHIEVEMENT_DEFS } = await import('../src/core/progression/AchievementMa
 const { COLLECT_GUARD_FRAMES } = await import('../src/ui/screens/rewardChest/chestTimeline.js');
 const { keybindings } = await import('../src/core/input/Keybindings.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
+const { shownPromptOwner } = await import('../src/ui/InteractionPrompt.js');
+const { INTERACTABLES } = await import('../src/ui/interactionFocus.js');
+const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
+const { RuinsGhoul } = await import('../src/creatures/RuinsGhoul.js');
+const { snapPlayer } = await import('../src/core/save/PlayerSnapshot.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
+const { settleArrival: settleSceneArrival } = await import('./settleArrival.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type DockId = Parameters<Scene['hud']['cssDockRect']>[0];
@@ -1060,6 +1074,251 @@ section('a Keyboard Hero lane tap that slides a little still counts');
     barriers['barriers'].length = 0;
   }
   frame(street);
+}
+
+// ── What the interact press is for ─────────────────────────────────────────
+
+{
+  section('the interact press: quest business first, and a fight before anything');
+  closeEverything(street);
+  const townProps = street['townProps'];
+  const townLife = street['townLife'];
+  const board = townProps?.noticeBoardTile ?? null;
+  const citizen = townLife?.people[0] ?? null;
+  if (townProps === null || townLife === null || board === null || citizen === null) {
+    throw new Error('the town has no notice board or no citizens to stand in front of it');
+  }
+  const human = street['human'];
+  if (!human.isActive) street['triggerSwitchCharacter'](true);
+  const roster = street['world'].roster;
+  const noticeBoard = street['noticeBoard'];
+  const standX = board.x * TILE_SIZE;
+  const standY = (board.y + 1) * TILE_SIZE;
+  const citizenHome = { x: citizen.x, y: citizen.y, marker: citizen.markerType };
+  const putEveryoneInFrontOfTheBoard = (): void => {
+    noticeBoard?.close();
+    street['conversation'].close();
+    street['releaseCitizenDialogTarget']();
+    human.x = standX;
+    human.y = standY;
+    human.attackTimer = 0;
+    const fromX = citizen.x;
+    const fromY = citizen.y;
+    citizen.x = standX;
+    citizen.y = standY;
+    citizen.markerType = 'none';
+    townLife['grid'].move(citizen, fromX, fromY);
+    frame(street);
+  };
+
+  putEveryoneInFrontOfTheBoard();
+  check(
+    street['citizenDialogTarget'] === null,
+    'nobody is mid-conversation, so the person is offered a prompt too',
+  );
+  check(
+    townLife.findTalkTarget(human.x, human.y) === citizen,
+    'a citizen stands in front of the board, nearer than it, close enough to talk to',
+  );
+  check(
+    shownPromptOwner() === street['promptOwners'].noticeBoard,
+    `the prompt shown is the board's, not the person's (${shownPromptOwner()?.kind ?? 'none'})`,
+  );
+  street['triggerSpaceAction']();
+  check(noticeBoard?.isOpen === true, 'and the interact press reads the board');
+  check(street['citizenDialogTarget'] === null, 'without talking to the person in front of it');
+  street['conversation'].close();
+  closeEverything(street);
+
+  const rooster = new BigRooster(board.x + HOSTILE_OFFSET_TILES, board.y + 1, TILE_SIZE);
+  rooster.currentTarget = human;
+  roster.add(rooster);
+  try {
+    putEveryoneInFrontOfTheBoard();
+    check(
+      shownPromptOwner() === null,
+      `with Big Rooster attacking in swing range, no interact prompt is shown (${shownPromptOwner()?.kind ?? 'none'})`,
+    );
+    street['triggerSpaceAction']();
+    check(noticeBoard?.isOpen !== true, 'the press does not read the board');
+    check(human.attackTimer > 0, 'the press is a swing');
+
+    const stanceOf = street['interactionStance'];
+    street['interactionStance'] = () => 'clear';
+    try {
+      putEveryoneInFrontOfTheBoard();
+      street['triggerSpaceAction']();
+      check(
+        noticeBoard?.isOpen === true,
+        'control: with the fight taken out of the stance, the same press reads the board',
+      );
+    } finally {
+      street['interactionStance'] = stanceOf;
+    }
+  } finally {
+    roster.replaceAll(roster.mobs.filter((mob) => mob !== rooster));
+    roster.rebuildGrid();
+  }
+  noticeBoard?.close();
+  street['conversation'].close();
+  street['releaseCitizenDialogTarget']();
+  const fromX = citizen.x;
+  const fromY = citizen.y;
+  citizen.x = citizenHome.x;
+  citizen.y = citizenHome.y;
+  citizen.markerType = citizenHome.marker;
+  townLife['grid'].move(citizen, fromX, fromY);
+  closeEverything(street);
+}
+
+// ── Talking is never what a press is for with enemies near ─────────────────
+
+/** How far east of Sgt. Kessler the ghoul stands, in tiles: outside the human's swing, inside "enemies near". */
+const GHOUL_OFFSET_TILES = 4.5;
+
+{
+  section('in Blackwood Lodge, Sgt. Kessler underfoot and a ghoul coming: the press swings');
+  const lodgeEntry = town.buildingEntries.find((entry) => entry.id === 'taloncrest_garrison_lodge');
+  if (lodgeEntry === undefined) throw new Error('the town has no Blackwood Lodge');
+  const human = street['human'];
+  if (!human.isActive) street['triggerSwitchCharacter'](true);
+  const input = new InputManager();
+  const lodge = new BuildingInteriorScene(
+    lodgeEntry,
+    snapPlayer(human),
+    snapPlayer(street['cat']),
+    level3.xpDiminishingTiers,
+    level3.arrivalLoadingScreen,
+    input,
+    new SceneManager(),
+    () => undefined,
+    createShopStock(),
+  );
+  check(await settleSceneArrival(lodge, ctx), "the lodge's arrival screen finishes");
+  const kessler = lodge['occupants']?.people.find((person) => person.residentId === 'sgt_kessler');
+  if (kessler === undefined) throw new Error('Sgt. Kessler is not in his lodge');
+  const crawler = lodge['human'];
+  const attackKey = keybindings.keysFor('attack')[0] ?? ' ';
+  const standOnKessler = (): void => {
+    lodge['conversation'].close();
+    lodge['releaseCitizenDialogTarget']();
+    crawler.x = kessler.x;
+    crawler.y = kessler.y;
+    crawler.attackTimer = 0;
+    lodge.render(ctx);
+  };
+  const pressSpace = (): void => {
+    input['keys'].add(attackKey);
+    lodge.update();
+    input.release(attackKey);
+  };
+
+  standOnKessler();
+  const shownBeforeTheGhoul = shownPromptOwner();
+  check(
+    shownBeforeTheGhoul !== null && INTERACTABLES[shownBeforeTheGhoul.kind].talk,
+    `with nothing hostile about, the prompt over him is a talk (${shownBeforeTheGhoul?.kind ?? 'none'})`,
+  );
+  pressSpace();
+  check(lodge['conversation'].isOpen, 'and the press talks to him');
+
+  const roster = lodge['world'].roster;
+  const ghoul = new RuinsGhoul(
+    Math.round(kessler.x / TILE_SIZE + GHOUL_OFFSET_TILES),
+    Math.round(kessler.y / TILE_SIZE),
+    TILE_SIZE,
+  );
+  ghoul.currentTarget = crawler;
+  roster.add(ghoul);
+  try {
+    standOnKessler();
+    check(
+      shownPromptOwner() === null,
+      `with a ghoul coming for the party, no talk prompt is shown (${shownPromptOwner()?.kind ?? 'none'})`,
+    );
+    pressSpace();
+    check(!lodge['conversation'].isOpen, 'the press does not talk to him');
+    check(crawler.attackTimer > 0, 'the press is a swing');
+
+    const stanceOf = lodge['interactionStance'];
+    lodge['interactionStance'] = () => 'clear';
+    try {
+      standOnKessler();
+      pressSpace();
+      check(
+        lodge['conversation'].isOpen,
+        'control: with the ghoul taken out of the stance, the same press talks to him',
+      );
+    } finally {
+      lodge['interactionStance'] = stanceOf;
+    }
+  } finally {
+    roster.replaceAll(roster.mobs.filter((mob) => mob !== ghoul));
+    roster.rebuildGrid();
+  }
+
+  section(
+    'in Blackwood Lodge, mid-talk with a ghoul in swing range: a press at someone else swings',
+  );
+  const people = lodge['occupants']?.people ?? [];
+  const talkRangeTiles = (): number =>
+    lodge['conversation']['request']?.anchor?.talkRangeTiles ?? 0;
+  standOnKessler();
+  pressSpace();
+  check(lodge['citizenDialogTarget'] === kessler, 'with nothing hostile about, Sgt. Kessler talks');
+  const kesslerTalkRangePx = talkRangeTiles() * TILE_SIZE;
+  const neighbour = people.find(
+    (person) =>
+      person !== kessler &&
+      lodge['occupants']?.findTalkTarget(person.x, person.y) === person &&
+      Math.hypot(person.x - kessler.x, person.y - kessler.y) > kesslerTalkRangePx,
+  );
+  if (neighbour === undefined) throw new Error('nobody in the lodge stands beyond his talk range');
+  const swingingGhoul = new RuinsGhoul(
+    Math.round(neighbour.x / TILE_SIZE + HOSTILE_OFFSET_TILES),
+    Math.round(neighbour.y / TILE_SIZE),
+    TILE_SIZE,
+  );
+  swingingGhoul.currentTarget = crawler;
+  roster.add(swingingGhoul);
+  const stepToTheNeighbourAndPress = (): void => {
+    crawler.x = neighbour.x;
+    crawler.y = neighbour.y;
+    crawler.attackTimer = 0;
+    lodge.render(ctx);
+    lodge.ui.key(attackKey);
+  };
+  try {
+    stepToTheNeighbourAndPress();
+    check(
+      lodge['interactionStance']() === 'fighting',
+      'beside the neighbour, the ghoul is in swing range',
+    );
+    check(
+      lodge['citizenDialogTarget'] !== neighbour,
+      'the press made from the conversation opens no talk with the occupant stepped up to',
+    );
+
+    const stanceOf = lodge['interactionStance'];
+    lodge['interactionStance'] = () => 'clear';
+    try {
+      standOnKessler();
+      pressSpace();
+      stepToTheNeighbourAndPress();
+      check(
+        lodge['citizenDialogTarget'] === neighbour,
+        'control: with the ghoul taken out of the stance, the same press talks to the neighbour',
+      );
+    } finally {
+      lodge['interactionStance'] = stanceOf;
+    }
+  } finally {
+    roster.replaceAll(roster.mobs.filter((mob) => mob !== swingingGhoul));
+    roster.rebuildGrid();
+  }
+  lodge['conversation'].close();
+  lodge.onExit();
+  lodge.ui.dispose();
 }
 
 // ── Keys held across a menu opening ────────────────────────────────────────

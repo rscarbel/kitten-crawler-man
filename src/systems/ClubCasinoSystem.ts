@@ -75,10 +75,10 @@ import {
   drawFocusRing,
   drawGlass,
   fillRounded,
-  roundRectPath,
   strokeRounded,
   type PaintTarget,
 } from '../ui/widgets/paint';
+import { roundRectPath } from '../ui/widgets/roundRect';
 import { measureText, text, type TextOptions } from '../ui/widgets/text';
 
 const FELT_BORDER_WIDTH = 1;

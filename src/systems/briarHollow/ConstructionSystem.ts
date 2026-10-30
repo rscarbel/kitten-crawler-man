@@ -33,7 +33,7 @@ import type { ResourceCost } from '../../core/items/gathering/partyResources';
 import { canAfford, spend } from '../../core/items/gathering/partyResources';
 import { canAffordCoins, spendPartyCoins } from '../../core/party/partyCoins';
 import { constructionTimeFactor, spikesUnlocked } from '../../core/labour/craftPerks';
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { worldBar } from '../../ui/world/worldShapes';
 import {
   BUILD_KNEEL_ROWS,
@@ -62,7 +62,6 @@ import {
   TREBUCHET_BUILD_SECONDS,
   TREBUCHET_MAX_AMMO,
   TREBUCHET_REPAIR_SECONDS,
-  UPDATES_PER_SECOND,
   WALL_TIERS,
   discountedCost,
   isFreeCost,
@@ -146,7 +145,7 @@ export interface ConstructionJob {
 
 /** How long a "no room" silhouette holds before fading out on its own. */
 const NO_ROOM_GHOST_SECONDS = 3;
-const NO_ROOM_GHOST_FRAMES = UPDATES_PER_SECOND * NO_ROOM_GHOST_SECONDS;
+const NO_ROOM_GHOST_FRAMES = WORLD_TICKS_PER_SECOND * NO_ROOM_GHOST_SECONDS;
 /**
  * How far a body sealed inside a just-raised or just-repaired wall may be
  * moved to reach open ground. Generous: the village interior is wide open, so
@@ -161,7 +160,7 @@ const PUSH_SETTLE_FRAMES = PUSH_FRAMES + PUSH_SETTLE_GRACE_FRAMES;
 /** Hammer cadence when nobody is drawn hammering: the cat's paws, or the human mid-flinch. */
 const HAMMER_CADENCE_FRAMES = 30;
 /** The resource strip stays up for the whole job, renewed this often. */
-const HUD_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
+const HUD_NOTE_INTERVAL_FRAMES = WORLD_TICKS_PER_SECOND;
 /** How far from a wall its rows reach: the segment the crawler faces within this many tiles. */
 export const WALL_REACH_TILES = 1.5;
 /** A tile's centre, as a fraction of the tile from its corner. */

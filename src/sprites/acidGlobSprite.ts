@@ -9,6 +9,7 @@ import {
   ACID_PUDDLE_STATE,
 } from './art/acidGlobFigure';
 import { GLOB_BOLT_FRAMES, GLOB_BURST_FRAMES, GLOB_PUDDLE_FRAMES } from './art/globEffectKit';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Draw wrappers for the three effects an acid glob is made of.
@@ -16,9 +17,6 @@ import { GLOB_BOLT_FRAMES, GLOB_BURST_FRAMES, GLOB_PUDDLE_FRAMES } from './art/g
  * Painted at runtime from `src/sprites/art/acidGlobArt.ts` through the figure
  * cache; reviewed with `npm run render:globs`.
  */
-
-/** Frames per second the game loop runs at; the art is timed against it. */
-const FRAMES_PER_SECOND = 60;
 
 /**
  * Warms all three rows the moment the thrower starts its wind-up: the glob
@@ -54,7 +52,7 @@ export function drawAcidBolt(
   heading: number,
   ageFrames: number,
 ): void {
-  const seconds = ageFrames / FRAMES_PER_SECOND;
+  const seconds = ageFrames / WORLD_TICKS_PER_SECOND;
   drawFigureCached(
     ctx,
     ACID_GLOB_BOLT_FIGURE,
@@ -101,7 +99,7 @@ export function drawAcidPuddle(
   seed: number,
   alpha: number,
 ): void {
-  const seconds = ageFrames / FRAMES_PER_SECOND;
+  const seconds = ageFrames / WORLD_TICKS_PER_SECOND;
   const frame =
     (timeFrameIndex(seconds, PUDDLE_FPS, GLOB_PUDDLE_FRAMES) + seed) % GLOB_PUDDLE_FRAMES;
   drawFigureCached(ctx, ACID_GLOB_PUDDLE_FIGURE, ACID_PUDDLE_STATE, frame, sx, sy, tileSize, {

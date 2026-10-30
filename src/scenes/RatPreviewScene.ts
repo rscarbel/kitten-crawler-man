@@ -30,6 +30,7 @@ import {
 import { RAT_FIGURE } from '../sprites/art/ratFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawRatSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -104,7 +105,6 @@ const OVERHANG_TILES = 3;
 /** Where a cell's rat stands, as a fraction of the cell's height. */
 const GROUND_FRACTION = 0.82;
 const CELL_TEXT_INSET = 4;
-const FRAMES_PER_SECOND = 60;
 /** Gore needs a map to settle onto; a small empty one is enough for a preview. */
 const PREVIEW_MAP_SIZE = 24;
 /** Impact direction for the preview kill: away from the camera and to the right. */
@@ -135,7 +135,7 @@ export class RatPreviewScene extends PreviewScene {
 
   /** Which frame of a row is showing right now, at the chosen playback speed. */
   private frameOf(row: RowSpec): number {
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(row.probeState);
   }
 

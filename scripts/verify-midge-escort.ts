@@ -30,7 +30,7 @@
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { buildSiegeRig, villageMap, type SiegeRig } from './villageSiegeHarness';
-import { TILE_SIZE, PLAYER_SPEED } from '../src/core/constants';
+import { TILE_SIZE, PLAYER_SPEED, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { createBriarHollowState, type BriarHollowState } from '../src/core/quests/briarHollowState';
 import { createMidgeEscortCarry, type MidgeEscortCarry } from '../src/core/quests/midgeEscortCarry';
 import { activeDifficultyProfile } from '../src/core/difficulty/difficultyProfiles';
@@ -85,7 +85,6 @@ useDevPlayerIdentity();
 
 installCanvasGlobals();
 
-const UPDATES_PER_SECOND = 60;
 const TILE_CENTRE = 0.5;
 
 /** Map seeds searched, in order, for floors with both Briar Hollow and Garrison Green. */
@@ -95,7 +94,7 @@ const SIM_MAPS = 3;
 const DEFAULT_STREAMS_PER_MAP = 6;
 /** A run that has not delivered Midge in this long has failed. */
 const MAX_ESCORT_SECONDS = 420;
-const MAX_ESCORT_FRAMES = MAX_ESCORT_SECONDS * UPDATES_PER_SECOND;
+const MAX_ESCORT_FRAMES = MAX_ESCORT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** What counts as a meaningful bite: this share of her escort health, not one stray point. */
 const MEANINGFUL_HURT_SHARE = 0.05;
 /** Potions each crawler carries onto the road. */
@@ -114,7 +113,7 @@ const WALK_ON_STREAMS_PER_MAP = 6;
  * screen, behind a cow the party keeps walking, it has a long way to come.
  */
 const WAVE_ARRIVAL_SECONDS_MAX = 45;
-const WAVE_ARRIVAL_FRAMES_MAX = WAVE_ARRIVAL_SECONDS_MAX * UPDATES_PER_SECOND;
+const WAVE_ARRIVAL_FRAMES_MAX = WAVE_ARRIVAL_SECONDS_MAX * WORLD_TICKS_PER_SECOND;
 /**
  * Share of the waves that came up which must arrive in time when the party
  * walks her on. Not every one: a wave sprung as the last of an earlier one
@@ -169,14 +168,14 @@ const HOLD_RADIUS_TILES = DEFEND_RADIUS_TILES;
  * defence turns on it: a player notices, turns and steps in, rather than
  * answering on the frame the first ghoul crosses an invisible line.
  */
-const REACTION_FRAMES = UPDATES_PER_SECOND;
+const REACTION_FRAMES = WORLD_TICKS_PER_SECOND;
 /** Off screen, a hostile is still felt once it is this close to the human: it is hitting him. */
 const FELT_TILES = 2;
 /** Close enough to land a blow: a fist or a claw's reach, diagonal neighbours included. */
 const STRIKE_REACH_TILES = 1.5;
 /** A chase that has gained nothing in this long is round a tree from its quarry: walk round instead. */
-const CHASE_STALL_FRAMES = UPDATES_PER_SECOND;
-const CHASE_ROUTE_FRAMES = 3 * UPDATES_PER_SECOND;
+const CHASE_STALL_FRAMES = WORLD_TICKS_PER_SECOND;
+const CHASE_ROUTE_FRAMES = 3 * WORLD_TICKS_PER_SECOND;
 /** The party walks on only while Midge is this close, so she is never left past her lead. */
 const WALK_ON_WITHIN_TILES = MIDGE_FOLLOW_START_TILES + TILE_CENTRE;
 /** The walk back to Midge is re-planned once she has moved this far from where it was planned to. */
@@ -193,7 +192,7 @@ const PAST_START_TILES = 5;
 /** Where the break probe's crawler stands: past the break, on open ground. */
 const PAST_BREAK_TILES = MIDGE_LEAD_BREAK_TILES + 3;
 /** Frames the break probe watches her waiting. */
-const BREAK_WATCH_FRAMES = 10 * UPDATES_PER_SECOND;
+const BREAK_WATCH_FRAMES = 10 * WORLD_TICKS_PER_SECOND;
 /** She may drift this far while waiting — a shove from a crawler passing, not a walk. */
 const WAITING_DRIFT_TILES = 0.25;
 /** How far the call probe's crawler stands from Merrit's gate. */
@@ -203,9 +202,9 @@ const CARRY_TOLERANCE_PX = 1;
 /** The leftovers probe waits for more than this many ambushers to be out before scaring her home. */
 const ESCORT_LEFTOVER_PROBE_BODIES = 1;
 /** How long the leftovers probe watches for a wave sprung over them, and for the next after they fall. */
-const LEFTOVER_WATCH_FRAMES = 15 * UPDATES_PER_SECOND;
+const LEFTOVER_WATCH_FRAMES = 15 * WORLD_TICKS_PER_SECOND;
 /** The longest an ambusher left out after the delivery may stay once the party has gone into town. */
-const LET_GO_BOUND_FRAMES = 12 * UPDATES_PER_SECOND;
+const LET_GO_BOUND_FRAMES = 12 * WORLD_TICKS_PER_SECOND;
 /** Within this many tiles of Midge or the human a body is in the fight: a skeleton archer's bow reach. */
 const WAVE_FIGHT_TILES = 9;
 /** How far either side of the safe zone's edge the sanctuary probe stands its crawler and its archer. */
@@ -214,7 +213,7 @@ const SANCTUARY_PROBE_OFFSET_TILES = 3;
 const STUCK_PROBE_SEED_OFFSET = 10;
 const SLOW_PROBE_SEED_OFFSET = 11;
 /** How long the stuck and slow probes watch for the next wave. */
-const STUCK_WATCH_FRAMES = 40 * UPDATES_PER_SECOND;
+const STUCK_WATCH_FRAMES = 40 * WORLD_TICKS_PER_SECOND;
 /** Where the stuck probe holds its ambusher: past a bow's reach, inside the let-go distance. */
 const PINNED_AWAY_TILES = 12;
 /** A bow's reach, inside which an ambusher is in the fight however still it stands. */
@@ -222,13 +221,13 @@ const IN_BOW_REACH_TILES = 9;
 /** The slow probe's ambusher: where it starts, and how far and how often it comes nearer. */
 const SLOW_START_TILES = 25;
 const SLOW_STEP_TILES = 0.6;
-const SLOW_STEP_FRAMES = 4 * UPDATES_PER_SECOND;
+const SLOW_STEP_FRAMES = 4 * WORLD_TICKS_PER_SECOND;
 /** How far past the next mark the probes walk Midge before holding. */
 const MARK_OVERSHOOT = 0.05;
 /** How long the siege probe watches the escort held. */
-const SIEGE_WATCH_FRAMES = 5 * UPDATES_PER_SECOND;
+const SIEGE_WATCH_FRAMES = 5 * WORLD_TICKS_PER_SECOND;
 /** Long enough for the rest of a held wave to come up, one body after another. */
-const REST_OF_WAVE_WATCH_FRAMES = 15 * UPDATES_PER_SECOND;
+const REST_OF_WAVE_WATCH_FRAMES = 15 * WORLD_TICKS_PER_SECOND;
 /** The side quest's playtest presets, each checked to stand up with one Midge. */
 const BLUEPRINTS_PRESET_IDS = [
   'blueprints-offer',
@@ -250,7 +249,7 @@ function check(ok: boolean, label: string): void {
 const verbose = process.env.MIDGE_SIM_VERBOSE === '1';
 /** `<map seed>:<stream>` to print one run's progress every few seconds. */
 const trace = process.env.MIDGE_SIM_TRACE ?? '';
-const TRACE_EVERY_FRAMES = 2 * UPDATES_PER_SECOND;
+const TRACE_EVERY_FRAMES = 2 * WORLD_TICKS_PER_SECOND;
 const streamsPerMap = Number(process.env.MIDGE_SIM_STREAMS ?? DEFAULT_STREAMS_PER_MAP);
 
 // ── Rig helpers ──────────────────────────────────────────────────────────
@@ -376,7 +375,7 @@ function publishView(rig: SiegeRig, view: SimView): void {
  * reshuffles every stream after it, run to run.
  */
 let simClockMs = 0;
-const MS_PER_UPDATE = 1000 / UPDATES_PER_SECOND;
+const MS_PER_UPDATE = 1000 / WORLD_TICKS_PER_SECOND;
 performance.now = () => simClockMs;
 Date.now = () => simClockMs;
 
@@ -916,7 +915,7 @@ function runEscort(
       const at = after === null ? null : tileOf(after);
       const humanAt = tileOf(human);
       console.log(
-        `    t=${(frames / UPDATES_PER_SECOND).toFixed(0)}s [${escort.ambush.livingAmbushers.map((mob) => `${mob.mobType}@${tileOf(mob).x},${tileOf(mob).y} mv${mob.isMoving} tg${mob.currentTarget === null ? 0 : 1} fa${mob.forceAggro} d${after === null ? -1 : tilesBetween(mob, after).toFixed(1)}`).join(' ')}] hp ${human.hp}/${human.maxHp} cat ${rig.cat.hp}/${rig.cat.maxHp} pots ${human.inventory.countOf('health_potion')} lv ${escort.ambush.livingAmbushers.map((mob) => mob.mobLevel).join('/')} human ${humanAt.x},${humanAt.y} midge ${at?.x},${at?.y} ` +
+        `    t=${(frames / WORLD_TICKS_PER_SECOND).toFixed(0)}s [${escort.ambush.livingAmbushers.map((mob) => `${mob.mobType}@${tileOf(mob).x},${tileOf(mob).y} mv${mob.isMoving} tg${mob.currentTarget === null ? 0 : 1} fa${mob.forceAggro} d${after === null ? -1 : tilesBetween(mob, after).toFixed(1)}`).join(' ')}] hp ${human.hp}/${human.maxHp} cat ${rig.cat.hp}/${rig.cat.maxHp} pots ${human.inventory.countOf('health_potion')} lv ${escort.ambush.livingAmbushers.map((mob) => mob.mobLevel).join('/')} human ${humanAt.x},${humanAt.y} midge ${at?.x},${at?.y} ` +
           `hp ${after?.hp} mode ${after?.mode} following ${after?.isFollowingLeader} waiting ${after?.isWaitingForLeader} ` +
           `gate ${escort.isWaitingAtGate} progress ${after === null ? 0 : escort.ambush.progressOf(after).toFixed(2)} ` +
           `ambushers ${escort.ambush.livingAmbushers.length} threat ${humanThreat === null ? '-' : `${humanThreat.mobType} ${tileOf(humanThreat).x},${tileOf(humanThreat).y} hp ${humanThreat.hp} target ${humanThreat.currentTarget === null ? 'none' : humanThreat.currentTarget === after ? 'midge' : 'crawler'} moving ${humanThreat.isMoving}`}`,
@@ -969,7 +968,11 @@ function runEscort(
   const delivered = rig.state.blueprints.phase === 'midge_delivered';
   const pen = escort.wendells.pen;
   // Delivered as she starts in through the gate: watch her finish the walk.
-  for (let frame = 0; delivered && frame < WALK_IN_WATCH_SECONDS * UPDATES_PER_SECOND; frame++) {
+  for (
+    let frame = 0;
+    delivered && frame < WALK_IN_WATCH_SECONDS * WORLD_TICKS_PER_SECOND;
+    frame++
+  ) {
     const walking = escort.wendells.midge;
     if (walking === null || pen === null || pen.holdsBody(walking.x, walking.y)) break;
     step(setup);
@@ -982,14 +985,14 @@ function runEscort(
     pen.holdsBody(resident.x, resident.y) &&
     setup.cues.includes('midgeSettled');
   const stings = setup.cues.filter((cue) => cue === 'escortAmbushSting').length;
-  const minutes = Math.max(1, frames) / UPDATES_PER_SECOND / 60;
+  const minutes = Math.max(1, frames) / WORLD_TICKS_PER_SECOND / 60;
   rig.dispose();
   setVisibleWorldView(null);
   return {
     delivered,
     damaged,
     scares,
-    seconds: frames / UPDATES_PER_SECOND,
+    seconds: frames / WORLD_TICKS_PER_SECOND,
     spawns,
     spawnsInView,
     spawnsInTown,
@@ -1116,7 +1119,7 @@ function verifyBreakAndMoo(mapSeed: number): void {
   }
   const lonely = setup.cues.filter((cue) => cue === 'midgeLonelyMoo').length;
   const expectedMoos = Math.floor(
-    BREAK_WATCH_FRAMES / (MIDGE_LONELY_MOO_SECONDS * UPDATES_PER_SECOND),
+    BREAK_WATCH_FRAMES / (MIDGE_LONELY_MOO_SECONDS * WORLD_TICKS_PER_SECOND),
   );
   check(midge.isWaitingForLeader, `left ${PAST_BREAK_TILES} tiles behind, she stops and waits`);
   check(
@@ -1125,7 +1128,7 @@ function verifyBreakAndMoo(mapSeed: number): void {
   );
   check(
     lonely >= expectedMoos,
-    `and lows after the party every ${MIDGE_LONELY_MOO_SECONDS}s (${lonely} moos in ${BREAK_WATCH_FRAMES / UPDATES_PER_SECOND}s)`,
+    `and lows after the party every ${MIDGE_LONELY_MOO_SECONDS}s (${lonely} moos in ${BREAK_WATCH_FRAMES / WORLD_TICKS_PER_SECOND}s)`,
   );
   check(
     escort.isOutOfLeadRange,
@@ -1169,7 +1172,7 @@ function verifyCall(mapSeed: number): void {
   });
   const called = midgeOf(escort);
   check(called !== null && called.name === MIDGE_COW_NAME, 'the call walks Midge out of the herd');
-  const timeoutFrames = MIDGE_CALL_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
+  const timeoutFrames = MIDGE_CALL_TIMEOUT_SECONDS * WORLD_TICKS_PER_SECOND;
   for (let frame = 0; frame < timeoutFrames + 2 && arrivals === 0; frame++) {
     step(setup);
     if (arrivals > 0) arrivedAt = frame;
@@ -1182,12 +1185,12 @@ function verifyCall(mapSeed: number): void {
   );
   check(
     arrivedAt >= 0 && arrivedAt < timeoutFrames,
-    `from ${CALL_STAND_TILES} tiles she walks over before the timeout (${(arrivedAt / UPDATES_PER_SECOND).toFixed(1)}s)`,
+    `from ${CALL_STAND_TILES} tiles she walks over before the timeout (${(arrivedAt / WORLD_TICKS_PER_SECOND).toFixed(1)}s)`,
   );
   const adultsAfter = livestock.herd.filter((cow) => !cow.isCalf).length;
   check(adultsAfter === adultsBefore, `the herd keeps ${adultsBefore} adults once she has left`);
   check(livestock.midge === null, 'and none of them is Midge');
-  for (let frame = 0; frame < UPDATES_PER_SECOND; frame++) step(setup);
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND; frame++) step(setup);
   check(arrivals === 1, 'no second answer while she waits on Merrit');
   rig.dispose();
 
@@ -1393,8 +1396,9 @@ function verifyNoWaveOverLeftovers(mapSeed: number): void {
     clearFor++;
   }
   check(
-    escort.ambush.wavesSprung === 1 && clearFor >= ESCORT_WAVE_MIN_GAP_SECONDS * UPDATES_PER_SECOND,
-    `once they are gone, the first wave springs again after a breather (${(clearFor / UPDATES_PER_SECOND).toFixed(1)}s)`,
+    escort.ambush.wavesSprung === 1 &&
+      clearFor >= ESCORT_WAVE_MIN_GAP_SECONDS * WORLD_TICKS_PER_SECOND,
+    `once they are gone, the first wave springs again after a breather (${(clearFor / WORLD_TICKS_PER_SECOND).toFixed(1)}s)`,
   );
   rig.dispose();
 }
@@ -1581,7 +1585,7 @@ function verifyDeliveryLetsTheRoadGo(mapSeed: number): void {
   }
   check(
     escort.ambush.livingAmbushers.length === 0,
-    `every ambusher left out is let go within ${LET_GO_BOUND_FRAMES / UPDATES_PER_SECOND}s once out of sight (${(framesToClear / UPDATES_PER_SECOND).toFixed(1)}s)`,
+    `every ambusher left out is let go within ${LET_GO_BOUND_FRAMES / WORLD_TICKS_PER_SECOND}s once out of sight (${(framesToClear / WORLD_TICKS_PER_SECOND).toFixed(1)}s)`,
   );
   rig.dispose();
 }
@@ -1671,10 +1675,10 @@ function verifyStuckAmbusherLetsTheWaveCome(mapSeed: number): void {
       break;
     }
   }
-  const soonest = (ESCORT_STUCK_SECONDS + ESCORT_WAVE_MIN_GAP_SECONDS) * UPDATES_PER_SECOND;
+  const soonest = (ESCORT_STUCK_SECONDS + ESCORT_WAVE_MIN_GAP_SECONDS) * WORLD_TICKS_PER_SECOND;
   check(
-    kept.isAlive && sprangAt >= soonest - UPDATES_PER_SECOND,
-    `held ${PINNED_AWAY_TILES} tiles off and coming no nearer, it lets the next wave come after the stuck time and the breather (${(sprangAt / UPDATES_PER_SECOND).toFixed(1)}s)`,
+    kept.isAlive && sprangAt >= soonest - WORLD_TICKS_PER_SECOND,
+    `held ${PINNED_AWAY_TILES} tiles off and coming no nearer, it lets the next wave come after the stuck time and the breather (${(sprangAt / WORLD_TICKS_PER_SECOND).toFixed(1)}s)`,
   );
   rig.dispose();
 }
@@ -1698,7 +1702,7 @@ function verifySlowAmbusherHoldsTheWave(mapSeed: number): void {
   }
   check(
     kept.isAlive && !sprang && awayTiles > IN_BOW_REACH_TILES,
-    `coming ${SLOW_STEP_TILES} tiles nearer every ${SLOW_STEP_FRAMES / UPDATES_PER_SECOND}s from ${SLOW_START_TILES} off, it holds the next wave back (still ${awayTiles.toFixed(1)} off)`,
+    `coming ${SLOW_STEP_TILES} tiles nearer every ${SLOW_STEP_FRAMES / WORLD_TICKS_PER_SECOND}s from ${SLOW_START_TILES} off, it holds the next wave back (still ${awayTiles.toFixed(1)} off)`,
   );
   rig.dispose();
 }
@@ -1785,13 +1789,13 @@ function verifyRewindAtWendells(mapSeed: number): void {
   check(reached, "rewind: Midge is walked into Wendell's pasture");
   if (!reached) return;
   const pen = escort.wendells.pen;
-  for (let frame = 0; frame < WALK_IN_WATCH_SECONDS * UPDATES_PER_SECOND; frame++) {
+  for (let frame = 0; frame < WALK_IN_WATCH_SECONDS * WORLD_TICKS_PER_SECOND; frame++) {
     const resident = escort.wendells.midge;
     if (resident !== null && pen !== null && pen.holdsBody(resident.x, resident.y)) break;
     step(setup);
   }
   markMobsAtCheckpoint(rig.world.roster);
-  for (let frame = 0; frame < UPDATES_PER_SECOND; frame++) step(setup);
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND; frame++) step(setup);
   rewindMobsToCheckpoint(rig.world.roster);
   rig.kit.restoreCheckpoint({});
   step(setup);
@@ -1959,9 +1963,9 @@ function verifyWendellsMidge(mapSeed: number): void {
   check(resident.name === MIDGE_COW_NAME && resident.displayName === MIDGE_COW_NAME, 'named Midge');
   resident.killOutright();
   rig.combat.resolveKills();
-  const respawnFrames = RESPAWN_SECONDS * UPDATES_PER_SECOND;
+  const respawnFrames = RESPAWN_SECONDS * WORLD_TICKS_PER_SECOND;
   let backAt = -1;
-  for (let frame = 0; frame < respawnFrames + UPDATES_PER_SECOND; frame++) {
+  for (let frame = 0; frame < respawnFrames + WORLD_TICKS_PER_SECOND; frame++) {
     step(setup);
     if (resident.isAlive) {
       backAt = frame;
@@ -2052,7 +2056,7 @@ for (const mapSeed of maps) {
       const outcomes = [...run.waves.values()]
         .map((wave) =>
           wave.arrivedAt !== null
-            ? `arrived in ${((wave.arrivedAt - wave.sprungAt) / UPDATES_PER_SECOND).toFixed(0)}s`
+            ? `arrived in ${((wave.arrivedAt - wave.sprungAt) / WORLD_TICKS_PER_SECOND).toFixed(0)}s`
             : wave.seen
               ? 'seen only'
               : 'never seen',

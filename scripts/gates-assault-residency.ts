@@ -162,6 +162,7 @@ import { CAT_FIGURE } from '../src/sprites/art/catFigure.js';
 import { RESIDENT_VIEW_ROWS } from '../src/sprites/catSprite.js';
 import { castRowsFor, ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
 import { SOLDIER_IDS } from '../src/core/quests/villagerIds.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 installCanvasGlobals();
 
@@ -174,8 +175,6 @@ const MB_DECIMALS = 1;
 const MS_DECIMALS = 1;
 /** A stage that has not drained in this many frames is not going to. */
 const DRAIN_GIVE_UP_FRAMES = 20000;
-/** Gameplay updates a second. */
-const UPDATES_PER_SECOND = 60;
 /** The countdown a wave is announced with. */
 const COUNTDOWN_SECONDS = IMMINENT_SECONDS;
 /** How long A2 holds wave 3's fight on screen after he has arrived. */
@@ -717,9 +716,9 @@ function play(
   return misses;
 }
 
-const COUNTDOWN_UPDATES = UPDATES_PER_SECOND * COUNTDOWN_SECONDS;
-const LULL_UPDATES = UPDATES_PER_SECOND * WAVE_LULL_SECONDS;
-const FIGHT_UPDATES = UPDATES_PER_SECOND * FIGHT_SECONDS;
+const COUNTDOWN_UPDATES = WORLD_TICKS_PER_SECOND * COUNTDOWN_SECONDS;
+const LULL_UPDATES = WORLD_TICKS_PER_SECOND * WAVE_LULL_SECONDS;
+const FIGHT_UPDATES = WORLD_TICKS_PER_SECOND * FIGHT_SECONDS;
 
 const UNDEAD_FIGURES: readonly FigureDef[] = [
   NECROMANCER_FIGURE,

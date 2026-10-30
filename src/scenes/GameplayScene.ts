@@ -13,8 +13,8 @@ import { Scene } from '../core/Scene';
 import type { InputManager } from '../core/input/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { frameTime } from '../utils';
-import { followCamera } from './interiorCamera';
-import type { WorldRect } from '../core/rendering/worldRect';
+import { framedCamera } from './interiorCamera';
+import type { WorldRect, WorldRows } from '../core/rendering/worldRect';
 import type { ArrivalLoader } from './ArrivalLoader';
 import { intoxicationCameraOffset } from '../core/combat/Intoxication';
 import type { GameMap } from '../map/GameMap';
@@ -231,6 +231,15 @@ export abstract class GameplayScene extends Scene {
   }
 
   /**
+   * Rows of the world {@link computeCamera} keeps clear of the HUD wherever
+   * the party's own tile allows: where a fight is staged, when it is staged
+   * against a room's far wall. Null: follow the focus alone.
+   */
+  protected cameraKeepRows(): WorldRows | null {
+    return null;
+  }
+
+  /**
    * This frame's camera shake, added after the clamp so it still reads with the
    * camera pinned against a wall. None by default.
    */
@@ -257,12 +266,13 @@ export abstract class GameplayScene extends Scene {
       w: worldView.width,
       h: worldView.height - viewBottomInset - viewTop,
     };
-    const camera = followCamera(
+    const camera = framedCamera(
       { x: focus.x + focusCentreOffset, y: focus.y + focusCentreOffset },
       bounds,
       view,
       this.cameraClearView(map, view, bounds),
       this.cameraFocusRange(map),
+      this.cameraKeepRows(),
     );
     // Applied after the clamp so the sway still reads in a room smaller than the
     // viewport, where the camera is pinned and every clamped offset would vanish.

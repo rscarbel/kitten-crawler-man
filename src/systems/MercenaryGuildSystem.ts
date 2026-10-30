@@ -20,6 +20,7 @@ import { activeRunStats } from '../core/progression/GameStats';
 import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
 import { SYDNEY_TOWER_LOAN } from '../dialog/scripts/scenes/missingCats';
 import type { Rect } from '../ui/core/geom';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** The largest a portrait tile is drawn: a short hire stops growing before it turns to mush. */
 const PORTRAIT_MAX_TILE = 84;
@@ -29,8 +30,6 @@ const PORTRAIT_MARGIN = 6;
 const FIGURE_FEET_IN_TILE = 0.95;
 /** Sydney's tile in the speech strip: her head and shoulders fill it, the rest is cropped. */
 const SPEECH_PORTRAIT_TILE = 56;
-/** The desk's idle clock runs in game ticks, like every hireling's own. */
-const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 /** She faces the customer across the desk. */
 const MANAGER_FACING_X = 0;
@@ -39,26 +38,20 @@ const MANAGER_FACING_Y = 1;
 const PORTRAIT_FACING_X = 0;
 const PORTRAIT_FACING_Y = 1;
 
-// Sydney's voice. She ran a garrison's stores before she ran this desk, and
-// she runs it the same way: by the form, without raising her voice.
+// Sydney's voice: a cheerful, tidy clerk who likes her fighters to come home.
 export const MERCENARY_DESK_TITLE = 'The Barracks Mercenaries';
-export const MERCENARY_DESK_SUBTITLE = 'Sydney runs the desk by the book. She wrote the book.';
-const GREETING = '"Contracts run to the end of the floor or the end of the hire. Pick a file."';
-const NOT_ENOUGH_COINS = '"The fee is paid up front, in full. Come back when it is."';
-const CONTRACT_ACTIVE =
-  '"One contract per party. Bring yours back, or tear it up here, and we start again."';
-const NO_FLOOR = '"I can only sign for the floor you\'re standing on."';
-const hireSuccess = (name: string): string =>
-  `"${name} is signed out to you, to the end of the floor or of them. Reporting to you now."`;
-const dismissed = (name: string): string =>
-  `"${name} goes back on the board. The fee was non-refundable. It says so on the form."`;
+export const MERCENARY_DESK_SUBTITLE = 'Sydney keeps the hiring desk.';
+const GREETING = '"Need a hand down there? Pick a fighter."';
+const NOT_ENOUGH_COINS = '"That one costs more than you have. Sorry!"';
+const CONTRACT_ACTIVE = '"You already have someone. One at a time, please."';
+const NO_FLOOR = '"I can\'t send anyone out from here."';
+const hireSuccess = (name: string): string => `"${name} is with you now. Look after each other."`;
+const dismissed = (name: string): string => `"All right. ${name} is back on the board."`;
 const DISMISS_CONFIRM_TITLE = 'Dismiss Contract';
 const KEEP_LABEL = 'Keep them';
-const TEAR_UP_LABEL = 'Tear it up';
-const confirmDismissal = (name: string): string =>
-  `"Tear up ${name}'s contract? The fee stays with the desk either way."`;
-const condolences = (name: string): string =>
-  `"${name} is marked lost on the board. The contract was paid through the floor. I'm sorry for it."`;
+const TEAR_UP_LABEL = 'Send them back';
+const confirmDismissal = (name: string): string => `"Send ${name} back? The fee stays spent."`;
+const condolences = (name: string): string => `"${name} didn't make it back. I'm so sorry."`;
 
 /** The only part of a crawler the desk reads or writes. */
 type Purse = Pick<Player, 'coins'>;
@@ -350,7 +343,7 @@ export class MercenaryGuildSystem {
       facing: selectFacing(PORTRAIT_FACING_X, PORTRAIT_FACING_Y),
       cardinalFacing: selectCardinalFacing(PORTRAIT_FACING_X, PORTRAIT_FACING_Y),
       facingX: PORTRAIT_FACING_X,
-      clock: (performance.now() / MS_PER_SECOND) * TICKS_PER_SECOND,
+      clock: (performance.now() / MS_PER_SECOND) * WORLD_TICKS_PER_SECOND,
     });
     ctx.restore();
   }

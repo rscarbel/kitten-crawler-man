@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../../dialog/request';
 import type { GameMap } from '../../map/GameMap';
@@ -46,9 +46,6 @@ const SCRIPTED_WALK_TIME_SLACK = 2;
 const WAYPOINT_REACHED_TILE_FRACTION = 0.25;
 const WAYPOINT_REACHED_PX = TILE_SIZE * WAYPOINT_REACHED_TILE_FRACTION;
 
-/** The world's fixed update rate, which a cue's clock is counted on when no audio clock runs. */
-export const WORLD_TICKS_PER_SECOND = 60;
-
 /**
  * How far past its mark a cue wait may run, counted in world ticks, before it
  * stops trusting an audio clock that is not moving: a context the browser
@@ -58,8 +55,11 @@ export const CUE_CLOCK_STALL_GRACE_S = 2;
 
 /** What a scene plays a script's timed cues on. */
 export interface CutsceneCueClock {
-  /** Starts `cue` this instant and returns the audio-clock second it began at; null when it could not start now. */
-  readonly start: (cue: CutsceneTimedCue) => number | null;
+  /**
+   * Starts `cue` this instant, `fromS` seconds into its recording, and
+   * returns the audio-clock second it began at; null when it could not start now.
+   */
+  readonly start: (cue: CutsceneTimedCue, fromS: number) => number | null;
   /** The audio clock, in seconds; null in a scene with no audio. */
   readonly nowS: () => number | null;
 }
@@ -106,7 +106,11 @@ type ActorMove<ActorId extends string> =
       frames: number;
     };
 
-/** Where a timed cue's clock started: on the audio clock when it really started, and on the director's ticks. */
+/**
+ * Where a timed cue's recording began, on the audio clock when it really
+ * started and on the director's ticks: a cue started partway in is dated
+ * back to where its top would have been.
+ */
 interface CueStart {
   readonly atAudioS: number | null;
   readonly atTick: number;
@@ -439,13 +443,16 @@ export class CutsceneDirector<
         this.deps.playSound(step.cue, step.at);
         this.finishStep(running);
         return;
-      case 'playCue':
+      case 'playCue': {
+        const fromS = step.fromS ?? 0;
+        const startedAtAudioS = this.deps.cueClock.start(step.cue, fromS);
         this.cueStarts.set(step.cue, {
-          atAudioS: this.deps.cueClock.start(step.cue),
-          atTick: this.ticks,
+          atAudioS: startedAtAudioS === null ? null : startedAtAudioS - fromS,
+          atTick: this.ticks - fromS * WORLD_TICKS_PER_SECOND,
         });
         this.finishStep(running);
         return;
+      }
       case 'waitForCue': {
         const cue = this.cueStarts.get(step.cue);
         if (cue === undefined) {
@@ -501,7 +508,8 @@ export class CutsceneDirector<
         : Math.max(
             WALK_UP_TIMEOUT_FRAMES,
             Math.ceil(
-              ((waypoints.length * TILE_SIZE) / body.walkPxPerTick) * SCRIPTED_WALK_TIME_SLACK,
+              ((waypoints.length * TILE_SIZE) / body.walkPxPerTick()[step.pace]) *
+                SCRIPTED_WALK_TIME_SLACK,
             ),
           );
       this.moves.set(step.who, { kind: 'walk', step, waypoints, timeoutFrames, frames: 0 });
@@ -563,7 +571,7 @@ export class CutsceneDirector<
       if (isActiveBody(body)) {
         if (heading !== null) activeMove = { ...heading, isMobile: true };
       } else {
-        body.walk(heading);
+        body.walk(heading, move.step.pace);
       }
     }
     return activeMove;
@@ -584,7 +592,9 @@ export class CutsceneDirector<
     const at = positionOf(body);
     // An actor comes all the way onto their last tile, so the set-down that
     // ends their walk is never more than one of their own steps.
-    const lastReachPx = isActiveBody(body) ? WAYPOINT_REACHED_PX : body.walkPxPerTick;
+    const lastReachPx = isActiveBody(body)
+      ? WAYPOINT_REACHED_PX
+      : body.walkPxPerTick()[walk.step.pace];
     while (walk.waypoints.length > 0) {
       const next = walk.waypoints[0];
       const dx = next.x * TILE_SIZE - at.x;
@@ -695,7 +705,7 @@ export class CutsceneDirector<
       }
       if (!isActiveBody(body)) {
         body.place(tilePoint(move.step.tile));
-        body.walk(null);
+        body.walk(null, move.step.pace);
       }
       faceBody(body, move.step.face);
     }

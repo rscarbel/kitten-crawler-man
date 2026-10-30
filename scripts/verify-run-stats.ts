@@ -19,7 +19,7 @@
  *   npx tsx scripts/verify-run-stats.ts
  */
 
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
 import { EventBus } from '../src/core/EventBus';
@@ -73,10 +73,9 @@ const HIRELING_TEMPLATE = getMercenaryTemplate('hammer_hands');
 const CRAWLER_HIT = 17;
 const COINS_EARNED = 250;
 const COINS_SPENT = 90;
-const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
-const FRAMES_PER_MINUTE = FRAMES_PER_SECOND * SECONDS_PER_MINUTE;
+const FRAMES_PER_MINUTE = WORLD_TICKS_PER_SECOND * SECONDS_PER_MINUTE;
 const FRAMES_PER_HOUR = FRAMES_PER_MINUTE * MINUTES_PER_HOUR;
 /** One hour, three minutes and five seconds of play, and how the clock must read it. */
 const PLAYED_MINUTES = 3;
@@ -85,7 +84,7 @@ const EXPECTED_CLOCK = '1:03:05';
 const LIVE_DEATHS = 4;
 const SAVED_DEATHS = 2;
 const TIME_PLAYED_FRAMES =
-  FRAMES_PER_HOUR + PLAYED_MINUTES * FRAMES_PER_MINUTE + PLAYED_SECONDS * FRAMES_PER_SECOND;
+  FRAMES_PER_HOUR + PLAYED_MINUTES * FRAMES_PER_MINUTE + PLAYED_SECONDS * WORLD_TICKS_PER_SECOND;
 
 let failures = 0;
 let checks = 0;

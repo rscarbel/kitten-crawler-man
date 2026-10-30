@@ -190,7 +190,10 @@ function seatBody(view: CardinalView, seatHeight: number): BipedPose {
   const pose = restingPose();
   const hipHeight = seatHeight + HIP_ABOVE_SEAT;
   pose.bob = Math.abs(HIP_Y) - hipHeight;
-  const footLift = hipHeight - ANKLE_BELOW_HIP - Math.abs(ANKLE_Y);
+  // On a seat lower than the shin is long, such as a street bench, the feet
+  // rest on the ground and the knees rise, rather than the soles sinking
+  // through the floor.
+  const footLift = Math.max(0, hipHeight - ANKLE_BELOW_HIP - Math.abs(ANKLE_Y));
   pose.leftKneeBreak = SEATED_KNEE_BREAK;
   pose.rightKneeBreak = SEATED_KNEE_BREAK;
   pose.leftFootPlanted = false;

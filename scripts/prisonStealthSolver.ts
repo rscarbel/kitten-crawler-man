@@ -7,7 +7,11 @@
  * through unseen — using the game's own `castPrisonLights` and
  * `lightSeesBody` — and then searches that space breadth-first for a party
  * that moves the way the prison makes it move: the leader one tile at a time
- * at real walking speed, the follower one tile behind on the leader's trail.
+ * at real walking speed, and the party's line behind it in single file, each
+ * follower one tile behind the body ahead on the leader's trail. Every
+ * follower is held to the crawlers' rule, so a route found keeps the whole
+ * line out of every look, which {@link walkRouteWithSuspicion} replays to
+ * prove.
  *
  * Time is searched in quanta of {@link SOLVER_QUANTUM_FRAMES}. A step takes
  * whole quanta, rounded up from the real per-tile time, and a tile counts as
@@ -26,6 +30,7 @@ import type { PrisonSectionId } from '../src/map/goblinPrisonLayouts.js';
 import {
   bodyTouchesGuard,
   lightSeesBody,
+  crawlerSighting,
   stepSuspicion,
   SUSPICION_CAPTURE,
   type PrisonPoint,
@@ -46,15 +51,60 @@ const FRAMES_PER_TILE = TILE_SIZE / PLAYER_SPEED;
 /** Quanta a one-tile step takes, rounded up from the real walking time. */
 export const SOLVER_STEP_QUANTA = Math.ceil(FRAMES_PER_TILE / SOLVER_QUANTUM_FRAMES);
 
-/** Neighbour directions; the follower's slot also uses {@link SAME_TILE}. */
+/** Neighbour directions; a follower's slot also uses {@link SAME_TILE}. */
 const STEPS: ReadonlyArray<PrisonTile> = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
   { x: 0, y: 1 },
   { x: -1, y: 0 },
 ];
+/** A follower still standing on the body ahead of it, as the whole line does where a search starts. */
 const SAME_TILE = 4;
-const FOLLOWER_SLOTS = 5;
+/** Where one follower can stand relative to the body ahead of it: a neighbour, or the same tile. */
+const SLOTS_PER_FOLLOWER = 5;
+
+/**
+ * The party's line as the search carries it: how many followers walk behind
+ * the leader. A state's slot packs each follower's place relative to the body
+ * ahead of it, nearest the leader in the lowest digit.
+ */
+export interface SolverLine {
+  readonly followers: number;
+  readonly slots: number;
+}
+
+/** The search's line for a leader with `followers` bodies in single file behind it. */
+export function solverLine(followers: number): SolverLine {
+  return { followers, slots: SLOTS_PER_FOLLOWER ** followers };
+}
+
+/** The slot of a line standing together on its leader's tile. */
+function stackedSlot(line: SolverLine): number {
+  let slot = 0;
+  for (let i = 0; i < line.followers; i++) slot = slot * SLOTS_PER_FOLLOWER + SAME_TILE;
+  return slot;
+}
+
+/** Each follower's place relative to the body ahead of it, nearest the leader first. */
+function slotDigits(line: SolverLine, slot: number): number[] {
+  const digits: number[] = [];
+  let rest = slot;
+  for (let i = 0; i < line.followers; i++) {
+    digits.push(rest % SLOTS_PER_FOLLOWER);
+    rest = Math.floor(rest / SLOTS_PER_FOLLOWER);
+  }
+  return digits;
+}
+
+/**
+ * The slot after the leader steps `dir`: the nearest follower stands on the
+ * tile the leader left, and every follower behind it steps up into the place
+ * of the one ahead, so the line keeps the shape it had one step further back.
+ */
+function slotAfterStep(line: SolverLine, slot: number, dir: number): number {
+  const kept = slot % (line.slots / SLOTS_PER_FOLLOWER);
+  return kept * SLOTS_PER_FOLLOWER + OPPOSITE[dir];
+}
 /** For each of {@link STEPS}, the index of the step back the other way. */
 const OPPOSITE: ReadonlyArray<number> = STEPS.map((step) =>
   STEPS.findIndex((other) => other.x === -step.x && other.y === -step.y),
@@ -227,14 +277,25 @@ function spaceOf(
   return { width: grid.width, tileCount: lit.tileCount, quanta: lit.quanta, walkable };
 }
 
-function stateId(space: SolverSpace, quantum: number, tile: number, slot: number): number {
-  return (quantum * space.tileCount + tile) * FOLLOWER_SLOTS + slot;
+function stateId(
+  space: SolverSpace,
+  line: SolverLine,
+  quantum: number,
+  tile: number,
+  slot: number,
+): number {
+  return (quantum * space.tileCount + tile) * line.slots + slot;
 }
 
 /** The start state for a party standing together on `tile` at quantum 0. */
-export function startState(compiled: CompiledStealth, lit: LitTables, tile: PrisonTile): number {
+export function startState(
+  compiled: CompiledStealth,
+  lit: LitTables,
+  tile: PrisonTile,
+  line: SolverLine,
+): number {
   const width = compiled.parsed.grid.width;
-  return (0 * lit.tileCount + tile.y * width + tile.x) * FOLLOWER_SLOTS + SAME_TILE;
+  return (0 * lit.tileCount + tile.y * width + tile.x) * line.slots + stackedSlot(line);
 }
 
 /** The midpoint table entry for the step from `tile` toward neighbour direction `dir`. */
@@ -265,17 +326,20 @@ function neighbourIndex(space: SolverSpace, tile: number, dir: number): number {
 
 /**
  * Shortest-time search from `starts` to any state whose leader stands on a
- * goal tile, never on a lit position.
+ * goal tile, with no body of `line` ever on a lit position. `starts` are
+ * states of the same line, from {@link startState} or an earlier search's
+ * {@link SolverResult.goalStates}.
  */
 export function solve(
   compiled: CompiledStealth,
   lit: LitTables,
   starts: ReadonlyArray<number>,
   goals: ReadonlyArray<PrisonTile>,
+  line: SolverLine,
   blocked?: (x: number, y: number) => boolean,
 ): SolverResult {
   const space = spaceOf(compiled, lit, blocked);
-  const total = space.quanta * space.tileCount * FOLLOWER_SLOTS;
+  const total = space.quanta * space.tileCount * line.slots;
   const parent = new Int32Array(total).fill(-1);
   const elapsed = new Int32Array(total).fill(-1);
   const goalSet = new Set(goals.map((tile) => tile.y * space.width + tile.x));
@@ -304,8 +368,8 @@ export function solve(
       pending--;
       if (elapsed[state] !== now) continue;
       const visit = (to: number, cost: number): void => push(state, to, now + cost);
-      const slot = state % FOLLOWER_SLOTS;
-      const tileQuantum = (state - slot) / FOLLOWER_SLOTS;
+      const slot = state % line.slots;
+      const tileQuantum = (state - slot) / line.slots;
       const tile = tileQuantum % space.tileCount;
       const quantum = (tileQuantum - tile) / space.tileCount;
       reachedTiles[tile] = 1;
@@ -314,12 +378,19 @@ export function solve(
         if (firstGoal < 0) firstGoal = state;
         continue;
       }
-      const follower = slot === SAME_TILE ? tile : neighbourIndex(space, tile, slot);
+      const followerSlots = slotDigits(line, slot);
+      const followers: number[] = [];
+      let ahead = tile;
+      for (const followerSlot of followerSlots) {
+        ahead = followerSlot === SAME_TILE ? ahead : neighbourIndex(space, ahead, followerSlot);
+        followers.push(ahead);
+      }
+      const aheadOf = (index: number): number => (index === 0 ? tile : followers[index - 1]);
 
       const nextQuantum = (quantum + 1) % space.quanta;
-      if (!centreLit(quantum, tile) && !centreLit(quantum, follower)) {
-        visit(stateId(space, nextQuantum, tile, slot), 1);
-      }
+      const waitClear =
+        !centreLit(quantum, tile) && followers.every((follower) => !centreLit(quantum, follower));
+      if (waitClear) visit(stateId(space, line, nextQuantum, tile, slot), 1);
 
       for (let dir = 0; dir < STEPS.length; dir++) {
         const target = neighbourIndex(space, tile, dir);
@@ -332,17 +403,22 @@ export function solve(
           if (edgeLit(lit, space, q, tile, dir)) clear = false;
           else if (firstPart && centreLit(q, tile)) clear = false;
           else if (secondPart && centreLit(q, target)) clear = false;
-          else if (slot === SAME_TILE) {
-            if (centreLit(q, tile)) clear = false;
-          } else {
-            if (edgeLit(lit, space, q, follower, OPPOSITE[slot])) clear = false;
+          for (let index = 0; index < followers.length && clear; index++) {
+            const follower = followers[index];
+            const followerSlot = followerSlots[index];
+            if (followerSlot === SAME_TILE) {
+              if (centreLit(q, follower)) clear = false;
+            } else if (edgeLit(lit, space, q, follower, OPPOSITE[followerSlot])) clear = false;
             else if (firstPart && centreLit(q, follower)) clear = false;
-            else if (secondPart && centreLit(q, tile)) clear = false;
+            else if (secondPart && centreLit(q, aheadOf(index))) clear = false;
           }
         }
         if (!clear) continue;
         const arrival = (quantum + SOLVER_STEP_QUANTA) % space.quanta;
-        visit(stateId(space, arrival, target, OPPOSITE[dir]), SOLVER_STEP_QUANTA);
+        visit(
+          stateId(space, line, arrival, target, slotAfterStep(line, slot, dir)),
+          SOLVER_STEP_QUANTA,
+        );
       }
     }
     bucket.length = 0;
@@ -352,8 +428,8 @@ export function solve(
   if (firstGoal >= 0) {
     let cursor = firstGoal;
     for (;;) {
-      const slot = cursor % FOLLOWER_SLOTS;
-      const tileQuantum = (cursor - slot) / FOLLOWER_SLOTS;
+      const slot = cursor % line.slots;
+      const tileQuantum = (cursor - slot) / line.slots;
       const tile = tileQuantum % space.tileCount;
       route.push({
         tile: { x: tile % space.width, y: Math.floor(tile / space.width) },
@@ -436,6 +512,119 @@ export interface WalkOutcome {
   readonly by: string | null;
 }
 
+/** A leader's position on one frame of a replay, with how far it has walked so far. */
+interface WalkedPoint {
+  readonly at: PrisonPoint;
+  readonly walkedPx: number;
+}
+
+/** The leader's position on every frame of `route`, from its first quantum, steps walked at the solver's pace. */
+function framesOfRoute(route: ReadonlyArray<SolverStep>): WalkedPoint[] {
+  const first = route[0];
+  if (first === undefined) return [];
+  const frames: WalkedPoint[] = [{ at: centreOf(first.tile.x, first.tile.y), walkedPx: 0 }];
+  const stepFrames = SOLVER_STEP_QUANTA * SOLVER_QUANTUM_FRAMES;
+  let walkedPx = 0;
+  for (let i = 1; i < route.length; i++) {
+    const from = route[i - 1].tile;
+    const to = route[i].tile;
+    const fromCentre = centreOf(from.x, from.y);
+    const toCentre = centreOf(to.x, to.y);
+    const stays = from.x === to.x && from.y === to.y;
+    const span = stays ? SOLVER_QUANTUM_FRAMES : stepFrames;
+    const stepStartPx = walkedPx;
+    for (let f = 1; f <= span; f++) {
+      const share = stays ? 0 : f / span;
+      walkedPx = stepStartPx + (stays ? 0 : TILE_SIZE * share);
+      frames.push({
+        at: {
+          x: fromCentre.x + (toCentre.x - fromCentre.x) * share,
+          y: fromCentre.y + (toCentre.y - fromCentre.y) * share,
+        },
+        walkedPx,
+      });
+    }
+  }
+  return frames;
+}
+
+/** Where a body `behindPx` of walked distance back along the leader's walk stands, on frame `frame`. */
+function pointBehind(
+  frames: ReadonlyArray<WalkedPoint>,
+  frame: number,
+  behindPx: number,
+): PrisonPoint {
+  const wanted = (frames[frame]?.walkedPx ?? 0) - behindPx;
+  for (let back = frame; back >= 0; back--) {
+    const point = frames[back];
+    if (point !== undefined && point.walkedPx <= wanted) return point.at;
+  }
+  return frames[0]?.at ?? { x: 0, y: 0 };
+}
+
+export interface RouteWalkOutcome extends WalkOutcome {
+  /** The first frame any light took in a companion, or null when none ever did. */
+  readonly companionSeenFrame: number | null;
+}
+
+/**
+ * Replays the leader down a solver `route` frame by frame from its first
+ * quantum, with the game's real suspicion fill and drain, while the party's
+ * line walks the leader's trail behind it, one companion at each of
+ * `companionTrailTiles` of walked distance back, and reports whether a
+ * capture starts on the way and whether any light ever took a companion in.
+ * A companion seen counts as one (it can only alert a watcher), the most any
+ * light sees of the whole line; only the leader can be caught by touch.
+ */
+export function walkRouteWithSuspicion(
+  timeline: PrisonTimeline,
+  route: ReadonlyArray<SolverStep>,
+  companionTrailTiles: ReadonlyArray<number>,
+): RouteWalkOutcome {
+  const { compiled } = timeline;
+  const { grid } = compiled.parsed;
+  const cycle = compiled.cycleFrames;
+  const suspicion = compiled.tuning.suspicion;
+  const frames = framesOfRoute(route);
+  const behindPx = companionTrailTiles.map((tiles) => tiles * TILE_SIZE);
+  const values = new Map<string, number>();
+  let companionSeenFrame: number | null = null;
+  const startFrame = (route[0]?.quantum ?? 0) * SOLVER_QUANTUM_FRAMES;
+  for (let k = 0; k < frames.length; k++) {
+    const clock = (startFrame + k) % cycle;
+    const leader = frames[k].at;
+    const companions = behindPx.map((behind) => pointBehind(frames, k, behind));
+    const state = timeline.states[clock];
+    for (const guard of state.guards) {
+      if (bodyTouchesGuard(grid, guard, leader)) {
+        return { caught: true, frame: k, by: guard.id, companionSeenFrame };
+      }
+    }
+    for (const light of timeline.lights[clock] ?? []) {
+      const companionWeight = companions.reduce(
+        (most, companion) =>
+          Math.max(most, lightSeesBody(grid, light.shape, companion, suspicion.coneEdgeWeight)),
+        0,
+      );
+      if (companionWeight > 0) companionSeenFrame ??= k;
+      const next = stepSuspicion(
+        values.get(light.sourceId) ?? 0,
+        light.shape.kind,
+        {
+          crawler: lightSeesBody(grid, light.shape, leader, suspicion.coneEdgeWeight),
+          companion: companionWeight,
+        },
+        suspicion,
+      );
+      values.set(light.sourceId, next);
+      if (next >= SUSPICION_CAPTURE) {
+        return { caught: true, frame: k, by: light.sourceId, companionSeenFrame };
+      }
+    }
+  }
+  return { caught: false, frame: frames.length, by: null, companionSeenFrame };
+}
+
 /**
  * Walks the party down `path` at full speed from shared-clock frame
  * `startFrame`, with the game's real suspicion fill and drain, and reports
@@ -473,7 +662,7 @@ export function walkPathWithSuspicion(
       const next = stepSuspicion(
         values.get(light.sourceId) ?? 0,
         light.shape.kind,
-        weight,
+        crawlerSighting(weight),
         suspicion,
       );
       values.set(light.sourceId, next);

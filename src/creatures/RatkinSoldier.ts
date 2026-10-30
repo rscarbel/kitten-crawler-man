@@ -1,7 +1,7 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageOptions, DamageSource, Player } from '../Player';
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { normalize } from '../utils';
 import type { TilePoint, TileRect } from '../map/town/townPlan';
 import type { SoldierId } from '../core/quests/villagerIds';
@@ -38,7 +38,6 @@ import { GHOUL_ATTACK_COOLDOWN_FRAMES, GHOUL_ATTACK_DAMAGE, GHOUL_HP } from './R
  * from there it will go after a hostile; `updateAI` does the rest.
  */
 
-const UPDATES_PER_SECOND = 60;
 const CENTER_OFFSET = 0.5;
 const FULL_TURN = Math.PI * 2;
 
@@ -168,7 +167,7 @@ const FOLLOW_CATCH_UP_PACE_OF_CRAWLER = 1;
 const FOLLOW_FIGHT_LEASH_TILES = 9;
 /** A fight dropped at the edge of a soldier's ground is not picked straight back up for this long. */
 const DROPPED_TARGET_BAN_SECONDS = 3;
-const DROPPED_TARGET_BAN_FRAMES = DROPPED_TARGET_BAN_SECONDS * UPDATES_PER_SECOND;
+const DROPPED_TARGET_BAN_FRAMES = DROPPED_TARGET_BAN_SECONDS * WORLD_TICKS_PER_SECOND;
 /** A post soldier chases this much past the ground they engage over before letting go. */
 const POST_CHASE_SLACK_TILES = 2;
 
@@ -180,12 +179,12 @@ const GATE_NEAR_TILES = 3;
 const ATTACKER_PREFERENCE_TILES = 2;
 /** Frames the soldier keeps facing where it last saw a hostile. */
 const LAST_SEEN_FACING_SECONDS = 10;
-const LAST_SEEN_FACING_FRAMES = LAST_SEEN_FACING_SECONDS * UPDATES_PER_SECOND;
+const LAST_SEEN_FACING_FRAMES = LAST_SEEN_FACING_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** Marta's rally: the damage a rallied soldier's blows gain, and for how long. */
 export const RALLY_DAMAGE_MULTIPLIER = 1.1;
 const RALLY_SECONDS = 5;
-export const RALLY_FRAMES = RALLY_SECONDS * UPDATES_PER_SECOND;
+export const RALLY_FRAMES = RALLY_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** Longer lines stay up longer, so a sentence can be read before it goes. */
 const SPEECH_FRAMES_PER_CHARACTER = 5;

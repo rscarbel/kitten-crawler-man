@@ -4,6 +4,9 @@
  */
 
 import type { EventBus } from '../../core/EventBus';
+import { leadMovesOn } from '../../core/quests/missingCatsLeads';
+import type { DialogLine } from '../../dialog/line';
+import { LEADS_ONWARD } from '../../dialog/scripts/scenes/missingCats';
 import type { QuestId } from '../../core/quests/QuestManager';
 import {
   investigationSolved,
@@ -57,7 +60,10 @@ export function enterMissingCatsPhase(
     bus.emit('questCompleted', { questId: MISSING_CATS_QUEST_ID });
     return;
   }
-  bus.emit('objectiveComplete', { objectiveId: `${MISSING_CATS_QUEST_ID}:${phase}` });
+  bus.emit('objectiveComplete', {
+    questId: MISSING_CATS_QUEST_ID,
+    objectiveId: `${MISSING_CATS_QUEST_ID}:${phase}`,
+  });
 }
 
 /**
@@ -77,10 +83,29 @@ export function findMissingCatsClue(
 ): ClueFinding {
   if (progress.clues.has(clue)) return 'already_found';
   progress.clues.add(clue);
-  bus.emit('objectiveComplete', { objectiveId: `${MISSING_CATS_QUEST_ID}:${clue}` });
+  bus.emit('objectiveComplete', {
+    questId: MISSING_CATS_QUEST_ID,
+    objectiveId: `${MISSING_CATS_QUEST_ID}:${clue}`,
+  });
   if (progress.phase === 'investigating' && investigationSolved(progress)) {
     enterMissingCatsPhase(progress, 'blame', bus);
     return 'investigation_solved';
   }
   return 'recorded';
+}
+
+/**
+ * What the party says once `found` has just been recorded, to send them on:
+ * the lead to the next clue's place when the story moves somewhere else, and
+ * nothing while the next clue is where they already are. The last clue's
+ * summing-up is its own beat.
+ */
+export function leadOnwardLines(
+  progress: MissingCatsProgress,
+  found: MissingCatsClueId,
+  finding: ClueFinding,
+): readonly DialogLine[] {
+  if (finding !== 'recorded') return [];
+  const next = leadMovesOn(progress, found);
+  return next === null ? [] : LEADS_ONWARD[next];
 }

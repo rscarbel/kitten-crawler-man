@@ -34,21 +34,44 @@ export type KnockOffFall =
 export type KnockOffLanding =
   /** It lies where it lands; on a pressure plate, its weight holds the plate down. */
   | { readonly kind: 'pressPlate' }
-  /** It lands loudly: anything listening within the radius hears it there. */
-  | { readonly kind: 'makeNoise'; readonly radiusTiles: number }
   /** It smashes, the way a swing breaks it. */
   | { readonly kind: 'break' }
-  /** It lies across the ground it falls on, which becomes this walkable floor. */
-  | { readonly kind: 'bridge'; readonly floorTileType: number; readonly spanTiles: number }
   /** Landing in a conveyor's end, it is sent on as this item; anywhere else it just lies there. */
   | { readonly kind: 'deliver'; readonly item: ItemId };
 
-export interface KnockOffPlacement {
+/** A small thing batted off its ledge, lobbed in a spinning arc to where it lands. */
+export interface LobbedKnockOff {
+  readonly motion: 'lobbed';
   readonly fall: KnockOffFall;
   readonly landing: KnockOffLanding;
   /** Heard where it lands; a break also plays the prop's own break cue. */
   readonly landingCue: SoundId;
 }
+
+/**
+ * A step along the floor's grid that a pushed-over thing falls along: one of
+ * the four cardinal headings, never a diagonal and never no way at all.
+ */
+export type ToppleHeading =
+  | { readonly dx: 1; readonly dy: 0 }
+  | { readonly dx: -1; readonly dy: 0 }
+  | { readonly dx: 0; readonly dy: 1 }
+  | { readonly dx: 0; readonly dy: -1 };
+
+/**
+ * A long thing pushed over where it stands: it pivots on its foot and falls
+ * flat along `toward`, its length lying across the next `spanTiles` tiles
+ * that way. A hole under it there can be crossed on it, and only there.
+ */
+export interface ToppledKnockOff {
+  readonly motion: 'toppled';
+  readonly toward: ToppleHeading;
+  readonly spanTiles: number;
+  /** Heard as it slams down. */
+  readonly landingCue: SoundId;
+}
+
+export type KnockOffPlacement = LobbedKnockOff | ToppledKnockOff;
 
 /** What a set of pressure plates opens. Every target blocks its tiles while shut. */
 export type PlateSetTarget =

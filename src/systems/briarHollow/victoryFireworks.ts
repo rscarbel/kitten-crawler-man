@@ -5,7 +5,7 @@
  * rocket it belongs to always leave together.
  */
 
-import { UPDATES_PER_SECOND } from './structureRules';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 /**
  * How long the victory fanfare holds the stage: the 12.0 s victory sting
@@ -13,7 +13,7 @@ import { UPDATES_PER_SECOND } from './structureRules';
  * only once the sting has rung out. Re-time it with the sting.
  */
 export const VICTORY_FANFARE_SECONDS = 12.5;
-export const VICTORY_FANFARE_FRAMES = Math.round(VICTORY_FANFARE_SECONDS * UPDATES_PER_SECOND);
+export const VICTORY_FANFARE_FRAMES = Math.round(VICTORY_FANFARE_SECONDS * WORLD_TICKS_PER_SECOND);
 
 const ROCKET_INTERVAL_SECONDS = 0.35;
 /** Rockets keep going up this long; the finale volley lands inside it. */
@@ -51,11 +51,11 @@ function fraction(value: number): number {
 }
 
 function rocketAt(index: number, launchSeconds: number): FireworkRocket {
-  const launchFrame = Math.round(launchSeconds * UPDATES_PER_SECOND);
+  const launchFrame = Math.round(launchSeconds * WORLD_TICKS_PER_SECOND);
   return {
     index,
     launchFrame,
-    burstFrame: launchFrame + Math.round(ROCKET_RISE_SECONDS * UPDATES_PER_SECOND),
+    burstFrame: launchFrame + Math.round(ROCKET_RISE_SECONDS * WORLD_TICKS_PER_SECOND),
     xShare: LAUNCH_SPAN_START + LAUNCH_SPAN * fraction(index * LAUNCH_STEP),
     apexShare: APEX_START + APEX_SPAN * fraction(index * APEX_STEP),
   };

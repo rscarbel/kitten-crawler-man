@@ -11,6 +11,7 @@ import {
   SKELETON_SOUL_BOLT_FIGURE,
   SKELETON_SOUL_BURST_FIGURE,
 } from './art/skeletonEffectsFigure';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Draw wrappers for the four effects the Skeleton Lord's attacks are made of.
@@ -28,9 +29,6 @@ import {
  * soil line sits a little below it and the hands reach above it, which is what
  * lets the cone be filled by drawing one instance per tile centre.
  */
-
-/** Frames per second the game loop runs at; the art is timed against it. */
-const FRAMES_PER_SECOND = 60;
 
 /** Loop speed of the churn on the bolt's surface. */
 const BOLT_FPS = 12;
@@ -96,7 +94,7 @@ export function drawSoulBolt(
   tileSize: number,
   age: number,
 ): void {
-  const seconds = age / FRAMES_PER_SECOND;
+  const seconds = age / WORLD_TICKS_PER_SECOND;
   const frameCount = figureFrameCount(SKELETON_SOUL_BOLT_FIGURE, BOLT_STATE);
   drawFigureCached(
     ctx,

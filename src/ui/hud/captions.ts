@@ -22,12 +22,12 @@ import { skinsFor, type TextRole } from '../theme/skins';
 import { motion } from '../theme/tokens';
 import { drawGlass } from '../widgets/paint';
 import { lineHeightOf, measureText, text } from '../widgets/text';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
-const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 
 function msToTicks(ms: number): number {
-  return Math.max(1, Math.round((ms * TICKS_PER_SECOND) / MS_PER_SECOND));
+  return Math.max(1, Math.round((ms * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND));
 }
 
 /** The most lines the lane shows; an older line gives way to a new one. */

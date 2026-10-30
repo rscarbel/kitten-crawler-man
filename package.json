@@ -158,6 +158,7 @@
     "render:kraken": "tsx scripts/render-kraken.ts",
     "render:globs": "tsx scripts/render-globs.ts",
     "render:lich": "tsx scripts/render-lich.ts",
+    "render:lich-fight-framing": "tsx scripts/render-lich-fight-framing.ts",
     "render:life-machine": "tsx scripts/render-life-machine.ts",
     "render:acid-llama": "tsx scripts/render-acid-llama.ts",
     "render:cow": "tsx scripts/render-cow.ts",

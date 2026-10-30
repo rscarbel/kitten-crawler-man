@@ -20,9 +20,14 @@ import { skinsFor } from '../theme/skins';
 import { drawGlass } from '../widgets/paint';
 import type { SizeClass } from '../core/viewport';
 import type { Theme } from '../theme/tokens';
+import type { StackedBandOptions } from './topBandStack';
 
-/** Highest first: a boss bar always sits nearest the top. */
-export const TOP_BAND_PRIORITIES = ['boss', 'encounter', 'countdown', 'banner'] as const;
+/**
+ * Highest first: a boss bar always sits nearest the top. `arrival` is where
+ * the player has just come in (a room's name): it is shown only while nothing
+ * else holds the band, so it never pushes a fight's cards down over the room.
+ */
+export const TOP_BAND_PRIORITIES = ['boss', 'encounter', 'countdown', 'banner', 'arrival'] as const;
 
 export type TopBandPriority = (typeof TOP_BAND_PRIORITIES)[number];
 
@@ -31,6 +36,7 @@ const PRIORITY_RANK: Readonly<Record<TopBandPriority, number>> = {
   encounter: 1,
   countdown: 2,
   banner: 3,
+  arrival: 4,
 };
 
 /** One bar in the band, built by its owner every frame it should show. */
@@ -43,6 +49,8 @@ export interface TopBandEntry {
   /** The height the entry needs at `width` UI units. */
   height(ui: Ui, width: number): number;
   render(ui: Ui, rect: Rect): void;
+  /** The rows and look it was built from, when it is a stack of rows (`stackedBandEntry`). */
+  readonly stack?: StackedBandOptions;
 }
 
 /** An entry's size for {@link layoutTopBand}, which needs no `Ui`. */
@@ -63,6 +71,12 @@ const MAX_OBSTACLE_STEPS = 16;
  */
 const ALWAYS_PLACED: ReadonlySet<TopBandPriority> = new Set(['boss', 'encounter']);
 
+/** The entries the band shows: an `arrival` entry only while it has the band to itself. */
+function shownSizes(sizes: readonly TopBandSize[]): readonly TopBandSize[] {
+  const anyOther = sizes.some((size) => size.priority !== 'arrival');
+  return anyOther ? sizes.filter((size) => size.priority !== 'arrival') : sizes;
+}
+
 /**
  * Where each entry goes in `area`: sorted by priority (stable within one),
  * centred across the area and stacked down from its top, `gap` apart. An entry
@@ -72,7 +86,8 @@ const ALWAYS_PLACED: ReadonlySet<TopBandPriority> = new Set(['boss', 'encounter'
  * `floor` — the lowest priorities on a full screen — is left out rather than
  * laid over a button, whose taps it would take. `keepClear` is avoided the
  * same way, unless that leaves a fight's own bar out: then the fight's bars
- * are laid out against `obstacles` alone and only the rest avoid it.
+ * are laid out against `obstacles` alone and only the rest avoid it. An
+ * `arrival` entry is left out whenever any other entry is shown.
  * Returned in stacking order.
  */
 export function layoutTopBand(
@@ -83,7 +98,7 @@ export function layoutTopBand(
   floor = Infinity,
   keepClear: readonly Rect[] = [],
 ): Placed[] {
-  const ordered = sizes
+  const ordered = shownSizes(sizes)
     .map((size, index) => ({ size, index }))
     .sort(
       (a, b) =>

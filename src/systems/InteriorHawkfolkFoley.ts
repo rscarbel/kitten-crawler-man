@@ -2,22 +2,21 @@
 
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { Townsperson } from '../creatures/Townsperson';
 
 const HEARING_RADIUS_TILES = 9;
 const HEARING_RADIUS_PX = HEARING_RADIUS_TILES * TILE_SIZE;
-const FRAMES_PER_SECOND = 60;
 const TALON_STEPS_CLIP_SECONDS = 2;
 const RUFFLE_MIN_GAP_SECONDS = 8;
 const RUFFLE_MAX_GAP_SECONDS = 20;
 
 /** The clip is a continuous run of steps, so it is not retriggered until it ends. */
-const TALON_STEPS_CLIP_FRAMES = TALON_STEPS_CLIP_SECONDS * FRAMES_PER_SECOND;
+const TALON_STEPS_CLIP_FRAMES = TALON_STEPS_CLIP_SECONDS * WORLD_TICKS_PER_SECOND;
 const TALON_STEPS_MAX_VOLUME = 0.5;
 
-const RUFFLE_MIN_GAP_FRAMES = RUFFLE_MIN_GAP_SECONDS * FRAMES_PER_SECOND;
-const RUFFLE_MAX_GAP_FRAMES = RUFFLE_MAX_GAP_SECONDS * FRAMES_PER_SECOND;
+const RUFFLE_MIN_GAP_FRAMES = RUFFLE_MIN_GAP_SECONDS * WORLD_TICKS_PER_SECOND;
+const RUFFLE_MAX_GAP_FRAMES = RUFFLE_MAX_GAP_SECONDS * WORLD_TICKS_PER_SECOND;
 const RUFFLE_MAX_VOLUME = 0.6;
 const WING_RUFFLE_SOUNDS: ReadonlyArray<SoundId> = [
   'hawkfolk_wing_ruffle_1',

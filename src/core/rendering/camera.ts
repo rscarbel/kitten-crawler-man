@@ -110,3 +110,19 @@ export function toWorldViewRect(rect: Rect, camera: Pick<Camera, 'zoom'>): Rect 
   const zoom = camera.zoom;
   return { x: rect.x / zoom, y: rect.y / zoom, w: rect.w / zoom, h: rect.h / zoom };
 }
+
+/**
+ * The whole world pixel at or past `coord` that the baked terrain is drawn
+ * from. Chunks are blitted at whole pixels so they never resample; art that
+ * lies flush with the floor — water, drains, decals — must sit on the same
+ * pixel, or it slides up to a pixel against the floor under it as the camera
+ * moves, and its thin edges re-rasterise differently on every frame.
+ */
+export function terrainAlignedCoord(coord: number): number {
+  return Math.ceil(coord);
+}
+
+/** `camera` moved onto the whole world pixel the baked terrain is drawn from; see {@link terrainAlignedCoord}. */
+export function terrainAlignedCamera(camera: Camera): Camera {
+  return { ...camera, x: terrainAlignedCoord(camera.x), y: terrainAlignedCoord(camera.y) };
+}

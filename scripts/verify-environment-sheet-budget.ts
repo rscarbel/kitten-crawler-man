@@ -39,6 +39,7 @@ import type { TileRect } from '../src/map/town/townPlan.js';
 import type { SheetRing } from '../src/systems/EnvironmentSheetResidentSet.js';
 import type { ScaledCity, ScaledCityBuilding } from './scaledCity.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 installCanvasGlobals();
 
@@ -89,11 +90,9 @@ setViewportSize(VIEW_WIDTH_PX, VIEW_HEIGHT_PX);
 
 const budgetBytes = ENVIRONMENT_SHEET_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
 const ceilingBytes = budgetBytes * (1 - REQUIRED_HEADROOM_SHARE);
-/** Frames per second the idle clock runs at during play. */
-const FRAMES_PER_SECOND = 60;
 /** How far the fastest walk carries the party past a release ring before the sheet goes. */
 const releasedGraceTiles =
-  (RELEASED_GRACE_FRAMES / FRAMES_PER_SECOND) * FASTEST_WALK_TILES_PER_SECOND;
+  (RELEASED_GRACE_FRAMES / WORLD_TICKS_PER_SECOND) * FASTEST_WALK_TILES_PER_SECOND;
 const ringReleaseTiles = (ring: SheetRing): number =>
   ring.leadSeconds * FASTEST_WALK_TILES_PER_SECOND +
   ring.releaseHysteresisTiles +

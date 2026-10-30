@@ -37,7 +37,7 @@ import type {
   RouteResult,
 } from './residencyRoutes.js';
 import { installFakeAudio } from './audioHarness.js';
-import { TILE_SIZE } from '../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants.js';
 import { loadSprites } from '../src/core/spriteAssets/SpriteLoader.js';
 import { SceneManager } from '../src/core/Scene.js';
 import { InputManager } from '../src/core/input/InputManager.js';
@@ -72,8 +72,7 @@ export type Floor3Route = (typeof RESIDENCY_FLOORS)['3']['routes'][number];
 /** The seed every floor-3 harness that walks to Briar Hollow uses; its village sites cleanly. */
 const WORLD_SEED = 1;
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
+const FRAME_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /** Frames an arrival's loading screen may take before the route calls it hung. */
 const MAX_ARRIVAL_FRAMES = 6000;
 /** Frames a walk onto a door or an exit mat may take. */
@@ -402,7 +401,7 @@ export async function runFloor3Route(
     ) {
       await runFrame();
       waited++;
-      if (waited % FRAMES_PER_SECOND === 0) await dismissConversations();
+      if (waited % WORLD_TICKS_PER_SECOND === 0) await dismissConversations();
     }
     if (!(current instanceof BuildingInteriorScene)) {
       throw new Error(`the split never carried Belle to the cattery in ${waited} frames`);
@@ -414,7 +413,7 @@ export async function runFloor3Route(
     for (let frame = 0; frame < DESTINATION_WAIT_FRAMES; frame++) {
       await runFrame();
       evictions += getFigureCacheStats().evictions;
-      if (frame % FRAMES_PER_SECOND === 0) await dismissConversations();
+      if (frame % WORLD_TICKS_PER_SECOND === 0) await dismissConversations();
     }
     setFigureCacheStatsRecording(false);
     await snapshot('cattery, after the wait');
@@ -535,7 +534,7 @@ export async function runFloor3Route(
   for (let frame = 0; frame < DESTINATION_WAIT_FRAMES; frame++) {
     placeParty(villageCentre.x, villageCentre.y);
     await runFrame();
-    if (frame % FRAMES_PER_SECOND === 0) await dismissConversations();
+    if (frame % WORLD_TICKS_PER_SECOND === 0) await dismissConversations();
   }
   await snapshot('Briar Hollow, after the wait');
 

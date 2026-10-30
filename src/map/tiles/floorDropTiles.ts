@@ -8,7 +8,7 @@
  * Everything is a share of `ts`; light comes from the upper left.
  */
 
-import { FLOOR_DROP, type TileContent } from '../tileTypes';
+import { FLOOR_DROP, FLOOR_DROP_SPANNED, type TileContent } from '../tileTypes';
 
 const DEPTH_TOP = '#0d0b0a';
 const DEPTH_BOTTOM = '#030303';
@@ -26,8 +26,12 @@ const NEAR_LIP_SHARE = 0.035;
 const SIDE_SHADOW = 'rgba(0,0,0,0.45)';
 const SIDE_SHADOW_SHARE = 0.06;
 
+function isHoleType(type: number | undefined): boolean {
+  return type === FLOOR_DROP || type === FLOOR_DROP_SPANNED;
+}
+
 function isDrop(structure: TileContent[][], tx: number, ty: number): boolean {
-  return structure[ty]?.[tx]?.type === FLOOR_DROP;
+  return isHoleType(structure[ty]?.[tx]?.type);
 }
 
 function drawFloorDrop(
@@ -73,7 +77,7 @@ function drawFloorDrop(
   if (!isDrop(structure, tx + 1, ty)) ctx.fillRect(sx + ts - sideWidth, sy, sideWidth, ts);
 }
 
-/** Paints a hole in the floor; false for any other type. */
+/** Paints a hole in the floor, spanned or not; false for any other type. */
 export function drawFloorDropTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -84,7 +88,7 @@ export function drawFloorDropTile(
   tx: number,
   ty: number,
 ): boolean {
-  if (type !== FLOOR_DROP) return false;
+  if (!isHoleType(type)) return false;
   drawFloorDrop(ctx, structure, sx, sy, ts, tx, ty);
   return true;
 }

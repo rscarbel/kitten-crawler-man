@@ -22,7 +22,7 @@
  *             back; it starts and ends on the idle's first frame
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import { safeRoomSeed, type SafeRoomId } from '../../map/safeRoomId';
 import {
   BUILD_WIDTH_SCALE,
@@ -64,7 +64,6 @@ import {
   IDLE_FRAMES,
   idleBlinkLid,
   idleBreathPhase,
-  TICKS_PER_SECOND,
 } from './human/timing';
 import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
 import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
@@ -621,7 +620,7 @@ const DOCTOR_ROWS: Readonly<Record<DoctorAction, DoctorRow>> = {
   writing: {
     frames: WRITING_FRAMES,
     loops: true,
-    ticks: Math.round(WRITING_SECONDS * TICKS_PER_SECOND),
+    ticks: Math.round(WRITING_SECONDS * WORLD_TICKS_PER_SECOND),
     pose: writingPose,
     kit: WRITING_KIT,
     stepTiles: STANDS_STILL,
@@ -629,7 +628,7 @@ const DOCTOR_ROWS: Readonly<Record<DoctorAction, DoctorRow>> = {
   sorting: {
     frames: SORTING_FRAMES,
     loops: false,
-    ticks: Math.round(SORTING_SECONDS * TICKS_PER_SECOND),
+    ticks: Math.round(SORTING_SECONDS * WORLD_TICKS_PER_SECOND),
     pose: sortingPose,
     kit: EMPTY_HANDS,
     stepTiles: STANDS_STILL,
@@ -637,7 +636,7 @@ const DOCTOR_ROWS: Readonly<Record<DoctorAction, DoctorRow>> = {
   treat: {
     frames: TREAT_FRAMES,
     loops: false,
-    ticks: Math.round(TREAT_SECONDS * TICKS_PER_SECOND),
+    ticks: Math.round(TREAT_SECONDS * WORLD_TICKS_PER_SECOND),
     pose: treatPose,
     kit: EMPTY_HANDS,
     stepTiles: (frame) => treatStepShare(frame / (TREAT_FRAMES - 1)) * TREAT_STEP_TILES,

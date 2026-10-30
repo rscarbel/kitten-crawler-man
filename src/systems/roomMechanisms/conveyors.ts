@@ -9,7 +9,13 @@
  * An item conveyor (a dumbwaiter, a chute) takes the first thing it accepts
  * from the crawler at one end and leaves it at the other; at an end with a
  * load waiting, interact takes it. A signal fixture (a bell on a pull) is a
- * conveyor of a flag: working either end raises it for the other.
+ * conveyor of a flag: working either end raises it at the other, and it
+ * stays raised there until a crawler at that end works any conveyor end on
+ * its map, which is the ring answered.
+ *
+ * A storey's own works may claim an end whose presses follow a story of their
+ * own: the conveyor then never offers or acts on it, and does only what the
+ * works ask of it through the claim.
  */
 
 import type { SoundId } from '../../audio/sounds';
@@ -17,12 +23,17 @@ import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { ItemId } from '../../core/items/defs/ItemDefs';
 import {
+  clearExchangeFlag,
+  exchangeFlag,
   exchangeFlagSet,
   exchangePoint,
   itemsWaitingAt,
   leaveExchangeItem,
   setExchangeFlag,
   takeExchangeItems,
+  takeExchangeItemsOf,
+  type ExchangeItem,
+  type ExchangeFlagId,
   type ExchangePointId,
   type PartySplitState,
 } from '../../core/party/partySplit';
@@ -45,12 +56,22 @@ type Crawler = HumanPlayer | CatPlayer;
 /** One end of a conveyor that stands on this map. */
 interface ConveyorEnd {
   readonly placement: ConveyorPlacement;
+  /** Whether a storey's works have claimed it, so presses there are theirs to answer. */
+  claimed: boolean;
   readonly end: ConveyorEndId;
   readonly tile: TilePoint;
   /** Where loads sent to this end wait. */
   readonly point: ExchangePointId;
   /** Where loads sent from this end go. */
   readonly farPoint: ExchangePointId;
+}
+
+/** The flag a signal fixture raises at `end` when its other end is rung, lowered once a crawler there answers. */
+function signalRaisedAt(
+  placement: Extract<ConveyorPlacement, { kind: 'signal' }>,
+  end: ConveyorEndId,
+): ExchangeFlagId {
+  return exchangeFlag(`${placement.flag}_${end}`);
 }
 
 const OTHER_END: Readonly<Record<ConveyorEndId, ConveyorEndId>> = { foot: 'head', head: 'foot' };
@@ -85,6 +106,32 @@ function tileCentrePx(tile: TilePoint): { x: number; y: number } {
   return { x: (tile.x + TILE_CENTRE) * TILE_SIZE, y: (tile.y + TILE_CENTRE) * TILE_SIZE };
 }
 
+/** An item conveyor's end claimed by a storey's works, worked only as they ask. */
+export interface ClaimedItemEnd {
+  readonly tile: TilePoint;
+  inReach(crawler: Crawler): boolean;
+  waiting(): readonly ExchangeItem[];
+  /** Moves every load of `item` waiting here into `crawler`'s bag; false when none waits. */
+  take(item: ItemId, crawler: Crawler): boolean;
+  /** Puts one `item` here to wait, unless one already does. */
+  stock(item: ItemId): void;
+  /** Takes every load of `item` waiting here out of the world. */
+  clear(item: ItemId): void;
+  /**
+   * Sends one `item` from `crawler`'s bag to someone waiting at the far end,
+   * who takes it as it arrives, so nothing is left there; false when the bag
+   * holds none.
+   */
+  sendTaken(item: ItemId, crawler: Crawler): boolean;
+}
+
+/** A signal fixture's end claimed by a storey's works, rung only when they ask. */
+export interface ClaimedSignalEnd {
+  readonly tile: TilePoint;
+  inReach(crawler: Crawler): boolean;
+  signal(): void;
+}
+
 /** The ends of every conveyor that stand on one map. */
 export class ConveyorSystem {
   private readonly ends: ConveyorEnd[] = [];
@@ -102,6 +149,7 @@ export class ConveyorSystem {
         if (!endStandsIn(place, options.place)) continue;
         this.ends.push({
           placement,
+          claimed: false,
           end,
           tile: place.tile,
           point: conveyorEndPoint(placement.id, end),
@@ -113,6 +161,70 @@ export class ConveyorSystem {
 
   get isEmpty(): boolean {
     return this.ends.length === 0;
+  }
+
+  /**
+   * Claims the end `end` of the item conveyor `id` for a storey's works, or
+   * null when that end does not stand on this map.
+   */
+  claimItemEnd(id: string, end: ConveyorEndId): ClaimedItemEnd | null {
+    const claimed = this.claim(id, end);
+    if (claimed === null) return null;
+    const placement = claimed.placement;
+    if (placement.kind !== 'items') return null;
+    const fixture = ITEM_CONVEYOR_KINDS[placement.fixture];
+    const at = tileCentrePx(claimed.tile);
+    return {
+      tile: claimed.tile,
+      inReach: (crawler) => this.reaches(crawler, claimed),
+      waiting: () => itemsWaitingAt(this.split, claimed.point),
+      take: (item, crawler) => {
+        const loads = takeExchangeItemsOf(this.split, claimed.point, item);
+        if (loads.length === 0) return false;
+        for (const load of loads) crawler.inventory.addItem(load.item, load.quantity);
+        this.playSound(fixture.arriveCue, at);
+        this.answerSignalsHere();
+        return true;
+      },
+      stock: (item) => {
+        if (itemsWaitingAt(this.split, claimed.point).some((load) => load.item === item)) return;
+        leaveExchangeItem(this.split, { item, quantity: 1, to: claimed.point });
+      },
+      clear: (item) => {
+        takeExchangeItemsOf(this.split, claimed.point, item);
+      },
+      sendTaken: (item, crawler) => {
+        if (!crawler.inventory.removeOne(item)) return false;
+        this.reportSent(claimed, placement, item);
+        this.answerSignalsHere();
+        return true;
+      },
+    };
+  }
+
+  /**
+   * Claims the end `end` of the signal fixture `id` for a storey's works, or
+   * null when that end does not stand on this map.
+   */
+  claimSignalEnd(id: string, end: ConveyorEndId): ClaimedSignalEnd | null {
+    const claimed = this.claim(id, end);
+    if (claimed === null) return null;
+    const placement = claimed.placement;
+    if (placement.kind !== 'signal') return null;
+    return {
+      tile: claimed.tile,
+      inReach: (crawler) => this.reaches(crawler, claimed),
+      signal: () => this.signal(claimed, placement),
+    };
+  }
+
+  private claim(id: string, end: ConveyorEndId): ConveyorEnd | null {
+    const found = this.ends.find(
+      (candidate) => candidate.placement.id === id && candidate.end === end,
+    );
+    if (found === undefined) return null;
+    found.claimed = true;
+    return found;
   }
 
   /**
@@ -137,20 +249,34 @@ export class ConveyorSystem {
     item: ItemId,
   ): void {
     leaveExchangeItem(this.split, { item, quantity: 1, to: end.farPoint });
+    this.reportSent(end, placement, item);
+  }
+
+  private reportSent(
+    end: ConveyorEnd,
+    placement: Extract<ConveyorPlacement, { kind: 'items' }>,
+    item: ItemId,
+  ): void {
     this.playSound(ITEM_CONVEYOR_KINDS[placement.fixture].sendCue, tileCentrePx(end.tile));
     this.bus.emit('conveyorSent', { conveyor: placement.id, item, to: OTHER_END[end.end] });
   }
 
-  private endInReach(crawler: Crawler): ConveyorEnd | null {
+  private distanceTo(crawler: Crawler, end: ConveyorEnd): number {
     const centreX = crawler.x / TILE_SIZE + TILE_CENTRE;
     const centreY = crawler.y / TILE_SIZE + TILE_CENTRE;
+    return Math.hypot(end.tile.x + TILE_CENTRE - centreX, end.tile.y + TILE_CENTRE - centreY);
+  }
+
+  private reaches(crawler: Crawler, end: ConveyorEnd): boolean {
+    return this.distanceTo(crawler, end) <= END_REACH_TILES;
+  }
+
+  private endInReach(crawler: Crawler): ConveyorEnd | null {
     let best: ConveyorEnd | null = null;
     let bestDistance = END_REACH_TILES;
     for (const end of this.ends) {
-      const distance = Math.hypot(
-        end.tile.x + TILE_CENTRE - centreX,
-        end.tile.y + TILE_CENTRE - centreY,
-      );
+      if (end.claimed) continue;
+      const distance = this.distanceTo(crawler, end);
       if (distance > bestDistance) continue;
       best = end;
       bestDistance = distance;
@@ -197,22 +323,44 @@ export class ConveyorSystem {
         if (waiting.length > 0) {
           for (const load of waiting) crawler.inventory.addItem(load.item, load.quantity);
           this.playSound(ITEM_CONVEYOR_KINDS[placement.fixture].arriveCue, at);
+          this.answerSignalsHere();
           return true;
         }
         const item = this.firstSendable(placement.accepts, crawler);
         if (item === null || !crawler.inventory.removeOne(item)) return false;
         this.send(end, placement, item);
+        this.answerSignalsHere();
         return true;
       }
       case 'signal':
-        setExchangeFlag(this.split, placement.flag);
-        this.playSound(SIGNAL_FIXTURE_KINDS[placement.fixture].signalCue, at);
-        this.bus.emit('conveyorSignalled', { conveyor: placement.id, flag: placement.flag });
+        this.signal(end, placement);
         return true;
       default: {
         const unreachable: never = placement;
         return unreachable;
       }
+    }
+  }
+
+  private signal(
+    end: ConveyorEnd,
+    placement: Extract<ConveyorPlacement, { kind: 'signal' }>,
+  ): void {
+    this.answerSignalsHere();
+    setExchangeFlag(this.split, signalRaisedAt(placement, OTHER_END[end.end]));
+    this.playSound(SIGNAL_FIXTURE_KINDS[placement.fixture].signalCue, tileCentrePx(end.tile));
+    this.bus.emit('conveyorSignalled', {
+      conveyor: placement.id,
+      flag: placement.flag,
+      from: end.end,
+    });
+  }
+
+  /** Lowers every signal raised at an end on this map: a crawler here has worked its conveyors. */
+  private answerSignalsHere(): void {
+    for (const end of this.ends) {
+      if (end.placement.kind !== 'signal') continue;
+      clearExchangeFlag(this.split, signalRaisedAt(end.placement, end.end));
     }
   }
 
@@ -243,7 +391,7 @@ export class ConveyorSystem {
       const y = centre.y - camY - ICON_LIFT_PX + bob;
       const placement = end.placement;
       if (placement.kind === 'signal') {
-        if (!exchangeFlagSet(this.split, placement.flag)) continue;
+        if (!exchangeFlagSet(this.split, signalRaisedAt(placement, end.end))) continue;
         ctx.save();
         ctx.fillStyle = ink.signalRaised;
         ctx.strokeStyle = ink.signalEdge;

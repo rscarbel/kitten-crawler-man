@@ -10,6 +10,7 @@
 
 import type { HawkfolkBuild } from './palette';
 import {
+  AVIEL_GREY,
   CORVIDBLACK,
   DOVEGREY,
   GOLDENBARRED,
@@ -345,7 +346,7 @@ function residentLook(id: string, role: HawkfolkRole, outfit: HawkfolkOutfit): H
  * `HAWKFOLK_CIVILIAN_LOOKS`.
  */
 export const HAWKFOLK_RESIDENT_LOOKS: readonly HawkfolkLook[] = [
-  residentLook('resident_deacon_aviel', 'temple', avielOutfit(GOLDENBARRED)),
+  residentLook('resident_deacon_aviel', 'temple', avielOutfit(AVIEL_GREY)),
   residentLook('resident_smith_varga', 'laborer', vargaOutfit(CORVIDBLACK)),
   residentLook('resident_innkeep_ossie', 'merchant', ossieOutfit(HAWKBROWN)),
   residentLook('resident_innkeep_brend', 'merchant', brendOutfit(DOVEGREY)),

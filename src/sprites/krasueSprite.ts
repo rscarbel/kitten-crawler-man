@@ -27,6 +27,17 @@ const KRASUE_INTESTINE_Y = 0.38;
 
 /** Float bob + glow. */
 const KRASUE_BOB_AMP = 0.06;
+/**
+ * How far the float phase turns each frame: one bob a little under a second.
+ * A caller that counts frames converts through {@link krasueFloatPhase}; a raw
+ * frame count passed as the phase bobs ten times a second and reads as jitter.
+ */
+export const KRASUE_FLOAT_RADIANS_PER_FRAME = 0.12;
+
+/** The float phase a krasue has reached after `frames` frames of drifting. */
+export function krasueFloatPhase(frames: number): number {
+  return frames * KRASUE_FLOAT_RADIANS_PER_FRAME;
+}
 const KRASUE_GLOW_RADIUS = 10;
 /** The halo disc round the head, as a multiple of the head's radius. */
 const KRASUE_HALO_SCALE = 1.4;

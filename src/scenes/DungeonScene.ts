@@ -1,4 +1,5 @@
 import { TRASH_PILE_ROACH_BURST } from '../audio/bossSoundCues';
+import type { CrawlerPair } from '../core/progression/awardXp';
 import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import { labApproachZoneAt } from '../map/labApproach';
 import { VILLAGE_CUES } from '../audio/villageSoundCues';
@@ -7,7 +8,7 @@ import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/input/InputManager';
 import { platform } from '../core/input/Platform';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { clamp, frameTime } from '../utils';
 import {
   renderEntityTooltip,
@@ -24,6 +25,7 @@ import type {
   SkillPointsModel,
 } from '../ui/hud/hudModel';
 import { HudSurface, surfacesOverHud, toCssRect } from '../ui/hud/HudSurface';
+import { TopBandReach } from '../ui/hud/topBandReach';
 import { inventoryTabRect, itemMenuEntryRects } from '../ui/screens/inventory/renderInventory';
 import type { Rect } from '../ui/core/geom';
 import { levelTimerCue, type LevelTimerCue } from '../ui/hud/levelTimer';
@@ -111,6 +113,7 @@ import {
 
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import {
+  autoPinQuest,
   captureJournalProgress,
   createJournalProgress,
   restoreJournalProgress,
@@ -129,6 +132,7 @@ import { WorldTrail } from '../ui/world/worldTrail';
 import { SenseLayer } from '../systems/senses/SenseLayer';
 import { CatSenseCue } from '../systems/senses/CatSenseCue';
 import { MissingCatsQuestSystem } from '../systems/missingCats/MissingCatsQuestSystem';
+import { reserveInnWallSitterTile } from '../systems/missingCats/innWallSitter';
 import { CAPTURE_ACTOR_IDS } from '../systems/missingCats/captureCutscene';
 import { missingCatsTowerResume } from '../systems/missingCats/towerResume';
 import {
@@ -144,7 +148,6 @@ import {
   collectTrackerEntries,
   isOutstanding,
   pinMatchesEntry,
-  resolvePinnedEntry,
   type ObjectiveBeaconSource,
   type TrackerEntry,
   type TrackerTarget,
@@ -232,8 +235,8 @@ import { CombatKit } from '../systems/kits/CombatKit';
 import { DestructionKit } from '../systems/kits/DestructionKit';
 import type { GroundPickupCheckpoint } from '../systems/GroundPickupSystem';
 import {
-  hostileWithinAttackRange,
   hostileWithinRadius,
+  interactionStance,
   shouldShowInteractionPrompts,
 } from '../systems/interactionPromptGate';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
@@ -252,7 +255,7 @@ import {
   FLOODED_PUMP_ROOM_CUES,
   type FloodedPumpRoomLoop,
 } from '../audio/floodedPumpRoomSoundCues';
-import { PARTY_TRAIL_SPACING_TILES } from '../systems/partyTrail';
+import { PARTY_TRAIL_SPACING_TILES, PartyLine } from '../systems/partyTrail';
 import { walkUpTo } from '../systems/cutscene/walkUp';
 import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
 import {
@@ -344,7 +347,8 @@ import {
   raisePromptsFor,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
-import type { PromptOwner } from '../ui/interactionFocus';
+import { offerPress, type InteractionStance, type PromptOwner } from '../ui/interactionFocus';
+import type { TownPropTarget } from '../systems/TownPropSystem';
 import type { GymRoomSystem } from '../systems/GymRoomSystem';
 import {
   BossRoomDressings,
@@ -473,6 +477,7 @@ import {
   phaseReached,
   restoreMissingCatsProgress,
   stormDrainOpenFor,
+  towerErrandLeg,
   townCatsHome,
   type MissingCatsPhase,
   type MissingCatsProgress,
@@ -550,7 +555,7 @@ import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/abov
 import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
 import { spiderQuestCueSound, spiderQuestLoop } from '../audio/spiderQuestSoundCues';
 import type { SafeRoomService } from '../map/DungeonGenerator';
-import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
+import { ANCHOR_QUEST_ID, AnchorQuestSystem } from '../systems/AnchorQuestSystem';
 import { stallBeaconTarget, doorwayBeaconTarget } from '../systems/objectiveBeaconTargets';
 import { TINKER_VENDOR_ID } from '../systems/market/vendorDefs';
 import {
@@ -648,6 +653,7 @@ import {
   SCREECH_AUDIO_SEEK_SECONDS,
 } from '../creatures/GrotesqueSpider';
 import { randomInt, randomIntFrom, pointInRect, pixelToTile } from '../utils';
+import { pinnedStreetEntry, standingTile } from '../systems/questRoute/pinnedLead';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
   adviceIntel,
@@ -701,6 +707,7 @@ import type { StoryBeatId } from '../story/storyBeatIds';
 import { storyPreviewEvent } from '../story/storyPreview';
 import {
   StoryDelivery,
+  arrivalFetchesParty,
   partyIsEngaged,
   storyFloorOf,
   MAX_DAVE_TALK_PAGES,
@@ -771,6 +778,7 @@ import type { HitRegion, Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
 import {
   STORM_DRAIN_ID,
+  TOWN_TOWER_ID,
   buildingDisplayName,
   type BriarHollowBuildingId,
   type BuildingId,
@@ -1100,6 +1108,8 @@ export interface DungeonSceneOptions {
   persistedWorldState?: PersistedWorldState;
   /** The building a resumed save was written in; absent for one written outdoors. */
   savedIndoorsIn?: BuildingId;
+  /** The building the party has just walked out of by its door; absent for any other arrival. */
+  walkedOutOf?: BuildingId;
   /**
    * The floor this scene was built from, held aside while the party was inside
    * one of its buildings. The scene keeps that party and population rather
@@ -1337,7 +1347,6 @@ const COMBAT_COOLDOWN_FRAMES = 300;
 /** The chest each crawler earns for a boss after Boss Slayer is already theirs. */
 const BOSS_REPEAT_CHEST_RARITY = ACHIEVEMENT_DEFS.boss_slayer.reward.rarity;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
-const FRAMES_PER_SECOND = 60;
 /** Within this many tiles of a stairwell the AI is told the party is at it. */
 const AI_AT_STAIRWELL_TILES = 3;
 /** Within this many tiles, places are described as "near the stairwell". */
@@ -1477,6 +1486,8 @@ export class DungeonScene extends GameplayScene {
   private readonly _vendorMinimapPositions: Array<{ x: number; y: number }> = [];
   /** Reused per-frame array of the Journal's entries, for the same reason. */
   private readonly _trackerEntries: TrackerEntry[] = [];
+  /** The crawlers of the room on show, whose bags are the party's until it walks back out. */
+  private partyIndoors: CrawlerPair | null = null;
   /** The way to the pinned objective: the arrow's next gate and the ground trail. */
   private readonly questRoute = new QuestRouteGuide();
   private readonly questRouteTrail = new WorldTrail();
@@ -1601,14 +1612,31 @@ export class DungeonScene extends GameplayScene {
       kind: 'quest',
       act: () => this.bounty?.tryInteract(this.active(), this.human, this.cat) === true,
     },
-    questCitizen: { kind: 'quest', act: () => this.tryTalkToCitizen(this.active()) },
+    innWallSitter: {
+      kind: 'person',
+      act: () => this.missingCats.tryTalkToInnWallSitter(this.active()),
+    },
+    questInnWallSitter: {
+      kind: 'questPerson',
+      act: () => this.missingCats.tryTalkToInnWallSitter(this.active()),
+    },
+    questCitizen: { kind: 'questPerson', act: () => this.tryTalkToCitizen(this.active()) },
     citizen: { kind: 'person', act: () => this.tryTalkToCitizen(this.active()) },
     market: { kind: 'service', act: () => this.market?.tryInteract(this.active()) === true },
     groundPickup: {
       kind: 'pickup',
       act: () => this.destruction.groundPickups.tryPickupNear(this.active()),
     },
-    townProps: { kind: 'examine', act: () => this.townProps?.tryInteract(this.active()) === true },
+    noticeBoard: { kind: 'quest', act: () => this.townProps?.tryInteract(this.active()) === true },
+    fortuneTeller: {
+      kind: 'service',
+      act: () => this.townProps?.tryInteract(this.active()) === true,
+    },
+    questFortuneTeller: {
+      kind: 'questPerson',
+      act: () => this.townProps?.tryInteract(this.active()) === true,
+    },
+    healSpot: { kind: 'fixture', act: () => this.townProps?.tryInteract(this.active()) === true },
     highStriker: {
       kind: 'fixture',
       act: () => this.highStriker?.tryInteract(this.active()) === true,
@@ -1783,6 +1811,8 @@ export class DungeonScene extends GameplayScene {
   private renderPipeline = new RenderPipeline();
   /** How far the camera is zoomed out to keep something in view; see {@link updateCameraZoom}. */
   private readonly cameraZoom = new CameraZoom();
+  /** The top band's cards as drawn, eased: the camera may scroll the map's top edge down out from under them. */
+  private readonly bandReach = new TopBandReach();
   private bus = new EventBus();
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
@@ -2543,6 +2573,7 @@ export class DungeonScene extends GameplayScene {
       roster: this.world.roster,
       conversation: this.conversation,
       standing: () => this.towerDoorStanding(),
+      walkedOutOfTower: options?.walkedOutOf === TOWN_TOWER_ID,
     });
     if (this.tutorial !== null) this.objectiveBeaconSources.push(this.tutorial);
     this.roomSaves = [this.cloggedBathroom, this.stealthKeySnatch].map((source) => ({
@@ -2634,6 +2665,7 @@ export class DungeonScene extends GameplayScene {
         sound: (id) => this.audio?.play(id),
       },
       this.pm.presence,
+      () => towerErrandLeg(this.missingCatsProgress),
     );
     this.attackCowSystem = new AttackCowSystem(
       this.attackCowState,
@@ -3008,19 +3040,24 @@ export class DungeonScene extends GameplayScene {
         // stall is only ever browsed long after both exist.
         (gate) => this.anchorQuest.isVendorLineOffered(gate),
       );
+      const innWallSitterTiles = reserveInnWallSitterTile(this.gameMap);
       this.townProps = new TownPropSystem(
         this.gameMap,
         () => this.openNoticeBoard(),
         () => this.openFortuneTeller(),
         () => this.audio,
-        this.market.reservedTiles,
+        new Set([...this.market.reservedTiles, ...innWallSitterTiles]),
       );
       // Claimed before the decor system copies the reserved set, or a lamp post
       // is planted on the tile the bounty giver is about to stand on.
       const bountyGiverTile = this.townProps.claimBountyGiverTile();
       this.townDecor = new TownDecorSystem(
         this.gameMap,
-        new Set([...this.market.reservedTiles, ...this.townProps.reservedTiles]),
+        new Set([
+          ...this.market.reservedTiles,
+          ...innWallSitterTiles,
+          ...this.townProps.reservedTiles,
+        ]),
       );
       this.townPropRenderables = [
         ...this.market.props,
@@ -3336,7 +3373,7 @@ export class DungeonScene extends GameplayScene {
     this.catSenseCue = new CatSenseCue({
       barks: this.crawlerBarks,
       audio: this.audio,
-      conversation: this.conversation,
+      explainers: { open: (id) => this.menus.craftExplainers.open(id) },
       stats: this.gameStats,
     });
     this.missingCats = new MissingCatsQuestSystem({
@@ -3349,17 +3386,20 @@ export class DungeonScene extends GameplayScene {
       loops: this.audioScope,
       human: this.human,
       cat: this.cat,
+      partyOnShow: () => this.partyOnShow(),
       senses: this.senses,
       steered: () => this.active(),
       present: () => this.pm.presentCrawlers(),
       announce: (message) => this.menus.announce(message),
+      barks: this.crawlerBarks,
       noticeBoardTile: () => this.townProps?.noticeBoardTile ?? null,
       noticeBoardOpen: () => this.noticeBoard?.isOpen ?? false,
-      save: () => this.captureSavePoint(this.activeTile),
+      save: () => this.captureSavePoint(standingTile(this.active())),
       playCutscene: (script, onComplete) => this.cutscenes.director.play(script, onComplete),
       cutsceneHides: (body) => this.cutscenes.director.hides(body),
       split: this.partySplitDirector,
       hire: () => this.mercenaryRoster.active?.id ?? null,
+      followQuest: (questId) => this.followQuestOnOffer(questId),
     });
     this.sfxGates = this.buildSfxGates(levelDef);
     // Reads the plaza's fortune tile and the tinker's counter through accessors
@@ -3367,7 +3407,7 @@ export class DungeonScene extends GameplayScene {
     this.anchorQuest = new AnchorQuestSystem(
       this.bus,
       this.anchorQuestProgress,
-      () => ({ human: this.human, cat: this.cat }),
+      () => this.partyOnShow(),
       () => {
         const tile = this.townProps?.fortuneTellerTile ?? null;
         return tile === null ? null : characterTarget(tile);
@@ -3936,22 +3976,7 @@ export class DungeonScene extends GameplayScene {
     // now: the anchor questline re-keys its entry per shard, and a pin on one
     // shard's row would die the moment that shard was found. `pinMatchesEntry`
     // is what lets the shorter id keep resolving.
-    bus.on('questStarted', (e) => {
-      const pinnedId = this.journalProgress.pinnedTrackerId;
-      if (pinnedId !== null && pinnedId !== e.questId) {
-        const trackedEntry = resolvePinnedEntry(pinnedId, this._trackerEntries);
-        if (trackedEntry !== null) {
-          this.pendingQuestSwitch = {
-            fromId: pinnedId,
-            fromName: trackedEntry.name,
-            toId: e.questId,
-          };
-          return;
-        }
-      }
-      this.journalProgress.pinnedTrackerId = e.questId;
-      this.journalProgress.pinSource = 'auto';
-    });
+    bus.on('questStarted', (e) => this.followQuestOnOffer(e.questId));
 
     // Each quest pays its own XP and coins and asks for its reward screen; what
     // stays here is what only the scene owns: the achievements it pays, and
@@ -4598,19 +4623,9 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  /** The active crawler's own tile, for ranking a pinned header's sub-steps by distance. */
-  private get activeTile(): { x: number; y: number } {
-    const active = this.active();
-    return { x: Math.floor(active.x / TILE_SIZE), y: Math.floor(active.y / TILE_SIZE) };
-  }
-
   /** The Journal entry the pin resolves to right now, or null when nothing is pinned. */
   private get pinnedObjectiveEntry(): TrackerEntry | null {
-    return resolvePinnedEntry(
-      this.journalProgress.pinnedTrackerId,
-      this._trackerEntries,
-      this.activeTile,
-    );
+    return pinnedStreetEntry(this.journalProgress, this._trackerEntries, this.active());
   }
 
   /** The tile the pinned Journal entry points at, or null when nothing is pinned. */
@@ -5348,9 +5363,9 @@ export class DungeonScene extends GameplayScene {
     const wanted = this.bossRoomDressings.parts.floodedPumpRoom?.partyWalksTrail === true;
     if (wanted === this.partyOnFloodedRoomTrail) return;
     this.partyOnFloodedRoomTrail = wanted;
-    const spacing = wanted ? PARTY_TRAIL_SPACING_TILES * TILE_SIZE : null;
-    this.companion.setTrailFollow(spacing);
-    this.mercenarySystem.setTrailFollow(spacing);
+    const line = wanted ? new PartyLine(PARTY_TRAIL_SPACING_TILES * TILE_SIZE) : null;
+    this.companion.setTrailFollow(line);
+    this.mercenarySystem.setTrailFollow(line);
   }
 
   /**
@@ -5742,6 +5757,7 @@ export class DungeonScene extends GameplayScene {
           const outside = new DungeonScene(levelDef, this.input, this.sceneManager, {
             ...this.buildingExitOptions(hudView, hSnap, cSnap, companionDeparture),
             spawnAt: exitTile,
+            ...(defeated || onward !== null ? {} : { walkedOutOf: entry.id }),
             // The save, not its checkpoint: the rebuilt scene regenerates the
             // overworld's creatures, so mob flags captured against this
             // scene would mean nothing there. An exit inside the town wall
@@ -5785,7 +5801,13 @@ export class DungeonScene extends GameplayScene {
         // reference (the anchor shards) moves indoors, and
         // the Journal should say so while the party is still inside.
         this.hasQuestJournal
-          ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
+          ? {
+              entries: () => this.collectTrackerEntries(),
+              progress: this.journalProgress,
+              partyOnShow: (party) => {
+                this.partyIndoors = party;
+              },
+            }
           : undefined,
         hudView,
         {
@@ -6714,6 +6736,7 @@ export class DungeonScene extends GameplayScene {
         persist: () => this.persistStory(),
         floor: storyFloorOf(this.levelDef.id),
         currentObjective: () => nextAdviceObjective(this.floorObjectives()),
+        arrivalFetchesParty: () => this.arrivalFetchesParty(),
         bearingOrigin: doorstep,
       },
       commitSave: (party, resumeAt) => this.commitSaveFromInterior(party, resumeAt),
@@ -7347,6 +7370,43 @@ export class DungeonScene extends GameplayScene {
     return shouldShowInteractionPrompts(active, this.world.roster.grid);
   }
 
+  /** The fight around the steering crawler as it bears on an interact press; see {@link InteractionStance}. */
+  private interactionStance(): InteractionStance {
+    return interactionStance(this.active(), this.pm.presentCrawlers(), this.world.roster.grid);
+  }
+
+  /** Who a prompt over the town prop `target` is raised for: Madame Voss is quest business while a marker hangs over her. */
+  private townPropOwner(target: TownPropTarget): PromptOwner {
+    switch (target.kind) {
+      case 'noticeBoard':
+        return this.promptOwners.noticeBoard;
+      case 'fortuneTeller':
+        return target.marker === 'none'
+          ? this.promptOwners.fortuneTeller
+          : this.promptOwners.questFortuneTeller;
+      case 'healSpot':
+        return this.promptOwners.healSpot;
+      default: {
+        const unhandled: never = target;
+        return unhandled;
+      }
+    }
+  }
+
+  /** Who talking to the regular outside the inn is raised for: quest business while his `!` is up. */
+  private innWallSitterOwner(): PromptOwner {
+    return this.missingCats.innWallSitterIcon() === 'none'
+      ? this.promptOwners.innWallSitter
+      : this.promptOwners.questInnWallSitter;
+  }
+
+  /** Who talking to `target` is raised for: quest business while a marker hangs over them. */
+  private citizenOwner(target: Townsperson): PromptOwner {
+    return target.markerType === 'none'
+      ? this.promptOwners.citizen
+      : this.promptOwners.questCitizen;
+  }
+
   /**
    * Whether a link ahead of the ground pickups in `triggerSpaceAction` would
    * claim a press from `active`. Asks each link's own `wouldInteract`, the
@@ -7549,7 +7609,12 @@ export class DungeonScene extends GameplayScene {
     const owners = this.promptOwners;
     raisePromptsFor(owners.market, () => this.market?.renderPrompt(ctx, camX, camY, active));
     raisePromptsFor(owners.bounty, () => this.bounty?.renderPrompt(ctx, camX, camY, active));
-    raisePromptsFor(owners.townProps, () => this.townProps?.renderPrompt(ctx, camX, camY, active));
+    const townPropTarget = this.townProps?.reachTarget(active) ?? null;
+    if (townPropTarget !== null) {
+      raisePromptsFor(this.townPropOwner(townPropTarget), () =>
+        this.townProps?.renderPrompt(ctx, camX, camY, active),
+      );
+    }
     raisePromptsFor(owners.highStriker, () =>
       this.highStriker?.renderPrompt(ctx, camX, camY, active),
     );
@@ -7568,9 +7633,9 @@ export class DungeonScene extends GameplayScene {
     if (!this.shouldShowInteractionPrompts(active)) return;
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return;
-    const owner =
-      target.markerType === 'none' ? this.promptOwners.citizen : this.promptOwners.questCitizen;
-    raisePromptsFor(owner, () => drawInteractionPromptOver(ctx, target, camX, camY, 'Talk'));
+    raisePromptsFor(this.citizenOwner(target), () =>
+      drawInteractionPromptOver(ctx, target, camX, camY, 'Talk'),
+    );
   }
 
   /**
@@ -7624,6 +7689,17 @@ export class DungeonScene extends GameplayScene {
     raisePromptsFor(this.promptOwners.mercenary, () =>
       drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk'),
     );
+  }
+
+  /**
+   * Points the Journal and the world arrow at `questId`, which the party has
+   * just started or just been told about, unless that would knock a quest
+   * still under way off the arrow: then the player is asked first.
+   */
+  private followQuestOnOffer(questId: string): void {
+    const held = autoPinQuest(this.journalProgress, questId, this._trackerEntries);
+    if (held === null) return;
+    this.pendingQuestSwitch = { fromId: held.pinnedId, fromName: held.entry.name, toId: questId };
   }
 
   /** Opens a conversation with the nearest street citizen, if one is in range. */
@@ -7716,7 +7792,7 @@ export class DungeonScene extends GameplayScene {
       ...this.arrivalLoading.surfaces(),
       this.dungeonIntro,
       this.wipeHold.surface('wipe-hold'),
-      promptSurface(),
+      promptSurface(() => this.hud.promptKeepOuts),
       this.hud,
       this.hud.overlay(),
       ...aiAdapter.surfaces(() => this.hud.isOpen()),
@@ -8048,7 +8124,8 @@ export class DungeonScene extends GameplayScene {
   /**
    * Dave's answer when tapped, from the highest-ranked source that has one:
    *
-   *     tutorial reminder → post-boss debrief → tactics for the current objective → AI chat
+   *     tutorial reminder → story beat his arrival held → post-boss debrief
+   *       → tactics for the current objective → AI chat
    *
    * His tactics sit above the AI chat because they are the deterministic
    * answer to "how do I get through what is next", and need no server; the
@@ -8063,6 +8140,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
+    if (this.story.tellHeldArrival()) return;
     if (this.speakPostBossDebrief(active)) return;
 
     const tactics = this.floorTactics(active);
@@ -8151,8 +8229,9 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  /** His `!`: news about gear behind a boss, or tactics for what is next that he has not yet given. */
+  /** His `!`: a story beat his arrival held, news about gear behind a boss, or tactics for what is next not yet given. */
   private daveMarkerFor(room: SafeRoomInfo): QuestMarkerState {
+    if (this.story.holdsArrivalBeat) return 'exclamation';
     const bossType = this.exitRoomBoss(room);
     if (bossType !== null && debriefHasNews(this.debriefMemoryFor(bossType), this.debriefState())) {
       return 'exclamation';
@@ -8311,24 +8390,50 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
+  /**
+   * Boss messages missed while away are caught up at once; Dave's talk
+   * either fetches the party or waits behind his `!` for the player.
+   */
   private playArrivalMoment(room: SafeRoomInfo): void {
     const floor = storyFloorOf(this.levelDef.id);
     if (floor === null) return;
-    this.story.playDaveMoment({
-      event: { kind: 'safeRoomArrival', floor, defeatedBosses: this.defeatedStoryBosses() },
-      walkUp: () => this.walkUpToDave(),
-      extra: (pageBudget) => this.pendingDebrief(room, pageBudget),
-      leavesAfter: false,
-      onDone: () => this.afterDaveArrival(room),
-    });
+    const fetches = this.arrivalFetchesParty();
+    if (!fetches) this.catchUpBossMessages();
+    this.story.meetArrival(
+      {
+        event: () => ({
+          kind: 'safeRoomArrival',
+          floor,
+          defeatedBosses: this.defeatedStoryBosses(),
+        }),
+        walkUp: () => this.walkUpToDave(),
+        extra: (pageBudget) => this.pendingDebrief(room, pageBudget),
+        afterTalk: () => this.catchUpBossMessages(),
+        afterFetchedTalk: () => this.briefRoomObjective(room),
+      },
+      fetches ? 'fetch_party' : 'wait_for_player',
+    );
   }
 
-  private afterDaveArrival(room: SafeRoomInfo): void {
-    // A boss message missed when it was due, lost to a fight that ran on or a
-    // floor left too soon, is caught up in the first calm room after.
+  /** Whether this floor's arrival talk may walk the party up to Dave; see {@link arrivalFetchesParty}. */
+  private arrivalFetchesParty(): boolean {
+    return arrivalFetchesParty(
+      { entries: this.collectTrackerEntries(), pinnedId: this.journalProgress.pinnedTrackerId },
+      { trackerId: ANCHOR_QUEST_ID, started: this.anchorQuestProgress.status !== 'available' },
+    );
+  }
+
+  /**
+   * A boss message missed when it was due, lost to a fight that ran on or a
+   * floor left too soon, is caught up in the first calm room after.
+   */
+  private catchUpBossMessages(): void {
     for (const boss of this.defeatedStoryBosses()) {
       this.story.noteCarolineMoment({ kind: 'bossDefeated', boss });
     }
+  }
+
+  private briefRoomObjective(room: SafeRoomInfo): void {
     const objective = this.currentObjective(room);
     if (objective !== null) {
       this.story.briefObjective(objective.id, () => this.intelStillDue(objective.id));
@@ -8706,8 +8811,9 @@ export class DungeonScene extends GameplayScene {
    * box mid-read for a pet or a bark the player never asked for.
    */
   private tryHandOffToWorld(active: HumanPlayer | CatPlayer): boolean {
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
-    return this.tryWalkedUpToInteraction(active, false);
+    const stance = this.interactionStance();
+    if (stance === 'fighting') return false;
+    return this.tryWalkedUpToInteraction(active, false, stance);
   }
 
   /** The safe room's half of the interact chain: whichever of the doctor and Dave is nearer. Returns whether either took the press. */
@@ -8727,36 +8833,44 @@ export class DungeonScene extends GameplayScene {
    * while a hostile is inside the attack range: the press is a swing then.
    */
   private tryInteractWithWorld(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    const stance = this.interactionStance();
+    if (stance === 'fighting') return false;
     return (
-      pressFocusedPrompt(this.promptOwners) ||
-      this.tryWalkedUpToInteraction(active, fromTap) ||
-      this.tryInteractWithSurroundings(active)
+      pressFocusedPrompt(this.promptOwners, stance) ||
+      this.tryWalkedUpToInteraction(active, fromTap, stance) ||
+      this.tryInteractWithSurroundings(active, stance)
     );
   }
 
   /**
    * The part of the interact chain the player reaches by walking up to it:
    * chests, quest givers, pickups, stalls, signs, villagers and citizens.
-   * Returns whether anything took the press.
+   * Every link with an owner is offered through it, so `stance` holds back the
+   * same links here that it holds back on the prompt surface. Returns whether
+   * anything took the press.
    */
-  private tryWalkedUpToInteraction(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
+  private tryWalkedUpToInteraction(
+    active: HumanPlayer | CatPlayer,
+    fromTap: boolean,
+    stance: InteractionStance,
+  ): boolean {
+    const owners = this.promptOwners;
     if (this.treasureChests.tryInteract(active)) {
       return true;
     }
-    if (this.defendQuest.tryInteract(active, { human: this.human, cat: this.cat })) {
+    if (offerPress(owners.defendQuest, stance)) {
       return true;
     }
-    if (this.spiderQuest.tryInteract(active)) {
+    if (offerPress(owners.spiderQuest, stance)) {
       return true;
     }
-    if (this.cloggedBathroom.tryInteract(active, { human: this.human, cat: this.cat })) {
+    if (offerPress(owners.cloggedBathroom, stance)) {
       return true;
     }
-    if (this.stealthKeySnatch.tryInteract(active, { human: this.human, cat: this.cat })) {
+    if (offerPress(owners.stealthKeySnatch, stance)) {
       return true;
     }
-    if (this.towerDoorGuards.tryInteract(active)) {
+    if (offerPress(owners.towerDoorGuards, stance)) {
       return true;
     }
     // Ahead of the boss room: standing on a placed piece singles it out, where
@@ -8768,30 +8882,35 @@ export class DungeonScene extends GameplayScene {
     if (this.bossRoomDressings.tryInteract(active)) {
       return true;
     }
-    if (this.destruction.groundPickups.tryPickupNear(active)) {
+    if (offerPress(owners.groundPickup, stance)) {
       return true;
     }
-    if (this.market?.tryInteract(active) === true) {
+    if (offerPress(owners.market, stance)) {
       return true;
     }
     // Before the board he stands beside: with both in reach, a press should
     // reach the man, not the noticeboard behind him.
-    if (this.bounty?.tryInteract(active, this.human, this.cat) === true) {
+    if (offerPress(owners.bounty, stance)) {
       return true;
     }
-    if (this.townProps?.tryInteract(active) === true) {
+    const townPropTarget = this.townProps?.reachTarget(active) ?? null;
+    if (townPropTarget !== null && offerPress(this.townPropOwner(townPropTarget), stance)) {
       return true;
     }
-    if (this.highStriker?.tryInteract(active) === true) {
+    if (offerPress(owners.highStriker, stance)) {
       return true;
     }
-    if (this.crawlerSigns?.tryInteract(active) === true) {
+    if (offerPress(owners.crawlerSigns, stance)) {
       return true;
     }
     if (this.briarHollowKit?.tryInteract(active, fromTap) === true) {
       return true;
     }
-    return this.tryTalkToCitizen(active);
+    if (offerPress(this.innWallSitterOwner(), stance)) {
+      return true;
+    }
+    const citizen = this.townLife?.findTalkTarget(active.x, active.y) ?? null;
+    return citizen !== null && offerPress(this.citizenOwner(citizen), stance);
   }
 
   /**
@@ -8799,21 +8918,21 @@ export class DungeonScene extends GameplayScene {
    * the trees, Deinonychus, the hireling — and so only answers a press nothing the
    * player walked up to wanted. Returns whether anything took it.
    */
-  private tryInteractWithSurroundings(active: HumanPlayer | CatPlayer): boolean {
+  private tryInteractWithSurroundings(
+    active: HumanPlayer | CatPlayer,
+    stance: InteractionStance,
+  ): boolean {
     // After citizen talk: a townsperson in range is who a press is meant for,
     // and a tree beside them is scenery until nobody is there to answer.
     if (this.gathering?.tryStartHarvest(active) === true) {
       return true;
     }
-    if (this.tryPetDeinonychus(active)) {
+    if (offerPress(this.promptOwners.deinonychus, stance)) {
       return true;
     }
     // Last in the chain: the hireling stands at the party's shoulder all
     // floor, so anything else within reach is what a press is meant for.
-    if (this.mercenarySystem.tryTalk(active, this.world.roster.mobs)) {
-      return true;
-    }
-    return false;
+    return offerPress(this.promptOwners.mercenary, stance);
   }
 
   private tryPetDeinonychus(active: HumanPlayer | CatPlayer): boolean {
@@ -9269,6 +9388,7 @@ export class DungeonScene extends GameplayScene {
     // played by nobody — a crowd walking off from where it was warmed, a save
     // taken of a floor the player has not seen.
     if (this.arrivalLoading.isOpen) return;
+    this.bandReach.tick(this.hud.isOpen() ? this.hud.standingBandRects : []);
     // Ahead of every halting return, so a sound the party walks into range of
     // is decoding even while a menu or conversation holds the world.
     this.updateSfxGates();
@@ -9348,7 +9468,7 @@ export class DungeonScene extends GameplayScene {
       this.townLife?.update(this.buildSystemContext());
       this.briarHollowKit?.update(this.buildSystemContext());
       this.gathering?.update(this.buildSystemContext(), this.overlayOpen);
-      this.circusAmbience?.update(this.gameMap, 1 / FRAMES_PER_SECOND);
+      this.circusAmbience?.update(this.gameMap, 1 / WORLD_TICKS_PER_SECOND);
       recordCircusGroundsVisit(this.townMemory, this.gameMap, this.active());
       this.highStriker?.update(this.gameMap, this.gameplayHalted);
       this.townProps?.update();
@@ -9378,7 +9498,7 @@ export class DungeonScene extends GameplayScene {
       this.routedPinnedTarget(),
       this.active().mobility,
     );
-    this.senses.update(this.active(), performance.now());
+    this.senses.update(this.active(), performance.now(), !this.gameplayHalted);
     this.catSenseCue.update({
       senses: this.senses,
       cat: this.cat,
@@ -9659,7 +9779,7 @@ export class DungeonScene extends GameplayScene {
     // Any overlay at all, not only the world-halting ones: a street conversation
     // lets the player keep walking, and a "SPACE — Talk" cap still hovering over
     // the citizen they are already talking to is the loudest of these.
-    setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver);
+    setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver, this.interactionStance());
     const camera = this.camera();
     const { x: camX, y: camY } = camera;
     // The world, and every world-anchored marker and prompt over it, is drawn
@@ -9742,6 +9862,7 @@ export class DungeonScene extends GameplayScene {
       sortedFixtures: [
         ...this.cloggedBathroom.sortedFixtures(),
         ...this.safeRoomRegroup.sortedFigures(),
+        ...this.missingCats.sortedFigures(),
         ...(this.tutorial?.gateRenderables() ?? []),
         ...(this.labHallway?.sortedRenderables() ?? []),
       ],
@@ -9756,15 +9877,14 @@ export class DungeonScene extends GameplayScene {
     this.missingCats.renderGround(ctx, camX, camY);
     this.missingCats.renderCats(ctx, camX, camY);
     if (!this.senses.isEmpty) {
-      const senseView = {
+      const senseScreen = {
         camX,
         camY,
         width: camera.viewWidth,
         height: camera.viewHeight,
-        nowMs: performance.now(),
       };
-      this.senses.paint(ctx, senseView);
-      this.catSenseCue.paint(ctx, this.cat, senseView);
+      this.senses.paint(ctx, senseScreen);
+      this.catSenseCue.paint(ctx, this.cat, this.senses.paintView(senseScreen));
     }
     this.briarHollowKit?.renderGround(ctx, camera);
     this.gathering?.renderGround(ctx, camX, camY);
@@ -9782,6 +9902,9 @@ export class DungeonScene extends GameplayScene {
     );
     raisePromptsFor(owners.towerDoorGuards, () =>
       this.towerDoorGuards.renderPrompt(ctx, camX, camY, promptFor),
+    );
+    raisePromptsFor(this.innWallSitterOwner(), () =>
+      this.missingCats.renderInnWallSitterPrompt(ctx, camX, camY, promptFor),
     );
     raisePromptsFor(owners.spiderQuest, () =>
       this.spiderQuest.render(ctx, camX, camY, this.active()),
@@ -10157,11 +10280,7 @@ export class DungeonScene extends GameplayScene {
     if (this.briarHollowKit !== null) markers.push(...this.briarHollowKit.questMarkers);
     const daveMarker = this.dave.minimapMarker;
     if (daveMarker !== null) markers.push(daveMarker);
-    const pinned = resolvePinnedEntry(
-      this.journalProgress.pinnedTrackerId,
-      this._trackerEntries,
-      this.activeTile,
-    );
+    const pinned = this.pinnedObjectiveEntry;
     // The pinned objective gets a marker of its own on top of whatever its own
     // system already contributes. That is not redundant: a quest can be pinned
     // while its system's marker rules say nothing (a bounty being collected),
@@ -10171,6 +10290,11 @@ export class DungeonScene extends GameplayScene {
       markers.push({ x: pinned.target.x, y: pinned.target.y, type: 'exclamation' });
     }
     return markers;
+  }
+
+  /** The crawlers whose bags are the party's right now: the room's while one is on show, else this floor's. */
+  private partyOnShow(): CrawlerPair {
+    return this.partyIndoors ?? { human: this.human, cat: this.cat };
   }
 
   /** Gathers every quest system's Journal lines into one reused array. */
@@ -10568,7 +10692,7 @@ export class DungeonScene extends GameplayScene {
       this.playerIdleFrames++;
       if (this.playerIdleFrames % PLAYER_IDLE_REPORT_INTERVAL_FRAMES === 0) {
         this.bus.emit('playerIdle', {
-          totalIdleMs: Math.round((this.playerIdleFrames / FRAMES_PER_SECOND) * MS_PER_SECOND),
+          totalIdleMs: Math.round((this.playerIdleFrames / WORLD_TICKS_PER_SECOND) * MS_PER_SECOND),
         });
       }
     }
@@ -10743,7 +10867,10 @@ export class DungeonScene extends GameplayScene {
     if (this.stairwell.menuOpen && this.tutorial !== null && !this.tutorial.canUseStairwell) {
       this.stairwell.closeMenu();
     }
-    this.building?.detect(this.active());
+    // A script carries the steered crawler where it likes, through walls and
+    // over doorsteps: Belle lifted from the fountain to the spire crosses the
+    // tower's sealed door. Only a crawler the player walks there is trying it.
+    if (!this.cutscenes.isActive) this.building?.detect(this.active());
 
     const partner = this.presentPartner();
     if (!this.timeLimitIsTakingParty && partner !== null) {
@@ -11185,14 +11312,14 @@ export class DungeonScene extends GameplayScene {
         const levelDef = this.levelDef;
         const remainingFrames = this.nightmareTimeRemaining();
         const timeLimitSeconds =
-          remainingFrames === null ? null : Math.ceil(remainingFrames / FRAMES_PER_SECOND);
+          remainingFrames === null ? null : Math.ceil(remainingFrames / WORLD_TICKS_PER_SECOND);
         const session: SessionInput = {
           floorNumber: levelDef.floorNumber,
           levelId: levelDef.id,
           floorName: levelDef.name,
           levelTimerRunning: timeLimitSeconds !== null && !this.isFloorClockPaused(),
           difficulty: DIFFICULTY_LABELS[settings.difficulty],
-          secondsPlayed: Math.floor(this.gameStats.framesPlayed / FRAMES_PER_SECOND),
+          secondsPlayed: Math.floor(this.gameStats.framesPlayed / WORLD_TICKS_PER_SECOND),
           deaths: this.gameStats.deaths,
           activeQuests: readActiveQuests(this.collectTrackerEntries()),
           companions: this.aiCompanionNames(),
@@ -11351,6 +11478,8 @@ export class DungeonScene extends GameplayScene {
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = intoxicationCameraOffset(player, frameTime);
+    const uiScale = this.hud.frame?.uiScale ?? 1;
+    const bandReachWorld = (this.bandReach.bottom * uiScale) / this.cameraZoom.zoom;
     return {
       x:
         clamp(framed.x, 0, mapPxW - viewW) +
@@ -11362,7 +11491,7 @@ export class DungeonScene extends GameplayScene {
         blastShake.x +
         cutsceneShake.x,
       y:
-        clamp(framed.y, 0, mapPxH - viewH) +
+        clamp(framed.y, -bandReachWorld, mapPxH - viewH) +
         shakeOffset.y +
         sway.y +
         seismicStompShake.y +

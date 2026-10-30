@@ -9,7 +9,7 @@
  * generated floor-3 map (the siege harness's rig).
  */
 
-import { TILE_SIZE } from '../../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
 import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
 import type { MidgeEscortCarry } from '../../src/core/quests/midgeEscortCarry';
@@ -30,7 +30,7 @@ import {
   PastureFenceWork,
 } from '../../src/systems/briarHollow/blueprints/PastureFenceWork';
 import { BLUEPRINTS_CUES } from '../../src/systems/briarHollow/blueprints/blueprintsSoundCues';
-import { buildSiegeRig, standAt, UPDATES_PER_SECOND, type SiegeRig } from '../villageSiegeHarness';
+import { buildSiegeRig, standAt, type SiegeRig } from '../villageSiegeHarness';
 
 /** The runner's pass/fail recorder, handed in so every section counts toward one verdict. */
 export type Check = (ok: boolean, label: string) => void;
@@ -43,13 +43,15 @@ const LONGEST_SECTION = 5;
 /** Enough boards for every section with some over. */
 const PLENTY_OF_BOARDS = 40;
 /** A frame or two past the channel's end, so the last tick has certainly run. */
-const WORK_FRAMES_WITH_SLACK = Math.ceil(FENCE_SECTION_WORK_SECONDS * UPDATES_PER_SECOND) + 2;
+const WORK_FRAMES_WITH_SLACK = Math.ceil(FENCE_SECTION_WORK_SECONDS * WORLD_TICKS_PER_SECOND) + 2;
 /** A push well past the channel's motion tolerance. */
 const WALK_OFF_PX = 6;
 const TILE_CENTRE = 0.5;
 /** The section the build walk-through rebuilds: any one away from the gate. */
 const BUILT_SECTION = 2;
-const HALF_THE_CHANNEL_FRAMES = Math.floor((FENCE_SECTION_WORK_SECONDS * UPDATES_PER_SECOND) / 2);
+const HALF_THE_CHANNEL_FRAMES = Math.floor(
+  (FENCE_SECTION_WORK_SECONDS * WORLD_TICKS_PER_SECOND) / 2,
+);
 
 /**
  * A fresh village kit, with the blueprints quest standing at `phase`, and

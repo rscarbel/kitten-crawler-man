@@ -33,6 +33,7 @@ import {
 import { FUZZY_NIGHTMARE_FIGURE } from '../sprites/art/fuzzyNightmareFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -74,8 +75,6 @@ interface RowSpec {
 
 /** Close enough to `Mob.walkFrame`'s cadence to judge the gait by. */
 const WALK_GAME_FRAMES = 40;
-/** The game's own fixed timestep, from `src/core/Scene.ts`. */
-const TICKS_PER_SECOND = 60;
 
 const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'idle', probeState: 'idle_side', loopFps: FUZZY_NIGHTMARE_IDLE_FPS },
@@ -93,7 +92,10 @@ function frameCountOf(state: string): number {
 /** How many game ticks one pass of a row takes at the speed the game plays it. */
 function tickSpanOf(row: RowSpec): number {
   if (row.loopFps === undefined) return row.gameFrames ?? 1;
-  return Math.max(1, Math.round((frameCountOf(row.probeState) * TICKS_PER_SECOND) / row.loopFps));
+  return Math.max(
+    1,
+    Math.round((frameCountOf(row.probeState) * WORLD_TICKS_PER_SECOND) / row.loopFps),
+  );
 }
 
 /** 1× is what a player sees; 3× is where the face becomes visible at all. */

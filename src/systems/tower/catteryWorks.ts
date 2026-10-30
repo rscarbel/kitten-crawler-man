@@ -1,16 +1,29 @@
 /**
  * The cattery before the Warden knows: nine cages down the side walls, the
  * seven town cats and the cellmate sat in theirs, Belle in hers, and the
- * keeper, a krasue that drifts between the room and the observatory window.
+ * keeper, a krasue that drifts between the room and the observatory window
+ * (`catteryKeeper.ts`).
  *
  * Every cage opens the same way: a cat at its latch jostles it a little at a
  * time, and a jostle only counts while the keeper's back is turned. The keeper
- * keeps a slow round — a long look over the room, a turn, a long gaze up at
- * the window, a turn back — and the round reads three ways at once: where it
- * floats (down among the cages, or up by the window), which way its look
- * washes the floor, and the colour of the latch's bar. A jostle under its eye
- * is seen: it shrieks, and stares on at the room for a while before it turns
- * away again. Nothing is lost but time.
+ * keeps a slow round, and the round reads three ways at once: where it floats
+ * (down among the cages, or up by the window), which way its look washes the
+ * floor, and the colour of the latch's bar. A jostle under its eye is seen: it
+ * shrieks, swings its look onto the latch and floats over until the latch is
+ * well inside its look, so a cat who stays at it is caught; one who slips out
+ * of its look waits out its search before it keeps its round again. The fan
+ * only ever warms with how near it is to catching her, so an amber fan always
+ * means a catch is coming.
+ *
+ * Its look is also what it sees. Through Belle's cattery chapter, Belle out of
+ * her cage in full view of the fan is caught at a glance, and at its edge
+ * puts it on its guard, when any sight of her is the catch: it shrieks, the
+ * screen goes dark, and she wakes shut in her own cage again with its latch
+ * to work from the start, as the keeper turns away to the window, and
+ * whoever walks with her is beside her again. Inside her own cage, even with
+ * its door open, she is never caught: that is a safe spot to wait out a look.
+ * The heaps of feed sacks and casks about the floor stand tall enough to throw
+ * a shadow in the fan, so she waits out its look behind one.
  *
  * Belle wakes in her own cage and works her own latch from inside it; until
  * that latch gives she can reach no other. A town cat let out bolts for the
@@ -20,7 +33,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { phaseReached } from '../../core/quests/missingCatsProgress';
+import { crawlerCatCageOpen, phaseReached } from '../../core/quests/missingCatsProgress';
 import { TOWN_CAT_IDS, type TownCatId } from '../../core/state/townCatIds';
 import type { CatAlly } from '../../creatures/CatAlly';
 import {
@@ -32,15 +45,25 @@ import {
   type TowerTile,
 } from '../../map/town/interiors/townCenterTower';
 import type { Player } from '../../Player';
-import { drawKrasueSprite } from '../../sprites/krasueSprite';
+import { drawKrasueSprite, krasueFloatPhase } from '../../sprites/krasueSprite';
 import { TURN_VALVE_ROWS } from '../../sprites/art/humanFigure';
 import { drawSightFan } from '../../ui/world/worldSightFan';
 import { drawSuspicionMarker } from '../../ui/world/suspicionMarker';
+import { SUSPICION_CAPTURE } from '../stealthKeySnatch/detection';
+import { CaptureFade } from './captureFade';
+import { CatteryKeeper, keeperSightGrid } from './catteryKeeper';
 import { TownCats } from '../critters/TownCats';
 import type { SystemContext } from '../GameSystem';
 import { TimingInteraction, type TimingInteractionDef, type TimingPress } from '../MashInteraction';
 import type { WorkChannelBuilder } from '../WorkChannel';
-import { StoreyWorks, tileCentrePx, tileOriginPx, type StoreyWorksDeps } from './storeyWorks';
+import {
+  sameTile,
+  StoreyWorks,
+  tileCentrePx,
+  tileOfBody,
+  tileOriginPx,
+  type StoreyWorksDeps,
+} from './storeyWorks';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 
 /** Jostles a latch takes to give. */
@@ -61,50 +84,19 @@ const LATCH_DEF: TimingInteractionDef = {
   artRisePx: CAGE_ART_RISE_PX,
 };
 
-// ── The keeper's round ───────────────────────────────────────────────────────
+// ── The keeper ───────────────────────────────────────────────────────────────
 
-/** Frames of each beat of the keeper's round, in order. */
-const KEEPER_LOOK_FRAMES = 200;
-const KEEPER_TURN_FRAMES = 45;
-const KEEPER_AWAY_FRAMES = 260;
-/** How much longer it stares at the room after seeing a paw at a latch. */
-const KEEPER_SEEN_STARE_FRAMES = 150;
-/** Where it floats while it watches the room, and where it gazes up at the window from. */
-const KEEPER_WATCH_POST: TowerTile = { x: 9, y: 8 };
-const KEEPER_WINDOW_POST: TowerTile = { x: 9, y: 4 };
-/** How far it drifts side to side while it watches, in tiles, and how fast. */
-const KEEPER_DRIFT_TILES = 2.5;
-const KEEPER_DRIFT_PERIOD_FRAMES = 420;
-const KEEPER_FLOAT_SPEED = 0.12;
-/** Its look: a wide fan over the floor, which it is looking at the room within. */
-const LOOK_HALF_SHARE_OF_PI = 0.42;
-const LOOK_HALF_ANGLE = Math.PI * LOOK_HALF_SHARE_OF_PI;
-const LOOK_REACH_TILES = 9;
-/** The look counts as on the room while it points within this of straight down the room. */
-const LOOKING_WITHIN_SHARE_OF_PI = 0.35;
-const LOOKING_WITHIN = Math.PI * LOOKING_WITHIN_SHARE_OF_PI;
-const FACING_ROOM = Math.PI / 2;
-const FACING_WINDOW = -Math.PI / 2;
 /** Its marker floats this far above its tile. */
 const MARKER_LIFT_TILES = 1.1;
 const MARKER_LIFT_PX = TILE_SIZE * MARKER_LIFT_TILES;
 /** How long its `!` stays up after a seen jostle. */
 const ALARM_FRAMES = 60;
 
-type KeeperBeat = 'look' | 'turn_away' | 'away' | 'turn_back';
+/** A notice share at which the marker shows the keeper as having seen. */
+const FULL_NOTICE = 1;
 
-const BEAT_FRAMES: Readonly<Record<KeeperBeat, number>> = {
-  look: KEEPER_LOOK_FRAMES,
-  turn_away: KEEPER_TURN_FRAMES,
-  away: KEEPER_AWAY_FRAMES,
-  turn_back: KEEPER_TURN_FRAMES,
-};
-const NEXT_BEAT: Readonly<Record<KeeperBeat, KeeperBeat>> = {
-  look: 'turn_away',
-  turn_away: 'away',
-  away: 'turn_back',
-  turn_back: 'look',
-};
+const RECAGED_TOAST =
+  'The Krasue spotted you and you were locked up. Try not to get seen this time.';
 
 // ── Freed cats ───────────────────────────────────────────────────────────────
 
@@ -142,23 +134,15 @@ export class CatteryWorks extends StoreyWorks {
   private readonly cats: TownCats;
   private readonly latches: Latch[] = [];
   private readonly runaways: Runaway[] = [];
-  private beat: KeeperBeat = 'look';
-  private beatFrame = 0;
-  private clock = 0;
-  private stareFrames = 0;
+  private readonly keeper: CatteryKeeper;
+  private readonly capture = new CaptureFade();
   private alarmFrames = 0;
-  private keeperX: number;
-  private keeperY: number;
-  private lookAngle = FACING_ROOM;
-  private floatPhase = 0;
 
   constructor(private readonly cattery: CatteryWorksDeps) {
     super(cattery);
     const map = cattery.map;
     this.cats = new TownCats((x, y) => map.isWalkable(x, y, 'walker'), Math.random);
-    const post = tileOriginPx(KEEPER_WATCH_POST);
-    this.keeperX = post.x;
-    this.keeperY = post.y;
+    this.keeper = new CatteryKeeper(this.sightGrid());
     if (!this.keeperOnWatch) return;
     for (const occupant of CAGE_OCCUPANTS) {
       if (cattery.conditions.openCages.has(occupant)) continue;
@@ -173,16 +157,34 @@ export class CatteryWorks extends StoreyWorks {
     return !phaseReached(this.deps.progress, 'ascent');
   }
 
-  /** Whether Belle's chapter here is under way: she is in the tower, and so in her cage until she works it open. */
-  private get belleHeld(): boolean {
-    const { progress } = this.deps;
-    return this.keeperOnWatch && phaseReached(progress, 'cattery') && !progress.crawlerCatUncaged;
+  /** Whether the keeper is on the look-out for Belle, so the party has to keep out of its look. */
+  get watched(): boolean {
+    return this.keeperHunting;
   }
 
-  private get keeperLooking(): boolean {
-    if (this.stareFrames > 0) return true;
-    const offRoom = Math.abs(angleBetween(this.lookAngle, FACING_ROOM));
-    return offRoom <= LOOKING_WITHIN;
+  /**
+   * Whether the keeper catches Belle out of her cage: only while her cattery
+   * chapter is played. She can climb back up from a later storey, and a catch
+   * then would shut her in a cage her chapter has already left behind.
+   */
+  private get keeperHunting(): boolean {
+    return this.deps.progress.phase === 'cattery';
+  }
+
+  /** Whether Belle is in the tower and her cage still shut on her, so she stays in it until she works it open. */
+  private get belleHeld(): boolean {
+    const { progress } = this.deps;
+    return phaseReached(progress, 'cattery') && !crawlerCatCageOpen(progress);
+  }
+
+  /** Whether Belle is being caught, which holds her input. */
+  get playerLocked(): boolean {
+    return this.capture.active;
+  }
+
+  /** How dark the capture has the screen. */
+  get fadeAlpha(): number {
+    return this.capture.alpha;
   }
 
   update(ctx: SystemContext): void {
@@ -190,8 +192,18 @@ export class CatteryWorks extends StoreyWorks {
     this.walkRunaways();
     if (!this.keeperOnWatch) return;
     this.holdCaged(ctx);
-    this.stepKeeper();
+    if (this.capture.active) {
+      this.stepCapture(ctx);
+      return;
+    }
+    this.stepKeeper(ctx);
     for (const latch of this.latches) latch.work.cue(ctx.active);
+  }
+
+  leave(): void {
+    if (!this.capture.active) return;
+    this.capture.cancel();
+    this.keeper.forget();
   }
 
   tryInteract(ctx: SystemContext): boolean {
@@ -207,29 +219,24 @@ export class CatteryWorks extends StoreyWorks {
 
   renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.keeperOnWatch) return;
-    const isStaring = this.stareFrames > 0;
+    const { cone } = this.keeper;
     drawSightFan(ctx, {
-      origin: {
-        x: this.keeperX + TILE_SIZE * HALF - camX,
-        y: this.keeperY + TILE_SIZE * HALF - camY,
-      },
-      rim: {
-        kind: 'arc',
-        facingRad: this.lookAngle,
-        halfAngleRad: LOOK_HALF_ANGLE,
-        reachPx: LOOK_REACH_TILES * TILE_SIZE,
-      },
-      suspicion: isStaring ? 1 : 0,
+      origin: { x: cone.origin.x - camX, y: cone.origin.y - camY },
+      rim: { kind: 'rays', ends: cone.ends.map((end) => ({ x: end.x - camX, y: end.y - camY })) },
+      suspicion: this.noticeShare,
     });
   }
 
   renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.keeperOnWatch || this.alarmFrames <= 0) return;
+    if (!this.keeperOnWatch) return;
+    const alarmed = this.alarmFrames > 0 || this.capture.active;
+    const suspicion = alarmed ? FULL_NOTICE : this.noticeShare;
+    if (suspicion <= 0) return;
     drawSuspicionMarker(ctx, {
-      x: this.keeperX + TILE_SIZE * HALF - camX,
-      y: this.keeperY - camY - MARKER_LIFT_PX,
-      suspicion: 1,
-      alarmed: true,
+      x: this.keeper.x + TILE_SIZE * HALF - camX,
+      y: this.keeper.y - camY - MARKER_LIFT_PX,
+      suspicion,
+      alarmed,
       nowMs: performance.now(),
     });
   }
@@ -255,17 +262,18 @@ export class CatteryWorks extends StoreyWorks {
       render: (ctx, camX, camY, tileSize) => cat.draw(ctx, camX, camY, tileSize),
     }));
     if (this.keeperOnWatch) {
+      const keeper = this.keeper;
       figures.push({
-        y: this.keeperY,
+        y: keeper.y,
         render: (ctx, camX, camY, tileSize) =>
           drawKrasueSprite(
             ctx,
-            this.keeperX - camX,
-            this.keeperY - camY,
+            keeper.x - camX,
+            keeper.y - camY,
             tileSize,
-            this.floatPhase,
-            this.stareFrames > 0,
-            Math.cos(this.lookAngle) >= 0 ? 1 : -1,
+            krasueFloatPhase(keeper.frames),
+            keeper.hunting,
+            keeper.facingX,
           ),
       });
     }
@@ -283,7 +291,7 @@ export class CatteryWorks extends StoreyWorks {
     const work = new TimingInteraction({
       def: LATCH_DEF,
       footprint: { x: tile.x, y: tile.y, w: 1, h: 1 },
-      watcher: { isLooking: () => this.keeperLooking },
+      watcher: { isLooking: () => this.keeper.lookingAtRoom },
       onPress: (press) => this.onLatch(occupant, tile, press),
     });
     this.latches.push({ occupant, tile, work });
@@ -296,8 +304,8 @@ export class CatteryWorks extends StoreyWorks {
         this.play('latchJostle', at);
         return;
       case 'seen':
-        this.play('keeperShriek', tileCentrePx(KEEPER_WATCH_POST));
-        this.stareFrames = KEEPER_SEEN_STARE_FRAMES;
+        this.play('keeperShriek', this.keeperCentre);
+        this.keeper.hear(at);
         this.alarmFrames = ALARM_FRAMES;
         this.moment({ kind: 'latch_seen' });
         return;
@@ -316,6 +324,7 @@ export class CatteryWorks extends StoreyWorks {
     const { map, progress } = this.deps;
     map.setPlacedInteriorPropVariant(catteryCageId(occupant), CATTERY_CAGE_VARIANT.open);
     map.unblockTilePermanently(tile.x, tile.y);
+    this.keeper.lookOver(this.sightGrid());
     if (occupant === 'crawler_cat') {
       progress.crawlerCatUncaged = true;
       this.moment({ kind: 'crawler_cat_uncaged' });
@@ -382,48 +391,95 @@ export class CatteryWorks extends StoreyWorks {
 
   // ── The keeper ─────────────────────────────────────────────────────────────
 
-  private stepKeeper(): void {
-    this.clock++;
-    this.floatPhase = this.clock;
-    if (this.alarmFrames > 0) this.alarmFrames--;
-    if (this.stareFrames > 0) {
-      this.stareFrames--;
-      this.lookAngle = FACING_ROOM;
-    } else {
-      this.beatFrame++;
-      if (this.beatFrame >= BEAT_FRAMES[this.beat]) {
-        this.beat = NEXT_BEAT[this.beat];
-        this.beatFrame = 0;
-      }
-      this.lookAngle = this.angleForBeat();
-    }
-    const watching = this.beat === 'look' || this.beat === 'turn_back' || this.stareFrames > 0;
-    const post = tileOriginPx(watching ? KEEPER_WATCH_POST : KEEPER_WINDOW_POST);
-    const drift = watching
-      ? Math.sin((this.clock / KEEPER_DRIFT_PERIOD_FRAMES) * Math.PI * 2) *
-        KEEPER_DRIFT_TILES *
-        TILE_SIZE
-      : 0;
-    this.keeperX += (post.x + drift - this.keeperX) * KEEPER_FLOAT_SPEED;
-    this.keeperY += (post.y - this.keeperY) * KEEPER_FLOAT_SPEED;
+  /** How near the keeper is to catching Belle, 0 to {@link FULL_NOTICE}. */
+  private get noticeShare(): number {
+    return this.keeper.suspicion / SUSPICION_CAPTURE;
   }
 
-  private angleForBeat(): number {
-    const share = this.beatFrame / BEAT_FRAMES[this.beat];
-    switch (this.beat) {
-      case 'look':
-        return FACING_ROOM;
-      case 'away':
-        return FACING_WINDOW;
-      case 'turn_away':
-        return FACING_ROOM + (FACING_WINDOW - FACING_ROOM) * share;
-      case 'turn_back':
-        return FACING_WINDOW + (FACING_ROOM - FACING_WINDOW) * share;
+  private get keeperCentre(): { x: number; y: number } {
+    return { x: this.keeper.x + TILE_SIZE * HALF, y: this.keeper.y + TILE_SIZE * HALF };
+  }
+
+  private sightGrid(): ReturnType<typeof keeperSightGrid> {
+    const plan = towerStoreyPlan('cattery');
+    return keeperSightGrid(this.deps.map, plan.width, plan.height);
+  }
+
+  /**
+   * Belle's body centre while she is out in the room and can be seen, else
+   * null. Inside her own cage, open or shut, she is where the keeper means her
+   * to be, so it has nothing to catch her for there.
+   */
+  private bellePoint(ctx: SystemContext): { x: number; y: number } | null {
+    const belle = ctx.cat;
+    if (!this.keeperHunting || this.belleHeld) return null;
+    if (!this.present(belle) || !belle.isAlive) return null;
+    if (this.inOwnCage(belle)) return null;
+    return { x: belle.x + TILE_SIZE * HALF, y: belle.y + TILE_SIZE * HALF };
+  }
+
+  /** Where the party's companions stand while the keeper is on the look-out, each its body centre. */
+  private companionPoints(): { x: number; y: number }[] {
+    if (!this.keeperHunting) return [];
+    return this.deps
+      .presentCompanions()
+      .filter((companion) => companion.isAlive)
+      .map((companion) => ({
+        x: companion.x + TILE_SIZE * HALF,
+        y: companion.y + TILE_SIZE * HALF,
+      }));
+  }
+
+  private inOwnCage(belle: Player): boolean {
+    return sameTile(tileOfBody(belle), TOWER_CATTERY_CAGES.crawler_cat);
+  }
+
+  private stepKeeper(ctx: SystemContext): void {
+    if (this.alarmFrames > 0) this.alarmFrames--;
+    this.keeper.step(this.bellePoint(ctx), this.companionPoints());
+    if (!this.keeper.caught) return;
+    this.play('keeperShriek', this.keeperCentre);
+    this.capture.begin();
+  }
+
+  private stepCapture(ctx: SystemContext): void {
+    const step = this.capture.step();
+    switch (step.kind) {
+      case 'none':
+        return;
+      case 'reset':
+        this.recageBelle(ctx);
+        return;
+      case 'returning':
+        this.deps.toast(RECAGED_TOAST);
+        return;
       default: {
-        const unhandled: never = this.beat;
-        throw new Error(`unhandled keeper beat ${String(unhandled)}`);
+        const unhandled: never = step;
+        throw new Error(`unhandled capture step ${JSON.stringify(unhandled)}`);
       }
     }
+  }
+
+  /** Belle, caught, is shut back in her own cage with its latch to work again from the start. */
+  private recageBelle(ctx: SystemContext): void {
+    const { map, progress } = this.deps;
+    const cage = TOWER_CATTERY_CAGES.crawler_cat;
+    progress.crawlerCatUncaged = false;
+    map.setPlacedInteriorPropVariant(catteryCageId('crawler_cat'), CATTERY_CAGE_VARIANT.shut);
+    map.blockTilePermanently(cage.x, cage.y);
+    this.keeper.lookOver(this.sightGrid());
+    this.keeper.forget();
+    this.keeper.turnAway();
+    const stale = this.latches.findIndex((latch) => latch.occupant === 'crawler_cat');
+    if (stale >= 0) this.latches.splice(stale, 1);
+    this.addLatch('crawler_cat');
+    this.holdCaged(ctx);
+    // Left where the catch found them, a companion still in the look would
+    // put the keeper straight back on its guard, and her first step out
+    // would be the next catch.
+    this.deps.regroupCompanions();
+    this.play('cageShut', tileCentrePx(cage));
+    this.moment({ kind: 'crawler_cat_recaged' });
   }
 }
 
@@ -435,8 +491,4 @@ function isCageOccupant(value: string): value is CatteryCageOccupant {
 
 function isTownCat(occupant: CatteryCageOccupant): occupant is TownCatId {
   return TOWN_CAT_IDS.some((cat) => cat === occupant);
-}
-
-function angleBetween(a: number, b: number): number {
-  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
 }

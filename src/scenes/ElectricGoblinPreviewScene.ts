@@ -21,8 +21,8 @@ import {
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
-const GAME_FRAMES_PER_SECOND = 60;
 /**
  * A gait row is paced by ground covered in the fight; standing still in a
  * preview it plays at this rate instead, close to his walking pace.
@@ -66,7 +66,7 @@ const GROUND_FRACTION = 0.92;
 /** The frame `row` shows `clockFrames` game frames into its preview loop. */
 function previewFrame(row: ElectricGoblinRow, clockFrames: number): number {
   const spec = ELECTRIC_GOBLIN_ROWS[row];
-  const seconds = clockFrames / GAME_FRAMES_PER_SECOND;
+  const seconds = clockFrames / WORLD_TICKS_PER_SECOND;
   switch (spec.kind) {
     case 'gait':
       return Math.floor(seconds * PREVIEW_GAIT_FPS) % spec.frames;

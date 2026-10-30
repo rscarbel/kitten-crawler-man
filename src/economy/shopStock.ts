@@ -20,6 +20,7 @@
 import { isRecord } from '../core/util/guards';
 import { isItemId, type ItemId } from '../core/items/defs/ItemDefs';
 import { isShopId, primaryCatalogLine, type ShopId } from './shops';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Units each shop holds away from normal, plus the game-time clock that
@@ -46,8 +47,6 @@ export const RESTOCK_INTERVAL_SECONDS = 10;
 export const RESTOCK_FRACTION_PER_INTERVAL = 0.01;
 /** A line away from normal always moves by at least this, so an unlimited line (normal 0) still drains. */
 const MIN_RESTOCK_UNITS = 1;
-/** Scenes run `update()` on a fixed 60-per-second timestep (`Scene`'s `FRAME_RATE`). */
-const WORLD_TICKS_PER_SECOND = 60;
 /** World updates in one restock step. */
 export const RESTOCK_INTERVAL_TICKS = RESTOCK_INTERVAL_SECONDS * WORLD_TICKS_PER_SECOND;
 

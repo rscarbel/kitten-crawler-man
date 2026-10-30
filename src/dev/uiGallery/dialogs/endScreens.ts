@@ -38,6 +38,7 @@ import {
   parsePetName,
   petWords,
 } from '../../../core/party/petNames';
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 /** Render frames that carry the death fade to full and the button live. */
 const DEATH_SETTLED_FRAMES = 60;
@@ -53,7 +54,6 @@ const QUEST_REWARD_SETTLED_FRAMES = 160;
 /** Chest update ticks: still rattling shut, and just burst open. */
 const CHEST_OPENING_TICKS = 12;
 const CHEST_OPENED_TICKS = 42;
-const FRAMES_PER_SECOND = 60;
 /** The full-screen fade halfway down, and fully black. */
 const FADE_HALF_ALPHA = 0.5;
 const FADE_BLACK_ALPHA = 1;
@@ -108,7 +108,7 @@ function namedRun(): PetNameBook {
 }
 
 const SAMPLE_SUMMARY: RunSummary = {
-  framesPlayed: PLAYED_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND,
+  framesPlayed: PLAYED_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND,
   deaths: 7,
   damageDealt: 184_230,
   damageTaken: 41_877,
@@ -127,6 +127,7 @@ const SAMPLE_SUMMARY: RunSummary = {
   deinonychusPets: 48,
   cowPets: 37,
   midgePets: 12,
+  townCatPets: 21,
   topKills: Object.entries(SAMPLE_KILLS),
 };
 

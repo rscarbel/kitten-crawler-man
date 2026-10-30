@@ -33,6 +33,7 @@ import { GameMap } from '../map/GameMap';
 import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { previewInk } from '../ui/theme/previewInk';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawEvilClownSprite` picks each view. */
 interface ViewSpec {
@@ -105,7 +106,6 @@ const LABEL_GAP = 2;
 const OVERHANG_TILES = 4.5;
 /** Where a cell's clown stands, as a fraction of the cell's height. */
 const GROUND_FRACTION = 0.94;
-const FRAMES_PER_SECOND = 60;
 
 /** Frames the vial strip's shatter and cloud demos run before repeating. */
 const SHATTER_DEMO_FRAMES = 22;
@@ -147,7 +147,7 @@ export class EvilClownPreviewScene extends PreviewScene {
 
   /** Which frame of a row is showing right now, at the chosen playback speed. */
   private frameOf(row: RowSpec): number {
-    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    const elapsedSeconds = this.clock / WORLD_TICKS_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(row.probeState);
   }
 

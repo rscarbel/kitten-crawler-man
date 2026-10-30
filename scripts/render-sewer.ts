@@ -3,8 +3,9 @@
  * Review PNGs of the sewer as the game draws it, through the real
  * `BuildingInteriorScene` behind the storm drain:
  *
- *  - each section whole, its valves untouched and then every valve turned,
- *    so the water each valve moves can be compared side by side;
+ *  - each section whole as built and then as a party that has done its work
+ *    finds it on a later visit (every sluice lowered, every nest washed out,
+ *    every pipe shut and its sump dry), side by side;
  *  - one in-game-scale screenshot at each of the guide's stops, with the
  *    party standing there.
  *
@@ -25,7 +26,8 @@ const { TILE_SIZE } = await import('../src/core/constants.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { cameraAt, UNZOOMED } = await import('../src/core/rendering/camera.js');
 const { planSewer } = await import('../src/map/sewer/sewerPlan.js');
-const { SEWER_VALVE_IDS } = await import('../src/map/sewer/sewerLayouts.js');
+const { SEWER_SLUICE_VALVE_IDS, SEWER_CLEARING_IDS } =
+  await import('../src/map/sewer/sewerLayouts.js');
 const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
 useDevPlayerIdentity();
 const { enterSewer } = await import('./sewerInteriorHarness.js');
@@ -42,7 +44,7 @@ for (const section of plan.sections) {
   const worldH = section.grid.height * TILE_SIZE;
   for (const [label, settled] of [
     ['as-built', []],
-    ['valves-turned', SEWER_VALVE_IDS],
+    ['cleared', [...SEWER_SLUICE_VALVE_IDS, ...SEWER_CLEARING_IDS]],
   ] as const) {
     setViewportSize(SCREEN.width, SCREEN.height);
     const arrivalCanvas = createCanvas(SCREEN.width, SCREEN.height);

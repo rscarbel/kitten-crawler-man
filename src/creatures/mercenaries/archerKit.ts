@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { MercenaryTemplate } from '../../core/party/mercenaryTemplates';
 import {
   IVY_HURT_DURATION_MS,
@@ -33,11 +33,10 @@ import {
  */
 
 const CENTER_OFFSET = 0.5;
-const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 
 function ticksFor(durationMs: number): number {
-  return Math.round((durationMs * TICKS_PER_SECOND) / MS_PER_SECOND);
+  return Math.round((durationMs * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND);
 }
 
 // ── The bow ─────────────────────────────────────────────────────────────────

@@ -4,14 +4,13 @@
  * freeze any moment of any state and get the same picture every time.
  */
 
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
+
 /** Milliseconds per second. */
 const MS_PER_SECOND = 1000;
 
-/** The scene loop's fixed update rate. */
-const UPDATES_PER_SECOND = 60;
-
 /** How much time one fixed update advances the clock. */
-export const TITLE_STEP_MS = MS_PER_SECOND / UPDATES_PER_SECOND;
+export const TITLE_STEP_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 
 /**
  * Where the title sequence is:

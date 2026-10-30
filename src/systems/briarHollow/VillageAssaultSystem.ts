@@ -31,7 +31,7 @@
  * (`captureBriarHollowState`), so a rewind or a reload lands before it.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import { PLACED_MAX_PAN, type AudioManager, type PlayOptions } from '../../audio/AudioManager';
 import {
@@ -127,7 +127,6 @@ import {
   bellThresholdDetail,
   type SiegeLoss,
 } from './siegeAlertCopy';
-import { UPDATES_PER_SECOND } from './structureRules';
 import { ASSAULT_BOUNTY_KINDS, createBountyMark, type AssaultBountyKind } from './siegeBountyMarks';
 import { placeAmong, spawnDue, type OffscreenSpawnRules } from './offscreenSpawns';
 
@@ -135,12 +134,12 @@ import { placeAmong, spawnDue, type OffscreenSpawnRules } from './offscreenSpawn
 
 /** The warning the village gets once the party says it is ready. */
 export const IMMINENT_SECONDS = 45;
-export const IMMINENT_FRAMES = IMMINENT_SECONDS * UPDATES_PER_SECOND;
+export const IMMINENT_FRAMES = IMMINENT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Four waves, one up each side of the village. */
 export const ASSAULT_WAVE_COUNT = 4;
 /** The next wave comes after this long, whatever is left of the current one. */
 export const WAVE_MAX_SECONDS = 120;
-const WAVE_MAX_FRAMES = WAVE_MAX_SECONDS * UPDATES_PER_SECOND;
+const WAVE_MAX_FRAMES = WAVE_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Or sooner, once no more than this share of the wave's bodies still stands. */
 export const WAVE_ADVANCE_REMAINING_SHARE = 0.2;
 /**
@@ -149,7 +148,7 @@ export const WAVE_ADVANCE_REMAINING_SHARE = 0.2;
  * than the whole roster in one clump.
  */
 const SPAWN_STAGGER_SECONDS = 0.6;
-const SPAWN_STAGGER_FRAMES = Math.round(SPAWN_STAGGER_SECONDS * UPDATES_PER_SECOND);
+const SPAWN_STAGGER_FRAMES = Math.round(SPAWN_STAGGER_SECONDS * WORLD_TICKS_PER_SECOND);
 /**
  * Wave `index` (from 1) strings together every roster from the first through
  * its own, one mini-wave at a time. The next mini-wave rises once no more
@@ -165,7 +164,7 @@ export const MINI_WAVE_ADVANCE_REMAINING_SHARE = 0.3;
  * it, and a won siege is still two-thirds fighting.
  */
 export const WAVE_LULL_SECONDS = 45;
-const WAVE_LULL_FRAMES = WAVE_LULL_SECONDS * UPDATES_PER_SECOND;
+const WAVE_LULL_FRAMES = WAVE_LULL_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * The most of the waves' own bodies alive at once. A real cap on the living,
  * checked before every spawn: anything over it waits its turn in the queue.
@@ -178,20 +177,20 @@ export const ASSAULT_LIVE_CAP = 40;
 export const ASSAULT_ABANDON_TILES = 45;
 /** How long they may stay gone before the siege is lost. */
 export const ASSAULT_ABANDON_SECONDS = 10;
-const ASSAULT_ABANDON_FRAMES = ASSAULT_ABANDON_SECONDS * UPDATES_PER_SECOND;
+const ASSAULT_ABANDON_FRAMES = ASSAULT_ABANDON_SECONDS * WORLD_TICKS_PER_SECOND;
 
 // ── Tuning ──────────────────────────────────────────────────────────────────
 
 /** The remaining undead crumble over this long after a victory, not all on one frame. */
 const CRUMBLE_STAGGER_SECONDS = 3;
-const CRUMBLE_STAGGER_FRAMES = CRUMBLE_STAGGER_SECONDS * UPDATES_PER_SECOND;
+const CRUMBLE_STAGGER_FRAMES = CRUMBLE_STAGGER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long a crumble's dust hangs in the air. */
 const CRUMBLE_EFFECT_FRAMES = 40;
 /** A withdrawing undead is released once it is this far out from the palisade. */
 export const WITHDRAW_RELEASE_TILES = 20;
 /** Or after this long, wherever it has got to — a withdrawal must end. */
 const WITHDRAW_TIMEOUT_SECONDS = 30;
-const WITHDRAW_TIMEOUT_FRAMES = WITHDRAW_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
+const WITHDRAW_TIMEOUT_FRAMES = WITHDRAW_TIMEOUT_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * Vordrick is the one figure of the retreat the banner names, so a longer
  * hold-up than this reads as the boss stuck on scenery rather than the
@@ -199,7 +198,7 @@ const WITHDRAW_TIMEOUT_FRAMES = WITHDRAW_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
  * {@link WITHDRAW_TIMEOUT_SECONDS} unnoticed.
  */
 const VORDRICK_WITHDRAW_TIMEOUT_SECONDS = 12;
-const VORDRICK_WITHDRAW_TIMEOUT_FRAMES = VORDRICK_WITHDRAW_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
+const VORDRICK_WITHDRAW_TIMEOUT_FRAMES = VORDRICK_WITHDRAW_TIMEOUT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How far a withdrawal's path search may reach: across the village and back out a lane. */
 const WITHDRAW_PATH_SEARCH_TILES = 140;
 /** Withdrawal paths planned per update, so a whole wave turning round costs no single frame. */
@@ -208,30 +207,30 @@ const WITHDRAW_PATHS_PER_UPDATE = 4;
 const WAYPOINT_REACHED_TILES = 0.35;
 /** The bell swings after every blow for this long. */
 const BELL_HIT_RING_SECONDS = 1.5;
-const BELL_HIT_RING_FRAMES = BELL_HIT_RING_SECONDS * UPDATES_PER_SECOND;
+const BELL_HIT_RING_FRAMES = BELL_HIT_RING_SECONDS * WORLD_TICKS_PER_SECOND;
 /** The bell's toll on a blow sounds no more often than this. */
 const BELL_TOLL_GAP_FRAMES = 30;
 /** The HUD's bell bar flashes this long when the bell is struck. */
 const BELL_FLASH_FRAMES = 18;
 /** A cracked bell hangs dead this long before the villagers have it mended and hung again. */
 const BELL_CRACK_SHOWN_SECONDS = 6;
-const BELL_CRACK_SHOWN_FRAMES = BELL_CRACK_SHOWN_SECONDS * UPDATES_PER_SECOND;
+const BELL_CRACK_SHOWN_FRAMES = BELL_CRACK_SHOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long the "bell has fallen" banner stays up. */
 const OUTCOME_BANNER_SECONDS = 6;
-const OUTCOME_BANNER_FRAMES = OUTCOME_BANNER_SECONDS * UPDATES_PER_SECOND;
+const OUTCOME_BANNER_FRAMES = OUTCOME_BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** The bell counts as under attack until this long after its last blow. */
 const BELL_UNDER_ATTACK_HOLD_SECONDS = 4;
-const BELL_UNDER_ATTACK_HOLD_FRAMES = BELL_UNDER_ATTACK_HOLD_SECONDS * UPDATES_PER_SECOND;
+const BELL_UNDER_ATTACK_HOLD_FRAMES = BELL_UNDER_ATTACK_HOLD_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long the clocktower alert's banner holds. */
 const BELL_ALERT_BANNER_SECONDS = 4.5;
-const BELL_ALERT_BANNER_FRAMES = BELL_ALERT_BANNER_SECONDS * UPDATES_PER_SECOND;
+const BELL_ALERT_BANNER_FRAMES = BELL_ALERT_BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * The soonest the banner and its alarm come back during one stretch of
  * attacks, so a crowd beating on the bell raises it once rather than on
  * every pause between blows.
  */
 const BELL_ALERT_COOLDOWN_SECONDS = 20;
-const BELL_ALERT_COOLDOWN_FRAMES = BELL_ALERT_COOLDOWN_SECONDS * UPDATES_PER_SECOND;
+const BELL_ALERT_COOLDOWN_FRAMES = BELL_ALERT_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 const BELL_THREE_QUARTERS = 0.75;
 const BELL_HALF = 0.5;
 const BELL_QUARTER = 0.25;
@@ -239,7 +238,7 @@ const BELL_QUARTER = 0.25;
 const BELL_ALERT_THRESHOLDS = [BELL_THREE_QUARTERS, BELL_HALF, BELL_QUARTER] as const;
 /** How long a lost siege's banner shows before the explainer halts the game. */
 const LOSS_EXPLAINER_DELAY_SECONDS = 2;
-const LOSS_EXPLAINER_DELAY_FRAMES = LOSS_EXPLAINER_DELAY_SECONDS * UPDATES_PER_SECOND;
+const LOSS_EXPLAINER_DELAY_FRAMES = LOSS_EXPLAINER_DELAY_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How fast the music and the world's effects drop away for the victory. */
 const VICTORY_MUSIC_FADE_MS = 300;
 const VICTORY_SFX_FADE_MS = 300;
@@ -280,7 +279,7 @@ export const SPAWN_MIN_CRAWLER_TILES = 8;
  * furthest spot in view that still keeps clear of both crawlers.
  */
 const SPAWN_DEFER_SECONDS = 3;
-const SPAWN_DEFER_FRAMES = SPAWN_DEFER_SECONDS * UPDATES_PER_SECOND;
+const SPAWN_DEFER_FRAMES = SPAWN_DEFER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Candidate tiles tried for a spawn out of sight before settling for the furthest. */
 const SPAWN_ATTEMPTS = 6;
 /**
@@ -359,7 +358,7 @@ export function assaultDifficulty(profile: DifficultyProfile): Difficulty {
  * one they hear.
  */
 const SIEGE_VOICE_HOLD_SECONDS = 2;
-const SIEGE_VOICE_HOLD_FRAMES = SIEGE_VOICE_HOLD_SECONDS * UPDATES_PER_SECOND;
+const SIEGE_VOICE_HOLD_FRAMES = SIEGE_VOICE_HOLD_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * How much harder a bounty mark strikes a wall than a common body of its
@@ -535,7 +534,7 @@ function createSpawn(
 
 /** The countdown as a clock face: 1:30, 0:07. */
 export function countdownLabel(frames: number): string {
-  const seconds = Math.max(0, Math.ceil(frames / UPDATES_PER_SECOND));
+  const seconds = Math.max(0, Math.ceil(frames / WORLD_TICKS_PER_SECOND));
   const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
   const rest = String(seconds % SECONDS_PER_MINUTE).padStart(TWO_DIGITS, '0');
   return `${minutes}:${rest}`;
@@ -1152,7 +1151,7 @@ export class VillageAssaultSystem {
     if (this.abandonFrames <= 0) return null;
     return Math.max(
       0,
-      Math.ceil((ASSAULT_ABANDON_FRAMES - this.abandonFrames) / UPDATES_PER_SECOND),
+      Math.ceil((ASSAULT_ABANDON_FRAMES - this.abandonFrames) / WORLD_TICKS_PER_SECOND),
     );
   }
 
@@ -1271,7 +1270,7 @@ export class VillageAssaultSystem {
   update(frame: VillageAssaultFrame): void {
     if (this.inSiege) this.holdSiegeMusic();
     this.withdraw.beginUpdate();
-    this.flow?.update(1 / UPDATES_PER_SECOND);
+    this.flow?.update(1 / WORLD_TICKS_PER_SECOND);
     this.tickBell();
     this.tickEffects();
     this.tickOutcome();
@@ -2434,7 +2433,7 @@ export class VillageAssaultSystem {
 const TILE_CENTRE = 0.5;
 /** How long the "Attack coming from…" banner stays up at the start of a countdown or a lull. */
 const SIDE_BANNER_SECONDS = 6;
-const SIDE_BANNER_FRAMES = SIDE_BANNER_SECONDS * UPDATES_PER_SECOND;
+const SIDE_BANNER_FRAMES = SIDE_BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** The abandon warning and the side banner sit this far down the screen. */
 const CENTRE_BANNER_HEIGHT_SHARE = 0.45;

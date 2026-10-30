@@ -14,7 +14,7 @@
  */
 
 import { allocCanvas, surfaceContext } from '../../src/core/rendering/canvasSurface';
-import { TILE_SIZE } from '../../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
 import { teachBoth } from '../../src/core/labour/CraftSkills';
 import { ITEM_DEF } from '../../src/core/items/defs/ItemDefs';
@@ -42,7 +42,7 @@ import { CALLOUT_FRAMES } from '../../src/systems/briarHollow/structureCallouts'
 import { queuedPrompts, setInteractionPromptsSuppressed } from '../../src/ui/InteractionPrompt';
 import { UNZOOMED, cameraAt } from '../../src/core/rendering/camera';
 import { testConversationFlow } from '../dialogFlowTestHelpers';
-import { standAt, UPDATES_PER_SECOND } from '../villageSiegeHarness';
+import { standAt } from '../villageSiegeHarness';
 import { blueprintsRig } from './fence';
 import { firstParagraph, journalRig, villagerContext, type Check } from './fenna';
 
@@ -67,7 +67,7 @@ const PROMPT_CANVAS_PX = 256;
 const PLENTY_OF_BOARDS = 40;
 /** How far around the two machines the station scan stands the crawler, in tiles. */
 const STATION_SCAN_MARGIN_TILES = 3;
-const UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * UPDATES_PER_SECOND);
+const UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * WORLD_TICKS_PER_SECOND);
 const WOOD_TO_WORK = 5;
 const TALK_LABEL = 'Talk';
 const MISMATCHES_SHOWN = 4;
@@ -103,7 +103,7 @@ function promptFrame(
   kit: BriarHollowKit,
   active: HumanPlayer,
 ): { readonly claimed: boolean; readonly texts: readonly string[] } {
-  setInteractionPromptsSuppressed(false);
+  setInteractionPromptsSuppressed(false, 'clear');
   const { ctx, texts } = recordingContext();
   const claimed = kit.renderPrompt(ctx, 0, 0, active);
   for (const prompt of queuedPrompts()) {

@@ -19,7 +19,7 @@
 import { createCanvas } from 'canvas';
 import { resolve } from 'node:path';
 
-import { TILE_SIZE } from '../src/core/constants.js';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants.js';
 import { HUMANOID_NPC_SCALE } from '../src/sprites/humanoidScale.js';
 import {
   generatePersonAppearance,
@@ -570,7 +570,7 @@ function gateCadence(): void {
       worstFrames = frames;
       worstSeed = appearance.seed;
     }
-    const stepsPerSecond = (STEPS_PER_CYCLE / frames) * FRAMES_PER_SECOND;
+    const stepsPerSecond = (STEPS_PER_CYCLE / frames) * WORLD_TICKS_PER_SECOND;
     fastestSteps = Math.max(fastestSteps, stepsPerSecond);
     slowestSteps = Math.min(slowestSteps, stepsPerSecond);
   }
@@ -588,7 +588,6 @@ function gateCadence(): void {
 }
 
 const STEPS_PER_CYCLE = 2;
-const FRAMES_PER_SECOND = 60;
 
 /** The fastest speed any `TownLifeSystem` cohort hands out, before the gait scales it. */
 const FASTEST_CITIZEN_SPEED = 1;

@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { DAMAGE_IMMUNE_LABEL, type Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -94,7 +94,6 @@ interface EntanglementHold {
 }
 
 const TILE_CENTER_OFFSET = 0.5;
-const GAME_FRAMES_PER_SECOND = 60;
 const SHIELD_COOLDOWN_FRAMES = 7200;
 const CHAIN_LIGHTNING_FRAMES = 20;
 const INITIAL_SHOCKWAVE_FRAMES = 40;
@@ -673,7 +672,7 @@ export class SpellSystem implements GameSystem {
     )
       return;
 
-    const elapsed = (totalFrames - framesRemaining) / GAME_FRAMES_PER_SECOND;
+    const elapsed = (totalFrames - framesRemaining) / WORLD_TICKS_PER_SECOND;
     const fadeIn = Math.min(1, (totalFrames - framesRemaining) / SHOCKWAVE_FADE_IN_FRAMES);
     const fadeOut = Math.min(1, framesRemaining / SHIELD_FADE_OUT_FRAMES);
     const alpha = Math.min(fadeIn, fadeOut);
@@ -704,7 +703,7 @@ export class SpellSystem implements GameSystem {
     const tileSize = shieldTileSizeFor(ENERGY_SHIELD_FIGURE, radiusPx);
     drawFigureCached(ctx, ENERGY_SHIELD_FIGURE, state, frame, sx, sy, tileSize, { alpha });
 
-    const secs = Math.ceil(framesRemaining / GAME_FRAMES_PER_SECOND);
+    const secs = Math.ceil(framesRemaining / WORLD_TICKS_PER_SECOND);
     const timerColor = isFullPower
       ? worldPalette.spell.energyShieldTimerFull
       : worldPalette.spell.energyShieldTimer;
@@ -730,7 +729,7 @@ export class SpellSystem implements GameSystem {
     const sx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET - camX;
     const sy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET - camY;
 
-    const elapsed = (MINI_SHIELD_FRAMES - framesRemaining) / GAME_FRAMES_PER_SECOND;
+    const elapsed = (MINI_SHIELD_FRAMES - framesRemaining) / WORLD_TICKS_PER_SECOND;
     const fadeOut = Math.min(1, framesRemaining / MINI_SHIELD_FADE_OUT_FRAMES);
     const alpha = fadeOut * MINI_SHIELD_ALPHA_MULT;
     const cycleFrames = figureFrameCount(ENERGY_SHIELD_MINI_FIGURE, MINI_SHIELD_STATE);

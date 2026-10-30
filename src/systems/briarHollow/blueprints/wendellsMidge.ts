@@ -11,7 +11,7 @@
  * Hollow — but she lows far less than the herd does, and in one voice.
  */
 
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import { applySpawnDifficulty } from '../../../core/difficulty/difficultyProfiles';
 import { Cow, LIVESTOCK_LEVEL } from '../../../creatures/Cow';
 import type { Player } from '../../../Player';
@@ -30,8 +30,6 @@ import { LivestockRespawner } from '../livestockRespawn';
 import { clearRespawnTile } from '../respawnClearance';
 import type { BlueprintsCue } from './blueprintsSoundCues';
 import { garrisonGreen } from './garrisonGreen';
-
-const UPDATES_PER_SECOND = 60;
 
 /**
  * Her own moo timer, much slower than the herd's shared one (8–20 s): one
@@ -194,7 +192,7 @@ export class WendellsMidge {
       return;
     }
     this.offPenUpdates++;
-    if (this.offPenUpdates < MIDGE_WALK_IN_TIMEOUT_SECONDS * UPDATES_PER_SECOND) return;
+    if (this.offPenUpdates < MIDGE_WALK_IN_TIMEOUT_SECONDS * WORLD_TICKS_PER_SECOND) return;
     this.offPenUpdates = 0;
     this.moveHome(cow);
   }
@@ -227,7 +225,7 @@ export class WendellsMidge {
     const seconds =
       WENDELL_COW_MOO_MIN_SECONDS +
       this.random() * (WENDELL_COW_MOO_MAX_SECONDS - WENDELL_COW_MOO_MIN_SECONDS);
-    return Math.round(seconds * UPDATES_PER_SECOND);
+    return Math.round(seconds * WORLD_TICKS_PER_SECOND);
   }
 
   /**

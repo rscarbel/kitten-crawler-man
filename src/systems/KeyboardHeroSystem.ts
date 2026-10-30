@@ -73,17 +73,15 @@ import {
   PIP_INTACT_BORDER,
   type NoteArtState,
 } from './keyboardHeroBoardArt';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Milliseconds per second. */
 const MS_PER_SECOND = 1_000;
 
 const SECONDS_PER_MINUTE = 60;
 
-/** Frames per second, used only by the fallback clock when no audio is available. */
-const FPS = 60;
-
 /** MS added per frame when no audio clock is available to drive the chart. */
-const MS_PER_FRAME = MS_PER_SECOND / FPS;
+const MS_PER_FRAME = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 
 /** How long a lane stays lit red after a forgiven mistake. */
 const ERROR_FLASH_MS = 1_000;

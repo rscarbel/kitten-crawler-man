@@ -8,7 +8,7 @@
 
 import type { Camera } from '../core/rendering/camera';
 import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/progression/awardXp';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { MusicClaims } from '../audio/AudioScope';
 import { randomInt, pixelToTile } from '../utils';
 import { drawInteractionPrompt, drawInteractionPromptOver } from '../ui/InteractionPrompt';
@@ -91,14 +91,13 @@ const APPROACH_SECONDS = 25;
 const DEFENSE_SECONDS = 60;
 const WOOD_RESPAWN_SECONDS = 6;
 const FIRST_WAVE_DELAY_SECONDS = 1;
-const FRAMES_PER_SECOND = 60;
-const APPROACH_TIMER_FRAMES = APPROACH_SECONDS * FRAMES_PER_SECOND;
-const DEFENSE_TIMER_FRAMES = DEFENSE_SECONDS * FRAMES_PER_SECOND;
-const WOOD_RESPAWN_FRAMES = WOOD_RESPAWN_SECONDS * FRAMES_PER_SECOND;
+const APPROACH_TIMER_FRAMES = APPROACH_SECONDS * WORLD_TICKS_PER_SECOND;
+const DEFENSE_TIMER_FRAMES = DEFENSE_SECONDS * WORLD_TICKS_PER_SECOND;
+const WOOD_RESPAWN_FRAMES = WOOD_RESPAWN_SECONDS * WORLD_TICKS_PER_SECOND;
 const WOOD_PER_PICKUP = 8;
 const BOARDS_PER_BUILD = 4;
 const BUILD_SECONDS = 2;
-const BUILD_FRAMES = BUILD_SECONDS * FRAMES_PER_SECOND;
+const BUILD_FRAMES = BUILD_SECONDS * WORLD_TICKS_PER_SECOND;
 /**
  * The cat has no thumbs and no hammer, so she can board up a grate — just badly.
  * Progress is a seeded frame countdown, so "slower" is more frames, not a
@@ -108,8 +107,8 @@ const CAT_BUILD_TIME_MULTIPLIER = 3;
 const BARRIER_MAX_HP = 36;
 const SPAWN_INTERVAL_MIN_SECONDS = 3;
 const SPAWN_INTERVAL_MAX_SECONDS = 5;
-const SPAWN_INTERVAL_MIN = SPAWN_INTERVAL_MIN_SECONDS * FRAMES_PER_SECOND;
-const SPAWN_INTERVAL_MAX = SPAWN_INTERVAL_MAX_SECONDS * FRAMES_PER_SECOND;
+const SPAWN_INTERVAL_MIN = SPAWN_INTERVAL_MIN_SECONDS * WORLD_TICKS_PER_SECOND;
+const SPAWN_INTERVAL_MAX = SPAWN_INTERVAL_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 const ENTRANCE_SPAWN_CHANCE = 0.15;
 const INTERACT_RANGE_TILES = 2.5;
 const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
@@ -119,10 +118,10 @@ const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
  * out to the wood pile is not an abandonment.
  */
 const AUDIENCE_ABSENCE_GRACE_SECONDS = 1.5;
-const AUDIENCE_ABSENCE_GRACE_FRAMES = AUDIENCE_ABSENCE_GRACE_SECONDS * FRAMES_PER_SECOND;
+const AUDIENCE_ABSENCE_GRACE_FRAMES = AUDIENCE_ABSENCE_GRACE_SECONDS * WORLD_TICKS_PER_SECOND;
 
 // Rendering / UI constants
-const FIRST_WAVE_DELAY_FRAMES = FIRST_WAVE_DELAY_SECONDS * FRAMES_PER_SECOND;
+const FIRST_WAVE_DELAY_FRAMES = FIRST_WAVE_DELAY_SECONDS * WORLD_TICKS_PER_SECOND;
 const CHILD_REUNION_WALK_FRAMES = 180;
 /** Ground the toddler covers in one full stride; short, because he is. */
 const CHILD_STRIDE_TILES = 0.6;
@@ -130,7 +129,7 @@ const CHILD_STRIDE_PX = TILE_SIZE * CHILD_STRIDE_TILES;
 /** `drawChildSprite` reads the stride phase in radians, one stride per turn. */
 const FULL_STRIDE_RADIANS = Math.PI * 2;
 const QUEST_FAILED_DISPLAY_SECONDS = 7;
-const QUEST_FAILED_DISPLAY_FRAMES = QUEST_FAILED_DISPLAY_SECONDS * FRAMES_PER_SECOND;
+const QUEST_FAILED_DISPLAY_FRAMES = QUEST_FAILED_DISPLAY_SECONDS * WORLD_TICKS_PER_SECOND;
 const OVERLAY_FADE_FRAMES = 90;
 const PICKUP_PROXIMITY_FRACTION = 1.2;
 /**
@@ -527,7 +526,7 @@ export class DefendQuestSystem implements GameSystem {
       x: Math.floor(this.npc.x / TILE_SIZE),
       y: Math.floor(this.npc.y / TILE_SIZE),
     };
-    const base = { id: DEFEND_QUEST_ID, name, target };
+    const base = { kind: 'single', id: DEFEND_QUEST_ID, name, target } as const;
 
     switch (this.phase) {
       case 'npc_waiting':
@@ -576,7 +575,9 @@ export class DefendQuestSystem implements GameSystem {
       case 'failed':
         return [{ ...base, status: 'failed', objective: 'The goblin mother did not survive' }];
       case 'complete':
-        return [{ id: base.id, name, status: 'completed', objective: 'The nursery held' }];
+        return [
+          { kind: 'single', id: base.id, name, status: 'completed', objective: 'The nursery held' },
+        ];
     }
   }
 
@@ -1411,7 +1412,10 @@ export class DefendQuestSystem implements GameSystem {
     if (this.npc) this.npc.clearHurtState();
 
     this.phase = 'complete_pending';
-    this.bus.emit('objectiveComplete', { objectiveId: 'goblin_child_returned' });
+    this.bus.emit('objectiveComplete', {
+      questId: DEFEND_QUEST_ID,
+      objectiveId: 'goblin_child_returned',
+    });
     if (this.npc) {
       this.npc.markerType = 'question';
     }
@@ -1870,7 +1874,7 @@ export class DefendQuestSystem implements GameSystem {
     const worldX = tile.x * TILE_SIZE;
     const labelWorldY = (tile.y - WOOD_PILE_TOP_RISE_TILES) * TILE_SIZE - WOOD_LABEL_GAP_PX;
     const centreX = worldX + TILE_SIZE * HALF - camX;
-    const restockSeconds = Math.ceil(this.woodRespawnTimer / FRAMES_PER_SECOND);
+    const restockSeconds = Math.ceil(this.woodRespawnTimer / WORLD_TICKS_PER_SECOND);
     const label = this.woodPileAvailable ? 'WOOD' : `WOOD · ${restockSeconds}s`;
     worldText(ctx, label, {
       ...(this.woodPileAvailable
@@ -2041,7 +2045,7 @@ export class DefendQuestSystem implements GameSystem {
     const held = this.phase === 'countdown' && this.encounterAborted;
     const title = held ? HELD_TITLE : defending ? DEFENSE_TITLE : APPROACH_TITLE;
     const seconds = Math.ceil(
-      (defending ? this.defenseTimer : this.approachTimer) / FRAMES_PER_SECOND,
+      (defending ? this.defenseTimer : this.approachTimer) / WORLD_TICKS_PER_SECOND,
     );
     const detail = held
       ? HELD_VALUE

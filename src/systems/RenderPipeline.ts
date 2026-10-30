@@ -60,7 +60,7 @@ import type { PlayerManager } from '../core/party/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
-import type { Camera } from '../core/rendering/camera';
+import { terrainAlignedCamera, type Camera } from '../core/rendering/camera';
 import { isStandingInWater } from './GameLoopPhases';
 import {
   DEFAULT_DUNGEON_FLOOR_THEME,
@@ -181,7 +181,9 @@ interface DrawEntry {
   chestRef: TreasureChest | null;
   /**
    * Screen y of the river surface across this entry's sprite, or `null` when it
-   * is not standing in water.
+   * is not standing in water. Placed on the terrain-aligned camera, as the
+   * water surface and its ripples are, so the cut and its meniscus sit on the
+   * river's own pixel rather than up to one off it.
    *
    * Carried on the entry rather than recomputed in the draw loop because the
    * loop has only the minimal `render`-shaped entity — resolving it there would
@@ -516,6 +518,7 @@ export class RenderPipeline {
       speechBubblePulse,
     } = rc;
     const { x: camX, y: camY } = camera;
+    const { x: surfaceCamX, y: surfaceCamY } = terrainAlignedCamera(camera);
 
     // Before anything in the pass draws: a quest beacon fades as the player
     // closes on it, and the creatures that draw one have no reference to the
@@ -600,8 +603,8 @@ export class RenderPipeline {
       // walking *on* the water — more obviously wrong than the player would,
       // because there are several of them and they cross at odd angles.
       if (mob.isWading()) {
-        e.waterlineScreenY = mob.y + TILE_SIZE - mob.waterlineAboveFootPx - camY;
-        e.waterlineScreenX = mob.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
+        e.waterlineScreenY = mob.y + TILE_SIZE - mob.waterlineAboveFootPx - surfaceCamY;
+        e.waterlineScreenX = mob.x + TILE_SIZE * TILE_CENTRE_FRACTION - surfaceCamX;
       }
     }
 
@@ -613,9 +616,9 @@ export class RenderPipeline {
       e.entity = player;
       e.chestRef = null;
       e.waterlineScreenY = isStandingInWater(player, gameMap)
-        ? player.y + TILE_SIZE - player.waterlineAboveFootPx - camY
+        ? player.y + TILE_SIZE - player.waterlineAboveFootPx - surfaceCamY
         : null;
-      e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
+      e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - surfaceCamX;
     }
 
     // Dave sorts with the crawlers rather than with the room he stands in, so
@@ -707,7 +710,8 @@ export class RenderPipeline {
       } finally {
         ctx.restore();
       }
-      rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY, camX, camY);
+      const surface = terrainAlignedCamera(camera);
+      rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY, surface.x, surface.y);
     } else {
       item.entity?.render(ctx, camX, camY, TILE_SIZE);
     }

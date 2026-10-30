@@ -18,7 +18,12 @@
 
 import { type Canvas, createCanvas } from 'canvas';
 
-import { PLAYER_SPEED, TILE_SIZE, WADE_SPEED_FACTOR } from '../src/core/constants.js';
+import {
+  PLAYER_SPEED,
+  TILE_SIZE,
+  WADE_SPEED_FACTOR,
+  WORLD_TICKS_PER_SECOND,
+} from '../src/core/constants.js';
 import { humanStatusFigureBoxOf, HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { Goblin } from '../src/creatures/Goblin.js';
 import { type Mob } from '../src/creatures/Mob.js';
@@ -71,7 +76,6 @@ import {
 import {
   RUN_FRAMES,
   SEISMIC_STOMP_IMPACT_FRAME,
-  TICKS_PER_SECOND,
   WALK_FRAMES,
 } from '../src/sprites/art/human/timing.js';
 import {
@@ -2021,7 +2025,7 @@ const EYE_OPEN_EPSILON = 1e-6;
  * shorter than that — the guard's bounce — cannot carry a blink every cycle
  * without fluttering, and is never held long enough for its lack to stare.
  */
-const SHORTEST_BLINKING_LOOP_TICKS = 2 * TICKS_PER_SECOND;
+const SHORTEST_BLINKING_LOOP_TICKS = 2 * WORLD_TICKS_PER_SECOND;
 
 /**
  * G12 — every looping row blinks once per cycle, shut on the blink's centre
@@ -3408,7 +3412,7 @@ const REPLAYED_CYCLES = 2;
  * gives up on him: the longest settle is a cycle turned at a frame a tick, and
  * the stop row plays after it.
  */
-const REST_WITHIN_TICKS = RUN_FRAMES * 2 + TICKS_PER_SECOND;
+const REST_WITHIN_TICKS = RUN_FRAMES * 2 + WORLD_TICKS_PER_SECOND;
 
 function probeOf(selection: HumanRowSelection): HumanJointProbe {
   return probesOf(HUMAN_ROW_TABLE_ROWS.get(selection.row) ?? HUMAN_ROWS[0])[selection.frame];
@@ -3630,7 +3634,7 @@ function isStandingRow(name: HumanRowName): boolean {
 
 /** Long enough for any blow, the whole guard hold, its wait for a seam and the drop, in seconds. */
 const GUARD_OUT_WITHIN_SECONDS = 6;
-const GUARD_OUT_WITHIN_TICKS = GUARD_OUT_WITHIN_SECONDS * TICKS_PER_SECOND;
+const GUARD_OUT_WITHIN_TICKS = GUARD_OUT_WITHIN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * Throws a blow standing, then stands until the guard it raised has dropped

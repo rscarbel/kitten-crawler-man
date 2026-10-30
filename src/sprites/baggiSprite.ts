@@ -1,7 +1,7 @@
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
-import { TILE_SIZE } from '../core/constants';
-import { idleFrameAtSeconds, TICKS_PER_SECOND } from './art/human/timing';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
+import { idleFrameAtSeconds } from './art/human/timing';
 import { TALK_TICKS_PER_FRAME } from './art/human/actionsMisc';
 import { RIG_WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
 import { type DrawnFigureRow, drawnFigureRow, figureFrameCount } from './figure/figureDef';
@@ -60,7 +60,9 @@ function frameFor(state: BaggiSpriteState, name: string): number {
     case 'walk':
       return walkFrameIndex(state.walkPhase, frames);
     case 'talk':
-      return Math.floor((state.timeSeconds * TICKS_PER_SECOND) / TALK_TICKS_PER_FRAME) % frames;
+      return (
+        Math.floor((state.timeSeconds * WORLD_TICKS_PER_SECOND) / TALK_TICKS_PER_FRAME) % frames
+      );
     case 'idle':
       return idleFrameAtSeconds(state.timeSeconds);
     default: {

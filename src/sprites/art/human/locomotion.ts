@@ -23,7 +23,12 @@
  * half a cycle behind it.
  */
 
-import { PLAYER_SPEED, TILE_SIZE, WADE_SPEED_FACTOR } from '../../../core/constants';
+import {
+  PLAYER_SPEED,
+  TILE_SIZE,
+  WADE_SPEED_FACTOR,
+  WORLD_TICKS_PER_SECOND,
+} from '../../../core/constants';
 import { pt, TWO_PI } from '../biped/geometry';
 import { WRIST_FOLLOW } from '../biped/limbs';
 import {
@@ -82,7 +87,6 @@ import {
   RUN_FRAMES,
   RUN_START_FRAMES,
   RUN_STOP_FRAMES,
-  TICKS_PER_SECOND,
   WALK_FRAMES,
   WALK_START_FRAMES,
   WALK_STOP_FRAMES,
@@ -578,7 +582,7 @@ const RIG_LEG_METRES = STANDING_HIP * RIG_WORLD_PX_PER_UNIT * METRES_PER_WORLD_P
 function froudeSpeedPxPerTick(froude: number, statureScale: number): number {
   const legMetres = RIG_LEG_METRES * statureScale;
   const metresPerSecond = Math.sqrt(froude * GRAVITY_METRES_PER_SECOND_SQ * legMetres);
-  return metresPerSecond / METRES_PER_WORLD_PX / TICKS_PER_SECOND;
+  return metresPerSecond / METRES_PER_WORLD_PX / WORLD_TICKS_PER_SECOND;
 }
 
 /** The measured ground speeds `look` changes gait at: up to a run at `enter`, back to a walk below `exit`. */
@@ -1273,7 +1277,7 @@ function walkFacingBase(phase: number, away: boolean): BipedPose {
  * the run at his base speed and the walk at a wade, the fastest pace he walks.
  */
 function loopSeconds(groundPerCycle: number, speedPxPerTick: number): number {
-  return (groundPerCycle * WORLD_PX_PER_UNIT) / speedPxPerTick / TICKS_PER_SECOND;
+  return (groundPerCycle * WORLD_PX_PER_UNIT) / speedPxPerTick / WORLD_TICKS_PER_SECOND;
 }
 
 const RUN_SPRINGS = springsFor(loopSeconds(RUN_GROUND_PER_CYCLE, PLAYER_SPEED));

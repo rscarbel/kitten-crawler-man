@@ -45,6 +45,7 @@ export function walkUpTo(map: GameMap, speaker: CutsceneTile, crawler: CutsceneT
         kind: 'walkTo',
         who: ACTIVE_CRAWLER,
         tile,
+        pace: 'stroll',
         face: spot.face,
         then: 'waitForArrival',
       };
@@ -54,6 +55,7 @@ export function walkUpTo(map: GameMap, speaker: CutsceneTile, crawler: CutsceneT
     kind: 'walkTo',
     who: ACTIVE_CRAWLER,
     tile: crawler,
+    pace: 'stroll',
     face: facingToward(crawler, speaker),
     then: 'waitForArrival',
   };

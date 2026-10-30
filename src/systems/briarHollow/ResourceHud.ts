@@ -25,11 +25,11 @@ import {
 import { drawResourceIcon } from '../../ui/icons/resourceIcons';
 import { badge, badgeSize } from '../../ui/widgets/badge';
 import { lineHeightOf, measureText, tabularNumber } from '../../ui/widgets/text';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
-const TICKS_PER_SECOND = 60;
 /** How long the strip stays up after the last harvest, build or repair. */
 export const RESOURCE_HUD_LINGER_SECONDS = 10;
-const LINGER_TICKS = RESOURCE_HUD_LINGER_SECONDS * TICKS_PER_SECOND;
+const LINGER_TICKS = RESOURCE_HUD_LINGER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Fade in and out over a quarter of a second. */
 const FADE_TICKS = 15;
 

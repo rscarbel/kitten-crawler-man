@@ -6,7 +6,7 @@
  */
 
 import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { isKitRow, type ArcherRow } from '../creatures/mercenaries/MercenaryKit';
 import type { EyePlacement } from './eyePlacement';
 import type { CardinalView, FacingSelection } from './facingView';
@@ -15,7 +15,7 @@ import { figureFrameCount } from './figure/figureDef';
 import { FIGURE_HEIGHT } from './art/biped/proportions';
 import { HUMAN_SCALE } from './art/human/figureScale';
 import { RIG_WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
-import { idleFrameAtSeconds, TICKS_PER_SECOND, WALK_FRAMES } from './art/human/timing';
+import { idleFrameAtSeconds, WALK_FRAMES } from './art/human/timing';
 import {
   IVY_ASHGROVE_FIGURE,
   IVY_HEIGHT_SCALE,
@@ -74,7 +74,7 @@ function viewFor(role: IvyRole, facing: FacingSelection<CardinalView>): IvyView 
 
 const FULL_TURN = Math.PI * 2;
 const MS_PER_SECOND = 1000;
-const DEATH_TICKS = Math.round((IVY_DEATH_DURATION_MS * TICKS_PER_SECOND) / MS_PER_SECOND);
+const DEATH_TICKS = Math.round((IVY_DEATH_DURATION_MS * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND);
 
 /** Her cell's furthest reach past her own tile on any side, rounded up to whole tiles. */
 const CULL_MARGIN_TILES = Math.ceil(
@@ -126,7 +126,7 @@ export const IVY_ASHGROVE_ART: MercenaryArt = {
     if (frames === 0) return;
     let index: number;
     if (role === 'walk') index = walkFrameIndex(frame.walkFrame, frames);
-    else if (role === 'idle') index = idleFrameAtSeconds(frame.clock / TICKS_PER_SECOND);
+    else if (role === 'idle') index = idleFrameAtSeconds(frame.clock / WORLD_TICKS_PER_SECOND);
     else index = progressFrameIndex(progress, frames);
     const turnedToProfile = view === 'side' && frame.cardinalFacing.view !== 'side';
     const flipX = turnedToProfile ? frame.facingX < 0 : frame.cardinalFacing.flipX;

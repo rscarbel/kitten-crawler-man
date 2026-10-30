@@ -110,6 +110,12 @@ const LOCKET_LINK_REGEN_MULTIPLIER = 1.5;
 const LOCKET_LINK_STAT_BONUS = 1;
 const LOCKET_LINK_SHIELD_FRAMES = 120;
 const GRINNING_MASK_MAX_HP_PENALTY = 0.25;
+const HUSHED_BELL_EVASIVENESS = 4;
+/** Half range: a goblin that would spot her at six tiles waits until three. */
+const HUSHED_BELL_NOTICE_SHARE = 0.5;
+/** Close enough that the crawler at her heels shares the hush, as a follower walks. */
+const HUSHED_BELL_PARTNER_RANGE_TILES = 4;
+const HUSHED_BELL_UNSEEN_MULTIPLIER = 1.5;
 const LUCKY_PENNY_COIN_SHARE = 0.1;
 const FANG_CHARM_LIFESTEAL_SHARE = 0.04;
 const HOURGLASS_HP_SHARE = 0.25;
@@ -1193,6 +1199,36 @@ export const GEAR_CATALOGUE = defineItemDefs({
     description:
       'A white porcelain mask with a smile that is a little too wide. It fits perfectly the ' +
       'first time, and every time after it fits a little tighter.',
+  },
+  hushed_bell: {
+    id: 'hushed_bell',
+    category: 'armor',
+    name: 'Hushed Bell',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    rarity: 'Legendary',
+    wearer: 'both',
+    lootRecipient: 'cat',
+    look: {
+      human: { kind: 'garment', garment: 'human_hushed_bell' },
+      cat: { kind: 'garment', garment: 'cat_hushed_bell' },
+    },
+    equipSlot: 'Head',
+    equipSubSlot: 'Neck',
+    statBonus: { evasiveness: HUSHED_BELL_EVASIVENESS },
+    traits: [
+      {
+        kind: 'quietPaws',
+        noticeShare: HUSHED_BELL_NOTICE_SHARE,
+        partnerRangeTiles: HUSHED_BELL_PARTNER_RANGE_TILES,
+      },
+      { kind: 'unseenStrike', multiplier: HUSHED_BELL_UNSEEN_MULTIPLIER },
+    ],
+    description:
+      'A brass bell on a red ribbon, off the neck of one of the cats the Warden kept. They ' +
+      'stuffed its clapper with their own fur on the way out of the tower, and it has not ' +
+      'made a sound since.',
   },
   nimble_bangle: {
     id: 'nimble_bangle',

@@ -250,6 +250,9 @@ Recordings live under `src/audio/`, one folder per family and then per owner:
 `caroline_message_chime`, which plays with each of Caroline's message boxes. A recording
 belongs to the folder of whoever or whatever makes the sound, never to the floor or the
 scene that first played it, so an owner's sounds move together when the owner does.
+Sounds of a kind of thing rather than of one owner sit in a shared folder: `effects/water_works/`
+holds the pumps, valve wheels, outflow and drain rush that the Kraken's pump room and the sewer's
+sluices and sump both play.
 
 ## Creatures are painted, not loaded
 
@@ -736,12 +739,23 @@ working set, so it stops growth without ever evicting something visible:
 - **Tile chunks:** `MAX_CACHED_CHUNKS` (60; a 1080p view spans 20), measured at 20–34 MB,
   and each chunk let go after half a minute undrawn.
   **Tile overlays:** `OVERLAY_CACHE_BUDGET_MEGABYTES` (32), evicting in batches down to 24.
-- **Smaller pools:** town interior props 8 MB and nursery poses 4 MB, both through the
-  shared `RecentSurfaceCache` (`src/core/rendering/recentSurfaceCache.ts`: a byte budget, LRU,
-  nothing drawn within its protected frames let go, and optionally an idle window, which
-  the town interior props use); figure rims
+- **Smaller pools:** town interior props 8 MB, interior prop flames 3 MB
+  (`FLAME_FRAME_BUDGET_MEGABYTES`, in `src/sprites/art/townInterior/propFlames.ts`), nursery
+  poses 4 MB, and the UI's baked
+  panel shadows (`SHADOW_BAKE_BUDGET_MEGABYTES`, 16, in `src/ui/widgets/shadowedFill.ts`;
+  a shape is baked only once it has held still for `STATIONARY_FRAMES_BEFORE_BAKE` frames,
+  so a sliding or fading panel is drawn live), all through the shared `RecentSurfaceCache`
+  (`src/core/rendering/recentSurfaceCache.ts`: a byte budget, LRU, nothing drawn within its
+  protected frames let go, and optionally an idle window, which the town interior props
+  use); figure rims
   (`RIM_CACHE_BUDGET_MEGABYTES`, 8); Starlight Tent props (6); held item art
-  (`HELD_ART_BUDGET_MEGABYTES`, 4); title hero cells (32).
+  (`HELD_ART_BUDGET_MEGABYTES`, 4); title hero cells (32). Ward walls
+  (`src/sprites/wardWallArt.ts`): each tile of wall is drawn from whole baked frames of a
+  seamless 16-frame loop at the canvas's device scale, held by a `RecentSurfaceCache`
+  (`TILE_FRAME_BUDGET_MEGABYTES`, 10, released after `TILE_FRAME_IDLE_RELEASE_FRAMES`
+  idle frames); a wall lit at one level in its three variants is 48 frames, 3.7 MB at a
+  device scale of 2. The stamps those frames are painted from are a fixed set,
+  `WARD_WALL_STAMP_BYTES` (about 0.6 MB).
 
 **Only half-density devices get smaller budgets.** `memoryBudgetScale()` in
 `src/core/perf/deviceMemoryBudget.ts` scales the figure and environment-sheet budgets: full

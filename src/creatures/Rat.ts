@@ -16,7 +16,7 @@ import {
 
 const RAT_HP = 3;
 const RAT_SPEED = 1.1;
-const AGGRO_RANGE_TILES = 3;
+export const RAT_AGGRO_RANGE_TILES = 3;
 const BITE_RANGE_TILES = 1.1;
 /** Frames between bites (~2 s at 60 fps) */
 const ATTACK_COOLDOWN = 120;
@@ -99,7 +99,7 @@ export class Rat extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, RAT_HP, RAT_SPEED);
-    this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
+    this.aggroRangePx = tileSize * RAT_AGGRO_RANGE_TILES;
     this.biteRangePx = tileSize * BITE_RANGE_TILES;
   }
 

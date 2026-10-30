@@ -3,6 +3,7 @@ import { difficultyStats } from '../core/difficulty/DifficultyStats';
 import type { StairwellHuntCheckpoint } from '../core/difficulty/DifficultyStats';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { drainTacticsTelemetry } from '../creatures/tactics/tacticsTelemetry';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Feeds the per-frame half of {@link difficultyStats}: damage the party actually
@@ -29,8 +30,6 @@ export const FIGHT_END_GRACE_FRAMES = 120;
  * in would report the floor as far easier than it plays.
  */
 export const MIN_COUNTED_FIGHT_FRAMES = 60;
-
-const FRAMES_PER_SECOND = 60;
 
 /** A point-in-time copy of the fight currently being measured, and of the stairwell-hunt clock. */
 export interface DifficultyTelemetryCheckpoint {
@@ -179,7 +178,7 @@ export class DifficultyTelemetrySystem implements GameSystem {
       const partyMaxHp = ctx.human.maxHp + ctx.cat.maxHp;
       difficultyStats.recordRoomFight({
         hpRemainingFraction: partyMaxHp > 0 ? partyHp / partyMaxHp : 0,
-        seconds: this.engagedFrames / FRAMES_PER_SECOND,
+        seconds: this.engagedFrames / WORLD_TICKS_PER_SECOND,
         blocks: this.fightBlocks,
         kiteStarts: this.fightKiteStarts,
         kiteEnds: this.fightKiteEnds,

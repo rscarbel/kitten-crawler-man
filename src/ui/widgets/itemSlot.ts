@@ -22,9 +22,9 @@ import {
   fillRounded,
   hoverAmount,
   isDisabled,
-  roundRectPath,
   strokeRounded,
 } from './paint';
+import { roundRectPath } from './roundRect';
 import { tabularNumber, text } from './text';
 import { tooltip } from './tooltip';
 

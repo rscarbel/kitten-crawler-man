@@ -46,7 +46,6 @@ import { palette } from '../../ui/theme/tokens';
 import { drawDeinonychusIcon, type DeinonychusStage } from '../../sprites/deinonychusSprite';
 import type { DialogFixture } from './dialogs/fixture';
 import { siegeHudEntry, type SiegeHudBar } from '../../systems/briarHollow/siegeHudEntry';
-import { UPDATES_PER_SECOND } from '../../systems/briarHollow/structureRules';
 import type {
   BellAlertView,
   SiegeOutcomeView,
@@ -68,6 +67,7 @@ import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
 import { buildFixture as inventoryFixture } from './inventory';
 import { PET_NAME_SUGGESTIONS } from '../../core/party/petNames';
 import { cameraAt, UNZOOMED } from '../../core/rendering/camera';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 const FIXTURE_TOAST_TICKS = 20;
 /** Long enough for Caroline's notice to unfold and decode in full, short of its fold. */
@@ -507,14 +507,15 @@ function reviveEntry(): TopBandEntry {
     id: 'knockout',
     priority: 'countdown',
     accentTone: 'danger',
+    ridesFightCard: true,
     rows: [
-      { kind: 'text', text: 'Revive your teammate!', role: 'title', tone: 'danger', maxLines: 2 },
       {
         kind: 'text',
-        text: `${REVIVE_SECONDS_LEFT}s`,
-        role: 'heading',
+        text: `Revive your teammate! ${REVIVE_SECONDS_LEFT}s`,
+        role: 'label',
         tone: 'warning',
         tabular: true,
+        wrap: false,
       },
     ],
   });
@@ -665,7 +666,7 @@ function siegeLossExplainerFixture(name: string): DialogFixture {
 /** The victory celebration `seconds` into its fanfare. */
 function siegeVictoryFixture(name: string, secondsIn: number): DialogFixture {
   const hud = siegeHud(name, 1);
-  const ageFrames = Math.round(secondsIn * UPDATES_PER_SECOND);
+  const ageFrames = Math.round(secondsIn * WORLD_TICKS_PER_SECOND);
   return {
     name,
     surfaces: (shown) => [

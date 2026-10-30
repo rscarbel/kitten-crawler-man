@@ -265,6 +265,11 @@ surface.
 
 `paint.ts` holds the shared primitives (rounded paths, glass, focus ring,
 hover/press treatment). Feature code never calls it; it calls widgets.
+A drop shadow under a panel that keeps its size goes through
+`fillShadowedRounded` (`widgets/shadowedFill.ts`), as `drawGlass` and the
+minimap frame do: it bakes the blurred body once per size and skin and blits
+it after, where a `shadowBlur` set every frame costs a blur pass per panel per
+frame (about 10 ms of the HUD's frame headless before glass was baked).
 
 **Surfaces with fixed jobs:**
 
@@ -402,15 +407,26 @@ prompt surface clamps every pill onto the screen.
 Only one interact-key prompt is ever shown. Each scene raises a link's
 prompts inside `raisePromptsFor(owner, raise)`, where the owner is a
 `PromptOwner` (`src/ui/interactionFocus.ts`): an `InteractableKind` and the
-`act` a press on it runs. The surface shows the prompt ranked first by
-`INTERACTABLE_RANK` (quest business, then people and services, then
-everything else, then the pet and the hireling), nearest first within a rank,
-measured from the point `anchorPromptFocus` set for the frame. The scene's
-interact press goes to `pressFocusedPrompt(owners)` before the rest of its
-chain, so the press reaches the thing the prompt names. A prompt raised
-outside any owner ranks as `other` and its press falls through to the chain,
-so give a new interactable an owner. A prompt with its own `keyOverride`
-names a different key and is always shown.
+`act` a press on it runs. A swing while fighting outranks everything (the
+stance's call); among what is in reach the order is `PRESS_TIERS`: quest
+business, then people and services, then things, then the pet and the
+hireling; `INTERACTABLES` gives every kind its tier and says
+whether it is a talk. Quest standing comes from the quest systems' own
+markers (a marked citizen or resident is `questPerson`, a quest board or
+clue is `quest`), never from a list of ids. The frame's
+`InteractionStance` (`interactionStance` in
+`src/systems/interactionPromptGate.ts`) is passed to
+`setInteractionPromptsSuppressed`: `fighting` (a hostile in attack range)
+shows and reaches nothing but a `fightMechanic`, and `enemiesNear` (a hostile
+that has noticed the party within `ENEMIES_NEAR_RADIUS_TILES`) shows and
+reaches no talk. The surface shows the best allowed prompt, nearest first
+within a tier, measured from the point `anchorPromptFocus` set for the frame.
+The scene's interact press goes to `pressFocusedPrompt(owners, stance)`
+first, and every later link of its chain goes through
+`offerPress(owner, stance)`, so the press reaches the thing the prompt names
+and nothing the stance holds back. A prompt raised outside any owner ranks as
+`other`, so give a new interactable an owner. A prompt with its own
+`keyOverride` names a different key and is always shown.
 
 ## The HUD (`src/ui/hud/`)
 

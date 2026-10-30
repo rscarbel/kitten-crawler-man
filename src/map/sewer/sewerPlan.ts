@@ -19,6 +19,7 @@ import {
   type SewerConnection,
   type SewerFightDef,
   type SewerGuideStopDef,
+  type SewerOutletDef,
   type SewerSectionId,
   type SewerSectionLayout,
   type SewerValveDef,
@@ -51,6 +52,14 @@ export interface ParsedSewerValve {
   readonly tile: SewerTile;
 }
 
+export interface ParsedSewerOutlet {
+  readonly def: SewerOutletDef;
+  /** The channel it floods: its nest's. */
+  readonly channel: SewerChannelId;
+  /** The wall tile the pipe comes out of. */
+  readonly tile: SewerTile;
+}
+
 export interface ParsedSewerFight {
   readonly def: SewerFightDef;
   readonly spawns: ReadonlyArray<SewerTile>;
@@ -78,7 +87,13 @@ export interface ParsedSewerSection {
   readonly mainChannel: ReadonlyArray<SewerTile>;
   /** The tiles the rat nest chokes, until the basin under it floods. */
   readonly nest: ReadonlyArray<SewerTile>;
+  /**
+   * Drain mouths in the nest basin's floor: basin tiles, so they flood and
+   * run dry with it, but shut to every body for good.
+   */
+  readonly drains: ReadonlyArray<SewerTile>;
   readonly valves: ReadonlyArray<ParsedSewerValve>;
+  readonly outlets: ReadonlyArray<ParsedSewerOutlet>;
   readonly fights: ReadonlyArray<ParsedSewerFight>;
   /** The guide's stops, in walking order. */
   readonly guideStops: ReadonlyArray<ParsedSewerGuideStop>;
@@ -115,6 +130,12 @@ function tileCodeOf(value: number): SewerTileCode {
   }
 }
 
+/** The tile code each valve-worked channel is stored as. */
+const CHANNEL_TILE_CODES = {
+  spillway: SEWER_TILE.spillway,
+  nest_basin: SEWER_TILE.nestBasin,
+} as const satisfies Record<SewerChannelId, SewerTileCode>;
+
 /** Every glyph that stands for walkway, whatever else it marks. */
 function isWalkwayMarker(char: string): boolean {
   return (
@@ -122,7 +143,7 @@ function isWalkwayMarker(char: string): boolean {
     char === SEWER_CHAR.ladder ||
     char === SEWER_CHAR.streetGrate ||
     char === SEWER_CHAR.culvert ||
-    SEWER_VALVE_CHARS.includes(char) ||
+    SEWER_VALVE_CHARS.some((valveChar) => valveChar === char) ||
     SEWER_FIGHT_CHARS.includes(char) ||
     SEWER_GUIDE_STOP_CHARS.includes(char)
   );
@@ -131,6 +152,7 @@ function isWalkwayMarker(char: string): boolean {
 function tileCodeForChar(char: string): SewerTileCode | null {
   switch (char) {
     case SEWER_CHAR.wall:
+    case SEWER_CHAR.outlet:
       return SEWER_TILE.wall;
     case SEWER_CHAR.mainChannel:
       return SEWER_TILE.mainChannel;
@@ -138,6 +160,7 @@ function tileCodeForChar(char: string): SewerTileCode | null {
       return SEWER_TILE.spillway;
     case SEWER_CHAR.nestBasin:
     case SEWER_CHAR.nest:
+    case SEWER_CHAR.drain:
       return SEWER_TILE.nestBasin;
     default:
       return isWalkwayMarker(char) ? SEWER_TILE.walkway : null;
@@ -219,6 +242,24 @@ export function parseSewerSection(layout: SewerSectionLayout): ParsedSewerSectio
     valves.push({ def, tile });
   }
 
+  const outlets: ParsedSewerOutlet[] = [];
+  const nestDef = layout.nest;
+  const outletDefs =
+    nestDef === null ? [] : nestDef.outlets.map((def) => ({ def, channel: nestDef.channel }));
+  for (const { def, channel } of outletDefs) {
+    const marked = tilesMarked(rows, def.char);
+    const tile = firstOf(marked);
+    if (marked.length !== 1 || tile === undefined) {
+      problems.push(`outlet "${def.id}" is marked ${marked.length} times, wants exactly 1`);
+      continue;
+    }
+    const below = sewerTileAt(grid, tile.x, tile.y + 1);
+    if (below !== CHANNEL_TILE_CODES[channel]) {
+      problems.push(`outlet "${def.id}" at ${tile.x},${tile.y} is not over its channel`);
+    }
+    outlets.push({ def, channel, tile });
+  }
+
   const fights: ParsedSewerFight[] = layout.fights.map((def) => {
     const spawns = tilesMarked(rows, def.char);
     if (spawns.length === 0) problems.push(`fight "${def.id}" has no spawns`);
@@ -245,6 +286,23 @@ export function parseSewerSection(layout: SewerSectionLayout): ParsedSewerSectio
     return { connection, tiles: marked };
   });
 
+  const nest = tilesMarked(rows, SEWER_CHAR.nest);
+  if (nest.length > 0 !== (layout.nest !== null)) {
+    problems.push(
+      `${nest.length} nest tiles marked, but the layout's nest is ${layout.nest?.id ?? 'null'}`,
+    );
+  }
+
+  const drains = tilesMarked(rows, SEWER_CHAR.drain);
+  for (const drain of drains) {
+    const openNeighbours = CARDINAL_STEPS.filter(
+      (step) => sewerTileAt(grid, drain.x + step.dx, drain.y + step.dy) !== SEWER_TILE.wall,
+    );
+    if (openNeighbours.length < CARDINAL_STEPS.length) {
+      problems.push(`drain at ${drain.x},${drain.y} touches a wall, so it could close the way`);
+    }
+  }
+
   const ladder = firstOf(ladders);
   if (problems.length > 0 || ladder === undefined) {
     throw new SewerLayoutError(layout.id, problems);
@@ -259,8 +317,10 @@ export function parseSewerSection(layout: SewerSectionLayout): ParsedSewerSectio
       nest_basin: tilesOfCode(grid, SEWER_TILE.nestBasin),
     },
     mainChannel: tilesOfCode(grid, SEWER_TILE.mainChannel),
-    nest: tilesMarked(rows, SEWER_CHAR.nest),
+    nest,
+    drains,
     valves,
+    outlets,
     fights,
     guideStops,
     connections,
@@ -305,7 +365,7 @@ export function towerCisternCulvertLanding(plan: SewerPlan): {
     const culvert = parsed.connections.find((each) => each.connection.kind === 'tower_cistern');
     if (culvert === undefined) continue;
     for (const mouth of culvert.tiles) {
-      for (const step of CULVERT_MOUTH_STEPS) {
+      for (const step of CARDINAL_STEPS) {
         const tile = { x: mouth.x + step.dx, y: mouth.y + step.dy };
         const char = parsed.layout.rows[tile.y]?.charAt(tile.x) ?? SEWER_CHAR.wall;
         if (char === SEWER_CHAR.walkway) return { section, tile };
@@ -315,7 +375,7 @@ export function towerCisternCulvertLanding(plan: SewerPlan): {
   throw new Error('no sewer section has the tower cistern culvert');
 }
 
-const CULVERT_MOUTH_STEPS = [
+const CARDINAL_STEPS = [
   { dx: -1, dy: 0 },
   { dx: 1, dy: 0 },
   { dx: 0, dy: -1 },

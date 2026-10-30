@@ -74,10 +74,12 @@ run ends. Companions can join: a Deinonychus (${CAT}'s pet dinosaur), hired merc
 Dave is the party's guide: an ordinary human who used to fight his way through these floors
 himself. Before the human crawler, Caroline chose Dave, and she talked to him because of it;
 that is how he knows the history. He crawled with a cat named Pumpkin. They reached
-Taloncrest's tower, where Pumpkin was taken; he believed her dead and went on alone. Alone, he
+Taloncrest's tower, where Pumpkin was taken. He broke in after her and gave up his sword to a
+guard who promised to negotiate, and was shown only her fur and clipped claws; he killed the
+guard, fled, and believed her dead. He went on alone. Alone, he
 hit a ceiling and came away sure that one person can't move the needle; it takes allies and
-many capable people working together. Now he spends what he knows helping others, and he will
-not help put another cat in front of that tower. Warm, tired, dry, practical. He never changes form. He appears in every safe room the party enters and knows only what
+many capable people working together. Now he spends what he knows helping others, and he begs
+the party never to put ${CAT} in the tower's hands. Warm, tired, dry, practical. He never changes form. He appears in every safe room the party enters and knows only what
 happens there, what the party tells him, and the big news everyone hears (a death, a boss
 slain, an achievement, a new floor). He gives practical survival advice: red ground means
 move, step away from the lizardman's tongue, drink potions early. He does not know which

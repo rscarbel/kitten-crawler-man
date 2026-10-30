@@ -48,7 +48,8 @@ export type GearHeadIconId =
   | 'moon_locket'
   | 'showmans_top_hat'
   | 'gilded_monocle'
-  | 'grinning_mask';
+  | 'grinning_mask'
+  | 'hushed_bell';
 
 type Painter = (ctx: CanvasRenderingContext2D, px: number) => void;
 type Point = readonly [number, number];
@@ -1293,6 +1294,57 @@ const paintGrinningMask: Painter = (ctx, px) => {
   glints(ctx, [MASK_GLINT]);
 };
 
+// ── Hushed Bell ────────────────────────────────────────────────────────
+const BELL_BRASS = '#c9a23e';
+const BELL_RIBBON = '#c4362e';
+const BELL_FUR = '#c9c4bb';
+/** The ribbon is a collar seen from the front: a loop sagging to the bell's ring. */
+const BELL_RIBBON_LOOP: Polyline = [
+  [0.1, 0.12],
+  [0.5, 0.3, 0.2],
+  [0.9, 0.12],
+];
+const BELL_RING_Y = 0.3;
+const BELL_RING_R = 0.05;
+const BELL_CY = 0.6;
+const BELL_R = 0.26;
+const BELL_SLOT_Y = 0.68;
+const BELL_SLOT: Polyline = [
+  [0.31, BELL_SLOT_Y],
+  [0.69, BELL_SLOT_Y],
+];
+const BELL_HOLE_Y = 0.77;
+const BELL_HOLE_R = 0.035;
+/** The twist of fur stopping its clapper, bulging out of the slot. */
+const BELL_FUR_X = 0.58;
+const BELL_FUR_RX = 0.08;
+const BELL_FUR_RY = 0.05;
+const BELL_GLINT: Spark = [0.4, 0.48, 0.07];
+
+const paintHushedBell: Painter = (ctx, px) => {
+  paintCord(ctx, px, BELL_RIBBON_LOOP, BELL_RIBBON, false);
+  traceEllipse(ctx, ICON_CENTER, BELL_RING_Y, BELL_RING_R, BELL_RING_R);
+  ctx.strokeStyle = ICON_OUTLINE;
+  ctx.lineWidth = outlineWidth(px) * 2 + hairlineWidth(px) * BOLD_DETAIL;
+  ctx.stroke();
+  ctx.strokeStyle = BELL_BRASS;
+  ctx.lineWidth = hairlineWidth(px) * BOLD_DETAIL;
+  ctx.stroke();
+  ellipseForm(
+    ctx,
+    px,
+    ICON_CENTER,
+    BELL_CY,
+    BELL_R,
+    BELL_R,
+    litFill(ctx, BELL_BRASS, LIGHT_FROM, LIGHT_TO),
+  );
+  strokeDetail(ctx, px, BELL_SLOT, tone(BELL_BRASS, ENGRAVED), BOLD_DETAIL);
+  disc(ctx, ICON_CENTER, BELL_HOLE_Y, BELL_HOLE_R, tone(BELL_BRASS, ENGRAVED));
+  ellipseForm(ctx, px, BELL_FUR_X, BELL_SLOT_Y, BELL_FUR_RX, BELL_FUR_RY, BELL_FUR);
+  glints(ctx, [BELL_GLINT]);
+};
+
 const PAINTERS: Record<GearHeadIconId, Painter> = {
   foremans_hardhat: paintHardhat,
   hazard_goggles: paintGoggles,
@@ -1309,6 +1361,7 @@ const PAINTERS: Record<GearHeadIconId, Painter> = {
   showmans_top_hat: paintTopHat,
   gilded_monocle: paintMonocle,
   grinning_mask: paintGrinningMask,
+  hushed_bell: paintHushedBell,
 };
 
 export function drawGearHeadIcon(

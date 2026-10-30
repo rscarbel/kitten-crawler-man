@@ -24,6 +24,7 @@ import {
   drawHawkfolkCastSprite,
   prewarmAndPinHawkfolkTalk,
   prewarmHawkfolkCastMember,
+  prewarmHawkfolkRun,
   hawkfolkCastMemberRows,
 } from '../sprites/hawkfolkCastSprite';
 import {
@@ -36,7 +37,9 @@ import type { RoutinePose } from './routinePose';
 import { VARIETY_TIERS, varietyTier, type VarietyTier } from '../core/perf/varietyTier';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
+  RUN_FRAMES as HAWKFOLK_RUN_FRAMES,
   WALK_FRAMES as HAWKFOLK_WALK_FRAMES,
+  hawkfolkRunCyclePx,
   hawkfolkWalkCyclePx,
 } from '../sprites/art/hawkfolkCastFigure';
 import { WALK_FRAMES as HUMAN_WALK_FRAMES } from '../sprites/art/townCastFrameCounts';
@@ -47,7 +50,7 @@ export type CitizenFigure =
   | { readonly species: 'hawkfolk'; readonly look: HawkfolkLook };
 
 /** What a citizen can be doing, as far as either cast's sprite wrapper is concerned. */
-export type CitizenAction = 'idle' | 'walk' | 'talk' | 'work';
+export type CitizenAction = 'idle' | 'walk' | 'run' | 'talk' | 'work';
 
 export interface CitizenSpriteState {
   readonly action: CitizenAction;
@@ -192,6 +195,34 @@ export function citizenWalkCyclePx(figure: CitizenFigure, tileSize: number): num
 /** Frames in a citizen's walk row: the most one tick may advance it is one of them. */
 export function citizenWalkFrames(figure: CitizenFigure): number {
   return figure.species === 'hawkfolk' ? HAWKFOLK_WALK_FRAMES : HUMAN_WALK_FRAMES;
+}
+
+/** A row a figure covers ground in: the ground one cycle sweeps, and its frame count. */
+export interface GaitRow {
+  readonly action: Extract<CitizenAction, 'walk' | 'run'>;
+  readonly cyclePx: number;
+  readonly frames: number;
+}
+
+/** Warms the row {@link citizenHurryGait} names; the human cast's walk is warm with the look already. */
+export function prewarmCitizenHurry(figure: CitizenFigure): void {
+  if (figure.species === 'hawkfolk') prewarmHawkfolkRun(figure.look.id);
+}
+
+/** The row a citizen hurries in: the Hawkfolk cast's run, else the human cast's own walk. */
+export function citizenHurryGait(figure: CitizenFigure, tileSize: number): GaitRow {
+  if (figure.species === 'hawkfolk') {
+    return {
+      action: 'run',
+      cyclePx: hawkfolkRunCyclePx(figure.look.id, tileSize),
+      frames: HAWKFOLK_RUN_FRAMES,
+    };
+  }
+  return {
+    action: 'walk',
+    cyclePx: citizenWalkCyclePx(figure, tileSize),
+    frames: citizenWalkFrames(figure),
+  };
 }
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;

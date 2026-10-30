@@ -38,6 +38,7 @@ import {
   DOWNSCALE_FACTOR,
   type SpriteKey,
 } from '../core/spriteAssets/SpriteLoader';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Milliseconds of painting the cache may spend on a render frame, on average.
@@ -96,7 +97,6 @@ const DEFERRED_SHEET_RETRY_MS = 5000;
 export const ENVIRONMENT_SHEET_BUDGET_MEGABYTES = 160;
 
 const RECENTLY_DRAWN_SECONDS = 30;
-const NOMINAL_FRAMES_PER_SECOND = 60;
 
 /**
  * Frames within which a sheet counts as drawn lately: safe from eviction over
@@ -114,7 +114,7 @@ const NOMINAL_FRAMES_PER_SECOND = 60;
  * it within the wait a player makes there.
  *
  */
-export const RECENTLY_DRAWN_FRAMES = RECENTLY_DRAWN_SECONDS * NOMINAL_FRAMES_PER_SECOND;
+export const RECENTLY_DRAWN_FRAMES = RECENTLY_DRAWN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 const ON_SCREEN_SECONDS = 1;
 /**
@@ -127,7 +127,7 @@ const ON_SCREEN_SECONDS = 1;
  * they draw, and a resident set's touches, made every few updates. Anything
  * else waits, like an evicted sheet, to be painted when it is next wanted.
  */
-const ON_SCREEN_FRAMES = ON_SCREEN_SECONDS * NOMINAL_FRAMES_PER_SECOND;
+const ON_SCREEN_FRAMES = ON_SCREEN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** One piece of a sheet: a material's patch, a prop's frame row, a facade. */
 export interface PaintStep {
@@ -965,7 +965,7 @@ const RELEASED_GRACE_SECONDS = 0.2;
  * idle clock stands still through a building visit in between. A fifth of a
  * second is two tiles of fastest walk past each release ring.
  */
-export const RELEASED_GRACE_FRAMES = Math.round(RELEASED_GRACE_SECONDS * NOMINAL_FRAMES_PER_SECOND);
+export const RELEASED_GRACE_FRAMES = Math.round(RELEASED_GRACE_SECONDS * WORLD_TICKS_PER_SECOND);
 
 /**
  * Lets a finished sheet go within {@link RELEASED_GRACE_FRAMES}, for a

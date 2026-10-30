@@ -24,7 +24,7 @@ import { crawlerPronouns } from '../characters/crawlerPronouns';
 import { Cow, type CowLeadBand } from './Cow';
 import type { LootDrop, Mob, PlayerDamageType } from './Mob';
 import type { DamageOptions, DamageSource, Player } from '../Player';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { levelledMaxHp, scaledDamageForLevel } from './mobLevelScaling';
 import { HirelingSurvival } from './mercenaries/hirelingSurvival';
 import {
@@ -54,7 +54,6 @@ import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { PetKind } from '../core/party/petNames';
 
-const UPDATES_PER_SECOND = 60;
 const TWO_PI = Math.PI * 2;
 const TILE_CENTRE = 0.5;
 
@@ -129,33 +128,35 @@ const HEADBUTT_KNOCKBACK_FRAMES = 8;
 /** The charge cry is not repeated more often than this: a moo per fight, not per target. */
 const CHARGE_CRY_COOLDOWN_FRAMES = 240;
 const HEADBUTT_UPDATES = Math.round(
-  (ATTACK_COW_HEADBUTT_FRAMES / ATTACK_COW_HEADBUTT_FPS) * UPDATES_PER_SECOND,
+  (ATTACK_COW_HEADBUTT_FRAMES / ATTACK_COW_HEADBUTT_FPS) * WORLD_TICKS_PER_SECOND,
 );
 const HEADBUTT_IMPACT_UPDATE = Math.round(
-  (ATTACK_COW_HEADBUTT_IMPACT_FRAME / ATTACK_COW_HEADBUTT_FPS) * UPDATES_PER_SECOND,
+  (ATTACK_COW_HEADBUTT_IMPACT_FRAME / ATTACK_COW_HEADBUTT_FPS) * WORLD_TICKS_PER_SECOND,
 );
 
 // ── Recovery ─────────────────────────────────────────────────────────────────
 
 /** Out of a fight this long, she starts to mend. */
 const QUIET_SECONDS_BEFORE_REGEN = 8;
-const QUIET_FRAMES_BEFORE_REGEN = QUIET_SECONDS_BEFORE_REGEN * UPDATES_PER_SECOND;
+const QUIET_FRAMES_BEFORE_REGEN = QUIET_SECONDS_BEFORE_REGEN * WORLD_TICKS_PER_SECOND;
 /** Share of her maximum mended each second once quiet. */
 const REGEN_SHARE_PER_SECOND = 0.04;
 /** A revive stands her up with this share of her health: enough to walk away from the fight. */
 const REVIVE_HP_SHARE = 0.3;
 
 const DOWNED_UPDATES = Math.round(
-  (ATTACK_COW_DOWNED_FRAMES / ATTACK_COW_DOWNED_FPS) * UPDATES_PER_SECOND,
+  (ATTACK_COW_DOWNED_FRAMES / ATTACK_COW_DOWNED_FPS) * WORLD_TICKS_PER_SECOND,
 );
-const HAPPY_UPDATES = Math.round((COW_HAPPY_FRAMES / COW_HAPPY_FPS) * UPDATES_PER_SECOND);
-const LIE_DOWN_UPDATES = Math.round((COW_LIE_DOWN_FRAMES / COW_LIE_DOWN_FPS) * UPDATES_PER_SECOND);
+const HAPPY_UPDATES = Math.round((COW_HAPPY_FRAMES / COW_HAPPY_FPS) * WORLD_TICKS_PER_SECOND);
+const LIE_DOWN_UPDATES = Math.round(
+  (COW_LIE_DOWN_FRAMES / COW_LIE_DOWN_FPS) * WORLD_TICKS_PER_SECOND,
+);
 /** How far from where she fell she limps before lying down. */
 const LIMP_AWAY_TILES = 4;
 const LIMP_SEARCH_TILES = 3;
 /** She gives up on reaching her spot after this long and lies down where she is. */
 const LIMP_MAX_SECONDS = 6;
-const LIMP_MAX_UPDATES = LIMP_MAX_SECONDS * UPDATES_PER_SECOND;
+const LIMP_MAX_UPDATES = LIMP_MAX_SECONDS * WORLD_TICKS_PER_SECOND;
 const LIMP_ARRIVE_PX = 2;
 
 /** Movement below this in an update is standing still, for the row and the stall count. */
@@ -187,6 +188,11 @@ export class AttackCow extends Cow {
   headbuttSoundPending = false;
   /** Updates in a row the lead asked her to walk and she gained nothing. */
   followStallFrames = 0;
+  /**
+   * Set while her system walks her along the party's trail: she neither picks
+   * a fight nor walks herself anywhere, and stands where the trail puts her.
+   */
+  walksTrail = false;
 
   private phaseValue: AttackCowPhase = 'follow';
   private phaseUpdates = 0;
@@ -202,6 +208,12 @@ export class AttackCow extends Cow {
   private frameCount = 0;
   private gait = 0;
   private steppedThisUpdate = false;
+  /**
+   * Where the last update left her. The trail moves her from her system,
+   * between updates, so on it her gait is paced by the ground covered since.
+   */
+  private settledX: number;
+  private settledY: number;
   private clock = 0;
   private readonly headbuttDamage: number;
 
@@ -224,6 +236,8 @@ export class AttackCow extends Cow {
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(startingHp ?? this.maxHp)));
     this.headbuttDamage = scaledDamageForLevel(ATTACK_COW_HEADBUTT_DAMAGE, level);
     this.beginLead(ATTACK_COW_LEAD_BAND, owner, { ignoresBreak: true });
+    this.settledX = this.x;
+    this.settledY = this.y;
     prewarmAttackCow();
   }
 
@@ -392,7 +406,7 @@ export class AttackCow extends Cow {
     if (!this.isAlive) return;
     this.frameCount++;
     this.phaseUpdates++;
-    this.clock = (this.clock + 1 / UPDATES_PER_SECOND) % CLOCK_WRAP_SECONDS;
+    this.clock = (this.clock + 1 / WORLD_TICKS_PER_SECOND) % CLOCK_WRAP_SECONDS;
     if (this.headbuttCooldown > 0) this.headbuttCooldown--;
     if (this.chargeCryCooldown > 0) this.chargeCryCooldown--;
     const beforeX = this.x;
@@ -416,14 +430,25 @@ export class AttackCow extends Cow {
         break;
       case 'follow':
       case 'fight':
-        this.think(targets);
+        if (this.walksTrail) this.keepToTrail();
+        else this.think(targets);
         break;
     }
 
-    const moved = Math.hypot(this.x - beforeX, this.y - beforeY);
+    const movedFromX = this.walksTrail ? this.settledX : beforeX;
+    const movedFromY = this.walksTrail ? this.settledY : beforeY;
+    const moved = Math.hypot(this.x - movedFromX, this.y - movedFromY);
+    this.settledX = this.x;
+    this.settledY = this.y;
     this.steppedThisUpdate = moved > STILL_EPSILON_PX;
     this.turnGait(moved);
     this.tickRegen();
+  }
+
+  private keepToTrail(): void {
+    this.dropTarget();
+    this.enterPhase('follow');
+    this.followStallFrames = 0;
   }
 
   private think(targets: Player[]): void {
@@ -631,7 +656,7 @@ export class AttackCow extends Cow {
     }
     if (this.hp >= this.maxHp) return;
     this.regenFrames++;
-    if (this.regenFrames < UPDATES_PER_SECOND) return;
+    if (this.regenFrames < WORLD_TICKS_PER_SECOND) return;
     this.regenFrames = 0;
     this.hp = Math.min(this.maxHp, this.hp + Math.ceil(this.maxHp * REGEN_SHARE_PER_SECOND));
   }

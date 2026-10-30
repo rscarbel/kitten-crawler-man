@@ -2,12 +2,15 @@ import {
   BARK_COOLDOWN_FRAMES,
   BARK_MIN_GAP_FRAMES,
   GAP_EXEMPT_TRIGGERS,
+  isChatterTrigger,
   linesFor,
   type MercenaryBarkTrigger,
   type MercenaryGrunt,
   type MercenaryVoice,
 } from './mercenaryVoices';
 import type { BarkLine, NonEmpty } from '../../dialog/line';
+import type { MercenaryLines } from '../../dialog/roles';
+import type { TowerErrandLeg } from '../../core/quests/missingCatsProgress';
 
 /** What one bark comes out as: words, a stage direction, a noise, or a direction with a noise. */
 export interface MercenaryUtterance {
@@ -30,6 +33,8 @@ export class MercenaryBarker {
   private readonly lastFrameByTrigger = new Map<MercenaryBarkTrigger, number>();
   /** The line said last per trigger, so the same trigger never says the same thing twice running. */
   private readonly lastLineByTrigger = new Map<MercenaryBarkTrigger, string>();
+  /** The leg of the tower errand the hire walks, which keeps its small talk to that leg; null off it. */
+  towerErrandLeg: TowerErrandLeg | null = null;
 
   constructor(
     private readonly voice: MercenaryVoice,
@@ -62,8 +67,9 @@ export class MercenaryBarker {
    */
   bark(trigger: MercenaryBarkTrigger): MercenaryUtterance | null {
     if (!this.canBark(trigger)) return null;
-    const spoken = linesFor(this.voice.lines, trigger);
-    const narrated = linesFor(this.voice.actions, trigger);
+    const { spoken: spokenBag, narrated: narratedBag } = this.tablesFor(trigger);
+    const spoken = linesFor(spokenBag, trigger);
+    const narrated = linesFor(narratedBag, trigger);
     const pool = spoken ?? narrated;
     const text = pool === undefined ? null : this.pickLine(trigger, pool);
     const italic = text !== null && pool === narrated;
@@ -76,11 +82,25 @@ export class MercenaryBarker {
 
   private hasAnything(trigger: MercenaryBarkTrigger): boolean {
     const grunt = this.voice.grunts?.[trigger];
+    const { spoken, narrated } = this.tablesFor(trigger);
     return (
-      linesFor(this.voice.lines, trigger) !== undefined ||
-      linesFor(this.voice.actions, trigger) !== undefined ||
+      linesFor(spoken, trigger) !== undefined ||
+      linesFor(narrated, trigger) !== undefined ||
       grunt !== undefined
     );
+  }
+
+  /** The spoken and narrated tables `trigger` reads from right now. */
+  private tablesFor(trigger: MercenaryBarkTrigger): {
+    readonly spoken: MercenaryLines;
+    readonly narrated: MercenaryLines | undefined;
+  } {
+    const leg = this.towerErrandLeg;
+    if (leg !== null && isChatterTrigger(trigger)) {
+      const errand = this.voice.towerErrand[leg];
+      return { spoken: errand.lines, narrated: errand.actions };
+    }
+    return { spoken: this.voice.lines, narrated: this.voice.actions };
   }
 
   private pickLine(trigger: MercenaryBarkTrigger, pool: NonEmpty<BarkLine>): string {

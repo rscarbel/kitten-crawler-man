@@ -32,6 +32,8 @@ export interface InteriorStory {
   readonly floor: StoryFloor | null;
   /** The objective the floor outside wants raised next, or null when nothing is left. */
   readonly currentObjective: () => AdviceObjective | null;
+  /** Whether arriving in a safe room in here may walk the party up to Dave, by the floor outside's rule. */
+  readonly arrivalFetchesParty: () => boolean;
   /**
    * Where bearings from inside are taken from: the building's door, in the
    * floor's tiles, since every objective is out there.
@@ -86,6 +88,7 @@ export function detachedPartyRun(): InteriorPartyRun {
       persist: () => undefined,
       floor: null,
       currentObjective: () => null,
+      arrivalFetchesParty: () => true,
       bearingOrigin: { x: 0, y: 0 },
     },
     commitSave: () => Promise.resolve('disabled'),

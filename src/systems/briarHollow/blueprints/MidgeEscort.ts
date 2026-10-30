@@ -29,7 +29,7 @@
  *   (`WendellsMidge`), walking in through the cart gate by herself.
  */
 
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import {
   activeDifficultyProfile,
   applySpawnDifficulty,
@@ -56,7 +56,6 @@ import { merritGateTile } from './escortRoute';
 import { WendellsMidge } from './wendellsMidge';
 import type { Camera } from '../../../core/rendering/camera';
 
-const UPDATES_PER_SECOND = 60;
 const TILE_CENTRE = 0.5;
 
 /** Merrit's call gives up waiting for Midge to walk over after this long, and sets her down beside the party. */
@@ -134,7 +133,7 @@ type EscortStage =
 const NO_STAGE: EscortStage = { kind: 'none' };
 
 function secondsToUpdates(seconds: number): number {
-  return Math.round(seconds * UPDATES_PER_SECOND);
+  return Math.round(seconds * WORLD_TICKS_PER_SECOND);
 }
 
 function tileOf(body: { readonly x: number; readonly y: number }): TilePoint {

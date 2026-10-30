@@ -8,8 +8,8 @@
  * placer stands her in until she is freed, when she bolts for the point she
  * is given and settles there), bound (sat rigid where a spell holds her, not
  * so much as a twitch of grooming, until she is freed the same way), or at
- * home (wandering a little round the point she is placed on). Which building
- * or street that is, and when, belongs to whoever places her.
+ * home (wandering a little round the point she is placed on). Which room
+ * that is, and when, belongs to whoever places her. At home she can be petted.
  *
  * Moments, not state: nothing here is checkpointed; the placer decides
  * afresh where each cat is on every visit.
@@ -22,19 +22,26 @@ import {
   CatAnimator,
   CatAppearance,
   drawCatSprite,
+  type CatOneShot,
   type CatSpriteState,
 } from '../../sprites/catSprite';
 import { FacingState } from '../../sprites/facingView';
+import type { TownInteriorPropId } from '../../sprites/art/townInterior/townInteriorProps';
 import type { CatLook } from '../../sprites/looks/catLook';
 import { TOWN_CAT_LOOKS } from '../../sprites/looks/cats/townCatLooks';
 import type { TownCatId } from '../../core/state/townCatIds';
 import type { CritterFloor, WorldPoint } from './ScatterSwarm';
 
-/** Who a town cat is: what her owners call her, the building she lives in, and how she is painted. */
+/**
+ * Who a town cat is: what her owners call her, the building she lives in, how
+ * she is painted, and the furniture in that building she keeps her spot by,
+ * in order of preference.
+ */
 export interface TownCatDef {
   readonly displayName: string;
   readonly home: BuildingId;
   readonly look: CatLook;
+  readonly restsBeside: readonly TownInteriorPropId[];
 }
 
 /** Every town cat. A cat cannot ship without a name, a home and a look. */
@@ -43,36 +50,43 @@ export const TOWN_CATS = {
     displayName: 'Biscuit',
     home: 'taloncrest_inn',
     look: TOWN_CAT_LOOKS.taloncrest_inn_cat,
+    restsBeside: ['cat_stool', 'inn_hearth', 'rag_rug'],
   },
   taloncrest_old_lady_cottage_cat: {
     displayName: 'Thimble',
     home: 'taloncrest_old_lady_cottage',
     look: TOWN_CAT_LOOKS.taloncrest_old_lady_cottage_cat,
+    restsBeside: ['cat_armchair', 'witch_hearth', 'rug_medium'],
   },
   taloncrest_apothecary_cat: {
     displayName: 'Sage',
     home: 'taloncrest_apothecary',
     look: TOWN_CAT_LOOKS.taloncrest_apothecary_cat,
+    restsBeside: ['rug_large', 'potting_bench'],
   },
   taloncrest_flagon_tavern_cat: {
     displayName: 'Barrel',
     home: 'taloncrest_flagon_tavern',
     look: TOWN_CAT_LOOKS.taloncrest_flagon_tavern_cat,
+    restsBeside: ['flagon_hearth_rug', 'flagon_hearth'],
   },
   taloncrest_mill_farm_cat: {
     displayName: 'Chaff',
     home: 'taloncrest_mill_farm',
     look: TOWN_CAT_LOOKS.taloncrest_mill_farm_cat,
+    restsBeside: ['farm_hearth', 'flour_sack_stack', 'rug_medium'],
   },
   taloncrest_smithy_cat: {
     displayName: 'Cinder',
     home: 'taloncrest_smithy',
     look: TOWN_CAT_LOOKS.taloncrest_smithy_cat,
+    restsBeside: ['coal_heap', 'forge'],
   },
   taloncrest_general_store_cat: {
     displayName: 'Penny',
     home: 'taloncrest_general_store',
     look: TOWN_CAT_LOOKS.taloncrest_general_store_cat,
+    restsBeside: ['rug_medium', 'store_counter'],
   },
 } as const satisfies Record<TownCatId, TownCatDef>;
 
@@ -92,6 +106,12 @@ const REST_MIN_FRAMES = 300;
 const REST_RANDOM_FRAMES = 600;
 /** The share of her rests she spends sat down rather than stood. */
 const SIT_SHARE = 0.6;
+/** Frames between two pets that each set her washing again. */
+const PET_COOLDOWN_FRAMES = 90;
+/** How far down her tile her head sits, as a share of a tile: where the hearts rise from. */
+const HEAD_HEIGHT_SHARE = 0.45;
+/** What she does with a pet: washes the flank she was stroked on. */
+const PETTED_ONE_SHOT = 'groom_flank' as const satisfies CatOneShot;
 
 /** Where she is in her life on the map. */
 type TownCatMode =
@@ -118,6 +138,7 @@ export class TownCat {
   private isMoving = false;
   private walkFrame = 0;
   private mode: TownCatMode;
+  private petCooldownFrames = 0;
   private readonly animator: CatAnimator;
   private readonly facing = new FacingState(this.facingX, this.facingY);
 
@@ -152,6 +173,41 @@ export class TownCat {
     return this.mode.kind === 'startled' || this.mode.kind === 'bolting';
   }
 
+  /** Whether she is settled about her home, where a crawler may pet her. */
+  get isAtHome(): boolean {
+    return this.mode.kind === 'home';
+  }
+
+  /** World pixel her head is at, for the hearts a pet floats up off her. */
+  headAnchor(): WorldPoint {
+    return { x: this.x + TILE_SIZE / 2, y: this.y + TILE_SIZE * HEAD_HEIGHT_SHARE };
+  }
+
+  /**
+   * A crawler at world pixel `from` stroked her. At home she stops where she
+   * is, sits, and washes; true when she took it, false away from home or
+   * inside the pause after the last pet.
+   */
+  pet(from: WorldPoint): boolean {
+    const mode = this.mode;
+    if (mode.kind !== 'home' || this.petCooldownFrames > 0) return false;
+    this.petCooldownFrames = PET_COOLDOWN_FRAMES;
+    mode.target = null;
+    mode.sitting = true;
+    mode.restFramesLeft = REST_MIN_FRAMES;
+    this.isMoving = false;
+    const dx = from.x - this.x;
+    const dy = from.y - this.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > 0) {
+      this.facingX = dx / distance;
+      this.facingY = dy / distance;
+    }
+    this.appearance.prewarmRow(PETTED_ONE_SHOT, true);
+    this.animator.play(PETTED_ONE_SHOT);
+    return true;
+  }
+
   /** Whether she is held where she sits, in a cage or bound: nothing she does moves her until she is freed. */
   private get held(): boolean {
     return this.mode.kind === 'caged' || this.mode.kind === 'bound';
@@ -172,6 +228,7 @@ export class TownCat {
 
   update(isFloor: CritterFloor, random: () => number): void {
     this.facing.update(this.facingX, this.facingY);
+    if (this.petCooldownFrames > 0) this.petCooldownFrames--;
     const mode = this.mode;
     switch (mode.kind) {
       case 'caged':
@@ -211,6 +268,10 @@ export class TownCat {
     isFloor: CritterFloor,
     random: () => number,
   ): void {
+    if (this.animator.current?.action === PETTED_ONE_SHOT) {
+      this.isMoving = false;
+      return;
+    }
     if (mode.target !== null) {
       if (this.stepToward(mode.target, AMBLE_SPEED, isFloor)) {
         mode.target = null;

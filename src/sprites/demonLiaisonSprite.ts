@@ -8,7 +8,7 @@
  */
 
 import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { drawFigureCached } from './figure/figureFrameCache';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import {
@@ -21,7 +21,7 @@ import {
   demonLiaisonStateName,
 } from './art/demonLiaisonFigure';
 import { RIG_WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
-import { idleFrameAtSeconds, TICKS_PER_SECOND } from './art/human/timing';
+import { idleFrameAtSeconds } from './art/human/timing';
 import { TALK_TICKS_PER_FRAME } from './art/human/actionsMisc';
 
 /**
@@ -72,7 +72,7 @@ function frameFor(role: DemonLiaisonRole, state: DemonLiaisonSpriteState, frames
   if (role === 'walk') return walkFrameIndex(state.walkPhase, frames);
   const seconds = performance.now() / MS_PER_SECOND + state.idleOffsetSeconds;
   if (role === 'talk')
-    return Math.floor((seconds * TICKS_PER_SECOND) / TALK_TICKS_PER_FRAME) % frames;
+    return Math.floor((seconds * WORLD_TICKS_PER_SECOND) / TALK_TICKS_PER_FRAME) % frames;
   return idleFrameAtSeconds(seconds);
 }
 

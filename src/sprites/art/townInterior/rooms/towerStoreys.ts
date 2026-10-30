@@ -163,13 +163,31 @@ const SLUICE_GATE_HEIGHT_TILES = 0.66;
 const SLUICE_GATE_RAISED_LIFT_TILES = 0.64;
 const SLUICE_GATE_PLANKS = 4;
 const SLUICE_GATE_STRAPS = 2;
+/** The shut gate's foot sinks this far below the basin's lip, into the channel. */
+const SLUICE_GATE_SHUT_SINK_TILES = 0.1;
+/** The mouth's centre, as a share of the footprint's width from its left edge. */
+const SLUICE_MOUTH_X_FRACTION = 0.36;
 /** The winding wheel sits to the right of the mouth, above the rail head. */
 const SLUICE_WHEEL_X_FRACTION = 0.79;
-const SLUICE_WHEEL_Y_TILES = 1.52;
-const SLUICE_WHEEL_RADIUS_TILES = 0.24;
+const SLUICE_WHEEL_Y_TILES = 1.48;
+const SLUICE_WHEEL_RADIUS_TILES = 0.34;
 const SLUICE_WHEEL_SPOKES = 6;
-const SLUICE_WHEEL_SHUT_TURN = Math.PI / SLUICE_WHEEL_SPOKES;
+const SLUICE_WHEEL_RIM_TILES = 0.075;
+const SLUICE_WHEEL_SPOKE_TILES = 0.04;
+const SLUICE_WHEEL_GLINT_TILES = 0.025;
+/** The glint on the wheel's rim, an arc on its upper left where the room's light catches it. */
+const SLUICE_WHEEL_GLINT_FROM = Math.PI * 1.05;
+const SLUICE_WHEEL_GLINT_TO = Math.PI * 1.6;
+const SLUICE_WHEEL_HUB_TILES = 0.07;
+const SLUICE_WHEEL_CRANK_TILES = 0.06;
+/** The wheel's rim: rust-red iron, lifted off the dark brick behind it. */
+const SLUICE_WHEEL_RIM: RGB = [122, 61, 36];
+const SLUICE_WHEEL_RIM_LIGHT: RGB = [176, 98, 64];
 const SLUICE_SPINDLE_WIDTH_TILES = 0.05;
+/** Where along the iron ramp the spindle is sampled: dark, being in the wheel's shadow. */
+const SLUICE_SPINDLE_IRON_SHADE = 0.35;
+/** Where the chain hooks onto the gate's top, as a share of the mouth's half width east of its centre. */
+const SLUICE_CHAIN_HOOK_SHARE = 0.5;
 const SLUICE_CHAIN_LINK_TILES = 0.05;
 const SLUICE_FALL_STREAKS = 6;
 const SLUICE_RIPPLES = 5;
@@ -177,12 +195,83 @@ const SLUICE_GLOW_RADIUS_TILES = 1.0;
 const SLUICE_LIT_GLOW_ALPHA = 0.7;
 const SLUICE_GUTTERED_GLOW_ALPHA = 0.08;
 
+/** Where the sluice's parts stand, worked out once from its footprint for the baked prop and the live works alike. */
+interface SluiceLayout {
+  readonly mouthCentreX: number;
+  readonly mouthHalfW: number;
+  readonly mouthSill: number;
+  readonly basinTop: number;
+  readonly wheelX: number;
+  readonly wheelY: number;
+}
+
+function sluiceLayout(left: number, width: number, bottom: number, ts: number): SluiceLayout {
+  return {
+    mouthCentreX: left + width * SLUICE_MOUTH_X_FRACTION,
+    mouthHalfW: (ts * SLUICE_MOUTH_WIDTH_TILES) / 2,
+    mouthSill: bottom - ts * SLUICE_MOUTH_SILL_TILES,
+    basinTop: bottom - ts * SLUICE_BASIN_DEPTH_TILES,
+    wheelX: left + width * SLUICE_WHEEL_X_FRACTION,
+    wheelY: bottom - ts * SLUICE_WHEEL_Y_TILES,
+  };
+}
+
+/** Where the sluice's footprint lies on the canvas it is drawn on. */
+export interface SluiceFrame {
+  /** Left edge of the footprint. */
+  readonly left: number;
+  /** Bottom edge of the footprint: the foot of the basin. */
+  readonly bottom: number;
+  readonly width: number;
+  readonly tileSize: number;
+}
+
+/** Where the winding wheel's hub stands, in the frame's space: what a light or a prompt over it is placed on. */
+export function sluiceWheelCentre(frame: SluiceFrame): { readonly x: number; readonly y: number } {
+  const layout = sluiceLayout(frame.left, frame.width, frame.bottom, frame.tileSize);
+  return { x: layout.wheelX, y: layout.wheelY };
+}
+
+/**
+ * The sluice's moving parts, drawn live over its baked prop: the gate in its
+ * rails, `gateDown` of the way from raised (0) to shut in the channel (1),
+ * hung on its chain from the winding wheel, which stands `wheelTurns` whole
+ * turns round.
+ */
+export function paintWardConduitSluiceWorks(
+  ctx: Ctx,
+  frame: SluiceFrame,
+  gateDown: number,
+  wheelTurns: number,
+): void {
+  const ts = frame.tileSize;
+  const layout = sluiceLayout(frame.left, frame.width, frame.bottom, ts);
+  const { mouthCentreX, mouthHalfW, mouthSill, basinTop, wheelX, wheelY } = layout;
+  const gateH = ts * SLUICE_GATE_HEIGHT_TILES;
+  const raisedFoot = mouthSill - ts * SLUICE_GATE_RAISED_LIFT_TILES;
+  const shutFoot = basinTop + ts * SLUICE_GATE_SHUT_SINK_TILES;
+  const gateFoot = lerp(raisedFoot, shutFoot, Math.min(1, Math.max(0, gateDown)));
+  const submerged = gateDown >= 1;
+  ctx.save();
+  paintSluiceGate(ctx, mouthCentreX, mouthHalfW, gateFoot - gateH, gateH, ts, submerged);
+  const iron = ironRamp();
+  const spindleW = ts * SLUICE_SPINDLE_WIDTH_TILES;
+  const spindleLeft = wheelX - spindleW / 2;
+  slab(ctx, iron, SLUICE_SPINDLE_IRON_SHADE, spindleLeft, wheelY, spindleW, basinTop - wheelY, ts);
+  const chainHookX = mouthCentreX + mouthHalfW * SLUICE_CHAIN_HOOK_SHARE;
+  paintChain(ctx, wheelX, wheelY, chainHookX, gateFoot - gateH, ts);
+  paintSluiceWheel(ctx, wheelX, wheelY, ts * SLUICE_WHEEL_RADIUS_TILES, wheelTurns * FULL_TURN, ts);
+  ctx.restore();
+}
+
 /**
  * A stone culvert mouth in the cistern's north wall with an iron-strapped
  * sluice gate in two rails, wound by the wheel at its side. Variant 0 runs:
  * the gate is up and the water pouring out carries the ward conduit's cold
  * light. Variant 1 is shut: the gate is down in the channel, the wheel turned
- * and the light guttered to a glint on dark water.
+ * and the light guttered to a glint on dark water. The gate, its chain and
+ * the wheel move, so they are not baked here: `paintWardConduitSluiceWorks`
+ * draws them over this, live.
  */
 export function paintWardConduitSluice(
   ctx: Ctx,
@@ -214,9 +303,12 @@ export function paintWardConduitSluice(
     );
     inkRect(ctx, wallLeft, wallTop, wallWidth, basinTop - wallTop, ts);
 
-    const mouthCentreX = box.left + box.width * 0.36;
-    const mouthHalfW = (ts * SLUICE_MOUTH_WIDTH_TILES) / 2;
-    const mouthSill = box.bottom - ts * SLUICE_MOUTH_SILL_TILES;
+    const { mouthCentreX, mouthHalfW, mouthSill } = sluiceLayout(
+      box.left,
+      box.width,
+      box.bottom,
+      ts,
+    );
     const mouthSpring = mouthSill - ts * SLUICE_MOUTH_HEIGHT_TILES + mouthHalfW;
     traceArchOpening(ctx, mouthCentreX, mouthHalfW, mouthSpring, mouthSill);
     ctx.fillStyle = rgb(CULVERT_DARK);
@@ -255,18 +347,6 @@ export function paintWardConduitSluice(
       railW,
       ts,
     );
-
-    const gateH = ts * SLUICE_GATE_HEIGHT_TILES;
-    const gateFoot = running ? mouthSill - ts * SLUICE_GATE_RAISED_LIFT_TILES : basinTop + ts * 0.1;
-    paintSluiceGate(ctx, mouthCentreX, mouthHalfW, gateFoot - gateH, gateH, ts, running);
-
-    const wheelX = box.left + box.width * SLUICE_WHEEL_X_FRACTION;
-    const wheelY = box.bottom - ts * SLUICE_WHEEL_Y_TILES;
-    const spindleW = ts * SLUICE_SPINDLE_WIDTH_TILES;
-    slab(ctx, iron, 0.35, wheelX - spindleW / 2, wheelY, spindleW, basinTop - wheelY, ts);
-    paintChain(ctx, wheelX, wheelY, mouthCentreX + mouthHalfW * 0.5, gateFoot - gateH, ts);
-    const wheelTurn = running ? 0 : SLUICE_WHEEL_SHUT_TURN;
-    paintWindingWheel(ctx, wheelX, wheelY, ts * SLUICE_WHEEL_RADIUS_TILES, wheelTurn, ts);
 
     const glowY = (mouthSill + basinTop) / 2;
     const glowAlpha = running ? SLUICE_LIT_GLOW_ALPHA : SLUICE_GUTTERED_GLOW_ALPHA;
@@ -371,7 +451,7 @@ function paintSluiceGate(
   top: number,
   height: number,
   ts: number,
-  running: boolean,
+  submerged: boolean,
 ): void {
   const left = centreX - mouthHalfW;
   const width = mouthHalfW * 2;
@@ -386,7 +466,7 @@ function paintSluiceGate(
     const strapY = top + height * (0.22 + i * 0.5);
     slab(ctx, iron, 0.55, left, strapY, width, strapH, ts);
   }
-  if (!running) {
+  if (submerged) {
     ctx.fillStyle = rgba(WATER_DARK, 0.7);
     ctx.fillRect(left, top + height * 0.82, width, height * 0.18);
   }
@@ -424,7 +504,8 @@ function paintChain(
   }
 }
 
-function paintWindingWheel(
+/** The sluice's winding wheel, face on: a rust-red rim on iron spokes, turned `turn` radians. */
+function paintSluiceWheel(
   ctx: Ctx,
   x: number,
   y: number,
@@ -433,18 +514,9 @@ function paintWindingWheel(
   ts: number,
 ): void {
   const iron = ironRamp();
-  ctx.strokeStyle = rgb(sampleRamp(iron, 0.55));
-  ctx.lineWidth = hairline(ts, 0.035);
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, FULL_TURN);
-  ctx.stroke();
-  ctx.strokeStyle = rgb(sampleRamp(iron, 0.85));
-  ctx.lineWidth = hairline(ts, 0.012);
-  ctx.beginPath();
-  ctx.arc(x, y, radius, Math.PI * 1.05, Math.PI * 1.6);
-  ctx.stroke();
-  ctx.strokeStyle = rgb(sampleRamp(iron, 0.45));
-  ctx.lineWidth = hairline(ts, 0.02);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = rgb(sampleRamp(iron, 0.6));
+  ctx.lineWidth = hairline(ts, SLUICE_WHEEL_SPOKE_TILES);
   for (let i = 0; i < SLUICE_WHEEL_SPOKES; i++) {
     const angle = turn + (FULL_TURN * i) / SLUICE_WHEEL_SPOKES;
     ctx.beginPath();
@@ -452,21 +524,43 @@ function paintWindingWheel(
     ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
     ctx.stroke();
   }
+  ctx.strokeStyle = rgb(SLUICE_WHEEL_RIM);
+  ctx.lineWidth = hairline(ts, SLUICE_WHEEL_RIM_TILES);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, FULL_TURN);
+  ctx.stroke();
+  ctx.strokeStyle = rgb(SLUICE_WHEEL_RIM_LIGHT);
+  ctx.lineWidth = hairline(ts, SLUICE_WHEEL_GLINT_TILES);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, SLUICE_WHEEL_GLINT_FROM, SLUICE_WHEEL_GLINT_TO);
+  ctx.stroke();
   const crankAngle = turn - Math.PI / 2;
-  const crankX = x + Math.cos(crankAngle) * radius;
-  const crankY = y + Math.sin(crankAngle) * radius;
   ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.55));
   ctx.beginPath();
-  ctx.arc(crankX, crankY, ts * 0.035, 0, FULL_TURN);
+  ctx.arc(
+    x + Math.cos(crankAngle) * radius,
+    y + Math.sin(crankAngle) * radius,
+    ts * SLUICE_WHEEL_CRANK_TILES,
+    0,
+    FULL_TURN,
+  );
   ctx.fill();
   inkOutline(ctx, ts);
   ctx.fillStyle = rgb(BRASS_DIM);
   ctx.beginPath();
-  ctx.arc(x, y, ts * 0.045, 0, FULL_TURN);
+  ctx.arc(x, y, ts * SLUICE_WHEEL_HUB_TILES, 0, FULL_TURN);
   ctx.fill();
   inkOutline(ctx, ts);
   ctx.fillStyle = rgb(BRASS_BRIGHT);
-  ctx.fillRect(x - ts * 0.02, y - ts * 0.025, ts * 0.015, ts * 0.015);
+  ctx.beginPath();
+  ctx.arc(
+    x - ts * SLUICE_WHEEL_GLINT_TILES,
+    y - ts * SLUICE_WHEEL_GLINT_TILES,
+    ts * SLUICE_WHEEL_GLINT_TILES,
+    0,
+    FULL_TURN,
+  );
+  ctx.fill();
 }
 
 // ── Stair portcullis ───────────────────────────────────────────────────────
@@ -1049,6 +1143,9 @@ const PILLAR_BAND_HEIGHT_TILES = 0.09;
 /** The iron band sits low, where a short tether reaches a cat. */
 const PILLAR_BAND_HEIGHT_FRACTION = 0.42;
 const PILLAR_RING_RADIUS_TILES = 0.12;
+/** The glint on the pillar's ring, an arc on its upper left. */
+const PILLAR_RING_GLINT_FROM = Math.PI * 1.1;
+const PILLAR_RING_GLINT_TO = Math.PI * 1.6;
 const PILLAR_GROOVE_ZIGS = 5;
 const PILLAR_LIT_GLOW_ALPHA = 0.5;
 
@@ -1156,7 +1253,7 @@ export function paintBindingPillar(
     ctx.strokeStyle = rgb(sampleRamp(iron, 0.95));
     ctx.lineWidth = hairline(ts, 0.01);
     ctx.beginPath();
-    ctx.arc(box.centreX, ringY, ringR, Math.PI * 1.1, Math.PI * 1.6);
+    ctx.arc(box.centreX, ringY, ringR, PILLAR_RING_GLINT_FROM, PILLAR_RING_GLINT_TO);
     ctx.stroke();
     ctx.fillStyle = rgb(sampleRamp(iron, 0.7));
     ctx.fillRect(box.centreX - ts * 0.025, bandY + bandH * 0.5, ts * 0.05, ringR * 0.5);

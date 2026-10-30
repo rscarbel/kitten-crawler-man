@@ -25,7 +25,7 @@
  * run with the review harness, `npm run render:scientist`.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { CardinalView, FacingSelection, FacingView } from '../facingView';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { drawFigureCached } from '../figure/figureFrameCache';
@@ -761,7 +761,6 @@ const TALK_FRAMES = 16;
 const BECKON_FRAMES = 10;
 const COWER_FRAMES = 12;
 
-const TICKS_PER_SECOND = 60;
 const IDLE_SECONDS = 4.2;
 const TALK_SECONDS = 1.8;
 const BECKON_SECONDS = 0.8;
@@ -794,7 +793,7 @@ export const SCIENTIST_ACTION_TABLE: Readonly<Record<ScientistAction, ActionSpec
   idle: {
     frames: IDLE_FRAMES,
     loops: true,
-    pacing: { kind: 'clock', ticksPerCycle: IDLE_SECONDS * TICKS_PER_SECOND },
+    pacing: { kind: 'clock', ticksPerCycle: IDLE_SECONDS * WORLD_TICKS_PER_SECOND },
     pose: idlePose,
     travels: false,
   },
@@ -815,21 +814,21 @@ export const SCIENTIST_ACTION_TABLE: Readonly<Record<ScientistAction, ActionSpec
   talk: {
     frames: TALK_FRAMES,
     loops: true,
-    pacing: { kind: 'clock', ticksPerCycle: TALK_SECONDS * TICKS_PER_SECOND },
+    pacing: { kind: 'clock', ticksPerCycle: TALK_SECONDS * WORLD_TICKS_PER_SECOND },
     pose: talkPose,
     travels: false,
   },
   beckon: {
     frames: BECKON_FRAMES,
     loops: true,
-    pacing: { kind: 'clock', ticksPerCycle: BECKON_SECONDS * TICKS_PER_SECOND },
+    pacing: { kind: 'clock', ticksPerCycle: BECKON_SECONDS * WORLD_TICKS_PER_SECOND },
     pose: beckonPose,
     travels: false,
   },
   cower: {
     frames: COWER_FRAMES,
     loops: false,
-    pacing: { kind: 'clock', ticksPerCycle: COWER_SECONDS * TICKS_PER_SECOND },
+    pacing: { kind: 'clock', ticksPerCycle: COWER_SECONDS * WORLD_TICKS_PER_SECOND },
     pose: cowerPose,
     travels: false,
   },

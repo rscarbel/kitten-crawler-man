@@ -9,6 +9,7 @@
  */
 
 import { ramp } from './bipedArt';
+import { BENCH_SEAT_HEIGHT_TILES } from '../townFixtures';
 
 export type SeatPose = 'idle' | 'play' | 'cheer' | 'slump';
 
@@ -66,6 +67,15 @@ export function seatStateName(pose: SeatPose, view: SeatView): string {
  * puts the cushion's centre a hair below its footprint row's top edge.
  */
 export const BAR_STOOL_SEAT_HEIGHT_TILES = 0.96;
+
+/** What a seated figure sits on: a club bar stool, or the town's street bench. */
+export type SeatKind = 'bar_stool' | 'street_bench';
+
+/** Each seat's height above the bottom edge of the tile it stands on, in tiles. */
+export const SEAT_HEIGHT_TILES = {
+  bar_stool: BAR_STOOL_SEAT_HEIGHT_TILES,
+  street_bench: BENCH_SEAT_HEIGHT_TILES,
+} as const satisfies Record<SeatKind, number>;
 
 /** Shares of a one-shot pose: the rise ends here, and the hold lasts until here. */
 const ONE_SHOT_RISE_END = 0.35;

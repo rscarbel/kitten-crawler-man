@@ -21,7 +21,7 @@
  *  - `spend-at-start` takes a job's materials when it starts.
  */
 
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import {
   captureBriarHollowState,
@@ -135,7 +135,6 @@ function section(name: string): void {
 
 const WORLD_SEED = 7919;
 const MAP_SIZE = 280;
-const UPDATES_PER_SECOND = 60;
 const SIMULATED_GATE_SECONDS = 60;
 const SETTLE_FRAMES = 30;
 /** Construction at which spikes unlock, for the jobs that add them. */
@@ -322,7 +321,7 @@ function giveTrapStock(crawler: HumanPlayer | CatPlayer): void {
   giveCost(crawler, scaleCost(SNARE_BUILD_COST, PLENTY_OF_TRAPS));
 }
 
-function runJob(rig: Rig, maxFrames = UPDATES_PER_SECOND * 20): void {
+function runJob(rig: Rig, maxFrames = WORLD_TICKS_PER_SECOND * 20): void {
   for (let frame = 0; frame < maxFrames && rig.construction.job !== null; frame++) {
     rig.construction.update();
   }
@@ -393,7 +392,7 @@ EXPECTED_SPEED_FACTORS.forEach((factor, index) => {
   const level = index + 1;
   const frames = jobFrames(1, level);
   check(
-    frames === Math.round(UPDATES_PER_SECOND * factor),
+    frames === Math.round(WORLD_TICKS_PER_SECOND * factor),
     `speed L${level}: a 1 s job takes ${frames} frames (×${factor})`,
   );
 });
@@ -635,7 +634,7 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
   raiseWall(rig, id, 'stone');
   rig.human.x = tile.x * TILE_SIZE;
   rig.human.y = (tile.y + 4) * TILE_SIZE;
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 3; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 3; frame++) {
     applyMovement(rig.human, { dx: 0, dy: -1, isMobile: false }, gameMap);
   }
   rig.human.isMoving = false;
@@ -669,7 +668,7 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
   raiseWall(rig, id, 'stone');
   rig.cat.x = tile.x * TILE_SIZE;
   rig.cat.y = (tile.y - 4) * TILE_SIZE;
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 3; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 3; frame++) {
     applyMovement(rig.cat, { dx: 0, dy: 1, isMobile: false }, gameMap);
   }
   rig.cat.isMoving = false;
@@ -796,7 +795,7 @@ const GATE_PATH_MAX_TILES = 40;
   let closest = Infinity;
   rig.human.godMode = true;
   rig.cat.godMode = true;
-  for (let frame = 0; frame < SIMULATED_GATE_SECONDS * UPDATES_PER_SECOND; frame++) {
+  for (let frame = 0; frame < SIMULATED_GATE_SECONDS * WORLD_TICKS_PER_SECOND; frame++) {
     loop.update(ctx);
     standAt(rig.human, inside.x, inside.y, 0, 1);
     const ratTileY = Math.floor((rat.y + TILE_SIZE / 2) / TILE_SIZE);
@@ -811,8 +810,8 @@ const GATE_PATH_MAX_TILES = 40;
   const pushedNorth = (mob: Rat | Cow | Deinonychus): boolean => {
     mob.x = outside.x * TILE_SIZE;
     mob.y = outside.y * TILE_SIZE;
-    mob.applyKnockback(0, -1, TILE_SIZE * 6, UPDATES_PER_SECOND);
-    for (let frame = 0; frame < UPDATES_PER_SECOND + 1; frame++) mob.advanceKnockback();
+    mob.applyKnockback(0, -1, TILE_SIZE * 6, WORLD_TICKS_PER_SECOND);
+    for (let frame = 0; frame < WORLD_TICKS_PER_SECOND + 1; frame++) mob.advanceKnockback();
     return Math.floor((mob.y + TILE_SIZE / 2) / TILE_SIZE) < gateRow;
   };
   const shoved = new Rat(outside.x, outside.y, TILE_SIZE);
@@ -826,7 +825,7 @@ const GATE_PATH_MAX_TILES = 40;
   check(pushedNorth(deinonychus), 'Deinonychus crosses the gate');
 
   const walker = new HumanPlayer(outside.x, outside.y, TILE_SIZE);
-  for (let frame = 0; frame < UPDATES_PER_SECOND * 3; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND * 3; frame++) {
     applyMovement(walker, { dx: 0, dy: -1, isMobile: false }, gameMap);
   }
   check(
@@ -1122,7 +1121,7 @@ section('Squeezing past a trebuchet');
 const SQUEEZE_START_TILES_NORTH = 2;
 /** How far into a trebuchet's frame the off-line walk starts, in tiles: inside the corner slide. */
 const SQUEEZE_MISALIGN_TILES = 0.2;
-const SQUEEZE_MAX_FRAMES = UPDATES_PER_SECOND * 6;
+const SQUEEZE_MAX_FRAMES = WORLD_TICKS_PER_SECOND * 6;
 /** Rows of footprint between the seam's middle row and open ground. */
 const SQUEEZE_CHASE_RING_TILES = 2;
 /** Columns west of the west trebuchet's footprint the chase starts from: open ground beyond its frame. */

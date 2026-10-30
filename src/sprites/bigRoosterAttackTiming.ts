@@ -11,13 +11,13 @@
  */
 
 import { ROOSTER_ROW_TIMING, rowImpactProgress } from './art/roosterFigure';
-import { TICKS_PER_SECOND } from './art/human/timing';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Sprite frames a second every rooster's idle plays at, off the wall clock. */
 export const ROOSTER_IDLE_FPS = 8;
 /** Game frames one loop of the idle lasts at {@link ROOSTER_IDLE_FPS}. */
 export const ROOSTER_IDLE_GAME_FRAMES =
-  (ROOSTER_ROW_TIMING.idle.frames / ROOSTER_IDLE_FPS) * TICKS_PER_SECOND;
+  (ROOSTER_ROW_TIMING.idle.frames / ROOSTER_IDLE_FPS) * WORLD_TICKS_PER_SECOND;
 
 /** Game frames before a one-shot's impact, for a row of `spriteFrames` held `hold` frames each. */
 function windupFramesOf(spriteFrames: number, hold: number, impactProgress: number): number {

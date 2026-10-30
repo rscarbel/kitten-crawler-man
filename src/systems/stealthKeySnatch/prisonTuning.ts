@@ -33,6 +33,7 @@ export interface PrisonSpotlightTuning {
  * as the frames it takes to run the whole way, which is how it is felt.
  */
 export interface PrisonSuspicionTuning {
+  readonly kind: 'gradual';
   /** Frames to fill, for a crawler on a cone's axis at close range. */
   readonly coneFillFrames: number;
   /** The rate multiplier at a cone's soft edge and far end. */
@@ -42,6 +43,28 @@ export interface PrisonSuspicionTuning {
   /** Frames to drain from full while the light sees nobody. */
   readonly drainFrames: number;
 }
+
+/**
+ * A watcher that catches at a glance: a crawler in full view is caught within
+ * `CAUGHT_AFTER_SEEN_FRAMES`, whatever the difficulty, so only the edge of its
+ * look and how long it stays wary are tuned.
+ */
+export interface OnSightNoticeTuning {
+  readonly kind: 'on_sight';
+  /**
+   * Frames a crawler seen at weight 1 would take to raise the orange alert
+   * were full view not quicker; at the soft edge's weight `w` it takes this
+   * over `w`.
+   */
+  readonly alertFillFrames: number;
+  /** The sighting weight at a look's soft edge and far end. */
+  readonly coneEdgeWeight: number;
+  /** Frames to drain from full while it sees nobody. */
+  readonly drainFrames: number;
+}
+
+/** How any stealth watcher's suspicion rises and falls. */
+export type WatcherNoticeTuning = PrisonSuspicionTuning | OnSightNoticeTuning;
 
 export interface PrisonDifficultyTuning {
   /** Guards authored at this tier or below stand their posts. */
@@ -53,7 +76,7 @@ export interface PrisonDifficultyTuning {
   /** How fast a guard turns its flashlight, in degrees per frame. Turns are never snapped. */
   readonly turnDegPerFrame: number;
   readonly spotlight: PrisonSpotlightTuning;
-  readonly suspicion: PrisonSuspicionTuning;
+  readonly suspicion: WatcherNoticeTuning;
 }
 
 export const PRISON_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTuning>> = {
@@ -65,6 +88,7 @@ export const PRISON_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTuning>>
     turnDegPerFrame: 2.5,
     spotlight: { radiusTiles: 1.4, speedPxPerFrame: 1.3 },
     suspicion: {
+      kind: 'gradual',
       coneFillFrames: 60,
       coneEdgeWeight: 0.35,
       spotFillFrames: 40,
@@ -79,6 +103,7 @@ export const PRISON_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTuning>>
     turnDegPerFrame: 3,
     spotlight: { radiusTiles: 1.6, speedPxPerFrame: 1.6 },
     suspicion: {
+      kind: 'gradual',
       coneFillFrames: 45,
       coneEdgeWeight: 0.35,
       spotFillFrames: 30,
@@ -93,6 +118,7 @@ export const PRISON_TUNING: Readonly<Record<Difficulty, PrisonDifficultyTuning>>
     turnDegPerFrame: 3.5,
     spotlight: { radiusTiles: 1.8, speedPxPerFrame: 1.9 },
     suspicion: {
+      kind: 'gradual',
       coneFillFrames: 32,
       coneEdgeWeight: 0.4,
       spotFillFrames: 22,

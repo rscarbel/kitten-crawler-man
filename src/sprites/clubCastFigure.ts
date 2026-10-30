@@ -93,7 +93,7 @@ export function clubFigureWalkFrames(ref: ClubFigureRef): number {
 export function clubSeatedFigure(ref: ClubFigureRef): FigureDef | undefined {
   return ref.species === 'hawkfolk'
     ? hawkfolkSeatedFigure(ref.lookId)
-    : townCastSeatedFigure(ref.look);
+    : townCastSeatedFigure(ref.look, 'bar_stool');
 }
 
 /** +1 faces right, −1 left, 0 along the vertical; +1 faces the camera, −1 away. */

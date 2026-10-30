@@ -7,6 +7,7 @@
 import type { Rect } from '../../core/geom';
 import type { IllustrationPainter, IllustrationRect } from '../../icons/explainerArt/illustration';
 import type { PagedOverlayPage } from '../../widgets/pagedOverlay';
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 /** One explainer page as written: a subtitle, its paragraphs and its illustration. */
 export interface ExplainerPageContent {
@@ -27,12 +28,11 @@ export const EXPLAINER_DESIGN: DesignSize = { width: 504, height: 190 };
 /** How tall an explainer's illustration is asked to be; the overlay caps it on short screens. */
 export const EXPLAINER_ILLUSTRATION_HEIGHT = 250;
 
-const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 
 /** Frames of a 60 Hz animation that `ms` milliseconds cover. */
 export function framesIn(ms: number): number {
-  return Math.floor((ms / MS_PER_SECOND) * FRAMES_PER_SECOND);
+  return Math.floor((ms / MS_PER_SECOND) * WORLD_TICKS_PER_SECOND);
 }
 
 /**

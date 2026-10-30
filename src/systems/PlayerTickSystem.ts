@@ -4,8 +4,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { firstHealingConsumable } from '../core/items/consumables/foods';
 import { crawlerRegenHpPerSecond } from '../core/party/crawlerFormulas';
-
-const FRAMES_PER_SECOND = 60;
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * A companion's unprompted heal: the first potion or stew it carries, through
@@ -47,7 +46,7 @@ export class PlayerTickSystem implements GameSystem {
   private accumulateRegen(player: Player, hpPerSecond: number, accumulated: number): number {
     if (!player.isAlive || player.hp >= player.maxHp) return 0;
     if (player.isRegenSuppressed) return accumulated;
-    const next = accumulated + (hpPerSecond / FRAMES_PER_SECOND) * player.regenMultiplier;
+    const next = accumulated + (hpPerSecond / WORLD_TICKS_PER_SECOND) * player.regenMultiplier;
     const heal = Math.floor(next);
     if (heal < 1) return next;
     player.hp = Math.min(player.maxHp, player.hp + heal);

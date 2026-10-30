@@ -6,6 +6,7 @@ import {
   unpinFigureState,
 } from './figure/figureFrameCache';
 import { GREMLIN_ACID_FIGURE, GREMLIN_BILE_ARC_FIGURE } from './art/gremlinBileFigure';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * The Trash Gremlin's bile in flight and the acid pool it leaves.
@@ -35,13 +36,6 @@ const SPLASH_HOLD_FRAMES = 16;
 const FORM_HOLD_FRAMES = 24;
 
 /**
- * Ages arrive as game-frame counts and `timeFrameIndex` wants seconds. Handed
- * `age / fps` the fps cancels out and the row advances one cell per game frame,
- * which runs every sheet at 60 fps whatever the constant beside it says.
- */
-const FRAMES_PER_SECOND = 60;
-
-/**
  * The bolus, rotated onto its flight angle. The sheet is drawn travelling +X
  * with its drool trailing behind, so `(x, y)` is the pivot and the frame's own
  * centre is the anchor.
@@ -54,7 +48,10 @@ export function drawGremlinBile(
   ageFrames: number,
   angle: number,
 ): void {
-  const frame = timeFrameIndex(ageFrames / FRAMES_PER_SECOND, BILE_ARC_FPS, BILE_ARC_FRAMES);
+  // Ages arrive as game-frame counts and `timeFrameIndex` wants seconds. Handed
+  // `age / fps` the fps cancels out and the row advances one cell per game
+  // frame, which runs every sheet at 60 fps whatever the constant beside it says.
+  const frame = timeFrameIndex(ageFrames / WORLD_TICKS_PER_SECOND, BILE_ARC_FPS, BILE_ARC_FRAMES);
   drawFigureCached(ctx, GREMLIN_BILE_ARC_FIGURE, 'arc', frame, x, y, tileSize, {
     rotation: angle,
   });
@@ -92,7 +89,7 @@ export function drawGremlinAcidPool(
     drawFigureCached(ctx, GREMLIN_ACID_FIGURE, 'fade', frame, x, y, tileSize);
     return;
   }
-  const frame = timeFrameIndex(ageFrames / FRAMES_PER_SECOND, ACID_POOL_FPS, ACID_POOL_FRAMES);
+  const frame = timeFrameIndex(ageFrames / WORLD_TICKS_PER_SECOND, ACID_POOL_FPS, ACID_POOL_FRAMES);
   drawFigureCached(ctx, GREMLIN_ACID_FIGURE, 'pool', frame, x, y, tileSize);
 }
 

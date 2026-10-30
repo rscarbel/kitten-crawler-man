@@ -27,6 +27,7 @@ import {
   HEALER_PREFERRED_RANGE_TILES,
   HEALER_SUPPORT_LEASH_TILES,
 } from './fairyTuning';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 const POSITIONING: FairyPositioning = {
   preferredRangeTiles: HEALER_PREFERRED_RANGE_TILES,
@@ -42,8 +43,6 @@ const HEAL_CAST: FairyCast = {
 };
 
 const HEALER_CASTS: readonly FairyCast[] = [HEAL_CAST];
-
-const FRAMES_PER_SECOND = 60;
 
 /** Frames the bloom on a healed ally lingers after the release. */
 const RELEASE_FLASH_FRAMES = 24;
@@ -98,7 +97,7 @@ export function healingFairyHealPerSecond(
   curve: LevelledCurve = SHARED_LEVELLED_CURVE,
 ): number {
   const perHeal = healingFairyHealAmount(level, targetMaxHp, isBoss, curve);
-  return (perHeal * FRAMES_PER_SECOND) / healingFairyCooldownFrames(level);
+  return (perHeal * WORLD_TICKS_PER_SECOND) / healingFairyCooldownFrames(level);
 }
 
 /** The green fairy: heals the most wounded ally, and releases a healing wave when it dies. */

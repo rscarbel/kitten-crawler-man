@@ -9,7 +9,7 @@
  * Taloncrest.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { Cow } from '../../creatures/Cow';
 import type { Player } from '../../Player';
 import type { GameMap } from '../../map/GameMap';
@@ -18,11 +18,9 @@ import type { MobRoster } from '../kits/SceneWorld';
 import type { CowPen } from './cowPen';
 import { clearRespawnTile } from './respawnClearance';
 
-const UPDATES_PER_SECOND = 60;
-
 /** A dead animal stands back up in its pasture after this long. */
 export const RESPAWN_SECONDS = 30;
-const RESPAWN_UPDATES = RESPAWN_SECONDS * UPDATES_PER_SECOND;
+const RESPAWN_UPDATES = RESPAWN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 export interface LivestockRespawnDeps {
   readonly gameMap: GameMap;

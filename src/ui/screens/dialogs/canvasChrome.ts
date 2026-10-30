@@ -11,7 +11,8 @@ import { inset, type Rect } from '../../core/geom';
 import { ITEM_ICONS } from '../../icons/itemIcons';
 import { withAlpha } from '../../theme/color';
 import { resolveTheme, type Theme } from '../../theme/tokens';
-import { fillRounded, roundRectPath, strokeRounded, type PaintTarget } from '../../widgets/paint';
+import { fillRounded, strokeRounded, type PaintTarget } from '../../widgets/paint';
+import { roundRectPath } from '../../widgets/roundRect';
 import type { TooltipLine } from '../../widgets/tooltip';
 
 /**

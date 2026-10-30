@@ -22,7 +22,7 @@ import { crawlerName } from '../../src/characters/characters';
 import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
 import { BLUEPRINTS_GRAIN_TARGET } from '../../src/core/quests/blueprintsQuestPhase';
-import { TILE_SIZE } from '../../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { QUEST_SLOT_IDX, type ItemId } from '../../src/core/items/defs/ItemDefs';
 import type { CrawlerKind } from '../../src/core/skills/SkillManager';
 import type { CatPlayer } from '../../src/creatures/CatPlayer';
@@ -52,9 +52,8 @@ const GRAIN_BEFORE_LOSS = 40;
 const WENDELL_FLOOR = 0;
 /** More presses than any of Wendell's beats has pages. */
 const MAX_PRESSES_PER_BEAT = 2000;
-const UPDATES_PER_SECOND = 60;
 /** A frame past the pile's own restock time, so rounding can never leave it one short. */
-const PILE_RESTOCK_FRAMES = WOOD_PILE_RESPAWN_SECONDS * UPDATES_PER_SECOND + 1;
+const PILE_RESTOCK_FRAMES = WOOD_PILE_RESPAWN_SECONDS * WORLD_TICKS_PER_SECOND + 1;
 /** Far enough from Lori's pile that it is out of pickup reach. */
 const AWAY_FROM_PILE_TILES = 4;
 

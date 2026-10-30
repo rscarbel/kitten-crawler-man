@@ -4,28 +4,33 @@
  * knocked off, where each is sent and what its landing does are data: the
  * prop's `knock_off` interaction and its placed `KnockOffPlacement`.
  *
- * Where it lands is found by flying it: from its tile toward its target until
+ * A long thing is pushed over instead: it rocks off what it leans on, pivots
+ * on its foot and slams down flat where it stood, and a hole its length now
+ * lies across can be crossed on it, on exactly the tiles it covers.
+ *
+ * Where a small thing lands is found by flying it: from its tile toward its target until
  * something tall enough to stop a lob is next, and it comes down short of
  * that. What the landing does is then asked of the tile it came down on —
- * the plate, the conveyor end or the gap actually there — never of the tile
- * it was aimed at.
+ * the plate or the conveyor end actually there — never of the tile it was
+ * aimed at.
  */
 
 import type { SoundId } from '../../audio/sounds';
 import { TILE_SIZE } from '../../core/constants';
-import type { EventBus } from '../../core/EventBus';
 import { canPerform } from '../../core/party/interactionPerformer';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap, PlacedTownInteriorProp } from '../../map/GameMap';
-import type { GridStep, KnockOffPlacement } from '../../map/interiorMechanisms';
+import type { GridStep, LobbedKnockOff, ToppledKnockOff } from '../../map/interiorMechanisms';
+import { FLOOR_DROP, FLOOR_DROP_SPANNED } from '../../map/tileTypes';
 import type { Footing } from '../../map/mobility';
 import { tileFooting } from '../../map/walkability';
 import type { TilePoint } from '../../map/town/townPlan';
 import {
   TOWN_INTERIOR_PROPS,
   drawTownInteriorProp,
+  type ToppledPropPainter,
 } from '../../sprites/art/townInterior/townInteriorProps';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { ConveyorSystem } from './conveyors';
@@ -51,6 +56,14 @@ const ARC_PEAK_PX = TILE_SIZE * ARC_PEAK_TILES;
 const FLIGHT_SPIN_TURNS = 1.25;
 /** The angle it comes to rest at, lying on its side. */
 const REST_ANGLE_RADIANS = Math.PI / 2;
+/** Frames a toppled thing takes to fall from upright to slamming flat, gathering speed as it goes. */
+const TOPPLE_FALL_FRAMES = 24;
+/** Frames it rebounds off the floor and settles after the slam, and how far back up it comes, as a share of the fall. */
+const TOPPLE_BOUNCE_FRAMES = 10;
+const TOPPLE_BOUNCE_SHARE = 0.05;
+/** How far over it has come off what it leaned on by the end of its rocking, as a share of the fall. */
+const TOPPLE_ROCK_SHARE = 0.04;
+const FLAT = 1;
 const SHADOW_ALPHA = 0.3;
 const SHADOW_RADIUS_X = 0.3;
 const SHADOW_RADIUS_Y = 0.12;
@@ -64,12 +77,23 @@ type KnockPhase =
   | { readonly kind: 'batted'; framesLeft: number }
   | { readonly kind: 'tipping'; framesLeft: number }
   | { readonly kind: 'flying'; readonly to: TilePoint; frame: number; readonly frames: number }
-  | { readonly kind: 'lying'; readonly at: TilePoint; readonly flat: boolean }
+  | { readonly kind: 'toppling'; frame: number; landed: boolean }
+  | { readonly kind: 'lying'; readonly at: TilePoint }
+  | { readonly kind: 'fallen' }
   | { readonly kind: 'gone' };
+
+/** How a knockable goes down, with what its placement and its prop say about that. */
+type KnockMotion =
+  | { readonly kind: 'lobbed'; readonly placement: LobbedKnockOff }
+  | {
+      readonly kind: 'toppled';
+      readonly placement: ToppledKnockOff;
+      readonly paint: ToppledPropPainter;
+    };
 
 interface Knockable {
   readonly placed: PlacedTownInteriorProp;
-  readonly knockOff: KnockOffPlacement;
+  readonly motion: KnockMotion;
   /**
    * What the thing stands on, from its tile's own type: the prop blocks its
    * tile outright, so the map's footing there no longer says it is a ledge.
@@ -80,7 +104,6 @@ interface Knockable {
 
 export interface KnockOffSystemOptions {
   readonly map: GameMap;
-  readonly bus: EventBus;
   /** Breaks the prop where it came down; false leaves it lying there whole. */
   readonly shatter: (placed: PlacedTownInteriorProp, at: TilePoint) => boolean;
   readonly conveyors: ConveyorSystem;
@@ -89,6 +112,27 @@ export interface KnockOffSystemOptions {
 
 function tileCentrePx(tile: TilePoint): { x: number; y: number } {
   return { x: (tile.x + TILE_CENTRE) * TILE_SIZE, y: (tile.y + TILE_CENTRE) * TILE_SIZE };
+}
+
+/** How far over a toppling thing is `frame` frames into its fall: gathering speed to the slam, then a small rebound. */
+function toppledShare(frame: number): number {
+  if (frame < TOPPLE_FALL_FRAMES) {
+    const share = frame / TOPPLE_FALL_FRAMES;
+    return share * share;
+  }
+  const settle = Math.min(1, (frame - TOPPLE_FALL_FRAMES) / TOPPLE_BOUNCE_FRAMES);
+  return FLAT - TOPPLE_BOUNCE_SHARE * Math.sin(Math.PI * settle);
+}
+
+function motionOf(placed: PlacedTownInteriorProp): KnockMotion | null {
+  const placement = placed.knockOff;
+  if (placement === null) return null;
+  if (placement.motion === 'lobbed') return { kind: 'lobbed', placement };
+  const interaction = TOWN_INTERIOR_PROPS[placed.propId].interaction;
+  if (interaction?.kind !== 'knock_off' || interaction.motion.kind !== 'toppled') {
+    throw new Error(`${placed.id} is placed to topple, but its prop cannot be drawn toppling`);
+  }
+  return { kind: 'toppled', placement, paint: interaction.motion.paint };
 }
 
 function sign(value: number): GridStep {
@@ -107,14 +151,10 @@ export class KnockOffSystem {
   constructor(options: KnockOffSystemOptions) {
     this.options = options;
     for (const placed of options.map.placedInteriorProps) {
-      if (placed.knockOff === null) continue;
+      const motion = motionOf(placed);
+      if (motion === null) continue;
       const sitsOn = tileFooting(options.map.structure[placed.tile.y][placed.tile.x]);
-      this.knockables.push({
-        placed,
-        knockOff: placed.knockOff,
-        sitsOn,
-        phase: { kind: 'standing' },
-      });
+      this.knockables.push({ placed, motion, sitsOn, phase: { kind: 'standing' } });
     }
   }
 
@@ -131,12 +171,21 @@ export class KnockOffSystem {
     return hidden;
   }
 
+  /** Whether the knockable placed as `id` is on the map and still standing where it was placed. */
+  isStanding(id: string): boolean {
+    return this.knockables.some(
+      (knockable) => knockable.placed.id === id && knockable.phase.kind === 'standing',
+    );
+  }
+
   /** The things lying where they fell that are heavy enough to hold a plate down. */
   weights(): PlateWeight[] {
     const weights: PlateWeight[] = [];
     for (const knockable of this.knockables) {
       const phase = knockable.phase;
-      if (phase.kind !== 'lying' || knockable.knockOff.landing.kind !== 'pressPlate') continue;
+      const motion = knockable.motion;
+      if (phase.kind !== 'lying' || motion.kind !== 'lobbed') continue;
+      if (motion.placement.landing.kind !== 'pressPlate') continue;
       const at = phase.at;
       weights.push({ occupiesPlate: (tile) => tile.x === at.x && tile.y === at.y });
     }
@@ -207,6 +256,7 @@ export class KnockOffSystem {
     switch (phase.kind) {
       case 'standing':
       case 'lying':
+      case 'fallen':
       case 'gone':
         return;
       case 'batted':
@@ -218,16 +268,37 @@ export class KnockOffSystem {
         if (phase.framesLeft > 0) return;
         const from = knockable.placed.tile;
         this.options.map.unblockTilePermanently(from.x, from.y);
-        const to = this.flightEnd(knockable);
+        const motion = knockable.motion;
+        if (motion.kind === 'toppled') {
+          knockable.phase = { kind: 'toppling', frame: 0, landed: false };
+          return;
+        }
+        const to = this.flightEnd(from, motion.placement);
         const tiles = Math.hypot(to.x - from.x, to.y - from.y);
         const frames = Math.max(MIN_FLIGHT_FRAMES, Math.round(tiles * FLIGHT_FRAMES_PER_TILE));
         knockable.phase = { kind: 'flying', to, frame: 0, frames };
         return;
       }
-      case 'flying':
+      case 'flying': {
         phase.frame++;
-        if (phase.frame >= phase.frames) this.land(knockable, phase.to);
+        const motion = knockable.motion;
+        if (phase.frame >= phase.frames && motion.kind === 'lobbed') {
+          this.land(knockable, motion.placement, phase.to);
+        }
         return;
+      }
+      case 'toppling': {
+        phase.frame++;
+        const motion = knockable.motion;
+        if (!phase.landed && phase.frame >= TOPPLE_FALL_FRAMES && motion.kind === 'toppled') {
+          phase.landed = true;
+          this.slamDown(knockable, motion.placement);
+        }
+        if (phase.frame >= TOPPLE_FALL_FRAMES + TOPPLE_BOUNCE_FRAMES) {
+          knockable.phase = { kind: 'fallen' };
+        }
+        return;
+      }
       default: {
         const unreachable: never = phase;
         return unreachable;
@@ -236,9 +307,8 @@ export class KnockOffSystem {
   }
 
   /** Flies the thing from its tile toward its target, one tile at a time, and returns the last tile it clears. */
-  private flightEnd(knockable: Knockable): TilePoint {
-    const from = knockable.placed.tile;
-    const fall = knockable.knockOff.fall;
+  private flightEnd(from: TilePoint, placement: LobbedKnockOff): TilePoint {
+    const fall = placement.fall;
     const aim =
       fall.kind === 'tile'
         ? fall.tile
@@ -256,44 +326,23 @@ export class KnockOffSystem {
   }
 
   /** Comes down on `at` and does what its landing says, against what is actually there. */
-  private land(knockable: Knockable, at: TilePoint): void {
-    const { landing, landingCue } = knockable.knockOff;
+  private land(knockable: Knockable, placement: LobbedKnockOff, at: TilePoint): void {
+    const { landing, landingCue } = placement;
     const options = this.options;
     const centre = tileCentrePx(at);
     options.playSound(landingCue, centre);
     switch (landing.kind) {
       case 'pressPlate':
-        knockable.phase = { kind: 'lying', at, flat: false };
-        return;
-      case 'makeNoise':
-        knockable.phase = { kind: 'lying', at, flat: false };
-        options.bus.emit('worldNoise', {
-          x: centre.x,
-          y: centre.y,
-          radiusTiles: landing.radiusTiles,
-          cause: 'knocked_off',
-        });
+        knockable.phase = { kind: 'lying', at };
         return;
       case 'break': {
         const shattered = options.shatter(knockable.placed, at);
-        knockable.phase = shattered ? { kind: 'gone' } : { kind: 'lying', at, flat: false };
-        return;
-      }
-      case 'bridge': {
-        const from = knockable.placed.tile;
-        const dx = sign(at.x - from.x);
-        const dy = sign(at.y - from.y);
-        const span: TilePoint[] = [];
-        for (let index = 0; index < landing.spanTiles; index++) {
-          span.push({ x: at.x + dx * index, y: at.y + dy * index });
-        }
-        options.map.retypeTiles(span, landing.floorTileType);
-        knockable.phase = { kind: 'lying', at, flat: true };
+        knockable.phase = shattered ? { kind: 'gone' } : { kind: 'lying', at };
         return;
       }
       case 'deliver': {
         const delivered = options.conveyors.deliverAt(at, landing.item);
-        knockable.phase = delivered ? { kind: 'gone' } : { kind: 'lying', at, flat: false };
+        knockable.phase = delivered ? { kind: 'gone' } : { kind: 'lying', at };
         return;
       }
       default: {
@@ -319,13 +368,31 @@ export class KnockOffSystem {
     return true;
   }
 
-  /** Things knocked flat across the floor, drawn under every body. */
+  /**
+   * The toppled thing hits the floor: every hole tile its length now lies
+   * across becomes crossable on it, and nothing else changes.
+   */
+  private slamDown(knockable: Knockable, placement: ToppledKnockOff): void {
+    const from = knockable.placed.tile;
+    const { dx, dy } = placement.toward;
+    const map = this.options.map;
+    const spanned: TilePoint[] = [];
+    for (let step = 1; step <= placement.spanTiles; step++) {
+      const at = { x: from.x + dx * step, y: from.y + dy * step };
+      if (map.structure[at.y]?.[at.x]?.type === FLOOR_DROP) spanned.push(at);
+    }
+    map.retypeTiles(spanned, FLOOR_DROP_SPANNED);
+    const middle = spanned[Math.floor(spanned.length * HALF)] ?? from;
+    this.options.playSound(placement.landingCue, tileCentrePx(middle));
+  }
+
+  /** Things pushed over and lying flat where they fell, drawn under every body. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const knockable of this.knockables) {
-      const phase = knockable.phase;
-      if (phase.kind !== 'lying' || !phase.flat) continue;
-      const centre = tileCentrePx(phase.at);
-      this.drawAt(ctx, knockable.placed, centre.x - camX, centre.y - camY, REST_ANGLE_RADIANS);
+      const motion = knockable.motion;
+      if (knockable.phase.kind !== 'fallen' || motion.kind !== 'toppled') continue;
+      const { tile, variant } = knockable.placed;
+      motion.paint(ctx, tile, variant, motion.placement.toward, FLAT, camX, camY, TILE_SIZE);
     }
   }
 
@@ -342,10 +409,16 @@ export class KnockOffSystem {
   private figureFor(knockable: Knockable): InteriorFigure | null {
     const phase = knockable.phase;
     const placed = knockable.placed;
+    const motion = knockable.motion;
+    if (motion.kind === 'toppled') {
+      return this.toppledFigure(knockable, motion.placement, motion.paint);
+    }
     const from = tileCentrePx(placed.tile);
     switch (phase.kind) {
       case 'standing':
       case 'gone':
+      case 'fallen':
+      case 'toppling':
         return null;
       case 'batted':
       case 'tipping': {
@@ -372,7 +445,6 @@ export class KnockOffSystem {
         };
       }
       case 'lying': {
-        if (phase.flat) return null;
         const at = tileCentrePx(phase.at);
         return {
           y: phase.at.y * TILE_SIZE,
@@ -387,9 +459,50 @@ export class KnockOffSystem {
     }
   }
 
+  /** A pushed-over thing while it rocks off what it leaned on and falls; flat on the floor it is ground paint. */
+  private toppledFigure(
+    knockable: Knockable,
+    placement: ToppledKnockOff,
+    paint: ToppledPropPainter,
+  ): InteriorFigure | null {
+    const phase = knockable.phase;
+    const fallen = this.toppledFallen(phase);
+    if (fallen === null) return null;
+    const { tile, variant } = knockable.placed;
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        paint(ctx, tile, variant, placement.toward, fallen, camX, camY, tileSize),
+    };
+  }
+
+  /** How far over a pushed thing is drawn in `phase`, or null while it is drawn elsewhere or not at all. */
+  private toppledFallen(phase: KnockPhase): number | null {
+    switch (phase.kind) {
+      case 'batted':
+        return 0;
+      case 'tipping':
+        return (1 - phase.framesLeft / TIP_FRAMES) * TOPPLE_ROCK_SHARE;
+      case 'toppling':
+        return TOPPLE_ROCK_SHARE + (FLAT - TOPPLE_ROCK_SHARE) * toppledShare(phase.frame);
+      case 'standing':
+      case 'flying':
+      case 'lying':
+      case 'fallen':
+      case 'gone':
+        return null;
+      default: {
+        const unreachable: never = phase;
+        return unreachable;
+      }
+    }
+  }
+
   /** Which way it leans and spins: toward where it is sent, west counting as the other way. */
   private leanSide(knockable: Knockable): number {
-    const fall = knockable.knockOff.fall;
+    const motion = knockable.motion;
+    if (motion.kind === 'toppled') return motion.placement.toward.dx < 0 ? -1 : 1;
+    const fall = motion.placement.fall;
     const dx = fall.kind === 'tile' ? fall.tile.x - knockable.placed.tile.x : fall.dx;
     return dx < 0 ? -1 : 1;
   }

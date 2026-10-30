@@ -17,7 +17,7 @@
  * written by the villagers into the durable state off `cowPetted`.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import { activeRunStats } from '../../core/progression/GameStats';
 import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
@@ -40,8 +40,7 @@ import type { Player } from '../../Player';
 import { CowPen } from './cowPen';
 import { LivestockRespawner } from './livestockRespawn';
 
-const UPDATES_PER_SECOND = 60;
-const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 const TILE_CENTRE = 0.5;
 
 /** The adults, by coat: a mixed herd with every coat represented. */
@@ -440,7 +439,7 @@ export class LivestockSystem {
 
   private nextMooDelay(): number {
     const seconds = MOO_MIN_SECONDS + this.random() * (MOO_MAX_SECONDS - MOO_MIN_SECONDS);
-    return Math.round(seconds * UPDATES_PER_SECOND);
+    return Math.round(seconds * WORLD_TICKS_PER_SECOND);
   }
 
   /** A blast at world pixel (`x`, `y`): everything alive within reach flinches and bolts. */

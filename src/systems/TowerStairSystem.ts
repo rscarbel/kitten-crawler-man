@@ -4,6 +4,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { towerStoreyLabel } from '../map/town/interiors/townCenterTower';
+import type { CrawlerKind } from '../core/skills/SkillManager';
+import type { BarkLine } from '../dialog/line';
 
 const TILE_CENTER_OFFSET = 0.5;
 
@@ -35,10 +37,15 @@ export type TowerStairPrompt =
 /** Which way a stair leads. */
 export type StairDirection = 'up' | 'down';
 
-/** A stair that will not be taken: why, as a toast says it, or null when it will. */
+/** Why a stair will not be taken: a notice on screen, or a line a crawler says over their own head. */
+export type StairRefusal =
+  | { readonly kind: 'notice'; readonly text: string }
+  | { readonly kind: 'bark'; readonly crawler: CrawlerKind; readonly line: BarkLine };
+
+/** A stair that will not be taken: why, or null when it will. */
 export interface StairRefusals {
-  readonly reasonFor: (going: StairDirection) => string | null;
-  readonly onRefused: (reason: string) => void;
+  readonly reasonFor: (going: StairDirection) => StairRefusal | null;
+  readonly onRefused: (reason: StairRefusal) => void;
 }
 
 const NO_STAIR_REFUSALS: StairRefusals = { reasonFor: () => null, onRefused: () => undefined };

@@ -4,7 +4,8 @@
  * stands, walks and talks through them exactly as a cast citizen does.
  *
  * Each entry adapts one existing bespoke painter to the citizen draw state,
- * mapping the actions a resident can be in onto the rows that painter has. A
+ * mapping the actions a resident can be in onto the rows that painter has;
+ * none paints a run, so each hurries in its walk. A
  * new bespoke resident is a new entry here plus `{ kind: 'bespoke', figure: id }`
  * as their `RESIDENT_LOOKS` entry in `residentFigures.ts`; nothing in
  * `Townsperson` or the occupant system changes.
@@ -127,6 +128,7 @@ const BRANDON_SALUTE_EVERY_MS = 4000;
 function brandonAction(action: CitizenAction): BrandonAction {
   switch (action) {
     case 'walk':
+    case 'run':
       return 'walk';
     case 'talk':
       return 'salute';
@@ -171,6 +173,7 @@ function drawBrandonResident(
 function sydneyRow(action: CitizenAction): SydneyRow {
   switch (action) {
     case 'walk':
+    case 'run':
       return 'walk';
     case 'talk':
       return 'talk';
@@ -197,6 +200,7 @@ function clockSeconds(state: CitizenSpriteState): number {
 function loriRow(action: CitizenAction): LoriRow {
   switch (action) {
     case 'walk':
+    case 'run':
       return 'walk';
     case 'idle':
     case 'talk':
@@ -211,6 +215,7 @@ function loriRow(action: CitizenAction): LoriRow {
 function baggiRole(action: CitizenAction): BaggiRole {
   switch (action) {
     case 'walk':
+    case 'run':
       return 'walk';
     case 'talk':
       return 'talk';
@@ -226,6 +231,7 @@ function baggiRole(action: CitizenAction): BaggiRole {
 function elfWalks(action: CitizenAction): boolean {
   switch (action) {
     case 'walk':
+    case 'run':
       return true;
     case 'idle':
     case 'talk':
@@ -267,6 +273,7 @@ const JANITOR_POSE_ROWS = {
 function janitorRow(action: CitizenAction, pose: RoutinePose | undefined): JanitorRow {
   switch (action) {
     case 'walk':
+    case 'run':
       return 'walk_mop';
     case 'idle':
     case 'talk':
@@ -299,6 +306,7 @@ const STEVE_POSE_ROWS = {
 function steveRow(action: CitizenAction, pose: RoutinePose | undefined): SteveRow {
   switch (action) {
     case 'walk':
+    case 'run':
       return 'walk';
     case 'idle':
     case 'talk':

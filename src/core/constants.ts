@@ -73,3 +73,10 @@ export const AGGRO_PERSIST_MULTIPLIER = 2;
  * there would make that a runtime import cycle.
  */
 export const WADE_SPEED_FACTOR = 0.36;
+
+/**
+ * The world's fixed update rate: `Scene` steps `update()` this many times a
+ * second whatever the display runs at, so every duration counted in ticks
+ * converts to seconds through it.
+ */
+export const WORLD_TICKS_PER_SECOND = 60;

@@ -14,7 +14,7 @@ import {
 } from '../sprites/goblinSprite';
 import { GOBLIN_PACK_ALERT_RADIUS_TILES, GOBLIN_PACK_KIND } from './Goblin';
 import type { GoblinArrowShot } from '../systems/GoblinArrowSystem';
-import { PLAYER_SPEED } from '../core/constants';
+import { PLAYER_SPEED, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatBehindHelper } from './tactics/retreat';
 import type { KiteAim } from './tactics/tacticalFrame';
@@ -76,8 +76,7 @@ const CENTER_OFFSET = 0.5;
 const BOW_OFFSET_X = 0.62;
 const BOW_OFFSET_Y = 0.28;
 
-const FRAMES_PER_SECOND = 60;
-const SECONDS_PER_FRAME = 1 / FRAMES_PER_SECOND;
+const SECONDS_PER_FRAME = 1 / WORLD_TICKS_PER_SECOND;
 const MILLISECONDS_PER_SECOND = 1000;
 
 /** Shared empty result so the common no-shots-this-frame path allocates nothing. */

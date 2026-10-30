@@ -52,6 +52,7 @@ import { CONSTRUCTION_EXPLAINER } from '../../ui/screens/dialogs/constructionExp
 import { PROCESSING_EXPLAINER } from '../../ui/screens/dialogs/processingExplainer';
 import { deinonychusExplainerEntry } from '../../ui/screens/dialogs/deinonychusExplainer';
 import { DUAL_HARVEST_EXPLAINER } from '../../ui/screens/dialogs/dualHarvestExplainer';
+import { CAT_SENSES_EXPLAINER } from '../../ui/screens/dialogs/catSensesExplainer';
 import { levelUpSurface } from '../../ui/screens/dialogs/levelUpDialog';
 import { rewardGrantedSurface } from '../../ui/screens/dialogs/rewardGrantedDialog';
 import { PetNamePrompt } from '../../ui/screens/dialogs/petNamePrompt';
@@ -189,8 +190,9 @@ export class MenusKit {
   private readonly stopCaptions: (() => void) | null;
   /**
    * The "how it works" explainers: the craft skills' and processing's, opened
-   * from the Crafts tab and by the teachers, and Deinonychus's, opened when he joins
-   * and from the pause menu.
+   * from the Crafts tab and by the teachers, Deinonychus's, opened when he joins
+   * and from the pause menu, and Belle's senses', opened by `CatSenseCue` the
+   * first time one comes into her reach.
    */
   readonly craftExplainers = new CraftExplainers();
   /**
@@ -246,6 +248,7 @@ export class MenusKit {
     this.craftExplainers.register('construction', CONSTRUCTION_EXPLAINER);
     this.craftExplainers.register('processing', PROCESSING_EXPLAINER);
     this.craftExplainers.register('dual_harvest', DUAL_HARVEST_EXPLAINER);
+    this.craftExplainers.register('cat_senses', CAT_SENSES_EXPLAINER);
     this.craftExplainers.register(
       'deinonychus',
       deinonychusExplainerEntry(() => this.abilityManager.getLevel('deinonychus'), deps.petNames),

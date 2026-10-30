@@ -127,10 +127,9 @@ export const DAVE_ADVICE = {
     "Hurt him enough and he stops feeling it for a bit. He'll kick every exercise ball in the place loose. Keep off him till they're all rolling, then go back to work.",
   ]),
 
-  defend_goblin_mother: say.line([
-    "If you help her, watch the grates, not the goblins. Whatever's coming climbs out of them.",
-    'Hit it as it comes up, before it reaches the little ones.',
-  ]),
+  defend_goblin_mother: say.line(
+    "If you help her, watch the grates, not the goblins. Whatever's coming climbs out of them. Hit it as it comes up, before it reaches the little ones.",
+  ),
 
   kraken: say.line([
     "Don't waste a swing on her while that room's full. Nothing touches her under the water. Shut the pumps off and drain it first.",
@@ -146,24 +145,21 @@ export const DAVE_ADVICE = {
     "He crosses the rods and swats your missiles away, about half of them. Not while he's winding up, or while he's catching his breath after. Throw then. And light a stick of dynamite if you want to watch him run.",
   ]),
 
-  stealth_gate: say.line([
-    "That prison, you sneak through. You can't fight your way past those guards, so don't try.",
-    'Stay out of sight, take your time, and get the key.',
-  ]),
+  stealth_gate: say.line(
+    "That prison, you sneak through. You can't fight your way past those guards, so don't try. Stay out of sight, take your time, and get the key.",
+  ),
 
   spider_lab: say.line(
     "Hear the scientist out before you decide anything. Nothing on the way down needs whatever he's selling.",
   ),
 
-  spider_lab_started: say.line([
-    "That lab's one of the harder fights on this floor. Don't go in hurt.",
-    'And if the ground looks red, get off it.',
-  ]),
+  spider_lab_started: say.line(
+    "That lab's one of the harder fights on this floor. Don't go in hurt. And if the ground looks red, get off it.",
+  ),
 
-  spider_lab_station: say.line([
-    "Have a seat. The cot's less comfortable than it looks.",
-    "Whatever the scientist wants, it's at the end of that hallway. You don't have to go. I'd think about it, if I were you.",
-  ]),
+  spider_lab_station: say.line(
+    "Have a seat. The cot's less comfortable than it looks. Whatever the scientist wants, it's at the end of that hallway. You don't have to go. I'd think about it, if I were you.",
+  ),
 
   shady_bounties: say.line(
     "The money's real, and the targets are out where nobody minds the noise. Take the ones you can handle. Leave the rest.",
@@ -183,41 +179,31 @@ export const DAVE_ADVICE = {
     "Read the notices before you go knocking. People talk easier when you already know the cat's name.",
   ),
 
-  missing_cats_owners: say.line([
-    "Let the owner talk first. They'll tell you where to look without knowing they've done it.",
-    "Switch to the cat now and then. Some of it, only she'll see.",
-  ]),
+  missing_cats_owners: say.line(
+    "Let the owner talk first. They'll tell you where to look without knowing they've done it. Switch to the cat now and then. Some of it, only she'll see.",
+  ),
 
-  missing_cats_cellar: say.line([
-    "Whatever's coming up that cistern comes up through the lid. Stand by the lid, not in a corner.",
-    'The elves are with you on this one. Mind where you swing.',
-    'It comes in waves. Drink between them, not during.',
-  ]),
+  missing_cats_cellar: say.line(
+    "Whatever's coming up that cistern comes up through the lid. Stand by the lid, not in a corner. The elves are with you on this one. Mind where you swing. It comes in waves. Drink between them, not during.",
+  ),
 
-  missing_cats_stakeout: say.line([
-    "Stay hidden. If it sees you, it won't come in. It'll circle off and come back later, so don't go running after it.",
-    'Pick a spot and stay in it. That whole job is sitting still.',
-  ]),
+  missing_cats_stakeout: say.line(
+    "Stay hidden. If it sees you, it won't come in. It'll circle off and come back later, so don't go running after it. Pick a spot and stay in it. That whole job is sitting still.",
+  ),
 
-  missing_cats_temple: say.line([
-    "Show him the feather and let him talk. Somebody who's carried a thing that long usually wants to put it down.",
-    "What you do with it after is up to you. I'm not telling you.",
-  ]),
+  missing_cats_temple: say.line(
+    "Show him the feather and let him talk. Somebody who's carried a thing that long usually wants to put it down. What you do with it after is up to you. I'm not telling you.",
+  ),
 
-  missing_cats_bait: say.line([
-    "No. I'm not helping with this one.",
-    "That tower took my cat. Pumpkin. We came through this town together, and she went in there and didn't come out.",
-    "You want to sit a cat on a fountain and wave her at it. I can't watch that again.",
-    "Do what you have to. Just don't ask me to be part of it.",
-  ]),
+  missing_cats_bait: say.line(
+    "No. Listen to me. Don't do this one. When they took Pumpkin, I went into that tower after her. Broke the door in and cut my way up through the guards. Then one of them called out that he'd talk. Give up my sword, he said, and he'd send the rest of his men away. Good faith, both sides. I'd never have parted with that sword. But I was scared of what they'd do to her if I kept swinging. So I handed it over. He walked me up to where they'd kept her. There was some of her fur on the floor. And her claws. Clipped. He said he was sorry. Said I was too late. I killed him, and I got out of that tower, and I've never been back. Haven't been much of anything since, if I'm honest. So no. You don't hand Belle to those people. Find another way. Any way at all, as long as it doesn't put her in their hands.",
+  ),
 
-  missing_cats_tower_door: say.line([
-    "Those guards don't hit. They pick you up and put you back on the street, and they're good at it.",
-    "You won't talk your way past them, so don't spend the afternoon trying. Find another door.",
-  ]),
+  missing_cats_tower_door: say.line(
+    "Those guards don't hit. They pick you up and put you back on the street, and they're good at it. You won't talk your way past them, so don't spend the afternoon trying. Find another door.",
+  ),
 
-  missing_cats_drain: say.line([
-    'Stay behind the elf. Down there the water decides where you can walk.',
-    "And take the hire. I don't care how good you are. Nobody goes into that tower on their own.",
-  ]),
+  missing_cats_drain: say.line(
+    "Stay behind the elf. Down there the water decides where you can walk. And take the hire. I don't care how good you are. Nobody goes into that tower on their own.",
+  ),
 } as const satisfies Record<AdviceObjectiveId, DialogLine>;

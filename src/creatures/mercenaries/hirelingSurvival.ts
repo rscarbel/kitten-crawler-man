@@ -1,6 +1,7 @@
 import { DamageLedger } from '../damageLedger';
 import { POTION_HEAL_FRACTION } from '../../Player';
 import { REVIVE_FRAMES, REVIVE_HP_FRACTION } from '../../core/party/reviveRules';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
 /**
  * How a Barracks hireling stays alive between the desk and the end of its
@@ -13,8 +14,6 @@ import { REVIVE_FRAMES, REVIVE_HP_FRACTION } from '../../core/party/reviveRules'
  * does the parts that need the world — who is standing close, the mob list,
  * the toast strip.
  */
-
-const UPDATE_FRAMES_PER_SECOND = 60;
 
 /**
  * Share of every blow a hireling actually takes. A hire costs real gold and
@@ -29,14 +28,14 @@ const OUT_OF_COMBAT_SECONDS = 15;
  * hireling is back to full health. A snap rather than a ramp, so the player can
  * read "they are fine again" from one moment instead of watching a bar.
  */
-export const HIRELING_OUT_OF_COMBAT_FRAMES = OUT_OF_COMBAT_SECONDS * UPDATE_FRAMES_PER_SECOND;
+export const HIRELING_OUT_OF_COMBAT_FRAMES = OUT_OF_COMBAT_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** At or below this share of its health, a hireling reaches for a draught. */
 export const HIRELING_POTION_HP_FRACTION = 0.4;
 
 const POTION_COOLDOWN_SECONDS = 15;
 /** Frames between two of a hireling's draughts. It carries as many as it likes. */
-export const HIRELING_POTION_COOLDOWN_FRAMES = POTION_COOLDOWN_SECONDS * UPDATE_FRAMES_PER_SECOND;
+export const HIRELING_POTION_COOLDOWN_FRAMES = POTION_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 
 const REVIVE_WINDOW_SECONDS = 15;
 /**
@@ -44,7 +43,7 @@ const REVIVE_WINDOW_SECONDS = 15;
  * Counted only while nobody is standing over it, so a revive in progress can
  * never be beaten by the clock.
  */
-export const HIRELING_REVIVE_WINDOW_FRAMES = REVIVE_WINDOW_SECONDS * UPDATE_FRAMES_PER_SECOND;
+export const HIRELING_REVIVE_WINDOW_FRAMES = REVIVE_WINDOW_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** How long the heal sparkle plays over a hireling that just drank or recovered. */
 export const HIRELING_HEAL_FLASH_FRAMES = 36;

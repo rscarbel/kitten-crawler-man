@@ -20,7 +20,6 @@ import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SCALE } from '../src/sprites/art/human/figureScale.js';
 import { HUMAN_ROW_TABLE, type HumanRowName } from '../src/sprites/art/humanFigure.js';
-import { TICKS_PER_SECOND } from '../src/sprites/art/human/timing.js';
 import { rowFrameHolds } from '../src/sprites/humanSprite.js';
 import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
 import type { CardinalView } from '../src/sprites/facingView.js';
@@ -35,6 +34,7 @@ import {
   TELEPORT_OUT_FRAMES,
   type TeleportDraw,
 } from '../src/sprites/teleportEffect.js';
+import { WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 
 installCanvasGlobals();
 
@@ -210,7 +210,7 @@ function rowState(
     facingY: facing.y,
     lastHorizontalFacing: sign,
     idleOffsetSeconds:
-      (heldTicks + HALF_TICK) / TICKS_PER_SECOND - performance.now() / MS_PER_SECOND,
+      (heldTicks + HALF_TICK) / WORLD_TICKS_PER_SECOND - performance.now() / MS_PER_SECOND,
     teleport: null,
   };
 }

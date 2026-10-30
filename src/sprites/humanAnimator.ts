@@ -34,7 +34,7 @@ import {
   WALK_RADIANS_PER_PX,
 } from './art/human/locomotion';
 import { groundPxPerFrame, type HumanJointProbe, probeHumanJoints } from './art/human/probe';
-import { heldLength, IDLE_FRAME_TICKS, TICKS_PER_SECOND } from './art/human/timing';
+import { heldLength, IDLE_FRAME_TICKS } from './art/human/timing';
 import {
   HUMAN_ROWS,
   type HumanGait,
@@ -60,6 +60,7 @@ import { wrapPhase } from './art/human/gaitShared';
 import { PHASE_EPSILON } from './art/human/travelling';
 import type { HolsterMotion, MotionSet } from './art/human/motionSets';
 import { activeHumanLook } from './humanSprite';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 // ── Gait pacing ──────────────────────────────────────────────────────────────
 
@@ -116,17 +117,17 @@ const NEAR_BEST_SHARE = 0.05;
 // ── Combat and idling timings ────────────────────────────────────────────────
 
 /** How long he holds the guard after the last blow thrown or taken. */
-const GUARD_HOLD_TICKS = 3 * TICKS_PER_SECOND;
+const GUARD_HOLD_TICKS = 3 * WORLD_TICKS_PER_SECOND;
 /** Fidgets are for a quiet moment: none for this long after any damage. */
-const FIDGET_SUPPRESS_TICKS = 4 * TICKS_PER_SECOND;
+const FIDGET_SUPPRESS_TICKS = 4 * WORLD_TICKS_PER_SECOND;
 /**
  * A fidget comes after 6 to 12 seconds of standing about. It waits for the
  * idle loop's seam once its delay is up, which can add up to a whole loop, so
  * the roll leaves a loop's worth of room under the ceiling — and none at all,
  * rather than a negative span, should the loop ever outgrow the window.
  */
-const FIDGET_DELAY_MIN_TICKS = 6 * TICKS_PER_SECOND;
-const FIDGET_DELAY_MAX_TICKS = 12 * TICKS_PER_SECOND;
+const FIDGET_DELAY_MIN_TICKS = 6 * WORLD_TICKS_PER_SECOND;
+const FIDGET_DELAY_MAX_TICKS = 12 * WORLD_TICKS_PER_SECOND;
 const FIDGET_DELAY_SPAN_TICKS = Math.max(
   0,
   FIDGET_DELAY_MAX_TICKS - FIDGET_DELAY_MIN_TICKS - heldLength(IDLE_FRAME_TICKS),
@@ -136,9 +137,9 @@ const FIDGET_DELAY_SPAN_TICKS = Math.max(
  * the prewarm slice to paint a whole row, well inside the cache's
  * `IDLE_FRAMES_BEFORE_RELEASE` window so the warming is not swept unused.
  */
-const FIDGET_PREWARM_LEAD_TICKS = 2 * TICKS_PER_SECOND;
+const FIDGET_PREWARM_LEAD_TICKS = 2 * WORLD_TICKS_PER_SECOND;
 /** A blow thrown this soon after the last one ended continues the combo. */
-export const COMBO_WINDOW_TICKS = TICKS_PER_SECOND / 2;
+export const COMBO_WINDOW_TICKS = WORLD_TICKS_PER_SECOND / 2;
 /** Past this share of his reach a target is at the edge of it, where kicks reach and fists do not. */
 export const FAR_REACH_SHARE = 0.75;
 

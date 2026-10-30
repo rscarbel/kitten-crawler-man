@@ -48,19 +48,25 @@ export interface DungeonWaterSurfaceInk {
 }
 
 /**
- * Where the water meets dry floor: the band of floor the water has soaked
- * dark, and the thin film and foam that lap up over it and back.
+ * Where the water meets dry floor: the stone kerb along the floor's edge, and
+ * the flat waterline on the water beneath it.
  */
-export interface DungeonWaterShoreInk {
-  readonly wet: WaterInk;
-  /** How dark the soaked floor is at the waterline, 0..1, fading to dry over its reach. */
-  readonly wetAlpha: number;
-  /** The sheet of water a lap leaves on the floor as it runs up and drains back. */
-  readonly filmAlpha: number;
-  /** The foam riding the front of each lap. */
-  readonly lapFoamAlpha: number;
-  /** The scum that stays strung along the waterline between laps. */
-  readonly restFoamAlpha: number;
+interface DungeonWaterKerbInk {
+  /** The kerb's top, a little lighter than the floor behind it. */
+  readonly top: WaterInk;
+  /** The worn outer edge of the top, catching the light. */
+  readonly highlight: WaterInk;
+  /** The face dropping to the water, at its top and at the waterline. */
+  readonly face: WaterInk;
+  readonly faceFoot: WaterInk;
+  /** The mortar line behind the kerb and between its stones. */
+  readonly joint: WaterInk;
+  readonly jointAlpha: number;
+  /** The kerb's shadow on the water, strongest against the stone. */
+  readonly waterShadow: WaterInk;
+  readonly waterShadowAlpha: number;
+  /** The pale line where the water touches the stone, in the surface's foam. */
+  readonly waterGlintAlpha: number;
 }
 
 export interface DungeonWaterPlan {
@@ -76,7 +82,7 @@ export interface DungeonWaterPlan {
    */
   readonly dryEdge: WaterColumnTint;
   readonly surface: DungeonWaterSurfaceInk;
-  readonly shore: DungeonWaterShoreInk;
+  readonly kerb: DungeonWaterKerbInk;
 }
 
 export const DUNGEON_WATER_PLANS: Readonly<Record<DungeonFloorThemeId, DungeonWaterPlan>> = {
@@ -94,12 +100,16 @@ export const DUNGEON_WATER_PLANS: Readonly<Record<DungeonFloorThemeId, DungeonWa
       foam: { r: 196, g: 210, b: 224 },
       strengthByDepth: [0.3, 0.78, 0.92, 1],
     },
-    shore: {
-      wet: { r: 18, g: 22, b: 30 },
-      wetAlpha: 0.6,
-      filmAlpha: 0.38,
-      lapFoamAlpha: 0.55,
-      restFoamAlpha: 0.3,
+    kerb: {
+      top: { r: 128, g: 118, b: 100 },
+      highlight: { r: 166, g: 154, b: 130 },
+      face: { r: 74, g: 66, b: 54 },
+      faceFoot: { r: 30, g: 27, b: 22 },
+      joint: { r: 26, g: 22, b: 18 },
+      jointAlpha: 0.7,
+      waterShadow: { r: 6, g: 10, b: 18 },
+      waterShadowAlpha: 0.55,
+      waterGlintAlpha: 0.35,
     },
   },
   service_level: {
@@ -116,12 +126,16 @@ export const DUNGEON_WATER_PLANS: Readonly<Record<DungeonFloorThemeId, DungeonWa
       foam: { r: 192, g: 212, b: 222 },
       strengthByDepth: [0.3, 0.78, 0.92, 1],
     },
-    shore: {
-      wet: { r: 16, g: 22, b: 28 },
-      wetAlpha: 0.6,
-      filmAlpha: 0.38,
-      lapFoamAlpha: 0.55,
-      restFoamAlpha: 0.3,
+    kerb: {
+      top: { r: 138, g: 144, b: 148 },
+      highlight: { r: 178, g: 184, b: 188 },
+      face: { r: 74, g: 80, b: 86 },
+      faceFoot: { r: 28, g: 33, b: 38 },
+      joint: { r: 24, g: 28, b: 32 },
+      jointAlpha: 0.7,
+      waterShadow: { r: 5, g: 12, b: 18 },
+      waterShadowAlpha: 0.55,
+      waterGlintAlpha: 0.35,
     },
   },
   sewer: {
@@ -138,12 +152,16 @@ export const DUNGEON_WATER_PLANS: Readonly<Record<DungeonFloorThemeId, DungeonWa
       foam: { r: 176, g: 174, b: 136 },
       strengthByDepth: [0.25, 0.6, 0.72, 0.8],
     },
-    shore: {
-      wet: { r: 22, g: 22, b: 14 },
-      wetAlpha: 0.6,
-      filmAlpha: 0.36,
-      lapFoamAlpha: 0.45,
-      restFoamAlpha: 0.32,
+    kerb: {
+      top: { r: 118, g: 120, b: 108 },
+      highlight: { r: 152, g: 152, b: 136 },
+      face: { r: 64, g: 64, b: 52 },
+      faceFoot: { r: 26, g: 27, b: 20 },
+      joint: { r: 22, g: 22, b: 16 },
+      jointAlpha: 0.7,
+      waterShadow: { r: 10, g: 12, b: 6 },
+      waterShadowAlpha: 0.55,
+      waterGlintAlpha: 0.3,
     },
   },
 };

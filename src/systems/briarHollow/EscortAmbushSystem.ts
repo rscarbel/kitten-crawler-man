@@ -37,7 +37,7 @@
  * home re-arms all three.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { AudioManager } from '../../audio/AudioManager';
 import {
   applySpawnDifficulty,
@@ -61,7 +61,6 @@ import type { MusicClaims } from '../../audio/AudioScope';
 import { worldToScreen, type Camera } from '../../core/rendering/camera';
 import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 
-const UPDATES_PER_SECOND = 60;
 const TILE_CENTRE = 0.5;
 const FULL_TURN = Math.PI * 2;
 const HALF_TURN_DEGREES = 180;
@@ -128,12 +127,12 @@ const ESCORT_WAVE_OVERLAP_BODIES = 0;
  * blow of the one before.
  */
 export const ESCORT_WAVE_MIN_GAP_SECONDS = 3;
-const ESCORT_WAVE_MIN_GAP_FRAMES = ESCORT_WAVE_MIN_GAP_SECONDS * UPDATES_PER_SECOND;
+const ESCORT_WAVE_MIN_GAP_FRAMES = ESCORT_WAVE_MIN_GAP_SECONDS * WORLD_TICKS_PER_SECOND;
 /** No ambusher comes up within this many tiles of the town wall's ring. */
 const TOWN_WALL_SPAWN_MARGIN_TILES = 2;
 /** A wave's bodies come out one after another this far apart, so one blow never meets the lot. */
 const WAVE_STAGGER_SECONDS = 0.6;
-const WAVE_STAGGER_FRAMES = Math.round(WAVE_STAGGER_SECONDS * UPDATES_PER_SECOND);
+const WAVE_STAGGER_FRAMES = Math.round(WAVE_STAGGER_SECONDS * WORLD_TICKS_PER_SECOND);
 
 /**
  * How far from Midge a wave's bodies may come up. Each is walked out along
@@ -173,7 +172,7 @@ const SPAWN_SPREAD_RADIANS = degreesToRadians(SPAWN_SPREAD_DEGREES);
  * war horn and nobody coming.
  */
 const SPAWN_WIDEN_SECONDS = 3;
-const SPAWN_WIDEN_FRAMES = SPAWN_WIDEN_SECONDS * UPDATES_PER_SECOND;
+const SPAWN_WIDEN_FRAMES = SPAWN_WIDEN_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Directions round Midge a body is offered for each try at placing it. */
 const SPAWN_ANCHORS_PER_TRY = 4;
 /** How far round one of those points a body may come up. */
@@ -204,7 +203,7 @@ const SPAWN_PATH_BUDGET_TILES = SPAWN_RING_MAX_TILES * 2;
  * the music forever.
  */
 const SPAWN_GIVE_UP_SECONDS = 10;
-const SPAWN_GIVE_UP_FRAMES = SPAWN_GIVE_UP_SECONDS * UPDATES_PER_SECOND;
+const SPAWN_GIVE_UP_FRAMES = SPAWN_GIVE_UP_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /**
  * An ambusher this far from everyone it could fight, and out of sight, for
@@ -219,7 +218,7 @@ const ABANDON_TILES =
   SPAWN_RING_MAX_TILES + SPAWN_SCATTER_TILES + SPAWN_SEARCH_TILES + ABANDON_MARGIN_TILES;
 /** No nearer to anyone for this long, and not yet at them, an ambusher is stuck. */
 export const ESCORT_STUCK_SECONDS = 8;
-const STUCK_FRAMES = ESCORT_STUCK_SECONDS * UPDATES_PER_SECOND;
+const STUCK_FRAMES = ESCORT_STUCK_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Coming this much nearer counts as closing in. */
 const CLOSING_STEP_TILES = 0.5;
 /**
@@ -229,7 +228,7 @@ const CLOSING_STEP_TILES = 0.5;
  */
 const IN_THE_FIGHT_TILES = 9;
 const ABANDON_SECONDS = 6;
-const ABANDON_FRAMES = ABANDON_SECONDS * UPDATES_PER_SECOND;
+const ABANDON_FRAMES = ABANDON_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** The four steps the road's walk is measured in. */
 const ROAD_STEPS: readonly (readonly [number, number])[] = [

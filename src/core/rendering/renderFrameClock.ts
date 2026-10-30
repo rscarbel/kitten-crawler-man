@@ -9,6 +9,14 @@
 let frame = 0;
 
 /**
+ * The display rate an idle window given in seconds is sized against. Render
+ * frames follow the screen's refresh rather than the world's tick, so on a
+ * faster screen such a window passes proportionally sooner; for a cache's
+ * idle release, a memory bound, that is harmless.
+ */
+export const NOMINAL_RENDER_FRAMES_PER_SECOND = 60;
+
+/**
  * Render frames during which nothing held the idle clock; see
  * {@link holdIdleClock}.
  */

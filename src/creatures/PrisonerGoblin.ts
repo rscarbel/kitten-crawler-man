@@ -15,9 +15,9 @@ import type { BarkLine } from '../dialog/line';
 import { PRISONER_HECKLE_BARKS } from '../dialog/scripts/scenes/stealthKeySnatch';
 import { pickFreshLine } from '../dialog/scripts/scenes/cloggedBathroom';
 import { bathroomSeedFraction } from './BathroomGoblin';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 const MINIMUM_LIVE_HP = 1;
-const FRAMES_PER_SECOND = 60;
 const MILLISECONDS_PER_SECOND = 1000;
 const HALF = 0.5;
 const PRISONER_CULL_MARGIN_TILES = 1.5;
@@ -26,8 +26,8 @@ const PRISONER_LOOP_FPS = 8;
 /** The shortest and longest a prisoner holds one idle before choosing the next, in frames. */
 const BEAT_MIN_SECONDS = 3;
 const BEAT_SPREAD_SECONDS = 4;
-const BEAT_MIN_FRAMES = BEAT_MIN_SECONDS * FRAMES_PER_SECOND;
-const BEAT_SPREAD_FRAMES = BEAT_SPREAD_SECONDS * FRAMES_PER_SECOND;
+const BEAT_MIN_FRAMES = BEAT_MIN_SECONDS * WORLD_TICKS_PER_SECOND;
+const BEAT_SPREAD_FRAMES = BEAT_SPREAD_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long a heckle's bubble stays up. */
 const HECKLE_BUBBLE_FRAMES = 120;
 

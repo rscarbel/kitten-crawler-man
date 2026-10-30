@@ -14,7 +14,7 @@
  * empty while that table is open.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   CLUB_CASINO_SEATS,
@@ -31,7 +31,6 @@ import {
 import { CLUB_PATRON_REFS } from '../sprites/clubCastRoster';
 import { POKER_REGULARS } from './casino/poker/npc/regulars';
 import { REGULAR_IDS, isRegularId, type RegularId } from './casino/poker/npc/regularIds';
-import { CLUB_ANIM_FRAMES_PER_SECOND } from '../core/club/clubTiming';
 import { PLAYER_SEAT } from './casino/poker/PokerTable';
 
 /** What the gamblers need to know about the tables this tick. */
@@ -63,9 +62,6 @@ interface Stool {
 
 /** A sitter sorts this far after the stool on their tile, so they are painted onto its cushion. */
 const SITTER_AFTER_STOOL_PX = 0.5;
-
-/** Ticks in a second of the club's clock. */
-const TICKS_PER_SECOND = CLUB_ANIM_FRAMES_PER_SECOND;
 
 /** How long a gambler stays put, in seconds: long enough that the room reads as settled. */
 const STAY_MIN_SECONDS = 45;
@@ -106,7 +102,7 @@ function randomBetween(random: () => number, min: number, max: number): number {
 }
 
 function secondsToTicks(seconds: number): number {
-  return Math.round(seconds * TICKS_PER_SECOND);
+  return Math.round(seconds * WORLD_TICKS_PER_SECOND);
 }
 
 export class ClubGamblerSystem {
@@ -366,7 +362,7 @@ export class ClubGamblerSystem {
         walkPhase: 0,
         facingX: facing.x,
         facingY: facing.y,
-        poseSeconds: (this.tick - gambler.poseStartTick) / TICKS_PER_SECOND,
+        poseSeconds: (this.tick - gambler.poseStartTick) / WORLD_TICKS_PER_SECOND,
       },
     );
   }

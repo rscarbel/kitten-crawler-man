@@ -27,6 +27,7 @@ import type { PalisadeTier } from '../map/tileTypes';
 import type { ResourceId } from './items/gathering/resourceIds';
 import type { HarvestKind } from './labour/craftPerks';
 import type { VillageQuestPhase } from './quests/villageQuestPhase';
+import type { QuestId } from './quests/QuestManager';
 import type { BlueprintsQuestPhase } from './quests/blueprintsQuestPhase';
 import type { ItemId } from './items/defs/ItemDefs';
 import type { ThrownItemId } from '../systems/DynamiteSystem';
@@ -41,22 +42,14 @@ import type { ExchangeFlagId } from './party/partySplit';
 import type { TowerMoment } from '../systems/tower/towerMoments';
 
 export interface GameEvents {
-  /**
-   * Something made a noise in the world at (`x`, `y`) world pixels: a thing
-   * knocked off a ledge landing. Whatever listens for noises (a watcher, a
-   * guard) decides for itself whether it is within `radiusTiles` and what it
-   * does about it, the way `respondToNoise` answers the prison's noises.
-   */
-  worldNoise: { x: number; y: number; radiusTiles: number; cause: 'knocked_off' };
-
   /** A set of pressure plates has opened its target all the way. */
   plateSetOpened: { set: string };
 
   /** A conveyor has taken `item` from one end; it now waits at the end named `to`. */
   conveyorSent: { conveyor: string; item: ItemId; to: ConveyorEndId };
 
-  /** A signal fixture's pull was worked, raising `flag` for its other end. */
-  conveyorSignalled: { conveyor: string; flag: ExchangeFlagId };
+  /** A signal fixture's pull was worked at its `from` end, raising `flag` for its other end. */
+  conveyorSignalled: { conveyor: string; flag: ExchangeFlagId; from: ConveyorEndId };
 
   /**
    * The tower's storey works reached a point the questline's chapters turn
@@ -223,7 +216,7 @@ export interface GameEvents {
   gameSaved: Record<string, never>;
 
   /** A mission objective was completed (e.g. goblin child returned to mother). */
-  objectiveComplete: { objectiveId: string };
+  objectiveComplete: { questId: QuestId; objectiveId: string };
 
   /**
    * The Wayfinder's Anchor completed a warp to `destination`; the tile is the

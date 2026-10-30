@@ -13,8 +13,7 @@ import {
   FULL_SHARE,
 } from '../../../core/combat/StatusEffect';
 import { frozenFramesFor } from '../../../core/combat/frostStatus';
-
-const FRAMES_PER_SECOND = 60;
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 /** Share of max HP Take Damage costs, before any status scales it. */
 export const WHEEL_DAMAGE_MAX_HP_SHARE = 0.5;
@@ -24,11 +23,11 @@ const WHEEL_PENALTY_SOURCE: DamageSource = { kind: 'wheelPenalty' };
 
 const WHEEL_POISON_SECONDS = 120;
 /** Far longer than any mob's poison, which is what makes it a wedge rather than a scratch. */
-export const WHEEL_POISON_FRAMES = WHEEL_POISON_SECONDS * FRAMES_PER_SECOND;
+export const WHEEL_POISON_FRAMES = WHEEL_POISON_SECONDS * WORLD_TICKS_PER_SECOND;
 
 const WHEEL_FREEZE_SECONDS = 4;
 /** Long enough to be seen as frozen solid on the club floor, before ice-resistant gear halves it. */
-export const WHEEL_FREEZE_FRAMES = WHEEL_FREEZE_SECONDS * FRAMES_PER_SECOND;
+export const WHEEL_FREEZE_FRAMES = WHEEL_FREEZE_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** Share of carried coins Donald takes from a robbed crawler. */
 const WHEEL_ROBBED_COIN_SHARE = 0.5;

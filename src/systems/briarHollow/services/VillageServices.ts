@@ -18,7 +18,7 @@ import type { AudioManager } from '../../../audio/AudioManager';
 import type { AudioScope } from '../../../audio/AudioScope';
 import type { SoundId } from '../../../audio/sounds';
 import { VILLAGE_CUES } from '../../../audio/villageSoundCues';
-import { TILE_SIZE } from '../../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 import type { EventBus } from '../../../core/EventBus';
 import type { GrantedReward } from '../../../core/items/loot/GrantedReward';
 import type { PartyTools } from '../../../core/items/gathering/PartyTools';
@@ -96,10 +96,9 @@ export interface VillageServicesDeps {
   readonly stationsUpgrading: () => boolean;
 }
 
-const UPDATES_PER_SECOND = 60;
 /** How long Sella's bandaging plays over the party before she pronounces them mended. */
 export const TREATMENT_SECONDS = 1.5;
-const TREATMENT_FRAMES = Math.round(TREATMENT_SECONDS * UPDATES_PER_SECOND);
+const TREATMENT_FRAMES = Math.round(TREATMENT_SECONDS * WORLD_TICKS_PER_SECOND);
 
 /** A real cut at the machine, right next to the player. */
 const SAWING_VOLUME = 0.7;

@@ -8,8 +8,8 @@
  */
 
 import type { CrawlerKind } from '../skills/SkillManager';
+import { WORLD_TICKS_PER_SECOND } from '../constants';
 
-const TICKS_PER_SECOND = 60;
 /** How long after a summon the same crawler can summon again. */
 export const THRALL_COOLDOWN_SECONDS = 60;
 /** How long a crawler must wait after their thralls run out of work before summoning again. */
@@ -22,7 +22,7 @@ export function startThrallCooldown(
   crawler: CrawlerKind,
   seconds: number = THRALL_COOLDOWN_SECONDS,
 ): void {
-  ticksLeft.set(crawler, seconds * TICKS_PER_SECOND);
+  ticksLeft.set(crawler, seconds * WORLD_TICKS_PER_SECOND);
 }
 
 /** Counts every cooldown down one fixed tick. */
@@ -39,7 +39,7 @@ export function thrallCooldownTicksLeft(crawler: CrawlerKind): number {
 
 /** Seconds until `crawler` can summon again, rounded up; 0 when ready. */
 export function thrallCooldownSecondsLeft(crawler: CrawlerKind): number {
-  return Math.ceil(thrallCooldownTicksLeft(crawler) / TICKS_PER_SECOND);
+  return Math.ceil(thrallCooldownTicksLeft(crawler) / WORLD_TICKS_PER_SECOND);
 }
 
 /** Clears every cooldown. For headless verification only. */

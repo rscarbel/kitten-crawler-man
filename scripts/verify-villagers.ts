@@ -41,7 +41,7 @@ import {
   GOODBYE_LABEL,
   type VillagerConversationFlow,
 } from '../src/systems/briarHollow/villagerTopics';
-import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
 import { Mob } from '../src/creatures/Mob';
 import { Player } from '../src/Player';
@@ -64,24 +64,23 @@ useDevPlayerIdentity();
 
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 3;
-const FRAMES_PER_SECOND = 60;
 const SIMULATED_MINUTES = 10;
 const SECONDS_PER_MINUTE = 60;
-const TOTAL_FRAMES = SIMULATED_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+const TOTAL_FRAMES = SIMULATED_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 /** The siege starts this far in, leaving time before it for the day and after it for the return. */
-const SIEGE_START_FRAME = 7 * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+const SIEGE_START_FRAME = 7 * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 /** How long the village stays in hiding before the phase moves on. */
-const SIEGE_LENGTH_FRAMES = 60 * FRAMES_PER_SECOND;
-const SHELTER_DEADLINE_FRAMES = 20 * FRAMES_PER_SECOND;
-const THRESHOLD_DWELL_LIMIT_FRAMES = 2 * FRAMES_PER_SECOND;
-const STUCK_LIMIT_FRAMES = 5 * FRAMES_PER_SECOND;
+const SIEGE_LENGTH_FRAMES = 60 * WORLD_TICKS_PER_SECOND;
+const SHELTER_DEADLINE_FRAMES = 20 * WORLD_TICKS_PER_SECOND;
+const THRESHOLD_DWELL_LIMIT_FRAMES = 2 * WORLD_TICKS_PER_SECOND;
+const STUCK_LIMIT_FRAMES = 5 * WORLD_TICKS_PER_SECOND;
 /** How far beyond the palisade the party roams — well past the point a shopkeeper is called home. */
 const PARTY_ROAM_MARGIN_TILES = 70;
 /** The party starts the day out in the fields, this far from the village centre at least, for this long. */
 const PARTY_AWAY_TILES = 75;
-const PARTY_AWAY_FRAMES = 3 * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+const PARTY_AWAY_FRAMES = 3 * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND;
 /** How long the party stands about at each stop, at most. */
-const PARTY_LINGER_MAX_FRAMES = 8 * FRAMES_PER_SECOND;
+const PARTY_LINGER_MAX_FRAMES = 8 * WORLD_TICKS_PER_SECOND;
 /** A small phone held landscape, and more choices than any villager has today. */
 const SHORT_PHONE_WIDTH = 568;
 const SHORT_PHONE_HEIGHT = 320;
@@ -409,7 +408,7 @@ function simulate(seed: number): void {
   );
   check(
     shelteredBy !== null && shelteredBy <= SHELTER_DEADLINE_FRAMES,
-    `everyone reached shelter within 20 s (${shelteredBy === null ? 'never' : `${(shelteredBy / FRAMES_PER_SECOND).toFixed(1)} s`})`,
+    `everyone reached shelter within 20 s (${shelteredBy === null ? 'never' : `${(shelteredBy / WORLD_TICKS_PER_SECOND).toFixed(1)} s`})`,
   );
   const returned = system.villagers.filter((villager) => villager.state !== 'sheltering').length;
   check(
@@ -668,7 +667,7 @@ function verifyGateOpensOnlyForARouteThroughIt(): void {
   };
   const middle = gateTiles[1];
   const middleWorld = { x: middle.x * TILE_SIZE, y: middle.y * TILE_SIZE };
-  const framesToOpen = Math.ceil(GATE_SWING_SECONDS * FRAMES_PER_SECOND);
+  const framesToOpen = Math.ceil(GATE_SWING_SECONDS * WORLD_TICKS_PER_SECOND);
 
   const openFractionAfter = (
     friendlies: ReadonlyArray<{
@@ -681,7 +680,7 @@ function verifyGateOpensOnlyForARouteThroughIt(): void {
     const gate = new VillageGate([], gateDef, null);
     let fraction = 0;
     for (let frame = 0; frame < frames; frame++) {
-      gate.update(friendlies, 0, 1 / FRAMES_PER_SECOND);
+      gate.update(friendlies, 0, 1 / WORLD_TICKS_PER_SECOND);
       fraction = gate.openFraction;
     }
     return fraction;

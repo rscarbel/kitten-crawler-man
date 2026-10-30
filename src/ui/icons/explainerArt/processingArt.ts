@@ -24,6 +24,7 @@ import { SERVICE_PRICES } from '../../../economy/servicePrices';
 import { worldText } from '../../world/worldText';
 import type { Rect } from '../../core/geom';
 import { drawResourceIcon } from '../resourceIcons';
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 // ── Shared stage ────────────────────────────────────────────────────────────
 
@@ -46,9 +47,8 @@ const WORKER_ROW = BUILD_ROWS.side;
 /** Frames per pose frame in the illustration: the same steady pace every other page's loop uses. */
 const WORK_TICKS_PER_FRAME = 6;
 
-const UPDATES_PER_SECOND = 60;
 /** How long the wood sits at the machine, matching the real machine's own per-wood time. */
-const WORK_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * UPDATES_PER_SECOND);
+const WORK_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * WORLD_TICKS_PER_SECOND);
 /** How long the log takes to slide in from off-band before the work starts. */
 const ENTER_FRAMES = 26;
 /** How long the "-1 Wood, +N output" pop takes to rise and fade once the work ends. */

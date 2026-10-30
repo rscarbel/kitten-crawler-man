@@ -1,6 +1,7 @@
 /**
  * What the human crawler hangs round his neck: the Stoneheart Amulet on its
- * leather thong, and the Sun and Moon Lockets on their chains. At the tile a
+ * leather thong, the Sun and Moon Lockets on their chains, and the Hushed
+ * Bell on its red ribbon. At the tile a
  * pendant is two or three pixels on his upper chest, so what reads is a bright
  * (or, for the stone, rough grey) blob ringed in a dark edge against any shirt,
  * with the line of the cord or chain running up to either side of his neck.
@@ -341,10 +342,67 @@ const STONE_LOOK: PendantLook = {
   paintProfile: (ctx, torso, centre) => paintStone(ctx, torso, centre, STONE_EDGE_SHARE),
 };
 
+// ── The bell ─────────────────────────────────────────────────────────────────
+
+const BRASS: MetalLook = { deep: '#3e2a06', mid: '#c9a23e', light: '#f2dc8a', glint: '#fffbe6' };
+/** A cat bell's red ribbon, broader than a chain so it reads as ribbon on any shirt. */
+const BELL_RIBBON: CordLook = { colour: '#c4362e', under: '#3a0c0a', width: 0.03 };
+/** A cat's bell on a man's chest: a touch larger than a locket so the round form still shows. */
+const BELL_RADIUS = 0.072;
+const BELL_RIM_WIDTH = 0.024;
+/** The slot across the bell's lower half, and the hole at its foot, as shares of its radius. */
+const BELL_SLOT_DROP = 0.32;
+const BELL_SLOT_HALF_SPAN = 0.72;
+const BELL_SLOT_WIDTH = 0.018;
+const BELL_HOLE_DROP = 0.62;
+const BELL_HOLE_SHARE = 0.17;
+/** The twist of grey fur standing out of the slot, the one mark that says its clapper is stopped. */
+const BELL_FUR = '#c9c4bb';
+const BELL_FUR_SHARE = 0.28;
+const BELL_FUR_OUT = 0.32;
+const BELL_GLINT_SHARE = 0.26;
+/** Edge-on a bell is round, so it narrows far less than a locket does. */
+const BELL_EDGE_SHARE = 0.9;
+
+function paintBell(ctx: Ctx, torso: TorsoFrame, centre: Pt, squeeze: number): void {
+  const across = BELL_RADIUS * squeeze;
+  traceOval(ctx, torso, centre, across + BELL_RIM_WIDTH, BELL_RADIUS + BELL_RIM_WIDTH);
+  ctx.fillStyle = BRASS.deep;
+  ctx.fill();
+  traceOval(ctx, torso, centre, across, BELL_RADIUS);
+  ctx.fillStyle = BRASS.mid;
+  ctx.fill();
+  const slotLeft = offsetFrom(
+    torso,
+    centre,
+    pt(-across * BELL_SLOT_HALF_SPAN, BELL_RADIUS * BELL_SLOT_DROP),
+  );
+  const slotRight = offsetFrom(
+    torso,
+    centre,
+    pt(across * BELL_SLOT_HALF_SPAN, BELL_RADIUS * BELL_SLOT_DROP),
+  );
+  strokeLine(ctx, [slotLeft, slotRight], BRASS.deep, BELL_SLOT_WIDTH);
+  const hole = offsetFrom(torso, centre, pt(0, BELL_RADIUS * BELL_HOLE_DROP));
+  fillDisc(ctx, torso, hole, BELL_RADIUS * BELL_HOLE_SHARE, BRASS.deep);
+  const fur = offsetFrom(torso, centre, pt(across * BELL_FUR_OUT, BELL_RADIUS * BELL_SLOT_DROP));
+  fillDisc(ctx, torso, fur, BELL_RADIUS * BELL_FUR_SHARE, BELL_FUR);
+  const glint = offsetFrom(torso, centre, scaled(LOCKET_GLINT_OFFSET, BELL_RADIUS));
+  fillDisc(ctx, torso, glint, BELL_RADIUS * BELL_GLINT_SHARE, BRASS.glint);
+}
+
+const BELL_LOOK: PendantLook = {
+  cord: BELL_RIBBON,
+  bailRise: BELL_RADIUS,
+  profileHalfDepth: BELL_RADIUS * BELL_EDGE_SHARE + BELL_RIM_WIDTH,
+  paintFacing: (ctx, torso, centre) => paintBell(ctx, torso, centre, 1),
+  paintProfile: (ctx, torso, centre) => paintBell(ctx, torso, centre, BELL_EDGE_SHARE),
+};
+
 // ── The garments ─────────────────────────────────────────────────────────────
 
 function definePendant(
-  id: 'human_stoneheart_amulet' | 'human_sun_locket' | 'human_moon_locket',
+  id: 'human_stoneheart_amulet' | 'human_sun_locket' | 'human_moon_locket' | 'human_hushed_bell',
   name: string,
   material: GarmentMaterial,
   look: PendantLook,
@@ -383,4 +441,11 @@ export const HUMAN_MOON_LOCKET = definePendant(
   'Moon Locket',
   'jewelry',
   locketLook(SILVER, paintCrescent),
+);
+
+export const HUMAN_HUSHED_BELL = definePendant(
+  'human_hushed_bell',
+  'Hushed Bell',
+  'jewelry',
+  BELL_LOOK,
 );

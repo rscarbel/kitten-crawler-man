@@ -82,7 +82,17 @@ export interface MinimapModel {
   readonly pan?: (dx: number, dy: number) => void;
 }
 
-export type DockButtonId = 'pause' | 'bag' | 'build' | 'chip' | 'journal' | 'follower' | 'switch';
+export const DOCK_BUTTON_IDS = [
+  'pause',
+  'bag',
+  'build',
+  'chip',
+  'journal',
+  'follower',
+  'switch',
+] as const;
+
+export type DockButtonId = (typeof DOCK_BUTTON_IDS)[number];
 
 export interface DockButtonModel {
   readonly id: DockButtonId;

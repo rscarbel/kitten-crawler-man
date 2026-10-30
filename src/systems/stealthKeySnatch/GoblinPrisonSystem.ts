@@ -103,6 +103,7 @@ import {
   bodyTouchesGuard,
   castDisc,
   lightSeesBody,
+  crawlerSighting,
   stepSuspicion,
   SUSPICION_CAPTURE,
   wrapAngle,
@@ -789,7 +790,7 @@ export class GoblinPrisonSystem {
       const was = guard.suspicion;
       guard.seenWeight = best;
       guard.seen = seen;
-      guard.suspicion = stepSuspicion(guard.suspicion, 'cone', best, suspicion);
+      guard.suspicion = stepSuspicion(guard.suspicion, 'cone', crawlerSighting(best), suspicion);
       if (best > SEEN_EDGE_WEIGHT_FLOOR) {
         anyRising = true;
         guard.hold ??= { pose: guard.pose, facing: guard.pose.facing };
@@ -809,7 +810,7 @@ export class GoblinPrisonSystem {
         best = Math.max(best, lightSeesBody(grid, spot.shape, centre, 1));
       }
       spot.seenWeight = best;
-      spot.suspicion = stepSuspicion(spot.suspicion, 'disc', best, suspicion);
+      spot.suspicion = stepSuspicion(spot.suspicion, 'disc', crawlerSighting(best), suspicion);
       if (best > SEEN_EDGE_WEIGHT_FLOOR) anyRising = true;
       if (spot.suspicion >= SUSPICION_CAPTURE) {
         this.capture({ kind: 'seen', sourceId: spot.compiled.def.id });

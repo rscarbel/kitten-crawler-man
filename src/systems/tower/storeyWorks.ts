@@ -37,9 +37,18 @@ export interface StoreyWorksDeps {
   readonly split: PartySplitState;
   /** Puts a creature into this storey's roster. */
   readonly addMob: (mob: Mob) => void;
+  /** Takes a creature out of this storey's roster for good. */
+  readonly removeMob: (mob: Mob) => void;
   /** The crawlers standing on the storey on show. */
   readonly presentCrawlers: () => readonly Player[];
-  /** Sets both crawlers down together on `tile` of the storey on show. */
+  /**
+   * The party's companions standing on the storey on show: never caught
+   * themselves, but a watcher that sees one is put on its guard.
+   */
+  readonly presentCompanions: () => readonly Player[];
+  /** Stands the party's own companions on the storey on show beside the crawler each follows, the crawlers left where they are. */
+  readonly regroupCompanions: () => void;
+  /** Sets both crawlers down together on `tile` of the storey on show, their companions beside them. */
   readonly setPartyDown: (tile: TowerTile) => void;
   readonly toast: (text: string) => void;
 }
@@ -78,6 +87,13 @@ export abstract class StoreyWorks {
 
   /** Placed props the works draw themselves, or that no longer stand where the layout put them. */
   hiddenProps?(): ReadonlySet<string>;
+
+  /**
+   * The Warden has fallen while this storey stood built: whatever it still
+   * holds against the party (a ward, a watcher) goes, so the way down is
+   * open. Called once, whichever storey the party is on.
+   */
+  standDown?(): void;
 
   dispose?(): void;
 

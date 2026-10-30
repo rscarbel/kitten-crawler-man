@@ -49,20 +49,35 @@ when it is shown.
 - An adventurer like the player. Before the player, Caroline chose Dave, and
   she talked to him because of it. That is how he knows the history.
 - He crawled with a cat named Pumpkin. They reached Taloncrest's tower, where
-  Pumpkin was taken. Dave believed her dead and went on alone.
+  Pumpkin was taken. Dave broke into the tower after her and was cutting
+  through its guards when one offered to negotiate: Dave's sword for the
+  troops being sent away, good faith on both sides. Dave would never part with
+  that sword, but afraid of what they would do to Pumpkin, he gave it up. The
+  guard led him to where she had been kept, and there was nothing left but
+  some fur and clipped claws; the guard said he was too late. Dave killed him
+  and fled the tower. He is sure Pumpkin is dead, has never gone back, and has
+  been hollow since. If he carries a sword now, it is not that one: the tower
+  kept it, and showed it to Pumpkin as proof that he was dead.
+- Pumpkin is high-maintenance, never bad-tempered; no line calls her grumpy,
+  mean or anything like it.
 - Alone, he hit a ceiling and concluded that one person can't move the needle:
   it takes allies and many capable people working together.
-- Now he spends his skill and knowledge helping others. He will not help put
-  another cat in front of that tower.
-- Pumpkin is not dead. She has lived wild in Taloncrest ever since; she lets
-  the tower catch her for its tuna and always walks back out. Dave does not
-  know, until the town's cats come home: then she walks into the Sleeping Cat
+- Now he spends his skill and knowledge helping others. When the party's plan
+  would hand Belle to the tower, he tells them his story and staunchly tells
+  them not to go through with it: find another way, any way that does not put
+  her in the tower's hands. He tells of losing Pumpkin to the tower as what
+  he learned there, never as his reason for not helping or for not going in
+  again himself.
+- Pumpkin is not dead. She has been held in the tower's cattery ever since,
+  her claws clipped every few days so she can never work a lock, and told
+  Dave was dead: they showed her his sword. Each believes the other dead.
+  Dave does not know she lives until the town's cats come home: then she walks into the Sleeping Cat
   Inn's taproom while he is in it. That conversation is the hardest the game
   has; in it he says where he learned that one person can't change anything,
   and ends it with the town's saying, the one he once added "usually" to.
   Afterwards she lives in the taproom with him for good, there even while he
-  is out of the room. She speaks in her own lowercase voice, about food and
-  doors.
+  is out of the room. She speaks in short, dry, flat sentences, about food
+  and doors.
 - On the human's way into the tower, his advice is plain: the guards don't
   hit, they throw you out; stay behind the elf in the drain; take the hire.
 - Good at practical advice: red ground means move, step away from the
@@ -113,6 +128,14 @@ holds only `<text>`; never type either into a line.
   nothing due there is no cutscene: Dave idles in his room. Tapped, he gives
   news about gear left unworn behind a boss, then his tactics for the
   current objective, then the AI chat.
+- **The walk-up stands down for a party with its own business.** Once the
+  fortune teller's quest is taken up, or while the Journal's pin follows
+  another quest (a lead overheard in the street pins one), the arrival walks
+  nobody over and Caroline gives no intel unasked. A side quest under way
+  that the Journal is not following does not count. What Dave had to tell is
+  never dropped: he waits with it behind his `!`, and tapped, tells it first,
+  debrief included, with no walk. A beat a floor never told is caught up
+  ahead of the next floor's, so the story stays whole.
 - **The world halts for the talk.** While a cutscene's conversation is open,
   the floor clock and mobs stop. The walk-up runs with the world
   ticking; safe rooms already keep hostiles out.
@@ -156,7 +179,7 @@ holds only `<text>`; never type either into a line.
   side sent the other (a key ring down, tuna up, a note asking for it), Belle
   introducing the cat she was caged beside, and one fact for the climb: the
   Warden knows they are inside, and only Belle can see the wards that move
-  now. The cellmate keeps her lowercase voice about food. No line there names
+  now. The cellmate keeps her short, dry voice about food. No line there names
   the human or assumes their body.
 
 ## Editing guide

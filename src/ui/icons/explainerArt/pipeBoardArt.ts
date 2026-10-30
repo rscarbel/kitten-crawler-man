@@ -21,6 +21,7 @@ import {
 import { pipeInk } from '../../theme/pipeInk';
 import { worldText } from '../../world/worldText';
 import type { IllustrationRect } from './illustration';
+import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 const N = 1;
 const E = 2;
@@ -28,8 +29,7 @@ const S = 4;
 const W = 8;
 
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const MS_PER_FRAME = MS_PER_SECOND / FRAMES_PER_SECOND;
+const MS_PER_FRAME = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /** The explainer floods slower than the board does, so the eye can follow it. */
 const LESSON_STEP_MS = 260;
 const HALF = 0.5;

@@ -42,7 +42,7 @@ import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTil
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { wallFaceMisplacements } from '../src/map/town/interiors/wallFaceProps';
 import { townInteriorPropEmitters } from '../src/systems/townInteriorPropAmbience';
-import { TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer';
 import {
@@ -81,7 +81,6 @@ import {
   CLUB_PATRON_COUNT,
   CLUB_PERFORMER_POSTS,
 } from '../src/core/club/clubLayout';
-import { CLUB_ANIM_FRAMES_PER_SECOND } from '../src/core/club/clubTiming';
 import {
   CROWD_BODY_RADIUS_TILES,
   WAYPOINT_MAX_OFF_LINE_TILES,
@@ -204,7 +203,6 @@ const MIN_TILE_COVERAGE = 0.99;
  * a south wall, so "in" is always north.
  */
 const DOORWAY_CLEAR_DEPTH_TILES = 2;
-const FRAMES_PER_SECOND = 60;
 
 /** Where Steve Cartwright keeps his range. */
 const CARTWRIGHT_HOME = 'taloncrest_crafting_house';
@@ -212,10 +210,10 @@ const CARTWRIGHT_HOME = 'taloncrest_crafting_house';
 const MIN_SHOOTING_LANE_TILES = 4;
 /** Comfortably longer than one aim, shot and reload, so a cycle always completes inside it. */
 const TARGET_PRACTICE_CYCLE_SECONDS = 8;
-const TARGET_PRACTICE_CYCLE_FRAMES = TARGET_PRACTICE_CYCLE_SECONDS * FRAMES_PER_SECOND;
+const TARGET_PRACTICE_CYCLE_FRAMES = TARGET_PRACTICE_CYCLE_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long a crawler stands in his lane. */
 const TARGET_PRACTICE_HELD_SECONDS = 15;
-const TARGET_PRACTICE_HELD_FRAMES = TARGET_PRACTICE_HELD_SECONDS * FRAMES_PER_SECOND;
+const TARGET_PRACTICE_HELD_FRAMES = TARGET_PRACTICE_HELD_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Each pub's janitor, by the building they mop. */
 const JANITOR_HOMES: ReadonlyArray<readonly [BuildingId, ResidentId]> = [
   ['taloncrest_pub', 'janitor_puddles'],
@@ -223,7 +221,7 @@ const JANITOR_HOMES: ReadonlyArray<readonly [BuildingId, ResidentId]> = [
 ];
 /** Long enough for a stroll and several spots worked. */
 const JANITOR_WATCH_SECONDS = 90;
-const JANITOR_WATCH_FRAMES = JANITOR_WATCH_SECONDS * FRAMES_PER_SECOND;
+const JANITOR_WATCH_FRAMES = JANITOR_WATCH_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** Where Old Lori lives — the town's roaming resident. */
 const LORI_HOME = 'taloncrest_old_lady_cottage';
@@ -235,7 +233,7 @@ const LORI_HOME = 'taloncrest_old_lady_cottage';
 const ROAMER_START_TOLERANCE_TILES = 3;
 /** Long enough for several strolls: each pause is at most six seconds. */
 const ROAMER_WANDER_SECONDS = 120;
-const ROAMER_WANDER_FRAMES = ROAMER_WANDER_SECONDS * FRAMES_PER_SECOND;
+const ROAMER_WANDER_FRAMES = ROAMER_WANDER_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Distinct tiles she must stand on over the wander — more than a shuffle on the spot. */
 const ROAMER_MIN_TILES_VISITED = 4;
 /** How far from her start she must get at some point, in tiles. */
@@ -244,15 +242,15 @@ const ROAMER_MIN_REACH_TILES = 2;
 const ROAMER_EXIT_KEEP_OFF_TILES = 1;
 /** How long to wait for her to be caught mid-stride before the hold is tested. */
 const ROAMER_STRIDE_WAIT_SECONDS = 60;
-const ROAMER_STRIDE_WAIT_FRAMES = ROAMER_STRIDE_WAIT_SECONDS * FRAMES_PER_SECOND;
+const ROAMER_STRIDE_WAIT_FRAMES = ROAMER_STRIDE_WAIT_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How long the player stands beside her. */
 const ROAMER_HOLD_TEST_SECONDS = 10;
-const ROAMER_HOLD_TEST_FRAMES = ROAMER_HOLD_TEST_SECONDS * FRAMES_PER_SECOND;
+const ROAMER_HOLD_TEST_FRAMES = ROAMER_HOLD_TEST_SECONDS * WORLD_TICKS_PER_SECOND;
 /** Sub-pixel slack on "did not move" — she is expected to stop dead. */
 const ROAMER_HOLD_SLACK_PX = 0.01;
 /** How long after the player walks off she has to get moving again. */
 const ROAMER_RESUME_SECONDS = 30;
-const ROAMER_RESUME_FRAMES = ROAMER_RESUME_SECONDS * FRAMES_PER_SECOND;
+const ROAMER_RESUME_FRAMES = ROAMER_RESUME_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** The floor-3 world seed the camp checks regenerate, standing in for a save. */
 const CAMP_WORLD_SEED = 424242;
@@ -956,12 +954,13 @@ for (const conditions of everyTowerConditions(MISSING_CATS_PHASES)) {
       );
     }
     if (storey !== 'cattery') continue;
+    // The keeper's cover is cleared away before the Warden's fight, whose walls of fire need the floor.
     const intruders = map.placedInteriorProps
       .filter((placed) => !TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker'))
       .filter((placed) => !CATTERY_MAY_BLOCK.has(placed.propId))
       .map((placed) => placed.propId);
     check(
-      intruders.length === 0,
+      conditions.keeper === 'on_watch' || intruders.length === 0,
       `${where} blocks nothing but cages, pillars and the hearth — ${intruders.join(' ')}`,
     );
     const fittings = [
@@ -1091,8 +1090,8 @@ console.log("\nThe club's crowd stands in company, not wandering");
     ringClash.length === 0,
     `no two gatherings stand their people within two bodies of each other — ${[...new Set(ringClash)].join(' ')}`,
   );
-  const sampleEvery = CLUB_ANIM_FRAMES_PER_SECOND;
-  const totalTicks = CROWD_SIM_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
+  const sampleEvery = WORLD_TICKS_PER_SECOND;
+  const totalTicks = CROWD_SIM_SECONDS * WORLD_TICKS_PER_SECOND;
   const peakCompany = CLUB_GATHERINGS.map(() => 0);
   let patronSamples = 0;
   let waiting = 0;
@@ -1169,7 +1168,7 @@ console.log("\nThe club's gatherings never take more people than they have room 
 // two patrons change plans on the same tick, so several seeds are run.
 {
   const map = buildInterior('taloncrest_nightclub', 'club', TOWER_GROUND_FLOOR);
-  const totalTicks = CROWD_SIM_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
+  const totalTicks = CROWD_SIM_SECONDS * WORLD_TICKS_PER_SECOND;
   const overfullSeeds: string[] = [];
   for (let seed = 1; seed <= CAPACITY_SIM_SEEDS; seed++) {
     const crowd = createClubCrowd(map, mulberry32(seed));
@@ -1204,7 +1203,7 @@ console.log("\nThe club's gamblers follow the tables");
     };
   })();
   const gamblers = new ClubGamblerSystem(seededRandom);
-  const settleTicks = GAMBLER_SETTLE_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
+  const settleTicks = GAMBLER_SETTLE_SECONDS * WORLD_TICKS_PER_SECOND;
   const blackjackHeld = (): number =>
     gamblers.occupiedSeats().filter((seat) => seat.fixture.game === 'blackjack').length;
   let tick = 0;
@@ -1213,7 +1212,7 @@ console.log("\nThe club's gamblers follow the tables");
   };
   const closed = { blackjackOpen: false, pokerSeats: null };
   run(settleTicks, closed);
-  run(BLACKJACK_SESSION_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND, {
+  run(BLACKJACK_SESSION_SECONDS * WORLD_TICKS_PER_SECOND, {
     blackjackOpen: true,
     pokerSeats: null,
   });

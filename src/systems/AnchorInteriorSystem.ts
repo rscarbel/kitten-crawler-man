@@ -26,7 +26,7 @@ import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { ResidentId } from '../core/state/residentIds';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { QUEST_SLOT_IDX } from '../core/items/defs/ItemDefs';
 import type { ItemId } from '../core/items/defs/ItemDefs';
 import {
@@ -81,8 +81,7 @@ const BOARDS_PER_PICKUP = BOARDS_PER_REPAIR * 2;
  * quest's cadence and there is no reason for Lori's to differ.
  */
 export const WOOD_PILE_RESPAWN_SECONDS = 6;
-const FRAMES_PER_SECOND = 60;
-const WOOD_PILE_RESPAWN_FRAMES = WOOD_PILE_RESPAWN_SECONDS * FRAMES_PER_SECOND;
+const WOOD_PILE_RESPAWN_FRAMES = WOOD_PILE_RESPAWN_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How close a crawler must walk to the pile to pick it up, in tiles. */
 const WOOD_PILE_PICKUP_TILES = 1.2;
 /** Manhattan tiles between crawler and wreck for a repair to be offered. */

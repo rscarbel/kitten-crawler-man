@@ -39,8 +39,7 @@ export interface MercenaryRoster {
   active: HiredMercenary | null;
   /**
    * The name of the last hire to die under contract, until the desk has spoken
-   * about it. Kept so the next visit can open with Sydney's condolences —
-   * and her reminder that the fee is not coming back.
+   * about it. Kept so the next visit can open with Sydney's condolences.
    */
   lastDeceased: string | null;
   /** Whether the desk has already lent this run its one tower loan. */

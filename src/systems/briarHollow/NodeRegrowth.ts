@@ -17,7 +17,7 @@
  * run two updates in one callback.
  */
 
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { HarvestNodeState } from '../../core/quests/briarHollowState';
 import type { HarvestKind } from '../../core/labour/craftPerks';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
@@ -47,11 +47,10 @@ export const SAPLING_GROW_SECONDS = BASE_SAPLING_GROW_SECONDS / GROVE_REGROW_SPE
 /** A regrowth blocked by someone standing on the tile tries again after this long. */
 export const REGROW_RETRY_SECONDS = 10;
 
-const TICKS_PER_SECOND = 60;
-export const DEPOSIT_REGROW_TICKS = DEPOSIT_REGROW_SECONDS * TICKS_PER_SECOND;
-export const GROVE_REGROW_TICKS = GROVE_REGROW_SECONDS * TICKS_PER_SECOND;
-export const SAPLING_GROW_TICKS = SAPLING_GROW_SECONDS * TICKS_PER_SECOND;
-export const REGROW_RETRY_TICKS = REGROW_RETRY_SECONDS * TICKS_PER_SECOND;
+export const DEPOSIT_REGROW_TICKS = DEPOSIT_REGROW_SECONDS * WORLD_TICKS_PER_SECOND;
+export const GROVE_REGROW_TICKS = GROVE_REGROW_SECONDS * WORLD_TICKS_PER_SECOND;
+export const SAPLING_GROW_TICKS = SAPLING_GROW_SECONDS * WORLD_TICKS_PER_SECOND;
+export const REGROW_RETRY_TICKS = REGROW_RETRY_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** The pop from sapling to tree: short, with a little overshoot so it reads as growth, not a swap. */
 const GROW_IN_TICKS = 30;

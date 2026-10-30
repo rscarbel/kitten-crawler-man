@@ -21,12 +21,12 @@ import { motion } from '../theme/tokens';
 import { drawGlass } from '../widgets/paint';
 import { measureText, measureTextHeight, text } from '../widgets/text';
 import type { HudToasts } from './toasts';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
-const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 
 function msToTicks(ms: number): number {
-  return Math.max(1, Math.round((ms * TICKS_PER_SECOND) / MS_PER_SECOND));
+  return Math.max(1, Math.round((ms * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND));
 }
 
 /** How long a credit stays up, fade included. */

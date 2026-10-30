@@ -26,7 +26,7 @@
 import { HUMAN_CRAWLER_LOOKS } from '../characters/humanCrawlerLooks';
 import type { HumanLook } from '../sprites/looks/humanLook';
 import { DAVE_LOOK } from '../sprites/looks/humans/dave';
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { HUMAN_SWING_FRAMES } from '../core/party/crawlerFormulas';
 import { HumanPlayer } from '../creatures/HumanPlayer';
@@ -65,7 +65,6 @@ import { type MotionSet, motionSetOf } from '../sprites/art/human/motionSets';
 import { humanSocketsAt } from '../sprites/art/human/sockets';
 import { gaitRadiansPerPx } from '../sprites/humanAnimator';
 import { groundPxPerFrame } from '../sprites/art/human/probe';
-import { TICKS_PER_SECOND } from '../sprites/art/human/timing';
 import { previewInk } from '../ui/theme/previewInk';
 
 const BG_COLOR = previewInk.human.backdrop;
@@ -105,7 +104,7 @@ interface ScriptStep {
 const GUARD_THEN_IDLE_SECONDS = 4;
 /** Past the longest fidget delay plus a full idle loop, so a fidget always shows. */
 const UNTIL_FIDGET_SECONDS = 14;
-const SECONDS = TICKS_PER_SECOND;
+const SECONDS = WORLD_TICKS_PER_SECOND;
 const LIVE_SCRIPT: ReadonlyArray<ScriptStep> = [
   { ticks: 1 * SECONDS, label: 'stowing', holster: 'stow' },
   { ticks: 1 * SECONDS, label: 'drawing', holster: 'draw' },

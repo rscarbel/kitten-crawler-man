@@ -86,13 +86,13 @@ export const RESIDENT_LINES = {
       const view = ctx.missingCats;
       if (view.clues.has('cottage_latch') && !phaseReached(view, 'stakeout')) {
         return [
-          'The whole street thinks an elf climbed my wall and took Thimble. This town would blame elves for the weather, dearie.',
+          'The whole street thinks an elf crept through my garden and took Thimble. This town would blame elves for the weather, dearie.',
         ];
       }
       return ownCatLines('taloncrest_old_lady_cottage_cat', view, {
         missing: [
           'Thimble’s cushion is still by the stove. I plump it every morning like a fool.',
-          'I keep the high window shut now. Bit late for that, I know.',
+          'I keep the back window shut now. Bit late for that, I know.',
         ],
         home: [
           'Thimble came in by the window she went out of and sat in my good chair. I have not had the heart to move her.',
@@ -273,7 +273,7 @@ export const RESIDENT_LINES = {
           case 'kept':
             return [
               'The bells stopped, and the cats came down the hill in the morning. I watched from the dome and counted them.',
-              'I still owe you a carry. I would rather owe it than have what the Warden promised me.',
+              'The carry I owed thee is paid. I would rather have paid it than have what the Warden promised me.',
             ];
           case null:
             break;
@@ -290,9 +290,14 @@ export const RESIDENT_LINES = {
             'I am kept on to sweep the nave until the Roost sends another.',
           ];
         case 'kept':
-          return [
-            'You kept what I did from the High Roost. I owe you a carry, and I will pay it the day you ask.',
-          ];
+          return phaseReached(view, 'captured')
+            ? [
+                'Thou didst keep what I did from the High Roost, and I paid thee the carry I owed. The tower was waiting at the end of it.',
+                'I have never paid a debt I liked less.',
+              ]
+            : [
+                'Thou didst keep what I did from the High Roost. The carry I owe thee, I pay at the fountain at dusk.',
+              ];
         case null:
           break;
         default: {
@@ -714,17 +719,17 @@ export const RESIDENT_LINES = {
   },
   sydney: {
     ambient: [
-      'Contracts are on the board. Read the terms before you read the names.',
-      'Every hire signs out with an armband and signs back in without one. That is how I count them.',
-      'The garrison lets us the corner. We keep it tidy and we keep it quiet.',
-      'If you are browsing, browse. If you are buying, the desk is right here.',
-      'I have a form for that. I have a form for most things.',
+      'Fighters for hire. The desk is right here.',
+      'Everyone on the board is rested and ready.',
+      'I keep the files tidy, so I can find the right fighter fast.',
+      'Come back in one piece. That is all I ask.',
+      'Busy day. Good.',
     ],
     lore: [
       [
-        "I ran a garrison's stores for eleven years. Boots, rations, blankets, bodies. Mostly bodies, by the end.",
-        'Now I sign the bodies out by the floor and sign back in whoever comes home. The paperwork is the same.',
-        'Fees up front, no refunds, one contract at a time. I did not write those rules to be unkind. I wrote them so they would hold.',
+        'I used to count blankets for the garrison. Now I count fighters. Fighters talk back more.',
+        'Every one of them is good at something. My job is matching them to you.',
+        'Bring them home, and I am always happy to send them out again.',
       ],
     ],
     reactive: null,

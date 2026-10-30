@@ -116,6 +116,7 @@ export type ItemId =
   | 'sequin_tailcoat'
   | 'gilded_monocle'
   | 'grinning_mask'
+  | 'hushed_bell'
   | 'nimble_bangle'
   | 'lucky_penny'
   | 'fang_charm'

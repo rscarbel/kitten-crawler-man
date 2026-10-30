@@ -21,7 +21,7 @@ export const SEWER_GUIDE_STOP_LINES = {
   ),
   junction: guide.bark('Rats. Keep your feet out of the channel.'),
   nest: guide.bark(
-    'Their nest has choked the sump. Open the wheel on the north wall and let the water take it.',
+    'Their nest has choked the sump. The wheel on the north wall opens the pipe over it. Let the water take it.',
   ),
   vault: guide.bark('Ghouls come in from the ruins through the old pipes. Mind them.'),
   cistern: guide.bark(
@@ -32,7 +32,10 @@ export const SEWER_GUIDE_STOP_LINES = {
 /** What the guide says as the water does what the party asked of it. */
 export const SEWER_GUIDE_WORK_LINES = {
   spillwayLowered: guide.bark('That is it. Step on the silt, not the green.'),
-  nestWashedOut: guide.bark('Gone. They will start another by morning.'),
+  nestWashedOut: guide.bark(
+    'Gone. Now shut the pipe off with the wheel by the sump. Nobody wades that water.',
+  ),
+  sumpDrained: guide.bark('Drained, and that nest is gone for good. The way on is open.'),
 } as const satisfies Record<string, BarkLine>;
 
 /** What the guide calls back while waiting for a party that has fallen behind. */

@@ -19,7 +19,7 @@
 import { crawlerDisplayName } from '../characters/characters';
 import { setViewportSize, viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { settings } from '../core/input/Settings';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { CatAppearance } from '../sprites/catSprite';
@@ -136,9 +136,8 @@ const DEV_BANKROLL_BUY_INS = 5;
 const SHUFFLE_SALT = 0x5e47;
 
 const MS_PER_SECOND = 1000;
-const PREVIEW_UPDATES_PER_SECOND = 60;
 /** Table time one scene update covers at normal speed. */
-const UPDATE_MS = MS_PER_SECOND / PREVIEW_UPDATES_PER_SECOND;
+const UPDATE_MS = MS_PER_SECOND / WORLD_TICKS_PER_SECOND;
 /** The table's own clock refuses frames longer than 100 ms, so fast-forward feeds it in steps below that. */
 const TABLE_STEP_MS = 50;
 const NORMAL_SPEED = 1;

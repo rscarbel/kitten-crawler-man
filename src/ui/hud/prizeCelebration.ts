@@ -14,14 +14,14 @@ import { rewardIconPainter } from '../questReward/rewardLines';
 import { skinsFor } from '../theme/skins';
 import { drawGlass, strokeRounded } from '../widgets/paint';
 import { lineHeightOf, text } from '../widgets/text';
+import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 
-const FRAMES_PER_SECOND = 60;
 /** How long the prize takes to rise from the world onto the card. */
 const RISE_FRAMES = 24;
 /** How long the card takes to burst in. */
 const POP_FRAMES = 16;
 /** When the prize leaves the card for the HUD. */
-const DEPART_FRAME = 2 * FRAMES_PER_SECOND;
+const DEPART_FRAME = 2 * WORLD_TICKS_PER_SECOND;
 const FLIGHT_FRAMES = 36;
 /** The card fades out over the prize's flight. */
 export const PRIZE_CELEBRATION_FRAMES = DEPART_FRAME + FLIGHT_FRAMES;
@@ -39,7 +39,7 @@ const WORLD_ICON_SCALE = 0.5;
 const RAY_COUNT = 12;
 /** One full turn of the rays behind the prize, in frames. */
 const RAY_TURN_SECONDS = 6;
-const RAY_TURN_FRAMES = RAY_TURN_SECONDS * FRAMES_PER_SECOND;
+const RAY_TURN_FRAMES = RAY_TURN_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How far the rays reach past the prize's icon, as a multiple of its size. */
 const RAY_REACH = 1.1;
 /** Each ray's angular width, as a fraction of the gap between rays. */

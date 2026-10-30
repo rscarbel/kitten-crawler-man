@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type { Player } from '../../Player';
 import type { Mob } from '../Mob';
 import type { Mercenary } from '../Mercenary';
@@ -41,13 +41,12 @@ import { MercenaryStrike, type StrikeTiming } from './mercenaryStrike';
  * make room.
  */
 
-const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const TILE_CENTER_OFFSET = TILE_SIZE / 2;
 const FULL_TURN = Math.PI * 2;
 
 function ticksFor(durationMs: number): number {
-  return Math.round((durationMs * TICKS_PER_SECOND) / MS_PER_SECOND);
+  return Math.round((durationMs * WORLD_TICKS_PER_SECOND) / MS_PER_SECOND);
 }
 
 /**

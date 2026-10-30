@@ -16,6 +16,8 @@ export const TOWER_CUES = {
   cageOpen: ['door_creak_1'],
   /** The keeper seeing a paw at a latch. `krasue_attack` stands in for a shriek. */
   keeperShriek: ['krasue_attack'],
+  /** The keeper shutting Belle back in her cage. `gate_thud` stands in for the door slamming. */
+  cageShut: ['gate_thud'],
   /** A ward line biting a crawler that touched it while it burned. */
   wardZap: ['electric_goblin_arc_burst'],
   /** A ward stone split by the human. */

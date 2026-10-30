@@ -7,7 +7,7 @@
  * from a shipped build.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { AssaultLane, BriarHollowSite } from '../map/overworld/briarHollowSite';
 import type { GameMap } from '../map/GameMap';
@@ -24,7 +24,6 @@ import {
   TREBUCHET_HEIGHT_TILES,
   TREBUCHET_MAX_AMMO,
   TREBUCHET_WIDTH_TILES,
-  UPDATES_PER_SECOND,
 } from '../systems/briarHollow/structureRules';
 import {
   grantConstructionUnlocks,
@@ -205,7 +204,7 @@ const ASSAULT_NOW_COUNTDOWN_SECONDS = 12;
  * village stands fortified and waiting.
  */
 export function beginAssaultForPlaytest(kit: BriarHollowKit): void {
-  const countdownFrames = ASSAULT_NOW_COUNTDOWN_SECONDS * UPDATES_PER_SECOND;
+  const countdownFrames = ASSAULT_NOW_COUNTDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
   const assault = kit.assault;
   if (assault === null) return;
   assault.begin();

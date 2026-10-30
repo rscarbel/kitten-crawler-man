@@ -21,7 +21,7 @@
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
-import { TILE_SIZE, PLAYER_SPEED } from '../src/core/constants';
+import { TILE_SIZE, PLAYER_SPEED, WORLD_TICKS_PER_SECOND } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import {
   captureBriarHollowState,
@@ -94,7 +94,6 @@ function section(name: string): void {
 
 const WORLD_SEED = 7919;
 const MAP_SIZE = 280;
-const UPDATES_PER_SECOND = 60;
 const HALF = 0.5;
 
 /** The level the gate's fights are held at: in the middle of the siege's band. */
@@ -297,7 +296,7 @@ function makeRig(
   const loop = new MobUpdateLoop();
   const rig: Rig = { state, bus, roster, human, cat, villagers, soldiers, defense, loop };
   tickers.set(rig, () => {
-    clock += 1 / UPDATES_PER_SECOND;
+    clock += 1 / WORLD_TICKS_PER_SECOND;
   });
   return rig;
 }
@@ -633,7 +632,7 @@ section('Hostiles pick and wound soldiers');
   const ghoul = ghoulAt(rig, { x: patch.x + FIGHT_START_TILES, y: patch.y });
   let targeted = false;
   let lowest = soldier.hp;
-  for (let frame = 0; frame < HOSTILE_WATCH_SECONDS * UPDATES_PER_SECOND; frame++) {
+  for (let frame = 0; frame < HOSTILE_WATCH_SECONDS * WORLD_TICKS_PER_SECOND; frame++) {
     tick(rig);
     if (ghoul.currentTarget === soldier) targeted = true;
     lowest = Math.min(lowest, soldier.hp);
@@ -674,12 +673,12 @@ section('Follow: through the gate and out, within the band');
   const crossedGate = tileOf(soldier).y > site.gate.tiles[0].y;
   let settledAt = -1;
   let worstSettled = 0;
-  const remaining = FOLLOW_WALK_SECONDS * UPDATES_PER_SECOND - walkedFrames;
+  const remaining = FOLLOW_WALK_SECONDS * WORLD_TICKS_PER_SECOND - walkedFrames;
   for (let frame = 0; frame < remaining; frame++) {
     tick(rig);
     const tiles = tilesBetween(soldier, rig.human);
     if (settledAt < 0 && tiles <= FOLLOW_BAND_MAX_TILES) settledAt = frame;
-    if (frame >= FOLLOW_SETTLE_SECONDS * UPDATES_PER_SECOND) {
+    if (frame >= FOLLOW_SETTLE_SECONDS * WORLD_TICKS_PER_SECOND) {
       worstSettled = Math.max(worstSettled, tiles);
     }
   }
@@ -731,7 +730,7 @@ section('Follow: the village leash');
   check(walked, `the crawler walks more than ${VILLAGE_LEASH_TILES} tiles outside the palisade`);
   for (
     let extra = 0;
-    extra < LEASH_REACTION_SECONDS * UPDATES_PER_SECOND && releasedAt < 0;
+    extra < LEASH_REACTION_SECONDS * WORLD_TICKS_PER_SECOND && releasedAt < 0;
     extra++
   ) {
     tick(rig);
@@ -744,7 +743,7 @@ section('Follow: the village leash');
   check(
     releasedAt >= 0 &&
       crossedAt >= 0 &&
-      releasedAt - crossedAt <= LEASH_REACTION_SECONDS * UPDATES_PER_SECOND,
+      releasedAt - crossedAt <= LEASH_REACTION_SECONDS * WORLD_TICKS_PER_SECOND,
     'past the leash, the follower drops the order within a couple of seconds',
   );
   check(
@@ -756,7 +755,7 @@ section('Follow: the village leash');
     `and says its follow line ("${bark ?? 'nothing'}")`,
   );
   const post = rig.soldiers.posts.post[id].tile;
-  tick(rig, HOME_WALK_SECONDS * UPDATES_PER_SECOND);
+  tick(rig, HOME_WALK_SECONDS * WORLD_TICKS_PER_SECOND);
   check(
     tilesBetween(soldier, { x: post.x * TILE_SIZE, y: post.y * TILE_SIZE }) <= AT_POST_TILES,
     'and walks back to its post',
@@ -799,9 +798,9 @@ function tilePastLeash(dx: number, dy: number): TilePoint | null {
     standAt(rig.human, far);
     const beside = findNearbyWalkableTile(gameMap, far.x + 1, far.y, PATCH_RADIUS_TILES) ?? far;
     place(rig, soldier, beside);
-    tick(rig, LEASH_REACTION_SECONDS * UPDATES_PER_SECOND);
+    tick(rig, LEASH_REACTION_SECONDS * WORLD_TICKS_PER_SECOND);
     check(rig.soldiers.orderFor(id) === undefined, `to the ${side.name}, the follower turns back`);
-    tick(rig, FAR_SIDE_HOME_WALK_SECONDS * UPDATES_PER_SECOND);
+    tick(rig, FAR_SIDE_HOME_WALK_SECONDS * WORLD_TICKS_PER_SECOND);
     const post = rig.soldiers.posts.post[id].tile;
     const homeTiles = tilesBetween(soldier, { x: post.x * TILE_SIZE, y: post.y * TILE_SIZE });
     check(
@@ -825,7 +824,7 @@ section('Talk yields to a fight');
   );
   const foe = ghoulAt(rig, { x: patch.x + FIGHT_START_TILES, y: patch.y });
   let engaged = false;
-  for (let frame = 0; frame < UPDATES_PER_SECOND && !engaged; frame++) {
+  for (let frame = 0; frame < WORLD_TICKS_PER_SECOND && !engaged; frame++) {
     tick(rig);
     engaged = soldier.isFighting;
   }
@@ -866,7 +865,7 @@ section('Hold never drifts');
   for (let wave = 0; wave < HOLD_ATTACKERS; wave++) {
     const offset = offsets[wave % offsets.length];
     const ghoul = ghoulAt(rig, { x: patch.x + offset.x, y: patch.y + offset.y });
-    const waveFrames = (HOLD_FIGHT_SECONDS * UPDATES_PER_SECOND) / HOLD_ATTACKERS;
+    const waveFrames = (HOLD_FIGHT_SECONDS * WORLD_TICKS_PER_SECOND) / HOLD_ATTACKERS;
     for (let frame = 0; frame < waveFrames; frame++) {
       tick(rig);
       if (soldier.isDowned) soldier.rise(1);
@@ -923,7 +922,7 @@ section('Patrol routes are walks a soldier can take');
     `in the open, a patrol is a walkable ${LOOP_PATROL_POINTS}-point loop (${route.length} points)`,
   );
   standAt(loopRig.human, { x: patch.x, y: patch.y - CRAWLER_CLEARANCE_TILES });
-  tick(loopRig, PATROL_LOOP_SECONDS * UPDATES_PER_SECOND);
+  tick(loopRig, PATROL_LOOP_SECONDS * WORLD_TICKS_PER_SECOND);
   check(
     soldier.loopsCompleted >= 1,
     `the patroller really walks its loop (${soldier.loopsCompleted} loops)`,
@@ -961,14 +960,14 @@ section('A beat beside a gate does not flap it open and shut');
     let proximityTransitions = 0;
     let proximityWasOpen = false;
 
-    for (let frame = 0; frame < PATROL_LOOP_SECONDS * UPDATES_PER_SECOND; frame++) {
+    for (let frame = 0; frame < PATROL_LOOP_SECONDS * WORLD_TICKS_PER_SECOND; frame++) {
       tick(rig);
       const nonHostile = rig.roster.mobs.filter((mob) => mob.isAlive && !mob.isHostile);
-      routeAwareGate.update(nonHostile, 0, 1 / UPDATES_PER_SECOND);
+      routeAwareGate.update(nonHostile, 0, 1 / WORLD_TICKS_PER_SECOND);
       proximityOnlyGate.update(
         nonHostile.map((mob) => ({ x: mob.x, y: mob.y })),
         0,
-        1 / UPDATES_PER_SECOND,
+        1 / WORLD_TICKS_PER_SECOND,
       );
       if (routeAwareGate.openFraction > 0) routeAwareEverOpened = true;
       const proximityOpen = proximityOnlyGate.openFraction >= GATE_FLAP_OPEN_THRESHOLD;
@@ -1098,7 +1097,7 @@ function duel(id: SoldierId, count: number, stream: number): DuelResult {
       };
       foes.push(foeAt(rig, tile, level));
     }
-    for (let frame = 0; frame < FIGHT_TIMEOUT_SECONDS * UPDATES_PER_SECOND; frame++) {
+    for (let frame = 0; frame < FIGHT_TIMEOUT_SECONDS * WORLD_TICKS_PER_SECOND; frame++) {
       tick(rig);
       const hpLeftShare = soldier.hp / soldier.maxHp;
       if (soldier.isDowned) return { outcome: 'loss', hpLeftShare };
@@ -1168,7 +1167,7 @@ section('Knocked down, never killed');
   check(soldier.hp === hpBefore && soldier.isDowned, 'a downed soldier cannot be hurt further');
 
   rig.state.quest.phase = 'assault';
-  tick(rig, (DOWNED_RECOVERY_SECONDS + RECOVERY_OVERRUN_SECONDS) * UPDATES_PER_SECOND);
+  tick(rig, (DOWNED_RECOVERY_SECONDS + RECOVERY_OVERRUN_SECONDS) * WORLD_TICKS_PER_SECOND);
   check(soldier.isDowned, 'during the assault a downed soldier stays down past the recovery time');
   rig.state.quest.phase = 'victory';
   tick(rig);
@@ -1179,21 +1178,21 @@ section('Knocked down, never killed');
   );
 
   rig.state.quest.phase = 'fortifying';
-  tick(rig, UPDATES_PER_SECOND);
+  tick(rig, WORLD_TICKS_PER_SECOND);
   soldier.takeDamageFrom(soldier.hp * 2, ghoul, 'melee');
   ghoul.hp = 0;
-  tick(rig, (DOWNED_RECOVERY_SECONDS - 1) * UPDATES_PER_SECOND);
+  tick(rig, (DOWNED_RECOVERY_SECONDS - 1) * WORLD_TICKS_PER_SECOND);
   const stillDown = soldier.isDowned;
-  tick(rig, 2 * UPDATES_PER_SECOND);
+  tick(rig, 2 * WORLD_TICKS_PER_SECOND);
   check(
     stillDown && !soldier.isDowned,
     `outside the siege a downed soldier gets up after ${DOWNED_RECOVERY_SECONDS} s`,
   );
 
-  tick(rig, 2 * UPDATES_PER_SECOND);
+  tick(rig, 2 * WORLD_TICKS_PER_SECOND);
   soldier.takeDamageFrom(soldier.hp * 2, null, 'melee');
   standAt(rig.human, tileOf(soldier));
-  tick(rig, (HELP_UP_SECONDS + HALF) * UPDATES_PER_SECOND);
+  tick(rig, (HELP_UP_SECONDS + HALF) * WORLD_TICKS_PER_SECOND);
   check(
     !soldier.isDowned,
     `a crawler standing over a downed soldier helps them up in ${HELP_UP_SECONDS} s`,

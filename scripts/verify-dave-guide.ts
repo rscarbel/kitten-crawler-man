@@ -28,6 +28,12 @@
  *   - A talk never runs past `MAX_DAVE_TALK_PAGES`, a beat and a debrief with
  *     a bag full of unworn gear included: what does not fit waits for the
  *     talks the player opens, each within the cap, until all is said.
+ *   - An arrival walks nobody up to Dave, and Caroline briefs nothing unasked,
+ *     once the fortune teller's quest is taken up or while the Journal
+ *     follows another quest (the inn regular's lead among them); a side quest
+ *     under way and unfollowed does not count. Run over floors 1 to 3 under
+ *     each of those, every beat told through Dave is still heard by talking
+ *     to him, a floor on which he was never spoken to included.
  *   - The director plays a party that skipped rooms the story in order.
  *   - The post-boss debrief's pure rules (`daveGuide/debriefChecks.ts`).
  *
@@ -36,6 +42,11 @@
 
 import { installBrowserShim, ShimEvent } from './browserShim.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import type { TrackerEntry } from '../src/systems/questTracker';
+import type { ArrivalJournal, ArrivalSteerQuest } from '../src/systems/StoryDelivery';
+import type { StoryFloor } from '../src/story/storyTypes';
+import type { DebriefBossType } from '../src/core/mobs/debriefBossTypes';
+import type { WalkToStep } from '../src/systems/cutscene/cutsceneSteps';
 
 useDevPlayerIdentity();
 
@@ -63,7 +74,15 @@ const { StoryDirector, storyBeat, storyDirectorFromSave } =
   await import('../src/story/StoryDirector.js');
 const { STORY_BEAT_ORDER } = await import('../src/story/storyBeatIds.js');
 const { debriefCheckResults } = await import('./daveGuide/debriefChecks.js');
-const { StoryDelivery, MAX_DAVE_TALK_PAGES } = await import('../src/systems/StoryDelivery.js');
+const { StoryDelivery, MAX_DAVE_TALK_PAGES, arrivalFetchesParty } =
+  await import('../src/systems/StoryDelivery.js');
+const { SPIDER_QUEST_ID } = await import('../src/systems/SpiderQuestSystem.js');
+const { MISSING_CATS_QUEST_ID } = await import('../src/systems/missingCats/missingCatsPhase.js');
+const { autoPinQuest, createJournalProgress } =
+  await import('../src/core/quests/JournalProgress.js');
+const { ACTIVE_CRAWLER } = await import('../src/systems/cutscene/cutsceneSteps.js');
+const { ANCHOR_QUEST_ID } = await import('../src/systems/AnchorQuestSystem.js');
+const { createAnchorQuestProgress } = await import('../src/core/quests/AnchorQuestProgress.js');
 const { displayPageCount } = await import('../src/dialog/Conversation.js');
 const { Inventory } = await import('../src/core/items/inventory/Inventory.js');
 const { ITEM_DEF } = await import('../src/core/items/defs/ItemDefs.js');
@@ -753,11 +772,269 @@ function verifyTalkLength(): void {
   );
 }
 
+// ── The arrival talk stands down for a party about other business ────────
+
+/** A Journal row for a quest the party may be about. */
+function questRow(id: string, status: 'available' | 'active'): TrackerEntry {
+  return {
+    kind: 'single',
+    id,
+    name: id,
+    status,
+    objective: `See to ${id}`,
+    target: { x: 0, y: 0 },
+  };
+}
+
+const FORTUNE_TELLER_ROW = questRow(ANCHOR_QUEST_ID, 'available');
+const MISSING_CATS_ROW = questRow(MISSING_CATS_QUEST_ID, 'available');
+const SPIDER_LAB_ROW = questRow(SPIDER_QUEST_ID, 'active');
+const FORTUNE_TELLER_OFFER = { trackerId: ANCHOR_QUEST_ID, started: false } as const;
+
+/** The Journal after the party heard the inn regular, pinned as the street pins a lead it is told about. */
+function journalAfterInnRegular(): { entries: TrackerEntry[]; pinnedId: string | null } {
+  const entries = [FORTUNE_TELLER_ROW, MISSING_CATS_ROW];
+  const progress = createJournalProgress();
+  autoPinQuest(progress, MISSING_CATS_QUEST_ID, entries);
+  return { entries, pinnedId: progress.pinnedTrackerId };
+}
+
+function verifyArrivalRule(): void {
+  console.log('\nthe arrival walks the party over only while it has nothing else to follow');
+  check(
+    arrivalFetchesParty({ entries: [FORTUNE_TELLER_ROW], pinnedId: null }, FORTUNE_TELLER_OFFER),
+    'a party with nothing followed is walked up to Dave',
+  );
+  check(
+    arrivalFetchesParty(
+      { entries: [FORTUNE_TELLER_ROW], pinnedId: ANCHOR_QUEST_ID },
+      FORTUNE_TELLER_OFFER,
+    ),
+    "following the fortune teller's offer still walks them over",
+  );
+  check(
+    !arrivalFetchesParty(
+      { entries: [FORTUNE_TELLER_ROW], pinnedId: null },
+      { ...FORTUNE_TELLER_OFFER, started: true },
+    ),
+    "once the fortune teller's quest is taken up, nobody is walked over",
+  );
+  check(
+    !arrivalFetchesParty(journalAfterInnRegular(), FORTUNE_TELLER_OFFER),
+    'having heard the inn regular, the party is not walked over',
+  );
+  check(
+    arrivalFetchesParty(
+      { entries: [FORTUNE_TELLER_ROW, SPIDER_LAB_ROW], pinnedId: null },
+      FORTUNE_TELLER_OFFER,
+    ),
+    'a side quest under way that the Journal is not following walks them over all the same',
+  );
+}
+
+/** Every bodily boss on each floor, dead: every beat a floor can hold back for a boss is open. */
+const FLOOR_BOSSES = {
+  1: ['trash_gremlin', 'kraken'],
+  2: ['electric_goblin', 'big_rooster'],
+  3: [],
+} as const satisfies Record<StoryFloor, readonly DebriefBossType[]>;
+const STORY_FLOORS = [1, 2, 3] as const satisfies readonly StoryFloor[];
+/** Safe rooms the party walks into on each floor of the simulation: more than any floor has beats. */
+const ARRIVALS_PER_FLOOR = 6;
+/** Frames run after each arrival, so Caroline's answer to a beat has had its quiet spell. */
+const FRAMES_AFTER_ARRIVAL = 600;
+const WALK_UP_SENTINEL = {
+  kind: 'walkTo',
+  who: ACTIVE_CRAWLER,
+  tile: { x: 0, y: 0 },
+  pace: 'stroll',
+  face: 'down',
+  then: 'waitForArrival',
+} as const satisfies WalkToStep;
+
+/** One run of floors 1 to 3 under a Journal state that holds for the whole run. */
+interface ArrivalCondition {
+  readonly label: string;
+  readonly journal: ArrivalJournal;
+  readonly steersTo: ArrivalSteerQuest;
+  /** Whether the walk and the unasked brief should stand down. */
+  readonly suppressed: boolean;
+  /** Whether the player walks over and talks to Dave on `floor`, in each room he arrives in. */
+  readonly talksOn: (floor: StoryFloor) => boolean;
+}
+
+const ARRIVAL_CONDITIONS: readonly ArrivalCondition[] = [
+  {
+    label: 'nothing followed',
+    journal: { entries: [FORTUNE_TELLER_ROW], pinnedId: null },
+    steersTo: FORTUNE_TELLER_OFFER,
+    suppressed: false,
+    talksOn: () => true,
+  },
+  {
+    label: 'the inn regular heard',
+    journal: journalAfterInnRegular(),
+    steersTo: FORTUNE_TELLER_OFFER,
+    suppressed: true,
+    talksOn: () => true,
+  },
+  {
+    label: "the fortune teller's quest taken up",
+    journal: { entries: [questRow(ANCHOR_QUEST_ID, 'active')], pinnedId: ANCHOR_QUEST_ID },
+    steersTo: { ...FORTUNE_TELLER_OFFER, started: true },
+    suppressed: true,
+    talksOn: () => true,
+  },
+  {
+    label: 'the spider lab under way, unfollowed',
+    journal: { entries: [FORTUNE_TELLER_ROW, SPIDER_LAB_ROW], pinnedId: null },
+    steersTo: FORTUNE_TELLER_OFFER,
+    suppressed: false,
+    talksOn: () => true,
+  },
+  {
+    label: 'the spider lab followed, Dave never spoken to on floor 2',
+    journal: { entries: [FORTUNE_TELLER_ROW, SPIDER_LAB_ROW], pinnedId: SPIDER_QUEST_ID },
+    steersTo: FORTUNE_TELLER_OFFER,
+    suppressed: true,
+    talksOn: (floor) => floor !== 2,
+  },
+];
+
+/** The beats a run told through Dave: his own, and Caroline's answers to them. */
+function toldThroughDave(id: BeatId): boolean {
+  const kind = storyBeat(id).trigger.kind;
+  return kind === 'safeRoomArrival' || kind === 'afterBeat';
+}
+
+function verifyWholeRunArrivals(condition: ArrivalCondition): void {
+  console.log(`\nfloors 1 to 3 with ${condition.label}: every story beat is still told`);
+  const story = new StoryDirector([
+    'tutorial_meets_dave',
+    'tutorial_caroline_first_contact',
+    'tutorial_dave_farewell',
+  ]);
+  const scripts: Script[] = [];
+  const delivery = new StoryDelivery({
+    director: story,
+    cutscenes: {
+      isActive: false,
+      play: (script, onComplete) => {
+        scripts.push(script);
+        onComplete?.();
+      },
+    },
+    persist: () => undefined,
+    calm: () => true,
+  });
+  let briefs = 0;
+  let walksUp = 0;
+  let afterTalks = 0;
+  const fetches = arrivalFetchesParty(condition.journal, condition.steersTo);
+  check(
+    fetches !== condition.suppressed,
+    `the arrival ${condition.suppressed ? 'stands down' : 'walks the party over'}`,
+  );
+  for (const floor of STORY_FLOORS) {
+    for (let arrival = 0; arrival < ARRIVALS_PER_FLOOR; arrival++) {
+      const scriptsBefore = scripts.length;
+      delivery.meetArrival(
+        {
+          event: () => ({
+            kind: 'safeRoomArrival',
+            floor,
+            defeatedBosses: new Set<DebriefBossType>(FLOOR_BOSSES[floor]),
+          }),
+          walkUp: () => WALK_UP_SENTINEL,
+          extra: () => null,
+          afterTalk: () => {
+            afterTalks++;
+          },
+          afterFetchedTalk: () => {
+            briefs++;
+          },
+        },
+        fetches ? 'fetch_party' : 'wait_for_player',
+      );
+      if (!fetches && condition.talksOn(floor)) delivery.tellHeldArrival();
+      for (let tick = 0; tick < FRAMES_AFTER_ARRIVAL; tick++) delivery.update();
+      const played = scripts.slice(scriptsBefore);
+      walksUp += played.filter((script) => script.some((step) => step.kind === 'walkTo')).length;
+    }
+  }
+  if (condition.suppressed) {
+    check(walksUp === 0, `nobody is walked up to Dave (${walksUp} walks)`);
+    check(briefs === 0, `Caroline briefs nothing unasked (${briefs} briefs)`);
+  } else {
+    check(walksUp > 0, `the party is walked up to him (${walksUp} walks)`);
+    check(
+      briefs === STORY_FLOORS.length * ARRIVALS_PER_FLOOR,
+      `Caroline briefs after every arrival (${briefs})`,
+    );
+  }
+  check(afterTalks > 0, `what follows his talk runs after the talks told (${afterTalks})`);
+  const missed = STORY_BEAT_ORDER.filter((id) => toldThroughDave(id) && !story.hasSeen(id));
+  check(
+    missed.length === 0,
+    `every beat told through Dave is heard (missed: ${missed.join(', ') || 'none'})`,
+  );
+}
+
+async function verifyArrivalAfterFortuneTeller(): Promise<void> {
+  console.log("\nan arrival after the fortune teller's quest is taken up waits for the player");
+  const anchorQuestProgress = createAnchorQuestProgress();
+  anchorQuestProgress.status = 'active';
+  const harness = await openFloorOne({ anchorQuestProgress });
+  const { scene, dave, scripts, story } = harness;
+  const map = sceneField(scene, 'gameMap', GameMap);
+  const delivery = sceneField(scene, 'story', StoryDelivery);
+  const room = map.safeRooms[0];
+  const outside = tileOutside(map, room.bounds);
+  if (outside === null) {
+    check(false, 'a walkable tile outside the first safe room');
+    return;
+  }
+  standParty(scene, outside);
+  frame(harness);
+  standParty(scene, room.centre);
+  check(
+    tickUntil(harness, () => dave.state.kind === 'inRoom' && dave.isPresent, MAX_ARRIVAL_FRAMES),
+    'Dave still teleports into the room',
+  );
+  tickUntil(harness, () => false, MAX_CALM_FRAMES);
+  const told = scripts.flatMap(daveBeatsIn);
+  check(told.length === 0, `nobody is walked up to him (${told.join(', ') || 'nothing told'})`);
+  const briefed = scripts.flatMap(carolineTextsIn).filter((text) => text.includes('Trash Gremlin'));
+  check(briefed.length === 0, `and Caroline briefs nothing (${briefed.length} briefings)`);
+  check(delivery.holdsArrivalBeat, 'he waits with his beat behind his `!`');
+
+  const scriptsBefore = scripts.length;
+  const talkToDave: unknown = Reflect.get(scene, 'talkToDave');
+  if (typeof talkToDave !== 'function') throw new Error('the scene has no talkToDave');
+  Reflect.apply(talkToDave, scene, [scene.pm.active()]);
+  const talk = scripts.slice(scriptsBefore);
+  const heard = talk.flatMap(daveBeatsIn);
+  check(
+    heard.includes('skipped_tutorial_dave_intro'),
+    `talking to him tells the beat he held (${heard.join(', ') || 'nothing told'})`,
+  );
+  check(
+    talk.every((script) => script.every((step) => step.kind !== 'walkTo')),
+    'with no walk up: the player came over',
+  );
+  check(readThrough(harness), 'and reads to its end');
+  check(story.hasSeen('skipped_tutorial_dave_intro'), 'the beat is marked heard');
+  check(!delivery.holdsArrivalBeat, 'and his `!` for it is gone');
+}
+
 await verifyRoomsAndBeats();
 await verifyArrivalTiming();
 await verifyCarolineArrivalReads(false);
 await verifyCarolineArrivalReads(true);
 verifyTalkLength();
+verifyArrivalRule();
+for (const condition of ARRIVAL_CONDITIONS) verifyWholeRunArrivals(condition);
+await verifyArrivalAfterFortuneTeller();
 await verifySkippedTutorial();
 verifySkippedRooms();
 

@@ -21,7 +21,15 @@ import {
   type HazardEscape,
 } from './GroundHazardSource';
 import type { BossRoomSystem } from './BossRoomSystem';
-import { PartyTrail, trailGroundOn } from './partyTrail';
+import {
+  canWalkTrail,
+  crawlerTrailStance,
+  trailGroundOn,
+  type PartyLine,
+  type PartyLineLink,
+  type PartyTrail,
+  type TrailFollowSwitch,
+} from './partyTrail';
 import { normalize, clamp, randomInt } from '../utils';
 
 type Entity = {
@@ -239,7 +247,7 @@ function isNoLongerAFight(target: Mob, mobGrid: SpatialGrid<Mob>): boolean {
   return !target.isHostileTarget || target.avoidInstead || !mobGrid.has(target);
 }
 
-export class CompanionSystem implements GameSystem {
+export class CompanionSystem implements GameSystem, TrailFollowSwitch {
   private catWanderTargetX = 0;
   private catWanderTargetY = 0;
   private catWanderTimer = 0;
@@ -320,8 +328,10 @@ export class CompanionSystem implements GameSystem {
   /** The gathering system, so a harvesting companion can be left alone or cut off. See {@link CompanionHarvestSource}. */
   private harvestSource: CompanionHarvestSource | null = null;
 
-  /** Set while the follower walks the leader's own trail instead of being driven; see {@link setTrailFollow}. */
-  private trail: PartyTrail | null = null;
+  /** Set while the follower walks the party's line instead of being driven; see {@link setTrailFollow}. */
+  private trailLink: PartyLineLink | null = null;
+  /** The follower, on a frame it walked the line; what the bodies behind it trail. */
+  private trailWalker: HumanPlayer | CatPlayer | null = null;
 
   constructor(
     private gameMap: GameMap,
@@ -435,27 +445,27 @@ export class CompanionSystem implements GameSystem {
   }
 
   /**
-   * Puts the follower on the leader's breadcrumb trail at `spacingPx` of walked
-   * distance, or (null) hands it back to the ordinary follow drive.
+   * Puts the follower at the head of the party's line, on the steered
+   * crawler's own trail, or (null) hands it back to the ordinary follow drive.
    *
    * On the trail the follower neither paths, fights, flees nor heeds a
    * movement order: it stands where the leader stood, so the route the player
    * walks decides both bodies. A room that judges both crawlers by where they
    * stand (the prison's lights) needs exactly that.
    */
-  setTrailFollow(spacingPx: number | null): void {
-    this.trail =
-      spacingPx === null
-        ? null
-        : new PartyTrail(
-            spacingPx,
-            trailGroundOn(() => this.gameMap),
-          );
+  setTrailFollow(line: PartyLine | null): void {
+    this.trailWalker = null;
+    this.trailLink =
+      line?.join(
+        'partner_crawler',
+        trailGroundOn(() => this.gameMap),
+        () => this.trailWalker,
+      ) ?? null;
   }
 
   /** The trail the follower is walking, when it is on one. */
   get followTrail(): PartyTrail | null {
-    return this.trail;
+    return this.trailLink?.trail ?? null;
   }
 
   get isFollowOverride(): boolean {
@@ -670,18 +680,22 @@ export class CompanionSystem implements GameSystem {
     this.tickTargetBans();
 
     const companion = human.isActive ? cat : human;
+    this.trailWalker = null;
     // A split party's live group may hold one crawler and no crawler
     // companion at all; its party companions follow that crawler on their own.
     if (companion.isAway || this.heldForScript.has(companion)) return;
     // Encased in ice is handled like being knocked out: no step and no swing.
     // A companion that walked off while its block was still drawn around it
     // would read as a bug rather than a freeze.
-    if (companion.isKnockedOut || !companion.canAct || companion.isCrossingFooting) {
+    const companionStands = canWalkTrail(crawlerTrailStance(companion));
+    if (!companionStands || companion.isCrossingFooting) {
       companion.isMoving = false;
       return;
     }
-    if (this.trail !== null) {
-      this.trail.tick(human.isActive ? human : cat, companion);
+    const trailLink = this.trailLink;
+    if (trailLink !== null) {
+      this.trailWalker = companion;
+      trailLink.step(companion, ctx, null);
       return;
     }
     this.companionMoveFactor = companion.statusMoveFactor;

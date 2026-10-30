@@ -175,6 +175,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   sequin_tailcoat: gearTorso('sequin_tailcoat'),
   gilded_monocle: gearHead('gilded_monocle'),
   grinning_mask: gearHead('grinning_mask'),
+  hushed_bell: gearHead('hushed_bell'),
   nimble_bangle: gearTrinket('nimble_bangle'),
   lucky_penny: gearTrinket('lucky_penny'),
   fang_charm: gearTrinket('fang_charm'),

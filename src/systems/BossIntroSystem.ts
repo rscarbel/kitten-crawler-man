@@ -37,7 +37,6 @@ import { ELECTRIC_GOBLIN_FIGURE } from '../sprites/art/electricGoblinFigure';
 import { drawElectricGoblinSprite, prewarmElectricGoblin } from '../sprites/electricGoblinSprite';
 import { drawGrotesqueSpiderPoseSprite } from '../sprites/grotesqueSpiderSprite';
 import { GROTESQUE_SPIDER_IDLE_REACH_TILES } from '../sprites/art/grotesqueSpiderFigure';
-import { SPIDER_FRAMES_PER_SECOND } from '../creatures/grotesqueSpiderTimeline';
 import type { GameSystem } from './GameSystem';
 import { measureWorldText, worldText } from '../ui/world/worldText';
 import { worldPlate, worldTint } from '../ui/world/worldShapes';
@@ -45,6 +44,7 @@ import { worldPalette } from '../ui/theme/worldInk';
 import { withAlpha } from '../ui/theme/color';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { crawlerDisplayName } from '../characters/characters';
+import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /**
  * Measured after uppercasing, because uppercasing can lengthen a name (ß
@@ -564,7 +564,7 @@ export class BossIntroSystem implements GameSystem {
           rightX + panelW / 2 - spS / 2,
           tileCentreY - spS / 2,
           spS,
-          { kind: 'idle', time: t / SPIDER_FRAMES_PER_SECOND },
+          { kind: 'idle', time: t / WORLD_TICKS_PER_SECOND },
         );
       } else if (intro.bossType === NECROMANCER_BOSS_TYPE) {
         const nS = NECROMANCER_SPRITE_SIZE / necromancerArtHeightTiles();

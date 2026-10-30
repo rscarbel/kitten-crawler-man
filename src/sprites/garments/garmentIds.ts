@@ -32,7 +32,11 @@ export type CatCharmGarmentId =
 
 /** A neck-slot piece as she wears it: a pendant on its own chain or thong. */
 export type CatPendantGarmentId =
-  'cat_moonmoth_pendant' | 'cat_stoneheart_amulet' | 'cat_sun_locket' | 'cat_moon_locket';
+  | 'cat_moonmoth_pendant'
+  | 'cat_stoneheart_amulet'
+  | 'cat_sun_locket'
+  | 'cat_moon_locket'
+  | 'cat_hushed_bell';
 
 /** What the cat crawler can put on over her coat. */
 export type CatWornGarmentId =
@@ -131,7 +135,8 @@ type HumanHeadTorsoGarmentId =
   | 'human_hearthguard_quilted_vest'
   | 'human_stoneheart_amulet'
   | 'human_sun_locket'
-  | 'human_moon_locket';
+  | 'human_moon_locket'
+  | 'human_hushed_bell';
 
 interface BaseGarmentIdsByWearer {
   readonly cat: CatBaseGarmentId;

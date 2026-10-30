@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { Camera } from '../core/rendering/camera';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -98,8 +98,7 @@ const TREE_CONTACT_DAMAGE_SOURCE = { kind: 'environmental' } as const;
 
 /** Playback rate of the burn and collapse loops. */
 const TREE_ANIM_FPS = 10;
-const FRAMES_PER_SECOND = 60;
-const FRAMES_PER_ANIM_STEP = FRAMES_PER_SECOND / TREE_ANIM_FPS;
+const FRAMES_PER_ANIM_STEP = WORLD_TICKS_PER_SECOND / TREE_ANIM_FPS;
 /** Frames in the `burning`, `burning_late` and `felling` rows of every tree sheet. */
 const TREE_ANIM_FRAME_COUNT = 6;
 /** How long a collapse takes, start to bare ground. */

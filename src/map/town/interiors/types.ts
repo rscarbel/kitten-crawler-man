@@ -21,10 +21,12 @@
 
 import type {
   KnockableTownInteriorPropId,
+  LobbedKnockableTownInteriorPropId,
   StatefulTownInteriorPropId,
   StatelessTownInteriorPropId,
+  ToppledKnockableTownInteriorPropId,
 } from '../../../sprites/art/townInterior/townInteriorProps';
-import type { KnockOffPlacement } from '../../interiorMechanisms';
+import type { KnockOffPlacement, LobbedKnockOff, ToppledKnockOff } from '../../interiorMechanisms';
 import { contractPropId } from '../../contractAreas';
 import type { PlannedBuildingId } from '../../buildingIds';
 
@@ -102,13 +104,25 @@ export function prop(
   return { kind: 'prop', x, y, propId, variant, id: options.id, dropsLoot: options.dropsLoot };
 }
 
-/** A prop a cat can knock off, under `id`, falling and landing as `knockOff` says. */
+/** A small prop a cat can bat off a ledge, under `id`, falling and landing as `knockOff` says. */
 export function knockableProp(
   x: number,
   y: number,
-  propId: KnockableTownInteriorPropId,
+  propId: LobbedKnockableTownInteriorPropId,
   id: string,
-  knockOff: KnockOffPlacement,
+  knockOff: LobbedKnockOff,
+  variant = 0,
+): TownInteriorPropEntry {
+  return { kind: 'prop', x, y, propId, id, variant, knockOff };
+}
+
+/** A long prop a cat can push over where it stands, under `id`, toppling as `knockOff` says. */
+export function toppleableProp(
+  x: number,
+  y: number,
+  propId: ToppledKnockableTownInteriorPropId,
+  id: string,
+  knockOff: ToppledKnockOff,
   variant = 0,
 ): TownInteriorPropEntry {
   return { kind: 'prop', x, y, propId, id, variant, knockOff };

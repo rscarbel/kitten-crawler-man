@@ -5,7 +5,7 @@
  * off their frame counts and impact frames rather than chosen again.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
 import {
   ATTACK_FRAMES,
@@ -15,14 +15,13 @@ import {
   STAFF_CHANNEL_TICKS_PER_FRAME,
   STAFF_FLINCH_FRAMES,
   STAFF_FLINCH_TICKS_PER_FRAME,
-  TICKS_PER_SECOND,
   WALK_FRAMES,
 } from './art/human/timing';
 
 const MS_PER_SECOND = 1000;
 
 function framesToMs(frames: number, ticksPerFrame: number): number {
-  return (frames * ticksPerFrame * MS_PER_SECOND) / TICKS_PER_SECOND;
+  return (frames * ticksPerFrame * MS_PER_SECOND) / WORLD_TICKS_PER_SECOND;
 }
 
 /** The whole healing channel, from the hand rising to it coming back down. */

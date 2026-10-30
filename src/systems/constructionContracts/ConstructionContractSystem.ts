@@ -400,7 +400,11 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
 
   private trackerEntry(): TrackerEntry | null {
     if (!contractsUnlocked(this.deps.state)) return null;
-    const base = { id: CONSTRUCTION_CONTRACT_QUEST_ID, name: CONSTRUCTION_CONTRACT_QUEST_NAME };
+    const base = {
+      kind: 'single',
+      id: CONSTRUCTION_CONTRACT_QUEST_ID,
+      name: CONSTRUCTION_CONTRACT_QUEST_NAME,
+    } as const;
     const active = this.deps.state.contracts.active;
     const site = this.activeSite;
     if (active === null || site === null) {

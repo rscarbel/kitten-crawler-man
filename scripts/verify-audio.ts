@@ -978,6 +978,11 @@ const CHECKS: readonly AudioCheck[] = [
   { id: 23, name: 'on-demand stings', run: checkOnDemandStings },
   { id: 24, name: 'gated floor-3 groups', run: checkGatedGroups },
   { id: 25, name: "gated groups' safety net", run: checkGatedSafetyNet },
+  {
+    id: 26,
+    name: 'objective chime by quest',
+    run: () => voices.checkObjectiveChime(harness, check),
+  },
 ];
 
 const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));

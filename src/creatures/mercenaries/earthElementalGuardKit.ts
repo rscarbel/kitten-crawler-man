@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import type {
   EarthElementalGuardStyle,
   MercenaryTemplate,
@@ -65,11 +65,10 @@ const PUNCH: StrikeTiming<EarthElementalGuardRow> = {
 
 // ── Shield ───────────────────────────────────────────────────────────────────
 
-const TICKS_PER_SECOND = 60;
 /** Damage one Shield soaks up before it breaks. */
 export const SHIELD_ABSORB = 12;
 const SHIELD_DURATION_SECONDS = 8;
-export const SHIELD_DURATION_TICKS = SHIELD_DURATION_SECONDS * TICKS_PER_SECOND;
+export const SHIELD_DURATION_TICKS = SHIELD_DURATION_SECONDS * WORLD_TICKS_PER_SECOND;
 /** How far from the caster an ally may stand and still be shielded. */
 const SHIELD_RANGE_TILES = 6;
 
@@ -148,11 +147,12 @@ const CRUSH_PUNCH_DAMAGE_RATIO = 1;
 const HAMMER_HANDS_PUNCH_DAMAGE_RATIO = 0.85;
 
 const CRUSH_SHIELD_COOLDOWN_SECONDS = 20;
-export const CRUSH_SHIELD_COOLDOWN_FRAMES = CRUSH_SHIELD_COOLDOWN_SECONDS * TICKS_PER_SECOND;
+export const CRUSH_SHIELD_COOLDOWN_FRAMES = CRUSH_SHIELD_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 const CRUSH_SHIELD_TRIGGER_HP_FRACTION = 0.6;
 /** Shielding is Hammer Hands' whole purpose, so it comes round sooner and for smaller wounds. */
 const HAMMER_HANDS_SHIELD_COOLDOWN_SECONDS = 14;
-const HAMMER_HANDS_SHIELD_COOLDOWN_FRAMES = HAMMER_HANDS_SHIELD_COOLDOWN_SECONDS * TICKS_PER_SECOND;
+const HAMMER_HANDS_SHIELD_COOLDOWN_FRAMES =
+  HAMMER_HANDS_SHIELD_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
 const HAMMER_HANDS_SHIELD_TRIGGER_HP_FRACTION = 0.7;
 
 export const CRUSH_CONFIG: EarthElementalGuardConfig = {

@@ -36,6 +36,16 @@ const CAROLINE_INTEL = {
   ).line,
 } as const;
 
+/** Why the Warden wants Belle, by whether its other cats are still bound or were let out of their cages. */
+const NINE_CATS = {
+  bound: warden.line(
+    'But it closes again the moment I let go. Something has to hold it open. A cat always comes back, so a cat can hold it. It takes nine. Yours makes nine.',
+  ),
+  empty: warden.line(
+    "But it closes again the moment I let go. Something has to hold it open. A cat always comes back, so a cat can hold it. It takes nine. You let the others out of their cages. They'll come back. Cats do. I'll start with yours.",
+  ),
+} as const;
+
 /**
  * The Warden's reveal: it names Belle as the ninth, says what the circle is
  * for, and lifts the mask long enough to show there is nothing under it.
@@ -44,12 +54,15 @@ export function wardenReveal(anyCatBound: boolean): NonEmpty<DialogLine> {
   const room = anyCatBound ? 'bound' : 'empty';
   return [
     ROOM_SEEN[room],
-    warden.line('The ninth. I had her lifted off the fountain, and you climbed after her.'),
     warden.line(
-      'Every soul this city lost in the Fraying is on the far side of the seam. Nine creatures that always come back can hold it open long enough to bring them through.',
+      'There she is. The ninth cat. I had her carried up here, and you followed her, just like I knew you would.',
     ),
     warden.line(
-      'I have kept their names in this tower since the bad year. Tonight I open the seam and call them over.',
+      "When the ground split under this city, everyone who fell with it ended up somewhere else. They aren't dead. They're on the other side of a seam, and I can open it.",
+    ),
+    NINE_CATS[room],
+    warden.line(
+      "I've kept every one of their names in this tower since that night. Tonight I bring them home. Don't get in my way.",
     ),
     narrator.line(
       'The Warden lifts the grinning mask away. There is no face behind it, only green fire burning in an empty hood. It settles the mask back over the fire.',
@@ -67,6 +80,7 @@ export const CARRIER_ARRIVES = {
 
 /** The Warden falls: the mask cracks, and the circle goes dark. */
 export const WARDEN_FALLS: NonEmpty<DialogLine> = [
+  warden.line('I kept every name. I only wanted them home.'),
   narrator.line(
     'The grinning mask cracks down its middle and falls in two halves. The robes fold onto the boards with nothing left inside them, and the light goes out of the circle.',
   ),

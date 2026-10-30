@@ -12,7 +12,8 @@ import { skinsFor } from '../theme/skins';
 import { iconButton } from '../widgets/iconButton';
 import { keycap, keycapSize } from '../widgets/keycap';
 import { meter } from '../widgets/meter';
-import { drawGlass, roundRectPath, strokeRounded } from '../widgets/paint';
+import { drawGlass, strokeRounded } from '../widgets/paint';
+import { roundRectPath } from '../widgets/roundRect';
 import { tabularNumber, text } from '../widgets/text';
 import { tooltip } from '../widgets/tooltip';
 import type { HudButtonRects } from './hudButtonLayout';
@@ -32,7 +33,8 @@ export interface DockOptions {
   readonly keyHints: boolean;
 }
 
-function rectFor(rects: HudButtonRects, id: DockButtonId): Rect | null {
+/** Where the dock button `id` goes, or null where the layout holds no slot for it. */
+export function dockButtonRect(rects: HudButtonRects, id: DockButtonId): Rect | null {
   switch (id) {
     case 'pause':
       return rects.pause;
@@ -48,6 +50,10 @@ function rectFor(rects: HudButtonRects, id: DockButtonId): Rect | null {
       return rects.follower;
     case 'switch':
       return rects.switchButton;
+    default: {
+      const unhandled: never = id;
+      throw new Error(`No dock rect for button ${String(unhandled)}`);
+    }
   }
 }
 
@@ -60,7 +66,7 @@ export function dock(
 ): Map<DockButtonId, Rect> {
   const drawn = new Map<DockButtonId, Rect>();
   for (const model of buttons) {
-    const rect = rectFor(rects, model.id);
+    const rect = dockButtonRect(rects, model.id);
     if (rect === null) continue;
     dockButton(ui, rect, model, opts);
     drawn.set(model.id, rect);

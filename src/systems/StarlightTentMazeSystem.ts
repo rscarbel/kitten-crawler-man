@@ -18,7 +18,7 @@
  */
 
 import { crawlerDisplayName } from '../characters/characters';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { MusicClaims } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
@@ -199,7 +199,6 @@ import {
 import { questBannerEntry } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 
-const FRAMES_PER_SECOND = 60;
 /** Any change of difficulty mid-show deals a new hall, so every one is asked about. */
 const TENT_RESTART_CONFIRMATION: DifficultyChangeConfirmation = {
   title: 'Restart the Starlight Tent?',
@@ -226,7 +225,7 @@ const TARGET_PROMPT_RANGE_TILES = 3;
 const BURNOUT_FLASH_PEAK_ALPHA = 0.92;
 
 const BANNER_SECONDS = 5;
-const BANNER_FRAMES = BANNER_SECONDS * FRAMES_PER_SECOND;
+const BANNER_FRAMES = BANNER_SECONDS * WORLD_TICKS_PER_SECOND;
 
 /** World-space hint text sits this far above the crawler's head. */
 const HINT_LIFT_TILES = 1.6;
