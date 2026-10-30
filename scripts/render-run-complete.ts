@@ -73,7 +73,7 @@ const FULL_RUN: RunSummary = {
     ['Goblin', 402],
     ['Rat-kin Skirmisher', 211],
     ['Cockroach', 188],
-    ['Krasue', 96],
+    ['Raveling', 96],
     ['Grotesque Spider Hatchling', 71],
   ],
 };

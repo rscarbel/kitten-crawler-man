@@ -123,8 +123,8 @@ export function playMissingCatsCue(
 
 /** The jingle the capture at the fountain plays under, and that its steps are timed to. */
 export const CAPTURE_CUE = 'capture_at_dusk' as const satisfies JingleId;
-/** Seconds into {@link CAPTURE_CUE}: the krasue drop lands on the fountain. */
-export const CAPTURE_KRASUE_LANDS_AT_S = 5.0;
+/** Seconds into {@link CAPTURE_CUE}: the raveling's drop lands on the fountain. */
+export const CAPTURE_RAVELING_LANDS_AT_S = 5.0;
 /** Seconds into {@link CAPTURE_CUE}: Belle is lifted off toward the spire. */
 export const CAPTURE_LIFT_OFF_AT_S = 12.0;
 /** Seconds into {@link CAPTURE_CUE}: the cue has faded out, and the screen with it. */

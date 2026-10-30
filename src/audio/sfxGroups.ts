@@ -762,7 +762,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * The floor-3 overworld/town itself: Hawkfolk, Krasue, Giant Wasps and the
+   * The floor-3 overworld/town itself: Hawkfolk, Ravelings, Giant Wasps and the
    * Lizardman camps' venom in the wilderness,
    * Deinonychus/mercenary escorts, the Dark Knight's rumble, and the paper of the notice
    * boards in the square and in Briar Hollow.
@@ -775,7 +775,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'candle_stand_topple_1',
     'candle_stand_topple_2',
     ...INTERIOR_BREAK_SFX_IDS,
-    'krasue_attack',
+    'raveling_attack',
     'giant_wasp_buzz_loop',
     'giant_wasp_sting_1',
     'giant_wasp_sting_2',

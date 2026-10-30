@@ -57,7 +57,7 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   GravediggerBeetle: 'gravediggerBeetle',
   GiantWasp: 'giantWasp',
   RuinsGhoul: 'ruinsGhoul',
-  Krasue: 'krasue',
+  Raveling: 'raveling',
   Lemur: 'lemur',
   TallClown: 'tallClown',
   FatClown: 'fatClown',

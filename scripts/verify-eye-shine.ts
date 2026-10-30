@@ -88,7 +88,7 @@ const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { Kraken } = await import('../src/creatures/Kraken.js');
 const { ElectricGoblin } = await import('../src/creatures/ElectricGoblin.js');
 const { KrakenTentacle } = await import('../src/creatures/KrakenTentacle.js');
-const { Krasue } = await import('../src/creatures/Krasue.js');
+const { Raveling } = await import('../src/creatures/Raveling.js');
 const { LittleRooster } = await import('../src/creatures/LittleRooster.js');
 const { AcidLlama } = await import('../src/creatures/AcidLlama.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
@@ -303,7 +303,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyeless('Kraken tentacle buried', new KrakenTentacle(...at)),
     eyeless('Kraken tentacle', surfacedTentacle()),
   ],
-  Krasue: () => [eyed('krasue', new Krasue(...at))],
+  Raveling: () => [eyed('raveling', new Raveling(...at))],
   LittleRooster: () => [eyed('Little Rooster', new LittleRooster(...at))],
   AcidLlama: () => [eyed('acid llama', new AcidLlama(...at))],
   Mantid: () => [eyed('mantid', new Mantid(...at))],

@@ -639,7 +639,7 @@ const SOUND_CAPTIONS: Readonly<Partial<Record<SoundId, SoundCaption>>> = {
   ...takes(['clown_laughing_1', 'clown_laughing_2'], offscreen('Clown laughs')),
   clown_horn: offscreen('Clown horn honks'),
   clown_burp: offscreen('Clown burps'),
-  krasue_attack: offscreen('Krasue shrieks'),
+  raveling_attack: offscreen('Raveling shrieks'),
   ...takes(['lemur_attack', 'lemur_sound'], offscreen('Lemur chatters')),
   fireball_launch: offscreen('Fireball whooshes'),
   fairy_fireball_whoosh: offscreen('Fireball whooshes'),

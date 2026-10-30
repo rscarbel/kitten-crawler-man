@@ -1,15 +1,15 @@
 /**
  * The capture at the plaza fountain, as a cutscene: the carrier settles
- * beside Belle to make a show of taking her, krasue drop out of the dark, the
+ * beside Belle to make a show of taking her, ravelings drop out of the dark, the
  * carrier is thrown aside, and Belle is lifted away toward the spire before
  * the screen goes black. The capture jingle comes in as the pretence
  * closes, started partway into its recording so that its drop hit falls
  * {@link CAPTURE_DROP_AFTER_PRETENCE_S} after the last line however long the
- * player reads, and the krasue lands on that hit. Every later step keeps to
+ * player reads, and the raveling lands on that hit. Every later step keeps to
  * the jingle's own clock, so what is said after the drop is said over the
  * scene, never holding it.
  *
- * The krasue and the carrier are not creatures of the street: they are
+ * The raveling and the carrier are not creatures of the street: they are
  * painted bodies that exist for the length of the scene ({@link CaptureStaging}),
  * lent to the script as actors by the ids in {@link CAPTURE_ACTOR_IDS}.
  */
@@ -28,19 +28,19 @@ import {
   prewarmWingedThief,
   WINGED_THIEF_SIZE_TILES,
 } from '../../sprites/art/wingedThiefFigure';
-import { drawKrasueSprite } from '../../sprites/krasueSprite';
+import { drawRavelingSprite } from '../../sprites/ravelingSprite';
 import { stagedActor, type CutsceneActor, type StagedBody } from '../cutscene/cutsceneActors';
 import type { CutscenePoint } from '../cutscene/cutsceneCamera';
 import type { CutsceneScript } from '../cutscene/cutsceneSteps';
 import {
   CAPTURE_CUE,
   CAPTURE_CUE_FADED_BY_S,
-  CAPTURE_KRASUE_LANDS_AT_S,
+  CAPTURE_RAVELING_LANDS_AT_S,
   CAPTURE_LIFT_OFF_AT_S,
 } from '../../audio/missingCatsSoundCues';
 
 /** The bodies the capture lends its script, besides the crawlers. */
-export const CAPTURE_ACTOR_IDS = ['capture_krasue', 'capture_carrier'] as const;
+export const CAPTURE_ACTOR_IDS = ['capture_raveling', 'capture_carrier'] as const;
 export type CaptureActorId = (typeof CAPTURE_ACTOR_IDS)[number];
 
 /** Who the capture's script can name: the crawlers by kind, and its own two bodies. */
@@ -51,47 +51,47 @@ const STAGED_WALK_PX_PER_TICK = 0;
 
 const HALF_TILE = TILE_SIZE / 2;
 /** Where each body waits out of sight before its entrance, in tiles above Belle. */
-const KRASUE_START_TILES_ABOVE = 9;
+const RAVELING_START_TILES_ABOVE = 9;
 const CARRIER_START_TILES_ABOVE = 8;
 const CARRIER_START_TILES_WEST = 5;
 /** The carrier settles this far east of Belle, on the fountain's rim. */
 const CARRIER_PERCH_TILES_EAST = 1;
-/** The krasue comes down this far above Belle, so it hangs over her rather than on her. */
-const KRASUE_HOVER_TILES_ABOVE = 0.6;
+/** The raveling comes down this far above Belle, so it hangs over her rather than on her. */
+const RAVELING_HOVER_TILES_ABOVE = 0.6;
 /** Where the blow throws the carrier, from its perch. */
 const CARRIER_THROWN_TILES_EAST = 4;
 const CARRIER_THROWN_TILES_SOUTH = 1.5;
 /** The spire, in tiles north of the tower's front door. */
 const SPIRE_TILES_ABOVE_DOOR = 5;
-/** The krasue rides a little ahead of Belle as they go up, her head above Belle's back. */
-const KRASUE_LIFT_LEAD_TILES = 0.5;
+/** The raveling rides a little ahead of Belle as they go up, her head above Belle's back. */
+const RAVELING_LIFT_LEAD_TILES = 0.5;
 
 const PAN_FRAMES = 45;
 const CARRIER_DESCENT_FRAMES = 90;
-const KRASUE_DROP_FRAMES = 30;
+const RAVELING_DROP_FRAMES = 30;
 const THROW_FRAMES = 20;
 const LIFT_FRAMES = 240;
 const FADE_FRAMES = 120;
 
-/** Seconds from the pretence's last line closing to the krasue landing on the jingle's drop hit. */
+/** Seconds from the pretence's last line closing to the raveling landing on the jingle's drop hit. */
 export const CAPTURE_DROP_AFTER_PRETENCE_S = 0.8;
 /** How far into {@link CAPTURE_CUE} it comes in, so the drop hit falls that long after the pretence. */
-const CUE_ENTERS_AT_S = CAPTURE_KRASUE_LANDS_AT_S - CAPTURE_DROP_AFTER_PRETENCE_S;
+const CUE_ENTERS_AT_S = CAPTURE_RAVELING_LANDS_AT_S - CAPTURE_DROP_AFTER_PRETENCE_S;
 
-/** The cue mark the krasue sets off from, so it lands on the drop's hit. */
-const KRASUE_SETS_OFF_AT_S =
-  CAPTURE_KRASUE_LANDS_AT_S - KRASUE_DROP_FRAMES / WORLD_TICKS_PER_SECOND;
+/** The cue mark the raveling sets off from, so it lands on the drop's hit. */
+const RAVELING_SETS_OFF_AT_S =
+  CAPTURE_RAVELING_LANDS_AT_S - RAVELING_DROP_FRAMES / WORLD_TICKS_PER_SECOND;
 /** The cue mark the fade starts from, so the screen is black as the cue fades out. */
 const FADE_STARTS_AT_S = CAPTURE_CUE_FADED_BY_S - FADE_FRAMES / WORLD_TICKS_PER_SECOND;
 
-/** The krasue's shriek as it lands. */
-const KRASUE_SHRIEK = { takes: ['krasue_attack'] } as const;
+/** The raveling's shriek as it lands. */
+const RAVELING_SHRIEK = { takes: ['raveling_attack'] } as const;
 
-/** The krasue is drawn at this share of a tile; a head with its trailing viscera reads larger than a cat. */
-const KRASUE_SIZE_SHARE = 1.1;
+/** The raveling is drawn at this share of a tile; a head with its trailing viscera reads larger than a cat. */
+const RAVELING_SIZE_SHARE = 1.1;
 /** The carrier is drawn the same size as the thief over the roofs. */
 const CARRIER_SIZE_PX = TILE_SIZE * WINGED_THIEF_SIZE_TILES;
-/** How fast the krasue bobs, in radians a tick. */
+/** How fast the raveling bobs, in radians a tick. */
 const FLOAT_RADIANS_PER_TICK = 0.08;
 /** How many of its wingbeats the carrier flies a tick. */
 const WINGBEATS_PER_TICK = 0.04;
@@ -115,7 +115,7 @@ function offset(at: CutscenePoint, tilesX: number, tilesY: number): CutscenePoin
  * the script moves them.
  */
 export class CaptureStaging {
-  private readonly krasue: StagedBody;
+  private readonly raveling: StagedBody;
   private readonly carrier: StagedBody;
   private readonly actors: Readonly<Record<CaptureActorId, CutsceneActor>>;
   private ticks = 0;
@@ -128,11 +128,11 @@ export class CaptureStaging {
   /** `belle` is Belle's tile-origin pixels on the fountain. */
   constructor(belle: CutscenePoint) {
     prewarmWingedThief();
-    this.krasue = stagedAt(offset(belle, 0, -KRASUE_START_TILES_ABOVE));
+    this.raveling = stagedAt(offset(belle, 0, -RAVELING_START_TILES_ABOVE));
     this.carrier = stagedAt(offset(belle, -CARRIER_START_TILES_WEST, -CARRIER_START_TILES_ABOVE));
     this.lastCarrier = { x: this.carrier.x, y: this.carrier.y };
     this.actors = {
-      capture_krasue: stagedActor(this.krasue, STAGED_WALK_PX_PER_TICK, 'walker'),
+      capture_raveling: stagedActor(this.raveling, STAGED_WALK_PX_PER_TICK, 'walker'),
       capture_carrier: stagedActor(this.carrier, STAGED_WALK_PX_PER_TICK, 'walker'),
     };
   }
@@ -168,7 +168,7 @@ export class CaptureStaging {
     ctx.restore();
   }
 
-  /** Over the dusk: the carrier's wings and the krasue. */
+  /** Over the dusk: the carrier's wings and the raveling. */
   renderAir(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -182,15 +182,15 @@ export class CaptureStaging {
       drawWingedThief(ctx, CARRIER_SIZE_PX, this.carrierHeading, wingbeat, false);
       ctx.restore();
     }
-    if (!hides(this.krasue)) {
-      drawKrasueSprite(
+    if (!hides(this.raveling)) {
+      drawRavelingSprite(
         ctx,
-        this.krasue.x - camX,
-        this.krasue.y - camY,
-        TILE_SIZE * KRASUE_SIZE_SHARE,
+        this.raveling.x - camX,
+        this.raveling.y - camY,
+        TILE_SIZE * RAVELING_SIZE_SHARE,
         this.ticks * FLOAT_RADIANS_PER_TICK,
         true,
-        this.krasue.facingX,
+        this.raveling.facingX,
       );
     }
   }
@@ -217,7 +217,7 @@ export function captureScript({
   const perch = offset(belle, CARRIER_PERCH_TILES_EAST, 0);
   const spire = offset(towerDoor, 0, -SPIRE_TILES_ABOVE_DOOR);
   return [
-    { kind: 'hideActor', who: 'capture_krasue' },
+    { kind: 'hideActor', who: 'capture_raveling' },
     { kind: 'panCamera', to: belle, frames: PAN_FRAMES },
     {
       kind: 'glideTo',
@@ -232,17 +232,17 @@ export function captureScript({
       request: { lines: CAPTURE_PRETENCE[choice], reward: null, questRelated: true },
     },
     { kind: 'playCue', cue: CAPTURE_CUE, fromS: CUE_ENTERS_AT_S },
-    { kind: 'waitForCue', cue: CAPTURE_CUE, atS: KRASUE_SETS_OFF_AT_S },
-    { kind: 'showActor', who: 'capture_krasue' },
+    { kind: 'waitForCue', cue: CAPTURE_CUE, atS: RAVELING_SETS_OFF_AT_S },
+    { kind: 'showActor', who: 'capture_raveling' },
     {
       kind: 'glideTo',
-      who: 'capture_krasue',
-      to: offset(belle, 0, -KRASUE_HOVER_TILES_ABOVE),
-      frames: KRASUE_DROP_FRAMES,
+      who: 'capture_raveling',
+      to: offset(belle, 0, -RAVELING_HOVER_TILES_ABOVE),
+      frames: RAVELING_DROP_FRAMES,
       face: null,
       then: 'waitForArrival',
     },
-    { kind: 'sound', cue: KRASUE_SHRIEK, at: belle },
+    { kind: 'sound', cue: RAVELING_SHRIEK, at: belle },
     { kind: 'shake', profile: 'heavy' },
     {
       kind: 'glideTo',
@@ -260,8 +260,8 @@ export function captureScript({
     { kind: 'glideTo', who: 'cat', to: spire, frames: LIFT_FRAMES, face: 'up', then: 'carryOn' },
     {
       kind: 'glideTo',
-      who: 'capture_krasue',
-      to: offset(spire, 0, -KRASUE_LIFT_LEAD_TILES),
+      who: 'capture_raveling',
+      to: offset(spire, 0, -RAVELING_LIFT_LEAD_TILES),
       frames: LIFT_FRAMES,
       face: null,
       then: 'carryOn',
@@ -270,7 +270,7 @@ export function captureScript({
     { kind: 'carolineMessage', message: CAROLINE_TO_TAKEN_BELLE, world: 'runs' },
     { kind: 'awaitActor', who: 'cat' },
     { kind: 'hideActor', who: 'cat' },
-    { kind: 'hideActor', who: 'capture_krasue' },
+    { kind: 'hideActor', who: 'capture_raveling' },
     { kind: 'waitForCue', cue: CAPTURE_CUE, atS: FADE_STARTS_AT_S },
     { kind: 'fade', to: 1, frames: FADE_FRAMES },
   ];

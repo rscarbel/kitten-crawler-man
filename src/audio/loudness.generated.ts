@@ -4451,14 +4451,6 @@ export const LOUDNESS = {
     hash: '2b6b06880f1b7fc0',
     trimDb: -4.1,
   },
-  krasue_attack: {
-    bus: 'sfx',
-    basis: 'integrated',
-    lufs: -10.8,
-    truePeakDbtp: 0,
-    hash: '8935dcca3a2a5ee9',
-    trimDb: -5.2,
-  },
   lamp_break_1: {
     bus: 'sfx',
     basis: 'integrated',
@@ -6138,6 +6130,14 @@ export const LOUDNESS = {
     truePeakDbtp: -0.9,
     hash: 'c674a2469c1acc8d',
     trimDb: -1.5,
+  },
+  raveling_attack: {
+    bus: 'sfx',
+    basis: 'integrated',
+    lufs: -10.8,
+    truePeakDbtp: 0,
+    hash: '8935dcca3a2a5ee9',
+    trimDb: -5.2,
   },
   refreshed_sting: {
     bus: 'sfx',

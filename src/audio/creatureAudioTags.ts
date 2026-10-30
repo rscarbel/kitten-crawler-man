@@ -25,7 +25,7 @@ export type CreatureAudioTag =
   | 'hawkfolk'
   | 'kraken'
   | 'kraken_tentacle'
-  | 'krasue'
+  | 'raveling'
   | 'lemur'
   | 'lion'
   | 'lizardman'

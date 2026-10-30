@@ -44,7 +44,7 @@ export type DeathCause =
   | 'gravediggerBeetle'
   | 'giantWasp'
   | 'ruinsGhoul'
-  | 'krasue'
+  | 'raveling'
   | 'lemur'
   | 'tallClown'
   | 'fatClown'
@@ -425,10 +425,10 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You were killed by a shambling former citizen of Taloncrest.',
     'The ghoul got its hands on you. There was not much left after that.',
   ],
-  krasue: [
+  raveling: [
     'A floating head with its guts still attached ate you. Welcome to Taloncrest.',
-    'The Krasue drifted in and finished you off. They are hard to pin down.',
-    'You were killed by a Krasue. Flying entrails are a genuine threat here.',
+    'A Raveling drifted in and finished you off. Ravelings are hard to pin down.',
+    'You were killed by a Raveling. Flying entrails are a genuine threat here.',
   ],
   lemur: [
     'A lemur put a thrown knife through you. The act still holds up.',

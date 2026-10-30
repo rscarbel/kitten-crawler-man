@@ -165,7 +165,7 @@ export const ARCHIVE_WARDS_BY_CONDUIT = {
 
 /**
  * Whether the Warden is gone and the tower has stood down: its guards off
- * the gatehouse, its bells still, its wards spent and its krasue gone, on
+ * the gatehouse, its bells still, its wards spent and its ravelings gone, on
  * every storey from the cattery to the street door. A storey built after this
  * is built that way; one already standing when the Warden falls is stood
  * down where it stands.
@@ -778,8 +778,8 @@ export const ARCHIVE_WARDEN_BELL_PATH: ReadonlyArray<TowerTile> = [
   { x: 16, y: 9 },
 ];
 
-/** Where the archive's krasue rise to fight once the Warden knows. */
-export const ARCHIVE_KRASUE_TILES: ReadonlyArray<TowerTile> = [
+/** Where the archive's ravelings rise to fight once the Warden knows. */
+export const ARCHIVE_RAVELING_TILES: ReadonlyArray<TowerTile> = [
   { x: 13, y: 10 },
   { x: 15, y: 12 },
   { x: 4, y: 11 },

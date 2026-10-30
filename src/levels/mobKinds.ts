@@ -38,7 +38,7 @@ import { SmallSpider } from '../creatures/SmallSpider';
 import { SpiderHatchling } from '../creatures/SpiderHatchling';
 import { SpiderEgg } from '../creatures/SpiderEgg';
 import { RuinsGhoul } from '../creatures/RuinsGhoul';
-import { Krasue } from '../creatures/Krasue';
+import { Raveling } from '../creatures/Raveling';
 import { Lemur } from '../creatures/Lemur';
 import { TallClown } from '../creatures/TallClown';
 import { FatClown } from '../creatures/FatClown';
@@ -584,8 +584,8 @@ const MOB_KIND_DEFS = {
     protected: null,
     prewarm: null,
   }),
-  krasue: kind({
-    create: (tile) => new Krasue(tile.x, tile.y, TILE_SIZE),
+  raveling: kind({
+    create: (tile) => new Raveling(tile.x, tile.y, TILE_SIZE),
     threat: 7.7,
     role: 'melee',
     protected: null,

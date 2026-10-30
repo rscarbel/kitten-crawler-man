@@ -1218,7 +1218,7 @@ export abstract class Mob extends Player {
    * Whether a Seismic Stomp passes under this creature: the shock runs through
    * the ground, so a body that hovers clear of it takes nothing and is shown
    * {@link DAMAGE_IMMUNE_LABEL}. Opt-in rather than read off {@link isFlying},
-   * because not every flyer is meant to escape it: the Krasue flies and is
+   * because not every flyer is meant to escape it: a Raveling flies and is
    * still caught by the stomp.
    */
   get evadesSeismicStomp(): boolean {

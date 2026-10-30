@@ -2,7 +2,7 @@
  * Blackwood Lodge's cellar, held against what climbs the old cistern.
  *
  * Kessler opened the lid looking for elves. What comes up the shaft is ruins
- * ghouls and krasue out of the deep cistern, one at a time up the iron rungs
+ * ghouls and ravelings out of the deep cistern, one at a time up the iron rungs
  * and out over the lip, through {@link LODGE_CELLAR_WAVE_COUNT} waves. The
  * elves live in the drains and knew what that lid kept down; with the shaft
  * full of ghouls between them and it, they come round by the alley drain and
@@ -50,13 +50,13 @@ const CELLAR_MOB_LEVEL = 6;
 /** The elves who come in from the alley and hold the hole with the party. */
 const ELF_COUNT = 3;
 /** What comes up the cistern. */
-type CellarMobKind = 'ruins_ghoul' | 'krasue';
+type CellarMobKind = 'ruins_ghoul' | 'raveling';
 
 /** Each wave, in order: what comes up the shaft. One entry per wave the questline counts. */
 const CELLAR_WAVES = [
   ['ruins_ghoul', 'ruins_ghoul', 'ruins_ghoul'],
-  ['ruins_ghoul', 'ruins_ghoul', 'ruins_ghoul', 'krasue'],
-  ['ruins_ghoul', 'ruins_ghoul', 'krasue', 'krasue'],
+  ['ruins_ghoul', 'ruins_ghoul', 'ruins_ghoul', 'raveling'],
+  ['ruins_ghoul', 'ruins_ghoul', 'raveling', 'raveling'],
 ] as const satisfies readonly (readonly CellarMobKind[])[] & {
   readonly length: typeof LODGE_CELLAR_WAVE_COUNT;
 };

@@ -1,7 +1,7 @@
 /**
  * The cattery before the Warden knows: nine cages down the side walls, the
  * seven town cats and the cellmate sat in theirs, Belle in hers, and the
- * keeper, a krasue that drifts between the room and the observatory window
+ * keeper, a raveling that drifts between the room and the observatory window
  * (`catteryKeeper.ts`).
  *
  * Every cage opens the same way: a cat at its latch jostles it a little at a
@@ -45,7 +45,7 @@ import {
   type TowerTile,
 } from '../../map/town/interiors/townCenterTower';
 import type { Player } from '../../Player';
-import { drawKrasueSprite, krasueFloatPhase } from '../../sprites/krasueSprite';
+import { drawRavelingSprite, ravelingFloatPhase } from '../../sprites/ravelingSprite';
 import { TURN_VALVE_ROWS } from '../../sprites/art/humanFigure';
 import { drawSightFan } from '../../ui/world/worldSightFan';
 import { drawSuspicionMarker } from '../../ui/world/suspicionMarker';
@@ -96,7 +96,7 @@ const ALARM_FRAMES = 60;
 const FULL_NOTICE = 1;
 
 const RECAGED_TOAST =
-  'The Krasue spotted you and you were locked up. Try not to get seen this time.';
+  'The Raveling spotted you and you were locked up. Try not to get seen this time.';
 
 // ── Freed cats ───────────────────────────────────────────────────────────────
 
@@ -266,12 +266,12 @@ export class CatteryWorks extends StoreyWorks {
       figures.push({
         y: keeper.y,
         render: (ctx, camX, camY, tileSize) =>
-          drawKrasueSprite(
+          drawRavelingSprite(
             ctx,
             keeper.x - camX,
             keeper.y - camY,
             tileSize,
-            krasueFloatPhase(keeper.frames),
+            ravelingFloatPhase(keeper.frames),
             keeper.hunting,
             keeper.facingX,
           ),

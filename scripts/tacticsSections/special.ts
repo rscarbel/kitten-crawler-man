@@ -1,7 +1,7 @@
 /**
  * `verify:tactics` sections for the creatures whose tactics are a special case
  * of the melee brawler: the rat (a tiny swarmer that only flanks), the
- * lemur (a knife-thrower that outruns the player), the krasue (a flier that
+ * lemur (a knife-thrower that outruns the player), the raveling (a flier that
  * steers by its own drift rather than by pathfinding) and the Hawkfolk (calm
  * until provoked) — plus the creatures deliberately left with none.
  *
@@ -51,7 +51,7 @@ import {
 import { Rat } from '../../src/creatures/Rat';
 import { ShrineVermin } from '../../src/creatures/ShrineVermin';
 import { LEMUR_THROW_STANDOFF_TILES, Lemur } from '../../src/creatures/Lemur';
-import { Krasue, KRASUE_FACING_TURN_TILES } from '../../src/creatures/Krasue';
+import { Raveling, RAVELING_FACING_TURN_TILES } from '../../src/creatures/Raveling';
 import { Hawkfolk } from '../../src/creatures/Hawkfolk';
 import { FuzzyNightmare } from '../../src/creatures/FuzzyNightmare';
 import { SmallSpider } from '../../src/creatures/SmallSpider';
@@ -92,10 +92,10 @@ function spawned(type: StandaloneMobKind): (map: GameMap) => Mob {
     spawnMob(type, { x: PROBE_TILE, y: PROBE_TILE }, map, liveSpawnContext('dev:spawn'));
 }
 
-function summonedKrasue(): Mob {
-  const krasue = new Krasue(PROBE_TILE, PROBE_TILE, TILE_SIZE);
-  krasue.isSummon = true;
-  return krasue;
+function summonedRaveling(): Mob {
+  const raveling = new Raveling(PROBE_TILE, PROBE_TILE, TILE_SIZE);
+  raveling.isSummon = true;
+  return raveling;
 }
 
 const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
@@ -112,9 +112,9 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: ['flank', 'kite', 'regroup'],
   },
   {
-    name: 'krasue',
-    build: spawned('krasue'),
-    isExpectedClass: (mob) => mob instanceof Krasue,
+    name: 'raveling',
+    build: spawned('raveling'),
+    isExpectedClass: (mob) => mob instanceof Raveling,
     expected: ['flank', 'block', 'regroup', 'riposte'],
   },
   {
@@ -160,15 +160,15 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: [],
   },
   {
-    name: 'a summoned krasue',
-    build: () => summonedKrasue(),
-    isExpectedClass: (mob) => mob instanceof Krasue && mob.isSummon,
+    name: 'a summoned raveling',
+    build: () => summonedRaveling(),
+    isExpectedClass: (mob) => mob instanceof Raveling && mob.isSummon,
     expected: [],
   },
 ];
 
 /** The spawner keys the shared "nothing below the minimum level" sweep must cover. */
-const SWEPT_TYPES: readonly MobKind[] = ['rat', 'lemur', 'krasue', 'hawkfolk', 'fuzzy_nightmare'];
+const SWEPT_TYPES: readonly MobKind[] = ['rat', 'lemur', 'raveling', 'hawkfolk', 'fuzzy_nightmare'];
 
 /** Every trait `mob` could ever roll: the top level, the hard profile, every roll a yes. */
 function eligibilityOf(mob: Mob): readonly TacticsTrait[] {
@@ -365,11 +365,11 @@ const FLANK_CASES: readonly FlankCase[] = [
     minSettledTiles: LEMUR_THROW_STANDOFF_TILES,
   },
   {
-    type: 'krasue',
+    type: 'raveling',
     startGapTiles: RANGED_FLANK_GAP_TILES,
     bearingAt: 'arrival',
     mirroredOnly: true,
-    facingTurnTiles: KRASUE_FACING_TURN_TILES,
+    facingTurnTiles: RAVELING_FACING_TURN_TILES,
   },
   {
     type: 'hawkfolk',
@@ -394,7 +394,7 @@ const FLANK_RUN_FRAMES = 600;
 const FLANK_DISTINCT_DEGREES = 40;
 /**
  * And must span this much more than the same pack's without the trait. Judged
- * against the control rather than a fixed line alone, because a krasue's
+ * against the control rather than a fixed line alone, because a raveling's
  * wobble already spreads a plain pack a good way toward that line.
  */
 const FLANK_SPREAD_GAIN_DEGREES = 25;
@@ -560,7 +560,7 @@ interface RetreatCase {
 
 const REGROUP_CASES: readonly RetreatCase[] = [
   { type: 'lemur', mirroredOnly: true, outrunsRetreatCap: true },
-  { type: 'krasue', mirroredOnly: true, outrunsRetreatCap: true },
+  { type: 'raveling', mirroredOnly: true, outrunsRetreatCap: true },
   { type: 'hawkfolk', mirroredOnly: false, outrunsRetreatCap: true },
 ];
 
@@ -577,7 +577,7 @@ const STEP_EPSILON_PX = 1e-6;
 /**
  * The fastest a retreat step may measure. No slack for separation shoves: none
  * lands on a retreat frame in these layouts, and any slack at all would let a
- * creature only a little faster than the cap, like the krasue, hide inside it.
+ * creature only a little faster than the cap, like the raveling, hide inside it.
  */
 const RETREAT_STEP_CAP_PX = TACTICAL_RETREAT_MAX_SPEED + STEP_EPSILON_PX;
 
@@ -904,19 +904,19 @@ function checkLemurKite(map: GameMap, harness: TacticsHarness): void {
   harness.check(plainTrace.started === 0, `control: without kite, ${plainTrace.started} kites`);
 }
 
-// ── Krasue guard and riposte ───────────────────────────────────────────────
+// ── Raveling guard and riposte ───────────────────────────────────────────────
 
-/** Blows thrown at a krasue before a probe gives up waiting for a guard. */
+/** Blows thrown at a raveling before a probe gives up waiting for a guard. */
 const GUARD_WAIT_ATTEMPTS = 500;
-/** Blows thrown at a krasue without `block` to show it never guards. */
+/** Blows thrown at a raveling without `block` to show it never guards. */
 const UNGUARDED_PROBE_BLOWS = 300;
-/** Pixels of the shove the krasue may lose to rounding. */
+/** Pixels of the shove the raveling may lose to rounding. */
 const SHOVE_SLACK_PX = 2;
 const SHOVE_SETTLE_FRAMES = 4;
 /** Where the open-floor shove starts, and how far west its attacker stands. */
 const SHOVE_TILE = { x: 12, y: 12 };
 const SHOVE_ATTACKER_OFFSET_TILES = 3;
-/** Floor tiles between the wall probe's krasue and the room's east wall. */
+/** Floor tiles between the wall probe's raveling and the room's east wall. */
 const WALL_PROBE_TILES_FROM_WALL = 2;
 /** Slightly less than one cell, so a rectangle query covers exactly one cell. */
 const CELL_QUERY_INSET_PX = 1e-6;
@@ -958,27 +958,27 @@ interface ShoveTrace {
   readonly framesMisfiled: number;
 }
 
-function traceKrasueShove(map: GameMap, tile: TilePoint, harness: TacticsHarness): ShoveTrace {
+function traceRavelingShove(map: GameMap, tile: TilePoint, harness: TacticsHarness): ShoveTrace {
   const arena = makeArena(map, { x: tile.x - SHOVE_ATTACKER_OFFSET_TILES, y: tile.y }, FAR_CORNER);
-  const krasue = addCreature(arena, 'krasue', tile, ['block'], harness);
-  krasue.noticeTarget(arena.human);
+  const raveling = addCreature(arena, 'raveling', tile, ['block'], harness);
+  raveling.noticeTarget(arena.human);
   const guarded = withSeededRandom(GUARD_SEED, () =>
-    hitUntilGuarded(krasue, arena.human, GUARD_WAIT_ATTEMPTS),
+    hitUntilGuarded(raveling, arena.human, GUARD_WAIT_ATTEMPTS),
   );
-  const startX = krasue.x;
-  const startDistance = centreDistance(krasue, arena.human);
+  const startX = raveling.x;
+  const startDistance = centreDistance(raveling, arena.human);
   let shoveEndDistance = startDistance;
   let maxX = startX;
   let framesInWall = 0;
   let framesMisfiled = 0;
   for (let frame = 0; frame < GUARD_KNOCKBACK_FRAMES + SHOVE_SETTLE_FRAMES; frame++) {
     arena.loop.update(arena.ctx);
-    maxX = Math.max(maxX, krasue.x);
+    maxX = Math.max(maxX, raveling.x);
     if (frame === GUARD_KNOCKBACK_FRAMES - 1)
-      shoveEndDistance = centreDistance(krasue, arena.human);
-    const standing = centreTile(krasue);
+      shoveEndDistance = centreDistance(raveling, arena.human);
+    const standing = centreTile(raveling);
     if (!map.isWalkable(standing.x, standing.y, 'walker')) framesInWall++;
-    if (!isFiledUnderOwnCell(arena.roster.grid, krasue)) framesMisfiled++;
+    if (!isFiledUnderOwnCell(arena.roster.grid, raveling)) framesMisfiled++;
   }
   arena.loop.dispose();
   return { guarded, startDistance, shoveEndDistance, startX, maxX, framesInWall, framesMisfiled };
@@ -991,10 +991,10 @@ function firstWallEastOf(map: GameMap, from: TilePoint): number {
   return x;
 }
 
-function checkKrasueGuard(map: GameMap, harness: TacticsHarness): void {
-  harness.section('Krasue guard: a flier is shoved like a walker, its drift refused mid-shove');
+function checkRavelingGuard(map: GameMap, harness: TacticsHarness): void {
+  harness.section('Raveling guard: a flier is shoved like a walker, its drift refused mid-shove');
   const shoveLengthPx = GUARD_KNOCKBACK_TILES * TILE_SIZE;
-  const open = traceKrasueShove(map, SHOVE_TILE, harness);
+  const open = traceRavelingShove(map, SHOVE_TILE, harness);
   const gainPx = open.shoveEndDistance - open.startDistance;
   harness.check(open.guarded, 'open floor: a guard went up');
   harness.check(
@@ -1009,7 +1009,7 @@ function checkKrasueGuard(map: GameMap, harness: TacticsHarness): void {
 
   const eastWallTile = firstWallEastOf(map, SHOVE_TILE);
   const wallTile = { x: eastWallTile - WALL_PROBE_TILES_FROM_WALL, y: SHOVE_TILE.y };
-  const wall = traceKrasueShove(map, wallTile, harness);
+  const wall = traceRavelingShove(map, wallTile, harness);
   const wallApproachPx = wall.maxX - wall.startX;
   harness.check(wall.guarded, 'against a wall: a guard went up');
   harness.check(
@@ -1018,7 +1018,7 @@ function checkKrasueGuard(map: GameMap, harness: TacticsHarness): void {
   );
 
   const plainArena = makeArena(map, { x: SHOVE_TILE.x - 1, y: SHOVE_TILE.y }, FAR_CORNER);
-  const plain = addCreature(plainArena, 'krasue', SHOVE_TILE, [], harness);
+  const plain = addCreature(plainArena, 'raveling', SHOVE_TILE, [], harness);
   const plainGuarded = withSeededRandom(GUARD_SEED, () =>
     hitUntilGuarded(plain, plainArena.human, UNGUARDED_PROBE_BLOWS),
   );
@@ -1038,35 +1038,35 @@ const FAIRNESS_MIN_TELEGRAPH_FRAMES = 21;
 const RIPOSTE_GUARDS_WANTED = 8;
 const RIPOSTE_RUN_FRAMES = 20000;
 
-/** Frames from each guard to the krasue's next strike landing, for a krasue with `traits`. */
-function measureKrasueGuardToStrike(
+/** Frames from each guard to the raveling's next strike landing, for a raveling with `traits`. */
+function measureRavelingGuardToStrike(
   map: GameMap,
   traits: readonly TacticsTrait[],
   harness: TacticsHarness,
 ): number[] {
   const arena = makeArena(map, RETREAT_HUMAN_TILE, FAR_CORNER);
-  const krasue = addCreature(arena, 'krasue', RETREAT_MOB_TILE, traits, harness);
+  const raveling = addCreature(arena, 'raveling', RETREAT_MOB_TILE, traits, harness);
   const intervals: number[] = [];
   let guardFrame: number | null = null;
-  takeAttackStarted(krasue);
+  takeAttackStarted(raveling);
   withSeededRandom(GUARD_SEED, () => {
     for (let frame = 0; frame < RIPOSTE_RUN_FRAMES; frame++) {
       if (intervals.length >= RIPOSTE_GUARDS_WANTED) break;
-      // The player presses in after the shove, so nothing but the krasue's own
+      // The player presses in after the shove, so nothing but the raveling's own
       // timing stands between a guard and its answer.
-      arena.human.x = krasue.x - TILE_SIZE;
-      arena.human.y = krasue.y;
+      arena.human.x = raveling.x - TILE_SIZE;
+      arena.human.y = raveling.y;
       arena.loop.update(arena.ctx);
-      if (!takeAttackStarted(krasue)) continue;
+      if (!takeAttackStarted(raveling)) continue;
       if (guardFrame !== null) {
         intervals.push(frame - guardFrame);
         guardFrame = null;
       }
-      // Struck back the moment a strike lands, so the whole of the krasue's
+      // Struck back the moment a strike lands, so the whole of the raveling's
       // cooldown lies between the guard and its next strike unless a riposte cuts it.
-      krasue.hp = krasue.maxHp;
-      krasue.takeHit(harnessHit(arena.human, PROBE_BLOW_DAMAGE, 'melee'));
-      if (krasue.lastBlowWasGuarded) guardFrame = frame;
+      raveling.hp = raveling.maxHp;
+      raveling.takeHit(harnessHit(arena.human, PROBE_BLOW_DAMAGE, 'melee'));
+      if (raveling.lastBlowWasGuarded) guardFrame = frame;
     }
   });
   arena.loop.dispose();
@@ -1077,10 +1077,10 @@ function mean(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 }
 
-function checkKrasueRiposte(map: GameMap, harness: TacticsHarness): void {
-  harness.section('Krasue riposte: answers a guard sooner, never inside the fairness floor');
-  const riposte = measureKrasueGuardToStrike(map, ['block', 'riposte'], harness);
-  const plain = measureKrasueGuardToStrike(map, ['block'], harness);
+function checkRavelingRiposte(map: GameMap, harness: TacticsHarness): void {
+  harness.section('Raveling riposte: answers a guard sooner, never inside the fairness floor');
+  const riposte = measureRavelingGuardToStrike(map, ['block', 'riposte'], harness);
+  const plain = measureRavelingGuardToStrike(map, ['block'], harness);
   harness.check(
     riposte.length >= RIPOSTE_GUARDS_WANTED && plain.length >= RIPOSTE_GUARDS_WANTED,
     `guards measured: ${riposte.length} riposting, ${plain.length} plain (need ${RIPOSTE_GUARDS_WANTED})`,
@@ -1119,6 +1119,6 @@ function runSpecialCaseSections(map: GameMap, harness: TacticsHarness): void {
     checkRegroup(map, harness, retreatCase);
   }
   checkLemurKite(map, harness);
-  checkKrasueGuard(map, harness);
-  checkKrasueRiposte(map, harness);
+  checkRavelingGuard(map, harness);
+  checkRavelingRiposte(map, harness);
 }

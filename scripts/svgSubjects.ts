@@ -536,19 +536,19 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'krasue',
+    name: 'raveling',
     views: async () => {
-      const { paintKrasueSprite } = await import('../src/sprites/krasueSprite.js');
+      const { paintRavelingSprite } = await import('../src/sprites/ravelingSprite.js');
       return [
-        { name: 'idle', paint: ({ dom, unit }) => paintKrasueSprite(dom, 0, 0, unit) },
+        { name: 'idle', paint: ({ dom, unit }) => paintRavelingSprite(dom, 0, 0, unit) },
         {
           name: 'aggressive',
-          paint: ({ dom, unit }) => paintKrasueSprite(dom, 0, 0, unit, 0, true),
+          paint: ({ dom, unit }) => paintRavelingSprite(dom, 0, 0, unit, 0, true),
         },
         {
           name: 'attack',
           paint: ({ dom, unit }) =>
-            paintKrasueSprite(dom, 0, 0, unit, 0, true, FACING_RIGHT, ATTACK_MIDPOINT),
+            paintRavelingSprite(dom, 0, 0, unit, 0, true, FACING_RIGHT, ATTACK_MIDPOINT),
         },
       ];
     },

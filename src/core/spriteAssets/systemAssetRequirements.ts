@@ -119,7 +119,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   {
     id: 'quest:missing_cats_cellar',
     levelIds: LEVEL3,
-    mobTypes: ['elf', 'ruins_ghoul', 'krasue'],
+    mobTypes: ['elf', 'ruins_ghoul', 'raveling'],
     requiredGroups: [],
   },
 

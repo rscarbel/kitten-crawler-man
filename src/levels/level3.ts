@@ -109,9 +109,9 @@ const HAWKFOLK_MAX_LEVEL = 7;
 const RUINS_GHOUL_MIN_LEVEL = 5;
 const RUINS_GHOUL_MAX_LEVEL = 8;
 
-/** Krasue level range — uncommon, faster and more dangerous than a ghoul. */
-const KRASUE_MIN_LEVEL = 6;
-const KRASUE_MAX_LEVEL = 9;
+/** Raveling level range — uncommon, faster and more dangerous than a ghoul. */
+const RAVELING_MIN_LEVEL = 6;
+const RAVELING_MAX_LEVEL = 9;
 
 /**
  * Wild bears and lions: occasional encounters on their own ground, each
@@ -140,7 +140,7 @@ const WASP_SWARM_MAX_ESCORTS = 4;
  * The camps' residents.
  *
  * Additions to the floor, not a redistribution of it: `hallwayMobs` and its ~150
- * scatter points are untouched, so ruins ghouls and krasues stay the dominant
+ * scatter points are untouched, so ruins ghouls and ravelings stay the dominant
  * population and a camp is a landmark you find among them.
  */
 const GOBLIN_CAMP_POPULATION = 5;
@@ -215,7 +215,7 @@ export const level3: LevelDef = {
       minLevel: RUINS_GHOUL_MIN_LEVEL,
       maxLevel: RUINS_GHOUL_MAX_LEVEL,
     },
-    { type: 'krasue', chance: 0.25, minLevel: KRASUE_MIN_LEVEL, maxLevel: KRASUE_MAX_LEVEL },
+    { type: 'raveling', chance: 0.25, minLevel: RAVELING_MIN_LEVEL, maxLevel: RAVELING_MAX_LEVEL },
     {
       type: 'dire_bear',
       chance: BEAR_CHANCE,

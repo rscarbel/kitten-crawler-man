@@ -1,13 +1,13 @@
 import { Mob, TACTICAL_RETREAT_MAX_SPEED } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
-import { drawKrasueSprite, KRASUE_FLOAT_RADIANS_PER_FRAME } from '../sprites/krasueSprite';
+import { drawRavelingSprite, RAVELING_FLOAT_RADIANS_PER_FRAME } from '../sprites/ravelingSprite';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticalMove } from './tactics/tacticalFrame';
 
-const KRASUE_HP = 9;
-const KRASUE_SPEED = 2.0;
+const RAVELING_HP = 9;
+const RAVELING_SPEED = 2.0;
 
 const AGGRO_RANGE_TILES = 8;
 const ATTACK_RANGE_TILES = 0.9;
@@ -26,17 +26,17 @@ const ATTACK_ENGAGE_FRACTION = 1.15;
 const WOBBLE_TURNS_PER_BOB = 0.5;
 const WOBBLE_AMOUNT = 0.65;
 /**
- * How far off straight up or down a krasue must be heading, as a share of its
+ * How far off straight up or down a raveling must be heading, as a share of its
  * step, before it turns to face that side; and how far to one side its target
  * must be, in tiles, while it holds still to strike. Without them a head
  * rising or sinking straight at its prey mirrors itself every frame.
  */
 const FACING_TURN_SHARE = 0.25;
-export const KRASUE_FACING_TURN_TILES = 0.25;
-const KRASUE_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
+export const RAVELING_FACING_TURN_TILES = 0.25;
+const RAVELING_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /** Drawn only face-on, so in profile it still shows that face. */
-const KRASUE_EYES: EyePlacement = {
+const RAVELING_EYES: EyePlacement = {
   sideForward: 0,
   sideHeight: 0.49,
   sideSpacing: 0.1,
@@ -47,29 +47,30 @@ const KRASUE_EYES: EyePlacement = {
 };
 
 /**
- * A krasue — a disembodied flying head trailing entrails, one of the old
- * city's people made by the Fraying. Fast, erratic, and low-HP but
- * dangerous in a straight fight; the Taloncrest ruins' aerial threat.
+ * A raveling — a disembodied flying head trailing entrails, one of the old
+ * city's people made by the Fraying, named for the loose thread that comes off
+ * a fraying cloth. Fast, erratic, and low-HP but dangerous in a straight fight;
+ * the Taloncrest ruins' aerial threat.
  */
-export class Krasue extends Mob {
+export class Raveling extends Mob {
   protected override get eyePlacement(): EyePlacement {
-    return KRASUE_EYES;
+    return RAVELING_EYES;
   }
 
   readonly xpValue = 10;
   protected coinDropMin = 0;
   protected coinDropMax = 1;
-  displayName = 'Krasue';
+  displayName = 'Raveling';
   description = 'A disembodied head trailing entrails, drifting erratically through the ruins.';
   override isFlying = true;
-  override readonly audioTag = 'krasue';
+  override readonly audioTag = 'raveling';
   private attackCooldown = 0;
   private attackAnimTimer = 0;
   private floatPhase = 0;
   private isAggro = false;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, KRASUE_HP, KRASUE_SPEED);
+    super(tileX, tileY, tileSize, RAVELING_HP, RAVELING_SPEED);
   }
 
   override resetToSpawn(): void {
@@ -80,7 +81,7 @@ export class Krasue extends Mob {
   }
 
   /**
-   * A krasue is a melee brawler that happens to fly: it can learn to come at
+   * A raveling is a melee brawler that happens to fly: it can learn to come at
    * the player from several sides, to turn a blow aside and answer it, and to
    * fall back on another head when hurt. Never `kite` — it is a swarm of
    * contact strikers with nothing to gain by drawing the player anywhere.
@@ -91,7 +92,7 @@ export class Krasue extends Mob {
    * its drift like any walk, and it has no committed charge to misread that.
    */
   protected override get tacticsEligibility(): readonly TacticsTrait[] {
-    return KRASUE_TACTICS;
+    return RAVELING_TACTICS;
   }
 
   updateAI(targets: Player[]): void {
@@ -99,11 +100,11 @@ export class Krasue extends Mob {
 
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
-    this.floatPhase += KRASUE_FLOAT_RADIANS_PER_FRAME;
+    this.floatPhase += RAVELING_FLOAT_RADIANS_PER_FRAME;
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
-    // Krasue won't pursue targets sheltering inside the town safe zone.
+    // A raveling won't pursue targets sheltering inside the town safe zone.
     const nearest = this.acquireTarget(
       targets,
       aggroRangePx,
@@ -177,7 +178,7 @@ export class Krasue extends Mob {
   /**
    * A flank's walk to its staging point: straight, with no wobble. The flank
    * picks a slot only when the straight line to it is open and short, and the
-   * weave lasts longer than the whole walk, so every krasue of a pack — all
+   * weave lasts longer than the whole walk, so every raveling of a pack — all
    * bobbing in step — would be pushed the same way off its line, and the one
    * whose slot lies against the push would come in beside its neighbour.
    */
@@ -195,13 +196,13 @@ export class Krasue extends Mob {
 
   /** Turns to face a target `dx` pixels to one side, once it is clearly to that side. */
   private faceTowardX(dx: number): void {
-    if (Math.abs(dx) <= this.tileSize * KRASUE_FACING_TURN_TILES) return;
+    if (Math.abs(dx) <= this.tileSize * RAVELING_FACING_TURN_TILES) return;
     this.facingX = dx > 0 ? 1 : -1;
   }
 
   /**
    * A regroup's walk: straight, with no wobble, stopping short of the friend,
-   * and no faster than any mob falls back. The wobble is how a krasue closes
+   * and no faster than any mob falls back. The wobble is how a raveling closes
    * on prey; a head drifting sideways while it falls back would spend the
    * regroup's short frame cap going nowhere.
    */
@@ -239,7 +240,7 @@ export class Krasue extends Mob {
 
     const attackAnim = this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES : 0;
     const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
-      drawKrasueSprite(
+      drawRavelingSprite(
         ctx,
         sx,
         sy,

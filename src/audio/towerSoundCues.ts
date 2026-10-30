@@ -14,8 +14,8 @@ export const TOWER_CUES = {
   latchJostle: ['stall_door_latch'],
   /** A latch giving and the cage door swinging. */
   cageOpen: ['door_creak_1'],
-  /** The keeper seeing a paw at a latch. `krasue_attack` stands in for a shriek. */
-  keeperShriek: ['krasue_attack'],
+  /** The keeper seeing a paw at a latch. `raveling_attack` stands in for a shriek. */
+  keeperShriek: ['raveling_attack'],
   /** The keeper shutting Belle back in her cage. `gate_thud` stands in for the door slamming. */
   cageShut: ['gate_thud'],
   /** A ward line biting a crawler that touched it while it burned. */

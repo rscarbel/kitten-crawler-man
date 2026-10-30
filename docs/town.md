@@ -603,7 +603,7 @@ there start again on the next visit, and are always there to be done again. Each
 chapter hangs on is raised as a `towerMoment` on the scene's bus (`towerMoments.ts`).
 
 - **Cattery** (before the Warden knows). Every shut cage opens by a timing interaction: the
-  cat jostles its latch, and a jostle counts only while the keeper, a krasue, has its back
+  cat jostles its latch, and a jostle counts only while the keeper, a raveling, has its back
   turned. Its round reads three ways: where it floats (among the cages, or up by the window),
   which way its look washes the floor, and the latch bar's colour. A jostle under its eye is
   seen; it shrieks and stares on a while. Its look is a fan cast against the room's tall
@@ -628,7 +628,7 @@ chapter hangs on is raised as a `towerMoment` on the scene's bus (`towerMoments.
   hole stands a long shelf board that is pushed over instead (`ToppledKnockOff`): it falls
   along its placement's `toward`, which its painter is handed too, and every hole tile it comes
   to lie across becomes `FLOOR_DROP_SPANNED`, crossable on the board and only there. Before the
-  Warden knows, krasue wardens drift on rounds and do not fight; one that sees a crawler at all
+  Warden knows, raveling wardens drift on rounds and do not fight; one that sees a crawler at all
   (an `on_sight` notice) has the party caught at a glance and set down at the cattery stair's
   landing, and one that sees a companion only goes on orange alert. The warden is the archive's keeper and the dumbwaiter's bell calls it: rung from
   the archive, it turns to the sound, leaves its room by the south doorway
@@ -636,7 +636,7 @@ chapter hangs on is raised as a `towerMoment` on the scene's bus (`towerMoments.
   then drifts back. That is the room's way through: ring, keep clear, slip through the
   doorway while it peers, bat the board across the hole, bat the jar onto the plate, take the
   stair. Each thing that can be worked wears the same quiet tell (`interestGlint.ts`): a
-  sheen on what can be batted or rung, a pool of light on the plate. Once it knows, krasue rise
+  sheen on what can be batted or rung, a pool of light on the plate. Once it knows, ravelings rise
   to fight.
 - **Kitchen.** The human's chapter is one value, `MissingCatsProgress.kitchen`
   (`KitchenStage`): take the key ring from the dumbwaiter's foot, unlock the larder with it,
@@ -957,10 +957,11 @@ still gives at most one of these facts per conversation (see [Talking to people]
 **The Fraying.** Taloncrest was once a city ten times its size. In "the bad year" the
 world came apart at a seam under the old city, and its streets unravelled into rubble
 overnight. The people caught inside the fray did not die: they came back wrong and
-wandered out into what became the ruins. Ruins ghouls and krasue are what the Fraying
-made of the citizens. The survivors walled the hill that was left. The seam never fully
-closed, the ground there still does not sit right, and on stormy nights the edge of the
-ruins shifts.
+wandered out into what became the ruins. Ruins ghouls and ravelings are what the Fraying
+made of the citizens. A raveling is named for the loose thread that comes off a fraying
+cloth, and the entrails trailing under its head hang like loose strands. The survivors
+walled the hill that was left. The seam never fully closed, the ground there still does not
+sit right, and on stormy nights the edge of the ruins shifts.
 
 - Nobody knows why it happened. Caroline has never said, and no creature or person
   caused it. No line invents a culprit.
@@ -1144,7 +1145,7 @@ a cat at home, as they pet a cow: she sits and washes, hearts float up, and the 
    under the town; Belle smells that what is under the lid is not elves. In a cutscene
    Kessler walks to the hatch, works the hasp and heaves the lid up on its north hinge
    (`LodgeCellarHatch`, painted by `cellarHatch.ts`), and steps aside. The lid had kept
-   the deep cistern shut, and ruins ghouls and krasue out of the old ruins under the hill
+   the deep cistern shut, and ruins ghouls and ravelings out of the old ruins under the hill
    climb the shaft's iron rungs and out over the lip one at a time, through
    `LODGE_CELLAR_WAVE_COUNT` waves (three). A little after the first is out, three elves
    run in at the lodge's front door: the ghouls fill the ladder, so they came round by the
@@ -1205,13 +1206,13 @@ a cat at home, as they pet a cow: she sits and washes, hearts float up, and the 
    to Belle. A Belle not already on the rim strolls onto the open tile within its reach
    nearest her (`baitSeat`); a Belle left further off has to be brought. Then the capture
    plays as a cutscene (`captureCutscene.ts`), timed to the `capture_at_dusk` jingle's own clock
-   (`CAPTURE_KRASUE_LANDS_AT_S`, `CAPTURE_LIFT_OFF_AT_S`, `CAPTURE_CUE_FADED_BY_S` beside
+   (`CAPTURE_RAVELING_LANDS_AT_S`, `CAPTURE_LIFT_OFF_AT_S`, `CAPTURE_CUE_FADED_BY_S` beside
    `CAPTURE_CUE`). The carrier (Aviel if his secret was kept, a High Roost hawk if he was
    exposed) settles on the rim and the pretence starts. The jingle starts as the camera
-   pans, so its lead-in plays under the pretence, and the krasue fall out of the dark onto
+   pans, so its lead-in plays under the pretence, and the raveling falls out of the dark onto
    Belle at the drop's mark or a beat after the pretence closes, whichever is later; the carrier is thrown aside and says they were expected; at the
    lift-off Belle is carried toward the spire while Caroline tells her the Warden planned
-   for this before she did; the screen goes black as the cue fades. The krasue and the
+   for this before she did; the screen goes black as the cue fades. The raveling and the
    carrier are painted bodies (`CaptureStaging`) lent to the script as actors, not
    creatures of the street. The jingle's group (`missingCatsCapture`) is held from the
    moment the bait is agreed. When the scene ends the party splits
@@ -1282,7 +1283,7 @@ are built differently for a party climbing together. The cellmate stays at Belle
 the scene's cat ally until the aftermath.
 
 **Up together** (`ascent`, `ritual`). The archive's wards sweep and only Belle sees them; the
-stones that feed them are hers to find and the human's to break, and the krasue fight. The
+stones that feed them are hers to find and the human's to break, and the ravelings fight. The
 first arrival on the cattery at `ascent` opens the Warden's fight (`TowerRitualSystem`) and
 moves the questline to `ritual`. A save written in the tower after the reunion resumes
 where `missingCatsTowerResume` (`towerResume.ts`) stands the whole party: the reunion's

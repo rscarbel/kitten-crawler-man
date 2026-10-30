@@ -8,7 +8,7 @@
  * Each storey is generated through `GameMap.generateInterior` with the
  * tower's own variant and drawn in the storey's own dungeon theme, with the
  * storey's works stood up on it the way `TowerStoreysSystem` raises them (the
- * bells, the wards and their wardens or krasue, the cattery's keeper and
+ * bells, the wards and their wardens or ravelings, the cattery's keeper and
  * caged cats, the kitchen's dumbwaiter and portcullis) and run for a short
  * while with nobody on the storey, so each picture shows the works mid-round.
  * The wards are drawn as Belle sees them. Then it is marked up for review:

@@ -2483,7 +2483,7 @@ export class GameMap {
     if (this.townSafeRadiusTiles === null) return false;
     // Measured from the plaza, not from `gridSize / 2`. The two coincide today only
     // because the plaza happens to be centred on the map. This is what tells the
-    // ruins ghouls and the krasue to break off a chase, and what switches the
+    // ruins ghouls and the ravelings to break off a chase, and what switches the
     // overworld music between town and wilderness, so it should follow the town.
     // (Spawn *placement* is a separate thing: `scatterRuinsSpawnPoints` filters
     // against `plan.centre` at generation time and never calls this.)

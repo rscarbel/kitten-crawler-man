@@ -1,5 +1,5 @@
 /**
- * The cattery's keeper, a krasue on a slow round: a long look over the room,
+ * The cattery's keeper, a raveling on a slow round: a long look over the room,
  * a turn, a long gaze up at the observatory window, a turn back. Its look is
  * a fan cast over the storey's own floor, so whatever stands tall in the room
  * (a cage, a pillar, a heap of feed sacks) throws a shadow in it, and the fan

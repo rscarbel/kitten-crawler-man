@@ -377,7 +377,7 @@ export const SUSPICION_CAPTURE = 1;
 /**
  * Whole frames a crawler in full view may take to raise an on-sight watcher
  * to orange. At least one, so the rise always has a frame to spread over; a
- * handful at most, because the tower's guards and krasue catch at a glance.
+ * handful at most, because the tower's guards and ravelings catch at a glance.
  */
 type GlanceRiseFrames = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 

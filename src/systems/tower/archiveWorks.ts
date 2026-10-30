@@ -18,7 +18,7 @@
  * A ward that bites does a little damage and puts the crawler back on the
  * last tile it stood on outside every ward.
  *
- * Before the Warden knows, krasue wardens drift on their rounds. They do not
+ * Before the Warden knows, raveling wardens drift on their rounds. They do not
  * fight; one that sees a crawler at all has the party caught at a glance
  * and set back at the cattery stair's landing, as the gatehouse's guards do,
  * and one that sees a companion is put on orange alert.
@@ -28,7 +28,7 @@
  * peering in at what came up, before it drifts back the way it came. Its back
  * is to the room the whole time it peers, and its own room stands empty.
  * Rung again, it goes back to the hatch, so the bell can always be used.
- * Once the Warden knows, the krasue come to fight.
+ * Once the Warden knows, the ravelings come to fight.
  *
  * While the party is apart, each thing in the room that can be worked wears
  * the same quiet tell (`interestGlint.ts`): a sheen on whatever can be batted
@@ -45,7 +45,7 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import {
   ARCHIVE_FIXED_WARDS,
   ARCHIVE_KNOCKABLES,
-  ARCHIVE_KRASUE_TILES,
+  ARCHIVE_RAVELING_TILES,
   ARCHIVE_SWEEPING_WARDS,
   ARCHIVE_WARD_PLATE,
   ARCHIVE_WARDEN_BELL_PATH,
@@ -59,7 +59,7 @@ import {
 import type { Player, DamageSource } from '../../Player';
 import { WARD_STONE_VARIANT } from '../../sprites/art/townInterior/rooms/towerWorks';
 import { MINE_ROWS } from '../../sprites/art/humanFigure';
-import { drawKrasueSprite, krasueFloatPhase } from '../../sprites/krasueSprite';
+import { drawRavelingSprite, ravelingFloatPhase } from '../../sprites/ravelingSprite';
 import { drawQuestBeacon } from '../../sprites/questBeacon';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import { worldPalette } from '../../ui/theme/worldInk';
@@ -278,8 +278,8 @@ export class ArchiveWorks extends StoreyWorks {
   private readonly wards: LiveWard[] = [];
   private readonly stones: Stone[] = [];
   private readonly wardens: Warden[] = [];
-  /** The krasue risen to fight once the Warden knows. */
-  private readonly krasue: Mob[] = [];
+  /** The ravelings risen to fight once the Warden knows. */
+  private readonly raveling: Mob[] = [];
   /** Tiles each fixed ward bars this frame, so a change is a block or an unblock. */
   private readonly barred = new Set<string>();
   private readonly lastSafe = new Map<Crawler, TowerTile>();
@@ -299,11 +299,11 @@ export class ArchiveWorks extends StoreyWorks {
       for (const round of ARCHIVE_WARDEN_ROUNDS) this.wardens.push(this.raiseWarden(round));
     }
     if (deps.conditions.wards === 'sweeping') {
-      for (const tile of ARCHIVE_KRASUE_TILES) {
-        const krasue = spawnMob('krasue', tile, deps.map, ARCHIVE_SPAWNS);
-        applySpawnDifficulty(krasue);
-        deps.addMob(krasue);
-        this.krasue.push(krasue);
+      for (const tile of ARCHIVE_RAVELING_TILES) {
+        const raveling = spawnMob('raveling', tile, deps.map, ARCHIVE_SPAWNS);
+        applySpawnDifficulty(raveling);
+        deps.addMob(raveling);
+        this.raveling.push(raveling);
       }
     }
     this.stopListening = deps.bus.on('conveyorSignalled', ({ flag, from }) => {
@@ -421,12 +421,12 @@ export class ArchiveWorks extends StoreyWorks {
     const figures: InteriorFigure[] = this.wardens.map((warden) => ({
       y: warden.y,
       render: (ctx, camX, camY, tileSize) =>
-        drawKrasueSprite(
+        drawRavelingSprite(
           ctx,
           warden.x - camX,
           warden.y - camY,
           tileSize,
-          krasueFloatPhase(warden.floatFrames),
+          ravelingFloatPhase(warden.floatFrames),
           warden.suspicion > 0,
           warden.facingX >= 0 ? 1 : -1,
         ),
@@ -487,8 +487,8 @@ export class ArchiveWorks extends StoreyWorks {
     }
     this.wards.length = 0;
     this.wardens.length = 0;
-    for (const krasue of this.krasue) this.deps.removeMob(krasue);
-    this.krasue.length = 0;
+    for (const raveling of this.raveling) this.deps.removeMob(raveling);
+    this.raveling.length = 0;
   }
 
   dispose(): void {

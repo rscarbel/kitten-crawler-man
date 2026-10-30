@@ -1,7 +1,7 @@
 /**
  * The floor-3 wilderness's two enemy camps: a goblin camp and a lizardman den.
  *
- * These are **landmarks, not a population change.** Ruins ghouls and krasues
+ * These are **landmarks, not a population change.** Ruins ghouls and ravelings
  * stay the dominant force on the floor — the ambient spawn table is untouched —
  * and what a camp adds is a place on the map that is obviously *somebody's*,
  * with its own residents standing around it.

@@ -84,7 +84,7 @@
  *   (`fight-stair-open`);
  * - descent: once the Warden falls, the tower that stood built through the
  *   fight is walked from the cattery to the street door: every stair down
- *   takes the party and is a walk from where it lands, no guard or krasue
+ *   takes the party and is a walk from where it lands, no guard or raveling
  *   keeps watch, no ward is lit and the bells strike no one
  *   (`tower-stands-guard-after-warden`);
  * - door: the tower's front door refuses in every phase (`door-opens-after-quest`);
@@ -167,7 +167,7 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { Player } from '../src/Player';
 import { TheLich } from '../src/creatures/TheLich';
 import { TowerGuard } from '../src/creatures/TowerGuard';
-import { Krasue } from '../src/creatures/Krasue';
+import { Raveling } from '../src/creatures/Raveling';
 import { TOWER_SPLIT_BAR_S } from '../src/audio/music/stemSets';
 import { Conversation } from '../src/dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../src/dialog/request';
@@ -189,7 +189,7 @@ import {
   captureScript,
   type CaptureScriptActorId,
 } from '../src/systems/missingCats/captureCutscene';
-import { CAPTURE_KRASUE_LANDS_AT_S } from '../src/audio/missingCatsSoundCues';
+import { CAPTURE_RAVELING_LANDS_AT_S } from '../src/audio/missingCatsSoundCues';
 import { PRISON_TILE, type PrisonGrid } from '../src/map/goblinPrisonPlan';
 import {
   CONVEYOR_PLACEMENTS,
@@ -3126,7 +3126,7 @@ const NEIGHBOUR_STEPS = [
   [0, -ONE],
 ] as const;
 
-/** The creatures on a storey still keeping watch: a gatehouse guard, a krasue. */
+/** The creatures on a storey still keeping watch: a gatehouse guard, a raveling. */
 // ── Watchers catch at a glance ───────────────────────────────────────────────
 
 /** Frames a companion is kept in a watcher's look: long past any catch, to show it never catches. */
@@ -3455,7 +3455,7 @@ function checkWatchersCatchAtAGlance(walk: Walk): void {
 
 function watchersOn(floor: TowerFloor): string[] {
   return floor.roster.mobs
-    .filter((mob) => mob.isAlive && (mob instanceof TowerGuard || mob instanceof Krasue))
+    .filter((mob) => mob.isAlive && (mob instanceof TowerGuard || mob instanceof Raveling))
     .map((mob) => mob.mobType);
 }
 
@@ -3465,7 +3465,7 @@ function watchersOn(floor: TowerFloor): string[] {
  * stair down refuses, and once it has fallen every storey from the cattery to
  * the street door is walked: each stair down takes the party, each storey's
  * stair down (and at the gatehouse the street door) is a walk from where the
- * party lands, no guard or krasue is left on watch, the archive's wards are
+ * party lands, no guard or raveling is left on watch, the archive's wards are
  * all out, and a crawler on a bell storey beam is never struck.
  */
 function checkDescentAfterTheWarden(): void {
@@ -4818,15 +4818,15 @@ const CAPTURE_MAX_TICKS = WORLD_TICKS_PER_SECOND * 120;
 const CAPTURE_MAX_READ_PRESSES = 40;
 /** Belle's tile on the open floor the capture is played on. */
 const CAPTURE_BELLE_TILE = { x: 20, y: 20 } as const;
-/** How far above Belle, in tiles, the krasue comes to rest over her. */
-const CAPTURE_KRASUE_REST_TILES_ABOVE = 0.6;
+/** How far above Belle, in tiles, the raveling comes to rest over her. */
+const CAPTURE_RAVELING_REST_TILES_ABOVE = 0.6;
 
 type CaptureStep = CutsceneStep<never, CaptureScriptActorId>;
 
 interface CaptureTiming {
-  /** Seconds into the capture jingle that the krasue came to rest over Belle. */
+  /** Seconds into the capture jingle that the raveling came to rest over Belle. */
   readonly landedAtCueS: number;
-  /** Seconds from the pretence closing to the krasue coming to rest. */
+  /** Seconds from the pretence closing to the raveling coming to rest. */
   readonly landedAfterPretenceS: number;
 }
 
@@ -4842,7 +4842,7 @@ function playCaptureReading(readingS: number): CaptureTiming | null {
   const belle = { x: CAPTURE_BELLE_TILE.x * TILE_SIZE, y: CAPTURE_BELLE_TILE.y * TILE_SIZE };
   const restingAt = {
     x: belle.x,
-    y: belle.y - CAPTURE_KRASUE_REST_TILES_ABOVE * TILE_SIZE,
+    y: belle.y - CAPTURE_RAVELING_REST_TILES_ABOVE * TILE_SIZE,
   };
   let audioNowS = 0;
   let cueTopAtS: number | null = null;
@@ -4865,7 +4865,7 @@ function playCaptureReading(readingS: number): CaptureTiming | null {
   for (const id of CAPTURE_ACTOR_IDS) director.actors.register(id, () => staging.actor(id));
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   const active = new PlayerManager(CAPTURE_BELLE_TILE.x, CAPTURE_BELLE_TILE.y, undefined).human;
-  const krasue = staging.actor('capture_krasue');
+  const raveling = staging.actor('capture_raveling');
   const script = captureScript({ belle, towerDoor: belle, choice: 'kept' });
   const fromTheTop = (step: CaptureStep): CaptureStep =>
     step.kind === 'playCue' ? { kind: step.kind, cue: step.cue } : step;
@@ -4892,7 +4892,7 @@ function playCaptureReading(readingS: number): CaptureTiming | null {
         readThrough(conversation);
       }
     }
-    const at = krasue.position();
+    const at = raveling.position();
     if (
       pretenceClosedAtS !== null &&
       cueTopAtS !== null &&
@@ -4909,18 +4909,20 @@ function playCaptureReading(readingS: number): CaptureTiming | null {
 }
 
 function checkCaptureDropOnHit(): void {
-  section("The capture's krasue lands on the jingle's drop hit, however long the pretence is read");
+  section(
+    "The capture's raveling lands on the jingle's drop hit, however long the pretence is read",
+  );
   const toleranceS = CAPTURE_LANDING_TOLERANCE_TICKS / WORLD_TICKS_PER_SECOND;
   for (const readingS of PRETENCE_READING_SECONDS) {
     const timing = playCaptureReading(readingS);
     if (timing === null) {
-      check('capture', false, `read for ${readingS} s: the krasue never came to rest over Belle`);
+      check('capture', false, `read for ${readingS} s: the raveling never came to rest over Belle`);
       continue;
     }
     check(
       'capture',
-      Math.abs(timing.landedAtCueS - CAPTURE_KRASUE_LANDS_AT_S) <= toleranceS,
-      `read for ${readingS} s: the krasue lands ${timing.landedAtCueS.toFixed(2)} s into the jingle, on its ${CAPTURE_KRASUE_LANDS_AT_S} s hit`,
+      Math.abs(timing.landedAtCueS - CAPTURE_RAVELING_LANDS_AT_S) <= toleranceS,
+      `read for ${readingS} s: the raveling lands ${timing.landedAtCueS.toFixed(2)} s into the jingle, on its ${CAPTURE_RAVELING_LANDS_AT_S} s hit`,
     );
     check(
       'capture',

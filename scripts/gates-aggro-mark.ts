@@ -44,7 +44,7 @@ const { DireBear } = await import('../src/creatures/DireBear.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { Kraken } = await import('../src/creatures/Kraken.js');
 const { KrakenTentacle } = await import('../src/creatures/KrakenTentacle.js');
-const { Krasue } = await import('../src/creatures/Krasue.js');
+const { Raveling } = await import('../src/creatures/Raveling.js');
 const { AcidLlama } = await import('../src/creatures/AcidLlama.js');
 const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
@@ -186,7 +186,7 @@ function subjects(): Subject[] {
     provoke(new Elf(...at), 'elf'),
     provoke(new RuinsGhoul(...at), 'ruins ghoul'),
     provoke(new Lemur(...at), 'lemur'),
-    provoke(new Krasue(...at), 'krasue'),
+    provoke(new Raveling(...at), 'raveling'),
     provoke(new Lion(...at), 'lion'),
     provoke(new DireBear(...at), 'dire bear'),
     unmarked(new RatkinSoldier(...at, 'sedge'), 'ratkin soldier'),

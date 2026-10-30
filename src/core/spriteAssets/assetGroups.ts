@@ -30,7 +30,7 @@ export type AssetGroup =
 /**
  * Every creature/effect/environment sheet a group covers.
  *
- * Roughly half of `src/sprites/*` (Krasue, Lemur, Lion,
+ * Roughly half of `src/sprites/*` (Raveling, Lemur, Lion,
  * DireBear, RuinsGhoul, Elf,
  * all townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
@@ -362,7 +362,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   grotesque_spider: [],
   small_spider: [],
   ruins_ghoul: [],
-  krasue: [],
+  raveling: [],
   lemur: [],
   tall_clown: [],
   fat_clown: [],

@@ -145,7 +145,7 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
       ],
     },
   },
-  krasue: { ...SILENT_VOICE, attack: { takes: ['krasue_attack'] } },
+  raveling: { ...SILENT_VOICE, attack: { takes: ['raveling_attack'] } },
   lemur: {
     attack: { takes: ['lemur_attack'] },
     projectile: { takes: ['lemur_sound'] },
