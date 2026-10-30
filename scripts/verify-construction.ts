@@ -112,6 +112,7 @@ import {
   trebuchetRepairCost,
   wallSegmentHp,
 } from '../src/systems/briarHollow/structureRules';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const fault = process.argv.find((arg) => arg.startsWith('--fault='))?.split('=')[1] ?? null;
 
@@ -787,6 +788,7 @@ const GATE_PATH_MAX_TILES = 40;
     activeIsMoving: false,
     roster: rig.roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const loop = new MobUpdateLoop();
   const gateRow = site.gate.tiles[0].y;
@@ -1713,6 +1715,7 @@ section('Defend-quest grate spikes');
     activeIsMoving: false,
     roster,
     gameMap: dungeon,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   });
   const snapshot = quest.captureCheckpoint();
   quest.restoreCheckpoint({

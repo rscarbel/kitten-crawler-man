@@ -58,6 +58,8 @@ import { SmallSpider } from '../../src/creatures/SmallSpider';
 import { Cockroach } from '../../src/creatures/Cockroach';
 import { Wereboar } from '../../src/creatures/Wereboar';
 import { KrakenTentacle } from '../../src/creatures/KrakenTentacle';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** The pass/fail reporting `verify-tactics.ts` owns, so its failure count covers these too. */
 export interface TacticsHarness {
@@ -233,6 +235,7 @@ function makeArena(map: GameMap, humanTile: TilePoint, catTile: TilePoint): Aren
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { map, roster, loop: new MobUpdateLoop(), ctx, human, cat };
 }
@@ -288,7 +291,7 @@ const PROBE_BLOW_DAMAGE = 1;
  * and counts as in the fight.
  */
 function bloody(mob: Mob, crawler: HumanPlayer, share: number): void {
-  mob.takeDamageFrom(PROBE_BLOW_DAMAGE, crawler, 'explosion');
+  mob.takeHit(harnessHit(crawler, PROBE_BLOW_DAMAGE, 'explosion'));
   mob.hp = Math.max(1, Math.round(mob.maxHp * (1 - share)));
 }
 
@@ -419,7 +422,8 @@ function flankRun(
   for (const mob of pack) {
     // A Hawkfolk is calm until struck; everything else is simply told where the
     // fight is, as a packmate's shout would.
-    if (mob instanceof Hawkfolk) mob.takeDamageFrom(PROBE_BLOW_DAMAGE, arena.human, 'explosion');
+    if (mob instanceof Hawkfolk)
+      mob.takeHit(harnessHit(arena.human, PROBE_BLOW_DAMAGE, 'explosion'));
     else mob.noticeTarget(arena.human);
   }
   const bearings = pack.map(() => Number.NaN);
@@ -925,7 +929,7 @@ function withSeededRandom<T>(seed: number, run: () => T): T {
 function hitUntilGuarded(mob: Mob, human: HumanPlayer, attempts: number): boolean {
   for (let attempt = 0; attempt < attempts; attempt++) {
     mob.hp = mob.maxHp;
-    mob.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+    mob.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
     if (mob.lastBlowWasGuarded) return true;
   }
   return false;
@@ -1048,7 +1052,7 @@ function measureKrasueGuardToStrike(
       // Struck back the moment a strike lands, so the whole of the krasue's
       // cooldown lies between the guard and its next strike unless a riposte cuts it.
       krasue.hp = krasue.maxHp;
-      krasue.takeDamageFrom(PROBE_BLOW_DAMAGE, arena.human, 'melee');
+      krasue.takeHit(harnessHit(arena.human, PROBE_BLOW_DAMAGE, 'melee'));
       if (krasue.lastBlowWasGuarded) guardFrame = frame;
     }
   });

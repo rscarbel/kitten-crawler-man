@@ -167,13 +167,13 @@ export class SpiderEgg extends Mob {
   }
 
   /** Any accepted hit destroys it, however little damage it carried. */
-  override takeDamageFrom(
+  protected override receiveDamage(
     _amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (!this.isAlive) return;
-    super.takeDamageFrom(this.hp, attacker, damageType);
+    super.receiveDamage(this.hp, attacker, damageType);
     const blowLanded = this.hp <= 0;
     if (blowLanded) this.end('destroyed');
   }

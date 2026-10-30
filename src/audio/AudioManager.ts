@@ -40,8 +40,7 @@ import {
   type StreamVoice,
   type Voice,
 } from './voiceFades';
-import { ELECTRIC_GOBLIN_CUES } from '../systems/bossSoundCues';
-import { ELECTRIC_GOBLIN_BOSS_TYPE, KRAKEN_BOSS_TYPE } from '../core/mobs/bossTypes';
+import { KRAKEN_BOSS_TYPE } from '../core/mobs/bossTypes';
 
 /** Set by the bundler: true in `npm run serve` / `npm run dev` builds, absent under tsx. */
 declare const __DEV_BUILD__: boolean | undefined;
@@ -2346,10 +2345,6 @@ export class AudioManager {
       this.play('boss_defeated');
       if (e.bossType === KRAKEN_BOSS_TYPE) {
         this.play('new_unlock');
-      }
-      if (e.bossType === ELECTRIC_GOBLIN_BOSS_TYPE) {
-        this.playRandom(ELECTRIC_GOBLIN_CUES.death);
-        this.playRandom(ELECTRIC_GOBLIN_CUES.labPowerDown);
       }
     });
 

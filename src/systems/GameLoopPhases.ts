@@ -1,4 +1,4 @@
-import { TILE_SIZE, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
+import { TILE_SIZE } from '../core/constants';
 import { handWeaponSoundsOf } from '../audio/weaponSoundCues';
 import { platform } from '../core/input/Platform';
 import { type InputManager } from '../core/input/InputManager';
@@ -10,7 +10,8 @@ import {
   SOLE_COLLISION_OFFSET,
   tileUnderFeet,
 } from '../map/collisionAnchors';
-import { tileSpeedFactor } from '../map/tileSpeed';
+import { footingFactorAt } from '../map/tileSpeed';
+import { crawlerCanWalk, crawlerWalkPacePx } from './crawlerWalk';
 import { type Player } from '../Player';
 import { pushPlayerWithCollision } from './playerDisplacement';
 import { DIAGONAL_PENALTY } from './PlayerMovementSystem';
@@ -21,7 +22,7 @@ import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { AudioManager, PlacedCuePlayer, PlacedReach } from '../audio/AudioManager';
 import { ELECTRIFIED_JOLT_SOUNDS, type SoundId } from '../audio/sounds';
-import { FLOODED_PUMP_ROOM_CUES } from './bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
+import { FLOODED_PUMP_ROOM_CUES } from '../audio/floodedPumpRoomSoundCues';
 import { applyIntoxicatedWalkWobble, intoxicationOf } from '../core/combat/Intoxication';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
@@ -37,7 +38,7 @@ import {
   ROOSTER_CUES,
   ROOSTER_STEP_VOLUME,
   TRASH_GREMLIN_CUES,
-} from './bossSoundCues';
+} from '../audio/bossSoundCues';
 import { ElectricGoblin } from '../creatures/ElectricGoblin';
 import { Mantid } from '../creatures/Mantid';
 import { AttackCow } from '../creatures/AttackCow';
@@ -50,13 +51,13 @@ import { KrakenTentacle } from '../creatures/KrakenTentacle';
 import { playFairyCastCues } from './fairyAudioCues';
 import { playUndeadCues } from './undeadAudioCues';
 import { GoblinBomber } from '../creatures/GoblinBomber';
-import { getWorldZoom } from '../core/rendering/Viewport';
+import { screenToWorld, type Camera } from '../core/rendering/camera';
 import {
   BOMBER_GOBLIN_CUES,
   BOMBER_SOUND_CUE_PLAYS,
   CueGap,
   PACK_CACKLE_GAP_S,
-} from './bomberGoblinSoundCues';
+} from '../audio/bomberGoblinSoundCues';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -116,7 +117,7 @@ export function readMovement(
   mobileMoveTarget: { x: number; y: number } | null,
   mobileTapStart: { x: number; y: number; time: number } | null,
   player: Player,
-  camera: { x: number; y: number },
+  camera: Camera,
 ): MovementInput {
   let dx = 0;
   let dy = 0;
@@ -134,9 +135,7 @@ export function readMovement(
     dx === 0 &&
     dy === 0
   ) {
-    const zoom = getWorldZoom();
-    const wx = mobileMoveTarget.x / zoom + camera.x;
-    const wy = mobileMoveTarget.y / zoom + camera.y;
+    const { x: wx, y: wy } = screenToWorld(camera, mobileMoveTarget.x, mobileMoveTarget.y);
     const ddx = wx - (player.x + TILE_SIZE / 2);
     const ddy = wy - (player.y + TILE_SIZE / 2);
     const dist = Math.hypot(ddx, ddy);
@@ -160,15 +159,8 @@ export function readMovement(
  * {@link isStandingInWater}, the test the renderer uses.
  */
 export function footingSpeedFactor(player: Player, gameMap: GameMap): number {
-  const riverFactor = isStandingInWater(player, gameMap) ? WADE_SPEED_FACTOR : 1;
   const { x: tileX, y: tileY } = tileUnderFeet(player, TILE_SIZE);
-  const insideMap =
-    tileY >= 0 &&
-    tileY < gameMap.structure.length &&
-    tileX >= 0 &&
-    tileX < gameMap.structure[tileY].length;
-  const groundFactor = insideMap ? tileSpeedFactor(gameMap.structure[tileY][tileX].type) : 1;
-  return riverFactor * groundFactor;
+  return footingFactorAt(gameMap, tileX, tileY);
 }
 
 /**
@@ -201,7 +193,7 @@ export function applyMovement(
   const mapPxW = (gameMap.structure[0]?.length ?? gameMap.structure.length) * TILE_SIZE;
   const mapPxH = gameMap.structure.length * TILE_SIZE;
 
-  if (player.hasStatus('stuck') || !player.canAct || player.isCrossingFooting) {
+  if (!crawlerCanWalk(player)) {
     player.isMoving = false;
     return;
   }
@@ -226,7 +218,7 @@ export function applyMovement(
     dx *= DIAGONAL_PENALTY;
     dy *= DIAGONAL_PENALTY;
   }
-  const speed = PLAYER_SPEED * player.speedMultiplier * footingSpeedFactor(player, gameMap);
+  const speed = crawlerWalkPacePx(player) * footingSpeedFactor(player, gameMap);
   dx *= speed;
   dy *= speed;
 

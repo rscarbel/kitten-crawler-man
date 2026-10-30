@@ -29,7 +29,6 @@ import { type ShownPlacement, stowedAxis, stowedCentre, stowedFlatFacing } from 
 import {
   CHOP_ROWS,
   GROUND_OFFSET_IN_TILE,
-  HUMAN_ROW_TABLE,
   type HumanFigurePainting,
   MINE_ROWS,
   type HumanRowMeta,
@@ -97,9 +96,9 @@ export interface HumanSocketFrames {
 }
 
 /** The figure a socket is read off: its id, for the memo, and how it paints a frame. */
-export interface SocketSource {
+export interface SocketSource<R extends string = HumanRowName> {
   readonly id: string;
-  readonly painting: HumanFigurePainting;
+  readonly painting: HumanFigurePainting<R>;
 }
 
 /** A figure-space point of a look as the cell paints it in a view, the look's own build applied. */
@@ -174,9 +173,9 @@ function handSocket(
 /** The rearmost slab: behind everything he is. */
 export const REARMOST_SOCKET_LAYER: SocketLayer = 0;
 
-function stowedSockets(
-  painting: HumanFigurePainting,
-  row: RowSpec,
+function stowedSockets<R extends string>(
+  painting: HumanFigurePainting<R>,
+  row: RowSpec<R>,
   frame: number,
   hands: BipedHandSockets,
 ): Pick<Record<HumanSocket, SocketFrame>, 'back' | 'hip'> {
@@ -213,7 +212,11 @@ const framesByCell = new Map<string, HumanSocketFrames>();
 const strikeSideByRow = new Map<string, EdgeSide | null>();
 
 /** The haft's angle on screen on one frame of a row, from the hand its item turns in. */
-function haftAngleAt(source: SocketSource, row: RowSpec, frame: number): number {
+function haftAngleAt<R extends string>(
+  source: SocketSource<R>,
+  row: RowSpec<R>,
+  frame: number,
+): number {
   const spec = VIEWS[row.view];
   const hands = paintedHandSockets(source.painting, row, frame);
   const main = drawnSide('right', spec) === 'right' ? hands.right : hands.left;
@@ -227,12 +230,12 @@ function turnBetween(from: number, to: number): number {
 }
 
 /** Tool swings and an armed set's own blows; a bare-handed blow thrown with something in hand does not swing it. */
-const TOOL_SWING_ROWS: ReadonlySet<HumanRowName> = new Set([
+const TOOL_SWING_ROWS: ReadonlySet<string> = new Set<HumanRowName>([
   ...Object.values(CHOP_ROWS),
   ...Object.values(MINE_ROWS),
 ]);
 
-function strikesWithWhatIsHeld(row: RowSpec): boolean {
+function strikesWithWhatIsHeld(row: RowSpec<string>): boolean {
   return row.motionSet !== undefined || TOOL_SWING_ROWS.has(row.name);
 }
 
@@ -242,7 +245,7 @@ function strikesWithWhatIsHeld(row: RowSpec): boolean {
  * wind-up carries the edge trailing and the blow lands edge first, with no
  * roll of the head between frames. Null for a row that strikes nothing.
  */
-function strikeSideOf(source: SocketSource, row: RowSpec): EdgeSide | null {
+function strikeSideOf<R extends string>(source: SocketSource<R>, row: RowSpec<R>): EdgeSide | null {
   const key = `${source.id}:${row.name}`;
   const known = strikeSideByRow.get(key);
   if (known !== undefined) return known;
@@ -264,15 +267,15 @@ function strikeSideOf(source: SocketSource, row: RowSpec): EdgeSide | null {
 }
 
 /** Every socket of `source`'s figure on one frame of one row. */
-export function humanSocketsAt(
-  source: SocketSource,
-  rowName: HumanRowName,
+export function humanSocketsAt<R extends string>(
+  source: SocketSource<R>,
+  rowName: R,
   frame: number,
 ): HumanSocketFrames {
   const key = `${source.id}:${rowName}:${frame}`;
   const known = framesByCell.get(key);
   if (known !== undefined) return known;
-  const row: RowSpec = { name: rowName, ...HUMAN_ROW_TABLE[rowName] };
+  const row = source.painting.rows.spec(rowName);
   const spec = VIEWS[row.view];
   const hands = paintedHandSockets(source.painting, row, frame);
   const axes = playerLookAxes(source.painting.look, spec.profile);

@@ -61,11 +61,7 @@ import {
 } from '../systems/stealthKeySnatch/GoblinPrisonSystem';
 import { partyHoldsPrisonKey } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
 import { detachedPrisonVisit } from '../systems/stealthKeySnatch/prisonVisit';
-import {
-  playPrisonCue,
-  PRISON_MUSIC,
-  prisonCueSound,
-} from '../systems/stealthKeySnatch/prisonSoundCues';
+import { playPrisonCue, PRISON_MUSIC, prisonCueSound } from '../audio/prisonSoundCues';
 import { PARTY_TRAIL_SPACING_TILES } from '../systems/partyTrail';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
@@ -211,7 +207,7 @@ import { prewarmGroups } from '../core/spriteAssets/SpriteLoader';
 import { ArrivalLoader } from './ArrivalLoader';
 import { activeMusicLibrary } from '../core/music/MusicLibrary';
 import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
-import { floorArrivalLoadTasks } from './floorArrivalLoad';
+import { floorArrivalLoadTasks, type ArrivalGroundArt } from './floorArrivalLoad';
 import type { ArrivalLoadingScreen } from '../levels/types';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
@@ -264,16 +260,18 @@ import { ClubWheelSystem } from '../systems/ClubWheelSystem';
 import { POKER_DEV_SEED } from '../systems/casino/poker/npc/personality';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { partyRoutineBodies } from '../systems/occupantRoutines';
-import { OCCUPANT_ROUTINE_CUES } from '../systems/occupantRoutineCues';
+import { OCCUPANT_ROUTINE_CUES } from '../audio/occupantRoutineCues';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
 import {
   type InteriorCue,
-  interiorInteractionClosingCue,
-  interiorInteractionCues,
   playInteriorCue,
   playInteriorCueWhenReady,
+} from '../audio/interiorInteractionSoundCues';
+import {
+  interiorInteractionClosingCue,
+  interiorInteractionCues,
   readableCue,
-} from '../systems/interiorInteractionSoundCues';
+} from '../systems/interiorInteractionCueMap';
 import {
   InteriorPropInteractionSystem,
   TownMemoryInteriorPayoutRecord,
@@ -338,6 +336,7 @@ import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
 import type { Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
 import {
+  buildingEntrySellsSomething,
   interiorKeepsDesk,
   interiorServicesFor,
   type OccupantService,
@@ -385,7 +384,7 @@ import {
   planStarlightTentMaze,
   type StarlightTentMazePlan,
 } from '../map/starlightTentMazeLayout';
-import { STARLIGHT_TENT_AMBIENT_BED } from '../systems/starlightTent/starlightTentSoundCues';
+import { STARLIGHT_TENT_AMBIENT_BED } from '../audio/starlightTentSoundCues';
 import { findPartyArrivalTiles } from '../map/findWalkableTile';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
@@ -436,6 +435,10 @@ import { StarlightTentMazeSystem } from '../systems/StarlightTentMazeSystem';
 import { StarlightTentFinale } from '../systems/starlightTent/StarlightTentFinale';
 import { restartStarlightTent } from '../systems/starlightTent/starlightTentRestart';
 import type { GroundHazardSource } from '../systems/GroundHazardSource';
+import type {
+  InteriorEncounterDialog,
+  InteriorEncounterRequest,
+} from '../systems/InteriorEncounterRequest';
 import { DIFFICULTY_LABELS, type Difficulty } from '../core/difficulty/difficultyProfiles';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
@@ -453,6 +456,12 @@ import {
   shouldShowInteractionPrompts,
 } from '../systems/interactionPromptGate';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import {
+  screenToWorld,
+  screenToWorldView,
+  worldToScreen,
+  type Camera,
+} from '../core/rendering/camera';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
   ClearViewMemo,
@@ -638,9 +647,44 @@ interface InteriorEncounterFixtures {
   readonly exits: InteriorExitFixtureSystem;
 }
 
+/** A room's own ground painter, standing in for the map's tiles: baked on arrival, painted every frame. */
+type EncounterGround = ArrivalGroundArt & {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void;
+};
+
 /** A scripted place that runs inside a building: the Starlight Tent maze, the prison, a sewer section. */
-interface InteriorEncounter {
+interface InteriorEncounter extends Partial<GroundHazardSource> {
   update(ctx: SystemContext): void;
+  /**
+   * What the encounter needs the scene to do since the last drain. Drained every
+   * frame, the frames its own conversation holds the room included.
+   */
+  drainRequests?(): readonly InteriorEncounterRequest[];
+  /**
+   * A conversation the encounter runs on the shared box. While it is open the
+   * scene halts the room and ticks only the encounter, which keeps its own
+   * clock still behind the box.
+   */
+  readonly dialog?: InteriorEncounterDialog;
+  /** The encounter's own ground, painted in place of the map's tiles. */
+  readonly ground?: EncounterGround;
+  /** The room refuses the follow command while this is true. */
+  readonly followDisabled?: boolean;
+  /**
+   * Where a crawler the player just stopped steering is parked, so an anchor is
+   * never left on ground about to burn. Unset, they are parked where they stand.
+   */
+  restingSpotFor?(entity: Player): { x: number; y: number };
+  /**
+   * Hints and prompts the encounter raises over the party that no interact press
+   * is routed to, drawn after its effects and outside the scene's focused prompt.
+   */
+  renderPrompts?(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    frame: SystemContext,
+  ): void;
   /** An interact press the encounter's own fittings take, ahead of the room's; true when one did. */
   tryInteract?(ctx: SystemContext): boolean;
   /** The prompts and progress bars over the encounter's fittings, drawn over the room's darkness. */
@@ -659,17 +703,17 @@ interface InteriorEncounter {
    * rather than to any creature in it, drawn under the figures so a crawler
    * crossing the room passes in front of them.
    */
-  renderWorld?(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void;
+  renderWorld?(ctx: CanvasRenderingContext2D, camera: Camera, active: Player): void;
   /**
    * World-space hazards the encounter owns, drawn *after* the sorted pass — a
    * wall of fire is something a crawler stands inside, not behind.
    */
-  renderEffects?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderEffects?(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /**
    * A room's own darkness, drawn straight after the sorted pass and before
    * every shot, blast and spell, so those keep their own light over it.
    */
-  renderDarkness?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderDarkness?(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /**
    * The party has walked off the storey this encounter lives on. Anything the
    * encounter is holding that only its own update can release — a scripted
@@ -702,7 +746,7 @@ interface InteriorEncounter {
    */
   readonly keepsRoomFittings?: true;
   /** Things the encounter draws in the room's depth-sorted pass, among the bodies and the furniture. */
-  roomFigures?(): InteriorFigure[];
+  roomFigures?(camera: Camera): readonly InteriorFigure[];
   /** Placed props the encounter draws itself this frame, or that no longer stand where they were placed. */
   hiddenProps?(): ReadonlySet<string>;
 }
@@ -1038,24 +1082,10 @@ export class BuildingInteriorScene extends GameplayScene {
   /** The quest fight running in this building, if any, and the floor it holds. */
   private encounter: InteriorEncounter | null = null;
   private encounterFloor: EncounterStoreys = 0;
-  /**
-   * The Starlight Tent's trap maze, held by its own type as well as by `encounter`.
-   *
-   * It has a conversation in it, and more besides — a camera the script takes over, a follow command it refuses, and a door it
-   * sends the party out through — so the conversation's hooks, the Space chain
-   * and the render pass all ask it questions no other encounter answers.
-   */
-  private starlightTentMaze: StarlightTentMazeSystem | null = null;
   /** The tent's record; a room built with no overworld behind it keeps a private one. */
   private readonly starlightTentProgress: StarlightTentProgress;
   /** The prison's key, its guidance and its explainer; null in every other building. */
   private prisonKey: PrisonKeySystem | null = null;
-  /**
-   * The prison's patrols, lights, captures and cells, held by its own type as
-   * well as by `encounter`: its ground replaces the map's tiles, its doors
-   * answer Space, and its captures own the party. Null in every other building.
-   */
-  private prison: GoblinPrisonSystem | null = null;
   /**
    * The hireling waits outside this building (the prison's rules), so the
    * hire on the roster is never stood up indoors. Deinonychus is kept out by the
@@ -1063,12 +1093,13 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private readonly companionsWaitOutside: boolean;
   /**
-   * The maze's hazards as the companion and the mob tactics see them, through
-   * whichever tent is standing: registered once, because a restarted tent is a
-   * new system and neither list can be told to forget the old one.
+   * The encounter's hazards as the companion and the mob tactics see them,
+   * through whichever encounter is standing on the party's storey. One proxy
+   * rather than the encounter itself, because a restarted encounter is a new
+   * system and neither list can be told to forget the old one.
    */
-  private readonly starlightTentHazards: GroundHazardSource = {
-    getHazardEscapeVector: (x, y) => this.starlightTentMaze?.getHazardEscapeVector(x, y) ?? null,
+  private readonly encounterHazards: GroundHazardSource = {
+    getHazardEscapeVector: (x, y) => this.activeEncounter?.getHazardEscapeVector?.(x, y) ?? null,
   };
   // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
   private readonly occupants: InteriorOccupantSystem | null;
@@ -1326,7 +1357,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // what no live scope declares is released as the floor's scene exits.
     void this.audioScope?.preload([
       ...sfxGroupsForLevelId(floor.levelId),
-      ...sfxGroupsForBuildingEntry(entry),
+      ...sfxGroupsForBuildingEntry(entry, { sellsSomething: buildingEntrySellsSomething(entry) }),
     ]);
     void this.audioScope?.keepCompressed(compressedSfxForLevelId(floor.levelId));
     this.abilityManager = abilityManager ?? new AbilityManager();
@@ -1547,7 +1578,7 @@ export class BuildingInteriorScene extends GameplayScene {
               safeRooms: this.safeRoom,
               conversation: this.conversation,
               whereabouts: partyRun.daveWhereabouts,
-              camera: () => this.computeCamera(this.map),
+              camera: () => this.frameCamera(this.map),
               audio: this.audio,
               onArrived: (room) => {
                 this.daveArrivalOwed = room.id;
@@ -1606,10 +1637,8 @@ export class BuildingInteriorScene extends GameplayScene {
         link: floor.stealthKeySnatch ?? detachedPrisonVisit(),
         audio: this.audio,
         toast: (text, opts) => this.menus.toasts.post(text, opts),
-        worldToScreen: (worldX, worldY) => {
-          const cam = this.computeCamera(this.map);
-          return { x: worldX - cam.x, y: worldY - cam.y };
-        },
+        worldToScreen: (worldX, worldY) =>
+          worldToScreen(this.frameCamera(this.map), worldX, worldY),
       });
     }
 
@@ -1770,10 +1799,10 @@ export class BuildingInteriorScene extends GameplayScene {
       floor.combat.gear.onRelicKill = (kind) => this.awards.recordRelicKill(kind);
       floor.destruction.loot.onCredited = (loot) => this.flyLootReward(floor, loot);
       floor.destruction.groundPickups.onCollected = (itemId, quantity, worldX, worldY) => {
-        const cam = this.computeCamera(floor.world.gameMap);
+        const screen = worldToScreen(this.frameCamera(floor.world.gameMap), worldX, worldY);
         const name = ITEM_DEF[itemId].name;
         for (let i = 0; i < quantity; i++) {
-          this.rewardFly.enqueueItem(itemId, name, worldX - cam.x, worldY - cam.y);
+          this.rewardFly.enqueueItem(itemId, name, screen.x, screen.y);
         }
       };
     }
@@ -1886,9 +1915,9 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio,
     );
     const flyGrantedItem = (id: ItemId, quantity: number, worldX: number, worldY: number): void => {
-      const cam = this.computeCamera(ground.gameMap);
+      const screen = worldToScreen(this.frameCamera(ground.gameMap), worldX, worldY);
       for (let i = 0; i < quantity; i++) {
-        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, screen.x, screen.y);
       }
     };
     if (this.anchorInterior !== null) this.anchorInterior.onItemGranted = flyGrantedItem;
@@ -1925,8 +1954,8 @@ export class BuildingInteriorScene extends GameplayScene {
       audio: this.audio,
       conversation: this.conversation,
       flyCoins: (coins, worldX, worldY) => {
-        const cam = this.computeCamera(ground.gameMap);
-        this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+        const screen = worldToScreen(this.frameCamera(ground.gameMap), worldX, worldY);
+        this.rewardFly.enqueueCoins(coins, screen.x, screen.y);
       },
       speechStyleOf: (residentId) =>
         this.occupants?.people.find((person) => person.residentId === residentId)?.speechStyle ??
@@ -2094,8 +2123,8 @@ export class BuildingInteriorScene extends GameplayScene {
       safeRoom !== null &&
       (safeRoom.safeRoomAt(this.active()) ?? this.presentPartnerSafeRoom(safeRoom)) !== null;
     if (this.dave !== null && arrivesInSafeRoom) prewarmDaveSprite();
-    const arrivalCamera = this.computeCamera(this.map);
-    this.doctor?.prewarmInView(arrivalCamera.x, arrivalCamera.y);
+    const arrivalCamera = this.frameCamera(this.map);
+    this.doctor?.prewarmInView(arrivalCamera);
     // After everything that warms figures or queues art — the occupants, the
     // party, the companions — so the loader measures what this room really owes.
     this.arrivalLoading.begin({
@@ -2106,9 +2135,12 @@ export class BuildingInteriorScene extends GameplayScene {
       returning: false,
       tasks: () =>
         floorArrivalLoadTasks({
-          gameMap: this.prison?.ground ?? this.map,
-          camera: () => this.computeCamera(this.map),
-          viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
+          gameMap: this.activeEncounter?.ground ?? this.map,
+          camera: () => this.frameCamera(this.map),
+          viewport: () => {
+            const camera = this.frameCamera(this.map);
+            return { width: camera.viewWidth, height: camera.viewHeight };
+          },
           spriteGroupsReady,
         }),
     });
@@ -2297,12 +2329,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** From a ground pile's world position on `floor`, to wherever the HUD's coin/bag targets sit this frame. */
   private flyLootReward(floor: InteriorFloor, loot: PendingLoot): void {
-    const cam = this.computeCamera(floor.world.gameMap);
-    const screenX = loot.x - cam.x;
-    const screenY = loot.y - cam.y;
-    this.rewardFly.enqueueCoins(loot.loot.coins, screenX, screenY);
+    const screen = worldToScreen(this.frameCamera(floor.world.gameMap), loot.x, loot.y);
+    this.rewardFly.enqueueCoins(loot.loot.coins, screen.x, screen.y);
     for (const item of loot.loot.items) {
-      this.rewardFly.enqueueItem(item.id, ITEM_DEF[item.id].name, screenX, screenY);
+      this.rewardFly.enqueueItem(item.id, ITEM_DEF[item.id].name, screen.x, screen.y);
     }
   }
 
@@ -2459,15 +2489,6 @@ export class BuildingInteriorScene extends GameplayScene {
       this.townMemory.visitedPlaces.add('starlight_tent');
       this.raiseStarlightTentMaze(plan, null);
       this.parkBothInTheMaze();
-      // The maze's fire is ground the companion has to be steered out of, the
-      // same as a gas cloud or a boss's puddle.
-      //
-      // Registered once, which is only safe because the Starlight Tent is a single
-      // storey: a storey change clears the companion's hazard list, and an
-      // encounter in a building with stairs has to re-register from its own
-      // update the way the tower's Lich fight does.
-      this.companion.registerHazardSource(this.starlightTentHazards);
-      this.combat.mobLoop.registerHazardSource(this.starlightTentHazards);
     }
   }
 
@@ -2486,7 +2507,6 @@ export class BuildingInteriorScene extends GameplayScene {
         triggerPlayerAttack(this.human, this.cat, this.world.roster.grid, this.map, this.audio),
     });
     this.startEncounter(GROUND_FLOOR_INDEX, () => prison);
-    this.prison = prison;
     // Guards don't search you: a capture with the key in hand keeps it, and says so.
     prison.onCapture((capture) => {
       if (partyHoldsPrisonKey(this.pm)) capture.toast = CAPTURE_WITH_KEY_TOAST;
@@ -2583,18 +2603,18 @@ export class BuildingInteriorScene extends GameplayScene {
           progress: this.starlightTentProgress,
           partyLevel: this.partyLevel,
         });
-      return new StarlightTentMazeSystem(
+      const tent: StarlightTentMazeSystem = new StarlightTentMazeSystem(
         this.map,
         addMob,
         this.starlightTentProgress,
         this.audioScope,
         this.conversation,
         plan,
-        (next) => this.restartStarlightTentMaze(next),
+        (next) => this.restartStarlightTentMaze(tent, next),
         ring,
       );
+      return tent;
     });
-    this.starlightTentMaze = maze;
     // Baked while the door is still loading, not on the fire walk's first frame.
     maze.lighting.prewarm();
     return maze;
@@ -2617,15 +2637,13 @@ export class BuildingInteriorScene extends GameplayScene {
    * room on the same map and puts the party at the flaps; around it the scene
    * closes its menu and settles what only it owns.
    */
-  private restartStarlightTentMaze(next: Difficulty): void {
-    const old = this.starlightTentMaze;
+  private restartStarlightTentMaze(old: StarlightTentMazeSystem, next: Difficulty): void {
+    if (this.encounter !== old) return;
     const worldSeed = this.overworld?.worldSeed ?? DETACHED_ROOM_WORLD_SEED;
-    if (old === null) return;
     this.pauseScreen.close();
     // The same as closing it with Escape: a key still held from the menu must
     // not walk a crawler off the flap the moment the show starts again.
     this.input.clear();
-    this.starlightTentMaze = null;
     this.encounter = null;
     restartStarlightTent(
       old,
@@ -2827,12 +2845,19 @@ export class BuildingInteriorScene extends GameplayScene {
     const floor = storeys === 'every_storey' ? this.currentFloor : storeys;
     const { world, chests, exits } = this.floors[floor];
     this.encounterFloor = storeys;
+    this.registerEncounterHazards(floor);
     const encounter = makeEncounter(this.bus, (mob) => world.roster.add(mob), {
       chests: chestPlacer(chests, world.gameMap),
       exits,
     });
     this.encounter = encounter;
     return encounter;
+  }
+
+  /** Registering twice is a no-op, so this is safe on every storey change and every restart. */
+  private registerEncounterHazards(storey: number): void {
+    this.companion.registerHazardSource(this.encounterHazards);
+    this.floors[storey].combat.mobLoop.registerHazardSource(this.encounterHazards);
   }
 
   /**
@@ -2894,6 +2919,9 @@ export class BuildingInteriorScene extends GameplayScene {
     // and its leash both read the landing they actually arrived on rather than
     // the storey they left.
     this.companion.setMap(this.map, this.human, this.cat);
+    // The storey change cleared the companion's hazards, and this storey's mob
+    // loop has never been told about the encounter's.
+    this.registerEncounterHazards(newFloor);
     // After the crawlers are placed, since each companion lands beside the one
     // it follows. The departing storey's roster is not ticked while the party is
     // elsewhere, so a companion left in it would stand frozen until they return.
@@ -3281,7 +3309,6 @@ export class BuildingInteriorScene extends GameplayScene {
       }),
     ];
     if (this.prisonKey !== null) surfaces.push(...this.prisonKey.surfaces());
-    if (this.prison !== null) surfaces.push(this.prison.fadeSurface());
     surfaces.push(...(this.encounter?.surfaces?.() ?? []));
     if (this.servicePanel !== null) {
       surfaces.push(
@@ -3336,8 +3363,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private conversationEscape(): (() => void) | null {
     const doctor = this.doctor;
     if (doctor?.isDialogOpen === true) return () => void doctor.dismissDialog();
-    const maze = this.starlightTentMaze;
-    if (maze?.isDialogOpen === true) return () => void maze.dismissDialog();
+    const encounterDialog = this.activeEncounter?.dialog;
+    if (encounterDialog?.isOpen() === true) return () => void encounterDialog.dismiss();
     const questHook = this.openResidentQuestHook();
     if (questHook !== null) return () => void questHook.dismissDialog();
     const contractContact = this.contractContact;
@@ -3381,15 +3408,13 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Whether this room refuses the follow command outright.
-   *
-   * The Starlight Tent's maze does: it is two people solving one room from opposite
-   * sides, and a companion trailing the active crawler would walk into a
-   * corridor nobody is steering them through. So does the prison, whose
-   * follower walks the leader's own trail and takes no orders at all.
+   * Whether this room refuses the follow command outright: an encounter can say
+   * so (the Starlight Tent's maze is two people solving one room from opposite
+   * sides), and so does a follower walking the leader's own trail, as in the
+   * prison, which takes no orders at all.
    */
   private get followDisabled(): boolean {
-    return this.starlightTentMaze?.followDisabled === true || this.companion.followTrail !== null;
+    return this.activeEncounter?.followDisabled === true || this.companion.followTrail !== null;
   }
 
   /** Hook the shared follower menu to the companion's commands (same set as the overworld). */
@@ -3545,11 +3570,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * swap bodies mid-slide, out from under the code writing their positions.
    */
   private get scriptOwnsParty(): boolean {
-    return (
-      this.cutscenes.isActive ||
-      this.prison?.playerLocked === true ||
-      this.activeEncounter?.playerLocked === true
-    );
+    return this.cutscenes.isActive || this.activeEncounter?.playerLocked === true;
   }
 
   private presentPartnerSafeRoom(safeRoom: SafeRoomSystem): SafeRoomId | null {
@@ -3591,7 +3612,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Parked where they stand, unless the room says that spot is about to be on
     // fire — an anchor inside a trap corridor is a crawler walking back into it
     // every time the follow drive goes out.
-    const restingSpot = this.starlightTentMaze?.restingSpotFor(parked) ?? parked;
+    const restingSpot = this.activeEncounter?.restingSpotFor?.(parked) ?? parked;
     this.companion.notifyBecameCompanion(restingSpot, wasHumanActive);
     this.human.autoTarget = null;
     this.cat.autoTarget = null;
@@ -3778,15 +3799,16 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.tickOpenModals(this.active(), this.partnerAnywhere());
       return;
     }
-    if (this.starlightTentMaze?.isDialogOpen === true) {
-      // Ticked rather than merely halted: the stage lights keep coming up and
-      // the banners keep running under an act card, and the maze holds its own
-      // hazards still while the box is up.
-      this.starlightTentMaze.update(this.buildSystemContext());
-      // And its cues are drained here rather than left for the frame the box
-      // closes: a barrier that opened on the same frame a reset notice came up
-      // would otherwise be heard several seconds later, over nothing.
-      this.drainMazeQueues();
+    const dialogEncounter = this.activeEncounter;
+    if (dialogEncounter?.dialog?.isOpen() === true) {
+      // Ticked rather than merely halted: the Starlight Tent's stage lights keep
+      // coming up and its banners keep running under an act card, and the
+      // encounter holds its own hazards still while the box is up.
+      dialogEncounter.update(this.buildSystemContext());
+      // And its requests are drained here rather than left for the frame the
+      // box closes: a barrier that opened on the same frame a reset notice came
+      // up would otherwise be heard several seconds later, over nothing.
+      this.drainEncounterRequests();
       return;
     }
     // Space and Escape reach this conversation through its surface on the key
@@ -3827,7 +3849,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.touch.moveTarget,
         this.touch.tapStart,
         player,
-        this.computeCamera(this.map),
+        this.frameCamera(this.map),
       );
       applyMovement(player, move, this.map, 'sole');
     }
@@ -3893,12 +3915,6 @@ export class BuildingInteriorScene extends GameplayScene {
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
     if (this.club !== null && interactPressed() && this.club.handleInteract(player)) {
-      keybindings.release(this.input, 'attack');
-    }
-
-    // A crawler in a holding cell breaks its door with one press from
-    // anywhere in the cell: the press is the swing, aimed at the door.
-    if (interactPressed() && this.prison?.tryInteract(this.buildSystemContext()) === true) {
       keybindings.release(this.input, 'attack');
     }
 
@@ -4015,33 +4031,67 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * The tent's own cues, played in the order its script raised them, and any
-   * coins it owes.
+   * Carries out what the encounter asked for, in the order it asked.
    *
-   * Drained whether or not there is anything to play it on. A muted run — the
+   * Drained whether or not there is anything to play a cue on. A muted run — the
    * headless gate is one — still raises a cue every time a vent lights, and a
    * queue nobody empties grows for the length of the session.
    */
-  private drainMazeQueues(): void {
-    const maze = this.starlightTentMaze;
-    if (maze === null) return;
-    const audio = this.audio;
-    for (const cue of maze.drainSounds()) {
-      audio?.play(cue.id, cue.volume === undefined ? undefined : { volume: cue.volume });
+  private drainEncounterRequests(): void {
+    for (const request of this.activeEncounter?.drainRequests?.() ?? []) {
+      this.carryOutEncounterRequest(request);
     }
-    // The encore's coins are the human crawler's: the pivots that aim the light are his.
-    // Dropped rather than credited, so they fall from the star and land first.
-    for (const reward of maze.drainRewards()) {
-      this.destruction.loot.addLoot(
-        reward.tile.x * TILE_SIZE,
-        reward.tile.y * TILE_SIZE,
-        { coins: reward.coins, items: [] },
-        this.human,
-        false,
-        false,
-        true,
-      );
+  }
+
+  private carryOutEncounterRequest(request: InteriorEncounterRequest): void {
+    switch (request.kind) {
+      case 'party_reset':
+        this.regroupAfterEncounterReset();
+        return;
+      case 'party_release':
+        this.companion.followBoth();
+        return;
+      case 'sound':
+        this.audio?.play(
+          request.id,
+          request.volume === undefined ? undefined : { volume: request.volume },
+        );
+        return;
+      case 'coin_drop':
+        // Dropped rather than credited, so they fall and land before collection.
+        this.destruction.loot.addLoot(
+          request.tile.x * TILE_SIZE,
+          request.tile.y * TILE_SIZE,
+          { coins: request.coins, items: [] },
+          this.human,
+          false,
+          false,
+          true,
+        );
+        return;
+      default: {
+        const unhandled: never = request;
+        return unhandled;
+      }
     }
+  }
+
+  /**
+   * The encounter moved both crawlers itself, but the anchors are the scene's
+   * to fix: an anchored companion still pointing where they stood walks
+   * straight back into whatever just sent them back.
+   */
+  private regroupAfterEncounterReset(): void {
+    this.companion.anchorBoth(this.human, this.cat);
+    // Companions go back with the crawlers: a pet left mid-crossing is on the
+    // far side of a curtain the party has just been sent back behind.
+    carryCompanions(this.carriedCompanions(), this.world.roster, this.world.roster, this.map);
+    // The party is no longer standing where the offer was made. A burnout can
+    // land on the same frame the active crawler steps onto an exit mat — the
+    // parked one is what burned — and the menu that opened would then be a
+    // question about a doorway two tiles from anybody, stacked over the box
+    // explaining why they moved.
+    this.exitMenuOpen = false;
   }
 
   /**
@@ -4060,9 +4110,10 @@ export class BuildingInteriorScene extends GameplayScene {
    * companion's boss-room veto answers "no room, no veto" — which is right,
    * since a quest fight indoors only exists once it has started.
    */
-  private buildSystemContext(): SystemContext {
+  private buildSystemContext(camera: Camera = this.frameCamera(this.map)): SystemContext {
     const active = this.active();
     return {
+      camera,
       human: this.human,
       cat: this.cat,
       active,
@@ -4092,12 +4143,9 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     combat.updatePlayerAttacks();
+    const hotbarBandWorldPx = this.viewportBottomInset() / ctx.camera.zoom;
     setVisibleWorldView(
-      cameraWorldView(
-        this.computeCamera(this.map),
-        null,
-        viewportHeight() - this.viewportBottomInset(),
-      ),
+      cameraWorldView(ctx.camera, null, ctx.camera.viewHeight - hotbarBandWorldPx),
     );
     combat.updateMobs(ctx);
     // A quest fight's own shots and hazards run on the hostile world's clock,
@@ -4112,30 +4160,9 @@ export class BuildingInteriorScene extends GameplayScene {
       calm: !this.ui.worldHalted() && !this.conversation.isOpen && !this.scriptOwnsParty,
       nowMs: performance.now(),
     });
-    // Beside the update that sets it, and ahead of next frame's companion pass:
-    // a burnout moves both crawlers itself, but the anchors are the scene's to
-    // fix, and an anchored companion still pointing at a corridor walks straight
-    // back into the fire that just took them.
-    if (this.starlightTentMaze?.partyResetPending === true) {
-      this.starlightTentMaze.partyResetPending = false;
-      this.companion.anchorBoth(this.human, this.cat);
-      // Companions go back with the crawlers: a pet left mid-crossing is on the
-      // far side of a curtain the party has just been sent back behind.
-      carryCompanions(this.carriedCompanions(), this.world.roster, this.world.roster, this.map);
-      // The party is no longer standing where the offer was made. A burnout can
-      // land on the same frame the active crawler steps onto an exit mat — the
-      // parked one is what burned — and the menu that opened would then be a
-      // question about a doorway two tiles from anybody, stacked over the box
-      // explaining why they moved.
-      this.exitMenuOpen = false;
-    }
-    // The acts park both crawlers; the ring is one fight the party takes
-    // together, and a restart parks them again through `parkBothInTheMaze`.
-    if (this.starlightTentMaze?.partyReleasePending === true) {
-      this.starlightTentMaze.partyReleasePending = false;
-      this.companion.followBoth();
-    }
-    this.drainMazeQueues();
+    // Beside the update that raises them, and ahead of next frame's companion
+    // pass, so a re-anchor lands before the follow drive reads the old anchors.
+    this.drainEncounterRequests();
     combat.drainMobAudioCues(this.audio);
 
     this.interiorPropDestruction?.setActivePlayer(active);
@@ -4355,12 +4382,12 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /** The way out on the floor, led from the active crawler's feet, under every body, alongside the arrow. */
-  private renderExitRouteTrail(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderExitRouteTrail(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!settings.questRouteTrail || !this.showsExitRoute()) return;
     const active = this.active();
     const shape = this.exitRoute.trailShape(crawlerGroundPoint(active));
-    this.exitRouteTrail.paint(ctx, shape, camX, camY, performance.now(), {
-      view: { width: viewportWidth(), height: viewportHeight() },
+    this.exitRouteTrail.paint(ctx, shape, camera.x, camera.y, performance.now(), {
+      view: { width: camera.viewWidth, height: camera.viewHeight },
       body: crawlerSpriteBox(active),
     });
   }
@@ -5560,20 +5587,15 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private renderSortedEntities(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     entities: ReadonlyArray<InteriorFigure>,
   ): void {
+    const { x: camX, y: camY } = camera;
     const drawables: Array<{ sortY: number; draw: () => void }> = entities.map((entity) => ({
       sortY: (entity.depthY ?? entity.y) + TILE_SIZE,
       draw: () => entity.render(ctx, camX, camY, TILE_SIZE),
     }));
-    for (const deco of this.map.getVisibleDecorationTiles(
-      camX,
-      camY,
-      viewportWidth(),
-      viewportHeight(),
-    )) {
+    for (const deco of this.map.getVisibleDecorationTiles(camera)) {
       drawables.push({
         sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx,
         draw: () => this.map.drawDecorationAt(ctx, deco.tx, deco.ty, camX, camY),
@@ -5658,7 +5680,8 @@ export class BuildingInteriorScene extends GameplayScene {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (this.arrivalLoading.renderLoading(this.ui, ctx)) return;
-    const { x: camX, y: camY } = this.computeCamera(this.map);
+    const camera = this.frameCamera(this.map);
+    const { x: camX, y: camY } = camera;
 
     // Any overlay at all, not only the world-halting ones: a shop-floor
     // conversation leaves the player free to walk, and the prompt that opened it
@@ -5670,11 +5693,12 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.fillStyle = worldPalette.shade;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
-    if (this.prison === null) {
-      this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
+    const encounterGround = this.activeEncounter?.ground;
+    if (encounterGround === undefined) {
+      this.map.renderCanvas(ctx, camera);
     } else {
       this.map.beginTileArtFrame();
-      this.prison.renderGround(ctx, camX, camY);
+      encounterGround.renderGround(ctx, camera);
     }
     const hiddenProps = this.hiddenInteriorProps();
     drawTownInteriorGroundProps(ctx, this.map, camX, camY, TILE_SIZE, hiddenProps);
@@ -5700,10 +5724,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
     const combat = this.combat;
     const destruction = this.destruction;
-    destruction.renderGround(ctx, camX, camY);
+    destruction.renderGround(ctx, camera);
     this.interiorPropDestruction?.renderGround(ctx, camX, camY);
-    this.contractSite?.renderGround(ctx, camX, camY, this.active());
-    combat.renderGround(ctx, camX, camY);
+    this.contractSite?.renderGround(ctx, camera, this.active());
+    combat.renderGround(ctx, camera);
     this.fairies.renderGround(ctx, camX, camY);
     // Under the figures: the highlight rings sit on the floor around the broken
     // furniture, and a crawler standing at one must not be drawn beneath it.
@@ -5711,21 +5735,21 @@ export class BuildingInteriorScene extends GameplayScene {
     raisePromptsFor(this.promptOwners.missingCats, () =>
       this.missingCatsInterior?.renderObjects(ctx, camX, camY, this.active()),
     );
-    this.activeEncounter?.renderWorld?.(ctx, camX, camY, this.active());
-    this.renderExitRouteTrail(ctx, camX, camY);
+    this.activeEncounter?.renderWorld?.(ctx, camera, this.active());
+    this.renderExitRouteTrail(ctx, camera);
     this.mechanisms.renderGround(ctx, camX, camY);
     if (!this.senses.isEmpty) {
       const senseView = {
         camX,
         camY,
-        width: viewportWidth(),
-        height: viewportHeight(),
+        width: camera.viewWidth,
+        height: camera.viewHeight,
         nowMs: performance.now(),
       };
       this.senses.paint(ctx, senseView);
       this.catSenseCue.paint(ctx, this.cat, senseView);
     }
-    this.renderSortedEntities(ctx, camX, camY, [
+    this.renderSortedEntities(ctx, camera, [
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
       ...this.world.roster.mobs.filter(
@@ -5742,7 +5766,7 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.occupants?.sortedFigures() ?? []),
       ...(this.missingCatsInterior?.sortedFigures() ?? []),
       ...safeRoomFigures,
-      ...(this.doctor?.sortedFigures(camX, camY) ?? []),
+      ...(this.doctor?.sortedFigures(camera) ?? []),
       ...(this.club?.sortedRenderables() ?? []),
       ...townInteriorPropFigures(this.map, hiddenProps),
       ...this.mechanisms.sortedFigures(),
@@ -5750,13 +5774,11 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.contractSite?.sortedFigures() ?? []),
       ...destruction.groundPickups.renderEntities(),
       ...this.chests.sortedFigures(this.active()),
-      ...(this.starlightTentMaze?.sortedFigures() ?? []),
-      ...(this.activeEncounter?.roomFigures?.() ?? []),
       ...(this.prisonKey === null ? [] : [this.prisonKey.sortedFigure()]),
-      ...(this.prison?.sortedFigures(camX, camY) ?? []),
+      ...(this.activeEncounter?.roomFigures?.(camera) ?? []),
     ]);
-    this.activeEncounter?.renderDarkness?.(ctx, camX, camY);
-    combat.renderEffects(ctx, camX, camY, this.cat);
+    this.activeEncounter?.renderDarkness?.(ctx, camera);
+    combat.renderEffects(ctx, camera, this.cat);
     // Over the creatures, so a shot never disappears behind the one it passes.
     this.skeletonShots.render(ctx, camX, camY);
     this.rockThrows.render(ctx, camX, camY);
@@ -5764,15 +5786,15 @@ export class BuildingInteriorScene extends GameplayScene {
     this.fairies.render(ctx, camX, camY);
     destruction.renderEffects(ctx, camX, camY);
     this.interiorPropDestruction?.renderEffects(ctx, camX, camY);
-    this.contractSite?.renderAbove(ctx, camX, camY);
+    this.contractSite?.renderAbove(ctx, camera);
     // Over the crawlers, so a column standing between the camera and one of them
     // still reads as fire they are inside rather than fire they are behind.
     // Through `activeEncounter` rather than named directly, so an encounter's
     // hazards are gated on its own storey the way its ground paint already is —
     // otherwise a party that walks downstairs mid-fight watches the fire keep
     // burning over the room below at the floor above's coordinates.
-    this.activeEncounter?.renderEffects?.(ctx, camX, camY);
-    this.starlightTentMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
+    this.activeEncounter?.renderEffects?.(ctx, camera);
+    this.activeEncounter?.renderPrompts?.(ctx, camX, camY, this.buildSystemContext(camera));
     const owners = this.promptOwners;
     raisePromptsFor(owners.encounter, () =>
       this.activeEncounter?.renderInteractionPrompts?.(ctx, camX, camY, this.active()),
@@ -5786,7 +5808,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.exitFixtures.renderPrompt(ctx, camX, camY, this.active()),
       );
     }
-    this.prisonKey?.renderOverDarkness(ctx, camX, camY, this.active());
+    this.prisonKey?.renderOverDarkness(ctx, camera, this.active());
     destruction.renderLoot(ctx, camX, camY, this.active());
     if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
       raisePromptsFor(owners.groundPickup, () =>
@@ -5821,8 +5843,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!this.gameOver && !this.pauseScreen.isOpen) {
       this.deinonychusSystem.renderOffscreenMarker(
         ctx,
-        camX,
-        camY,
+        camera,
         this.active(),
         this.floor.sightRadiusPx,
       );
@@ -5837,15 +5858,13 @@ export class BuildingInteriorScene extends GameplayScene {
           : null,
         this.mercenarySystem.downedArrowCandidate(
           ctx,
-          camX,
-          camY,
+          camera,
           this.active(),
           this.floor.sightRadiusPx,
         ),
         this.attackCowSystem.downedArrowCandidate(
           ctx,
-          camX,
-          camY,
+          camera,
           this.active(),
           this.floor.sightRadiusPx,
         ),
@@ -5904,7 +5923,7 @@ export class BuildingInteriorScene extends GameplayScene {
       !this.pauseScreen.isOpen &&
       !this.ui.pointerOverUi();
     if (showTooltip) {
-      renderEntityTooltip(ctx, camX, camY, mouse.x, mouse.y, this.world.roster.grid);
+      renderEntityTooltip(ctx, camera, mouse.x, mouse.y, this.world.roster.grid);
     }
 
     // Flies over every dialog, same as DungeonScene: it's reporting a grant
@@ -6227,21 +6246,23 @@ export class BuildingInteriorScene extends GameplayScene {
       !this.conversation.isOpen &&
       !this.scriptOwnsParty;
     if (!tapIsForTheWorld) return false;
-    const { x: camX, y: camY } = this.computeCamera(this.map);
-    return throwReadiedDynamiteAt(this.hotbarHost(), screenX + camX, screenY + camY);
+    const target = screenToWorld(this.frameCamera(this.map), screenX, screenY);
+    return throwReadiedDynamiteAt(this.hotbarHost(), target.x, target.y);
   }
 
   private collectLootAt(screenX: number, screenY: number): void {
-    const { x: camX, y: camY } = this.computeCamera(this.map);
+    const camera = this.frameCamera(this.map);
+    const tapped = screenToWorldView(camera, screenX, screenY);
     const collected = this.destruction.loot.tryCollectLootAt(
-      screenX,
-      screenY,
-      camX,
-      camY,
+      tapped.x,
+      tapped.y,
+      camera.x,
+      camera.y,
       this.active(),
       this.partnerAnywhere(),
     );
-    if (!collected) this.chests.tryInteractAt(screenX, screenY, camX, camY, this.active());
+    if (!collected)
+      this.chests.tryInteractAt(tapped.x, tapped.y, camera.x, camera.y, this.active());
   }
 
   /** A chest or an exit fixture in reach of `player` takes the press. */
@@ -6345,13 +6366,8 @@ export class BuildingInteriorScene extends GameplayScene {
   ): boolean {
     const site = this.contractSite;
     if (site === null || hostileWithinAttackRange(active, this.world.roster.grid)) return false;
-    const cam = this.computeCamera(this.map);
-    return site.handleTap(
-      tapScreenX + cam.x,
-      tapScreenY + cam.y,
-      active,
-      this.occupantTalkTiles(active),
-    );
+    const tap = screenToWorld(this.frameCamera(this.map), tapScreenX, tapScreenY);
+    return site.handleTap(tap.x, tap.y, active, this.occupantTalkTiles(active));
   }
 
   /** How far the occupant a press would talk to stands, in tiles; null when nobody would answer. */
@@ -6388,9 +6404,9 @@ export class BuildingInteriorScene extends GameplayScene {
     tapScreenX: number,
     tapScreenY: number,
   ): void {
-    const cam = this.computeCamera(this.map);
-    const dx = tapScreenX + cam.x - (active.x + TILE_SIZE * TILE_CENTER_RATIO);
-    const dy = tapScreenY + cam.y - (active.y + TILE_SIZE * TILE_CENTER_RATIO);
+    const tap = screenToWorld(this.frameCamera(this.map), tapScreenX, tapScreenY);
+    const dx = tap.x - (active.x + TILE_SIZE * TILE_CENTER_RATIO);
+    const dy = tap.y - (active.y + TILE_SIZE * TILE_CENTER_RATIO);
     const distance = Math.hypot(dx, dy);
     if (distance > 0) {
       active.facingX = dx / distance;

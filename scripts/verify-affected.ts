@@ -19,6 +19,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
+import { CHILD_BUDGET_ENV } from './childUnits.js';
 import { relative, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { lastDuration } from './gateRunner.js';
@@ -114,7 +115,10 @@ async function importGraphs(entryFiles: readonly string[]): Promise<Map<string, 
 function runGate(name: string): Promise<{ name: string; ok: boolean; text: string }> {
   return new Promise((done) => {
     const chunks: Buffer[] = [];
-    const child = spawn('npm', ['run', '-s', name], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('npm', ['run', '-s', name], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, [CHILD_BUDGET_ENV]: String(childBudgetPerGate) },
+    });
     child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
     child.stderr.on('data', (chunk: Buffer) => chunks.push(chunk));
     child.on('close', (code) => {
@@ -123,9 +127,17 @@ function runGate(name: string): Promise<{ name: string; ok: boolean; text: strin
   });
 }
 
+const gateWorkers = Math.max(1, Math.floor(availableParallelism() / CPU_SHARE_FOR_GATES));
+/**
+ * How many children a gate that splits its work may run at once while others
+ * run beside it: enough that every gate worker's children together fill the
+ * cores once, not once per gate.
+ */
+const childBudgetPerGate = Math.max(1, Math.floor(availableParallelism() / gateWorkers));
+
 async function runAll(names: readonly string[]) {
   const queue = [...names].sort((a, b) => (lastDuration(b) ?? 0) - (lastDuration(a) ?? 0));
-  const workers = Math.max(1, Math.floor(availableParallelism() / CPU_SHARE_FOR_GATES));
+  const workers = gateWorkers;
   const failed: string[] = [];
   const worker = async () => {
     for (let name = queue.shift(); name !== undefined; name = queue.shift()) {

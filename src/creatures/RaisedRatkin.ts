@@ -212,13 +212,13 @@ export class RaisedRatkin extends RisingSkeleton {
     this.idleTicks++;
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const before = this.hp;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (this.hp < before && this.hp > 0) this.hurtTimer = HURT_ROW_TICKS;
   }
 

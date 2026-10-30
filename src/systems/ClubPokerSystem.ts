@@ -54,12 +54,7 @@ import { lineHeightOf, text } from '../ui/widgets/text';
 import type { PokerAction, PokerActionKind } from './casino/poker/bettingRound';
 import { PokerHandHistory, type HandHistoryEntry } from './casino/poker/handHistory';
 import type { PokerBanterTrigger, PokerEvent } from './casino/poker/pokerEvents';
-import {
-  betChipsCue,
-  pokerCueSound,
-  shuffleSound,
-  type PokerCue,
-} from './casino/poker/pokerSoundCues';
+import { betChipsCue, pokerCueSound, shuffleSound, type PokerCue } from '../audio/pokerSoundCues';
 import { PokerHandReactions, type ReactionVoice } from './casino/poker/pokerReactions';
 import {
   BUY_IN_BIG_BLINDS,

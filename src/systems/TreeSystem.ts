@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
@@ -25,7 +25,7 @@ import {
 import { inferFloorType } from '../map/tiles/helpers';
 import type { VillageDistrictId } from '../map/overworld/briarHollowSite';
 import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
-import { makeBurn } from '../core/combat/StatusEffect';
+import { FULL_SHARE, makeBurn } from '../core/combat/StatusEffect';
 import { randomInt } from '../utils';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
@@ -903,7 +903,7 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       player.takeDamage(TREE_CONTACT_DAMAGE, TREE_CONTACT_DAMAGE_SOURCE);
       player.damageFlash = TREE_CONTACT_DAMAGE_FLASH_FRAMES;
     }
-    if (frames === TREE_CONTACT_BURN_DELAY) player.applyStatus(makeBurn());
+    if (frames === TREE_CONTACT_BURN_DELAY) player.applyStatus(makeBurn(FULL_SHARE));
     return frames;
   }
 
@@ -998,18 +998,19 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    * them: firelight lies on the ground the player is standing on, and drawn in
    * the effects pass it washed flat orange over their sprite instead.
    */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.renderFireGlow(ctx, camX, camY);
-    this.renderStumps(ctx, camX, camY);
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.renderFireGlow(ctx, camera);
+    this.renderStumps(ctx, camera);
   }
 
-  private renderFireGlow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderFireGlow(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     // Culled per tree. The update path is bounded to the trees that are actually
     // alight, but a stick of dynamite lights a whole ring of them and each one
     // would otherwise cost a fresh radial gradient every frame for the full
     // twelve seconds of its burn — including long after the player has walked
     // away from it.
-    const onScreen = viewportBounds(camX, camY);
+    const onScreen = viewportBounds(camera);
     const pulse =
       1 +
       Math.sin((this.glowPulseFrames / FIRE_GLOW_PULSE_PERIOD_FRAMES) * TWO_PI) *
@@ -1033,8 +1034,9 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     }
   }
 
-  private renderStumps(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const onScreen = viewportBounds(camX, camY);
+  private renderStumps(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    const onScreen = viewportBounds(camera);
     for (const stump of this.stumps) {
       if (!onScreen(stump.tileX * TILE_SIZE, stump.tileY * TILE_SIZE)) continue;
       const alpha = stump.life < STUMP_FADE_FRAMES ? stump.life / STUMP_FADE_FRAMES : 1;
@@ -1056,8 +1058,9 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    * the flash on one that has just been struck. The ground-level glow is in
    * `renderGround` instead, under the entities.
    */
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const onScreen = viewportBounds(camX, camY);
+  render(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    const onScreen = viewportBounds(camera);
     for (const key of this.flashing) {
       const health = this.health.get(key);
       if (health === undefined) continue;
@@ -1103,11 +1106,11 @@ function restoreKeySet(live: Set<string>, snapshot: ReadonlySet<string>): void {
 }
 
 /** A predicate for "this world point is near enough the camera to be worth drawing". */
-function viewportBounds(camX: number, camY: number): (x: number, y: number) => boolean {
-  const left = camX - EFFECT_CULL_MARGIN_PX;
-  const top = camY - EFFECT_CULL_MARGIN_PX;
-  const right = camX + worldViewWidth() + EFFECT_CULL_MARGIN_PX;
-  const bottom = camY + worldViewHeight() + EFFECT_CULL_MARGIN_PX;
+function viewportBounds(camera: Camera): (x: number, y: number) => boolean {
+  const left = camera.x - EFFECT_CULL_MARGIN_PX;
+  const top = camera.y - EFFECT_CULL_MARGIN_PX;
+  const right = camera.x + camera.viewWidth + EFFECT_CULL_MARGIN_PX;
+  const bottom = camera.y + camera.viewHeight + EFFECT_CULL_MARGIN_PX;
   return (x, y) => x >= left && x <= right && y >= top && y <= bottom;
 }
 

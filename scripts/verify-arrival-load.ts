@@ -7,7 +7,8 @@
  * the tutorial, floors 1 and 2, floor 3's town, a shop interior and the inn,
  * whose safe-room counter stands on dungeon ground — headless
  * behind the browser shim, ticking the real frame loop by hand, one environment
- * per child process so no cache warmed by one can flatter the next. For each:
+ * per child process so no cache warmed by one can flatter the next, several at
+ * once. For each:
  *
  *  - the loading screen is up as the scene is entered, and closes;
  *  - for the first frames of play afterwards, no figure cell is baked on the
@@ -28,7 +29,9 @@
  *   npx tsx scripts/verify-arrival-load.ts --fault=skip-loader   # must fail
  */
 
-import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { runUnitsInChildren } from './childUnits.js';
+import type { GameplayScene } from '../src/scenes/GameplayScene.js';
 
 const ENVIRONMENTS = [
   'tutorial',
@@ -50,20 +53,12 @@ const envArg = process.argv.find((arg) => arg.startsWith('--env='))?.slice('--en
 const faultArg = process.argv.find((arg) => arg.startsWith('--fault='));
 
 if (envArg === undefined) {
-  let failed = 0;
-  for (const environment of ENVIRONMENTS) {
-    const child = spawnSync(
-      process.execPath,
-      [
-        ...process.execArgv,
-        'scripts/verify-arrival-load.ts',
-        `--env=${environment}`,
-        ...(faultArg === undefined ? [] : [faultArg]),
-      ],
-      { stdio: 'inherit' },
-    );
-    if (child.status !== 0) failed++;
-  }
+  const runs = await runUnitsInChildren(
+    fileURLToPath(import.meta.url),
+    ENVIRONMENTS,
+    (environment) => [`--env=${environment}`, ...(faultArg === undefined ? [] : [faultArg])],
+  );
+  const failed = [...runs.values()].filter((run) => run.exitCode !== 0).length;
   console.log(
     failed === 0
       ? 'PASS verify:arrival-load'
@@ -170,9 +165,7 @@ audio.music.claim = (claim, holder) => {
   claimMusic(claim, holder);
 };
 
-type Scene = InstanceType<typeof DungeonScene> | InstanceType<typeof BuildingInteriorScene>;
-
-function buildScene(): Scene {
+function buildScene(): GameplayScene {
   switch (environment) {
     case 'tutorial':
       return new DungeonScene(getLevelDef('tutorial'), input, sceneManager, {
@@ -204,7 +197,7 @@ function buildScene(): Scene {
             return entry.id === STORM_DRAIN_ID;
           case 'cistern':
             return entry.id === TOWN_TOWER_ID;
-          default:
+          case 'interior':
             return entry.type === 'store';
         }
       });

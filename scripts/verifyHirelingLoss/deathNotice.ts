@@ -29,6 +29,7 @@ import { MercenarySystem, type HirelingFeedback } from '../../src/systems/Mercen
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { JourneyGateReporter } from './circusJourney';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 const HIRE_ID = 'crush';
 const ROOM_W_TILES = 24;
@@ -97,6 +98,7 @@ function makeScene(roster: MercenaryRoster): Scene {
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [],
   };
   system.update(ctx);

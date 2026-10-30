@@ -10,11 +10,14 @@ export type DamageTag = WeaponFamily | 'magic' | 'fire' | 'explosion';
 
 export type DamageTags = readonly DamageTag[];
 
-/** A hit that is none of the tagged kinds: a stomp, a bare paw, a gear-thrown strike. */
+/** A hit that is none of the tagged kinds: a stomp, a bare paw, a gear spark's share of a blow. */
 export const UNTAGGED_HIT: DamageTags = [];
 
 /** Every spell hit. */
 export const MAGIC_HIT: DamageTags = ['magic'];
+
+/** A hit of flame: a burn's bite, a fire relic's bolt. */
+export const FIRE_HIT: DamageTags = ['fire'];
 
 /** Every blast a crawler sets off. */
 export const EXPLOSION_HIT: DamageTags = ['explosion'];

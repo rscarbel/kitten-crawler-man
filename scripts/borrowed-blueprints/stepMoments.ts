@@ -49,11 +49,12 @@ import {
   type QuestRewardUi,
 } from '../villageSiegeHarness';
 import { BLUEPRINTS_RIG_SEED, blueprintsRig, type Check } from './fence';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera';
 
 const GRAIN_TARGET = 100;
 const BANNER_FRAMES = STEP_BANNER_SECONDS * UPDATES_PER_SECOND;
 /** The rig never scrolls, so the village's world-anchored panels read the map's origin. */
-const HARNESS_CAMERA = { x: 0, y: 0 } as const;
+const HARNESS_CAMERA_TOP_LEFT = { x: 0, y: 0 } as const;
 
 /** Every `objectiveComplete` id the rig's bus carries from now on. */
 function recordObjectives(rig: SiegeRig): string[] {
@@ -207,7 +208,8 @@ function completionRigOn(state: BriarHollowState): CompletionRig {
     open(spec);
   };
   const ui = questRewardUi(rig);
-  for (const surface of rig.kit.surfaces(() => HARNESS_CAMERA)) ui.root.mount(surface);
+  for (const surface of rig.kit.surfaces(() => cameraAt(HARNESS_CAMERA_TOP_LEFT, UNZOOMED)))
+    ui.root.mount(surface);
   return { rig, blueprints, screen, ui, opens };
 }
 

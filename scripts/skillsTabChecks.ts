@@ -30,19 +30,43 @@ import {
 } from '../src/core/skills/proficiency';
 import {
   friendlyBlastDamage,
-  outgoingHitDamage,
   proficiencyDamageBonus,
+  resolveCrawlerHit,
+  type CrawlerDealer,
+  type CrawlerHit,
+  type HitTraining,
 } from '../src/core/combat/outgoingHit';
-import type { DamageTag } from '../src/core/combat/damageTags';
+import type { DamageTag, DamageTags } from '../src/core/combat/damageTags';
 import { WEAPON_FAMILY_LABELS, type WeaponFamily } from '../src/core/items/equipment/weapons';
 import {
   makeBurn,
   makeCreditedBurn,
   makeMagicBurn,
   STATUS_DEFS,
+  FULL_SHARE,
 } from '../src/core/combat/StatusEffect';
 import { Rat } from '../src/creatures/Rat';
 import { skillBookRefusal } from '../src/systems/skillBookUse';
+
+/** What a hit of `blow` tagged `tags` lands for once `dealer`'s proficiency skills have weighed in. */
+function landedDamage(
+  dealer: CrawlerDealer,
+  blow: number,
+  tags: DamageTags,
+  training: HitTraining,
+  roll?: () => number,
+): number {
+  const hit: CrawlerHit = {
+    dealer,
+    delivery: 'unscaled',
+    blow,
+    tags,
+    training,
+    damageType: 'melee',
+    struckBy: 'dealer',
+  };
+  return resolveCrawlerHit(hit, roll).damage;
+}
 
 /** One rule's outcome, for the gate to count and report. */
 export interface SkillsTabCheck {
@@ -203,19 +227,19 @@ export function runSkillsTabChecks(): SkillsTabCheck[] {
     const tag = PROFICIENCY_SKILL_TAGS[skill][0];
     const extra = TEST_BLOW * share;
     check(
-      outgoingHitDamage(trained, TEST_BLOW, [tag], 'trainsNothing', ROLL_NEVER) ===
+      landedDamage(trained, TEST_BLOW, [tag], 'trainsNothing', ROLL_NEVER) ===
         TEST_BLOW + Math.floor(extra) &&
-        outgoingHitDamage(trained, TEST_BLOW, [tag], 'trainsNothing', ROLL_ALWAYS) ===
+        landedDamage(trained, TEST_BLOW, [tag], 'trainsNothing', ROLL_ALWAYS) ===
           TEST_BLOW + Math.ceil(extra),
       `a ${tag} hit lands for its share more with ${def.name}`,
     );
     check(
-      outgoingHitDamage(trained, TEST_BLOW, [], 'trainsNothing', ROLL_ALWAYS) === TEST_BLOW,
+      landedDamage(trained, TEST_BLOW, [], 'trainsNothing', ROLL_ALWAYS) === TEST_BLOW,
       `an untagged hit is untouched by ${def.name}`,
     );
 
     const usesBefore = trained.skills.unlockedStates().find((s) => s.id === skill)?.usesTowardNext;
-    outgoingHitDamage(trained, TEST_BLOW, [tag], 'trains');
+    landedDamage(trained, TEST_BLOW, [tag], 'trains');
     const usesAfter = trained.skills.unlockedStates().find((s) => s.id === skill)?.usesTowardNext;
     check(
       usesBefore !== undefined && usesAfter === usesBefore + 1,
@@ -260,16 +284,16 @@ export function runSkillsTabChecks(): SkillsTabCheck[] {
   {
     const burnBites = STATUS_DEFS.burn.damageOverTime?.tags ?? [];
     check(burnBites.includes('fire'), 'every bite of a burn is a fire hit');
-    const plainTicks = makeBurn().ticksRemaining;
+    const plainTicks = makeBurn(FULL_SHARE).ticksRemaining;
     const untrained = makeCrawler('cat');
-    untrained.applyStatus(makeBurn());
+    untrained.applyStatus(makeBurn(FULL_SHARE));
     check(
       untrained.statusEffects.find((e) => e.type === 'burn')?.ticksRemaining === plainTicks,
       'a burn runs its full length without Pyro’s Touch',
     );
     const pyro = makeCrawler('cat');
     trainTo(pyro, 'pyros_touch', TRAINED_LEVEL);
-    pyro.applyStatus(makeBurn());
+    pyro.applyStatus(makeBurn(FULL_SHARE));
     pyro.applyStatus(makeMagicBurn());
     const shortened = Math.ceil(plainTicks * (1 - proficiencyEffect(TRAINED_LEVEL)));
     check(
@@ -303,7 +327,7 @@ export function runSkillsTabChecks(): SkillsTabCheck[] {
     trainTo(builder, 'pyros_touch', TRAINED_LEVEL);
     const builderBefore = usesToward(builder, 'pyros_touch');
     const plain = new Rat(0, 0, TILE_SIZE);
-    letBite(plain, makeBurn());
+    letBite(plain, makeBurn(FULL_SHARE));
     const credited = new Rat(0, 0, TILE_SIZE);
     letBite(credited, makeCreditedBurn(builder));
     check(

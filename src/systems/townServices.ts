@@ -9,12 +9,13 @@
  *
  * The building-level questions live here rather than in `BuildingInteriorScene`
  * because two places must not disagree about them: the scene, which builds the
- * surfaces, and `sfxGroups.ts`, which decides whether an interior needs the
- * commerce cue preloaded before the door opens.
+ * surfaces, and the preload that decides whether an interior needs the
+ * commerce cue decoded before the door opens.
  */
 
 import { BUILDING_OCCUPANTS } from './buildingOccupants';
 import type { BuildingId } from '../map/buildingIds';
+import type { BuildingEntry } from '../map/buildingEntry';
 
 /**
  * Which priced menu a counter opens. Each one is its own menu builder and
@@ -65,6 +66,15 @@ export function interiorServicesFor(building: BuildingId): ReadonlyArray<Occupan
 /** Whether this building takes coin over any counter or desk, and so needs the purchase cue. */
 export function interiorSellsSomething(building: BuildingId): boolean {
   return interiorServicesFor(building).some((service) => service.surface !== 'reading');
+}
+
+/** Whether coin changes hands over a counter behind this door: every club and store, and a house whose occupants sell. */
+export function buildingEntrySellsSomething(entry: BuildingEntry): boolean {
+  return (
+    entry.type === 'club' ||
+    entry.type === 'store' ||
+    (entry.type === 'house' && interiorSellsSomething(entry.id))
+  );
 }
 
 /** Whether one of this building's occupants keeps `desk`. */

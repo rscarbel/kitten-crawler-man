@@ -292,13 +292,13 @@ export class SkeletonLord extends Mob {
     this.castWindupSoundPending = false;
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const previousHp = this.hp;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (this.hp < previousHp) this.damageSoundPending = true;
   }
 
@@ -576,7 +576,7 @@ export class SkeletonLord extends Mob {
       // Gated on the hit landing: a dodge that avoids the damage but still roots
       // the player in the middle of the cone is worse than no dodge at all.
       if (connected) {
-        target.applyStatus(makeStuck(target.magicResistedFrames(HANDS_STUCK_FRAMES)));
+        target.applyStatus(makeStuck(target.survivingShare('magic'), HANDS_STUCK_FRAMES));
       }
     }
   }

@@ -12,6 +12,7 @@ import {
   makePoison,
   makeWhetstone,
   type StatusEffect,
+  FULL_SHARE,
 } from '../../core/combat/StatusEffect';
 import {
   CRAWLER_HP_THRESHOLDS,
@@ -359,7 +360,7 @@ function plainStatus(harmful: boolean, make: () => StatusEffect): AIStatusEffect
 }
 
 const AI_STATUS_EFFECTS = {
-  burn: plainStatus(true, () => makeBurn()),
+  burn: plainStatus(true, () => makeBurn(FULL_SHARE)),
   poison: plainStatus(true, () => makePoison()),
   drunk: plainStatus(true, () => makeDrunk()),
   catnip_buzz: plainStatus(true, () => makeCatnipBuzz()),

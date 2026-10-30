@@ -1,7 +1,7 @@
 import { TILE_SIZE } from '../core/constants';
 import type { GearOwnership } from './market/vendorMenu';
 import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
-import { playInteriorCue } from './interiorInteractionSoundCues';
+import { playInteriorCue } from '../audio/interiorInteractionSoundCues';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope, MusicClaims } from '../audio/AudioScope';

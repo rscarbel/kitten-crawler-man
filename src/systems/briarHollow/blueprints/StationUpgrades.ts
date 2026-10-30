@@ -24,7 +24,7 @@ import {
   spend,
   type ResourceCost,
 } from '../../../core/items/gathering/partyResources';
-import { worldViewWidth, worldViewHeight } from '../../../core/rendering/Viewport';
+import type { Camera } from '../../../core/rendering/camera';
 import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import {
   BLUEPRINTS_STATION_IDS,
@@ -554,11 +554,11 @@ export class StationUpgrades {
   }
 
   /** Under every body: each station still to upgrade, gold when the party can pay for it, orange while short. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const nowMs = performance.now();
     for (const machine of this.machinesToMark()) {
       const mood = this.highlightMood(machine);
-      drawAreaHighlightGround(ctx, footprintRect(machine, camX, camY), {
+      drawAreaHighlightGround(ctx, camera, footprintRect(machine, camera.x, camera.y), {
         color: mood === 'ready' ? worldPalette.objective.ready : worldPalette.objective.pending,
         nowMs,
         mood,
@@ -573,18 +573,19 @@ export class StationUpgrades {
    * whole art so a tall saw is marked top to bottom. While a crawler is down
    * only the progress bar stays.
    */
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const nowMs = performance.now();
     const channel = this.channel;
     const machinesFramed = this.crawlerDown() ? [] : this.machinesToMark();
     for (const machine of machinesFramed) {
       const mood = this.highlightMood(machine);
-      drawAreaHighlightFrame(ctx, artRect(machine, camX, camY), {
+      drawAreaHighlightFrame(ctx, camera, artRect(machine, camX, camY), {
         color: mood === 'ready' ? worldPalette.objective.ready : worldPalette.objective.pending,
         nowMs,
         mood,
       });
-      if (channel?.machine !== machine) this.renderCaption(ctx, camX, camY, machine);
+      if (channel?.machine !== machine) this.renderCaption(ctx, camera, machine);
     }
     if (channel === null) return;
     const { x, y, w } = channel.machine.footprint;
@@ -609,10 +610,10 @@ export class StationUpgrades {
    */
   private renderCaption(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     machine: ProcessingStation,
   ): void {
+    const { x: camX, y: camY } = camera;
     const { requirements, ready, title, actionLine, panelHeight, panelTopWorldY } =
       this.captionPlan(machine);
     const titleStyle = ready ? 'ready' : 'label';
@@ -628,9 +629,9 @@ export class StationUpgrades {
     const panelBottom = panelTop + panelHeight;
     const offScreen =
       centreX < -CAPTION_CULL_MARGIN_PX ||
-      centreX > worldViewWidth() + CAPTION_CULL_MARGIN_PX ||
+      centreX > camera.viewWidth + CAPTION_CULL_MARGIN_PX ||
       panelBottom < 0 ||
-      panelTop > worldViewHeight();
+      panelTop > camera.viewHeight;
     if (offScreen) return;
 
     worldPlate(

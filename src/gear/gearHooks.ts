@@ -265,8 +265,8 @@ function unequipped<K extends GearTraitKind>(
 }
 
 /** Runs every worn trait's hit hook for one landed blow (melee) or missile (spell). */
-export function runHitHooks(wearer: Player, hit: GearHit): void {
-  for (const { ctx, trait } of wornTraits(wearer)) {
+export function runHitHooks(hit: GearHit): void {
+  for (const { ctx, trait } of wornTraits(hit.dealer)) {
     if (hit.delivery === 'melee') meleeHit(trait.kind, ctx, trait, hit);
     else spellHit(trait.kind, ctx, trait, hit);
   }

@@ -357,9 +357,11 @@ regen is one formula for both (`crawlerRegenHpPerSecond`), saturating in health.
 (`HAZARD_IS_MAGIC`: the Lich's firewalls and orbs) are turned aside by magic-resistant
 gear in `Player.incomingDamage`, for every caller. The share it turns aside is `magicResistedShare(magic)`: `MAGIC_RESIST_BASE_SHARE` at starting Magic, plus
 `MAGIC_RESIST_SHARE_PER_MAGIC` a point, capped at `MAGIC_RESIST_MAX_SHARE`
-(`src/core/party/crawlerFormulas.ts`). A magic status loses the same share of its length
-(`Player.magicResistedFrames`), and a chill the same share of its slow: the ice fairy's chill and freeze, the fire fairy's
-burn, the Skeleton Lord's and the Lich's stuck hands. A magic-attuned relic's recharge
+(`src/core/party/crawlerFormulas.ts`). A magic status is stamped with the share that survives
+(`StatusEffect.survivingShare`, from `Player.survivingShare('magic')`) when it is laid on: it
+keeps only that share of its length, and a chill only that share of its slow: the ice fairy's chill and
+freeze, the fire fairy's burn, the Skeleton Lord's and the Lich's stuck hands. A status no
+spell laid is stamped `FULL_SHARE`, so magic resistance never eases it. A magic-attuned relic's recharge
 shortens with its wearer's Magic down to `MAGIC_RECHARGE_MIN_SCALE` of its own. Every
 one of these is capped.
 

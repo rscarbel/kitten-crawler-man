@@ -13,7 +13,7 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -43,7 +43,7 @@ import {
   drawPortcullisSideTile,
 } from '../map/tiles/tutorialGateArt';
 import type { TownPropRenderable } from './townPropRenderable';
-import type { TutorialCue, TutorialCueAt } from './tutorialSoundCues';
+import type { TutorialCue, TutorialCueAt } from '../audio/tutorialSoundCues';
 
 export type TutorialGateId = 'safeEntrance' | 'g1' | 'seismic_stomp' | 'fence' | 'goblinB' | 'g3';
 
@@ -62,8 +62,8 @@ type GateOpenRule = 'approach' | 'noDialog' | 'fullyInView' | 'atOnce';
 
 /** What a gate can see of the scene this frame. */
 export interface TutorialGateView {
-  /** The view's top-left in world pixels. */
-  readonly camera: { readonly x: number; readonly y: number };
+  /** The camera the scene draws this frame with. */
+  readonly camera: Camera;
   /** Whether a dialog box or any other surface over the world is open. */
   readonly dialogOpen: boolean;
 }
@@ -465,7 +465,7 @@ export class TutorialGates {
     gate: GateState,
     human: HumanPlayer,
     cat: CatPlayer,
-    camera: { readonly x: number; readonly y: number },
+    camera: Camera,
   ): boolean {
     const onScreen = this.isOnScreen(gate.def, camera);
     for (const crawler of [human, cat]) {
@@ -494,20 +494,20 @@ export class TutorialGates {
   }
 
   /** Whether every pixel a face-on gate's art can reach is inside the view. */
-  private isFullyInView(def: GateDef, camera: { readonly x: number; readonly y: number }): boolean {
+  private isFullyInView(def: GateDef, camera: Camera): boolean {
     const left = def.x1 * TILE_SIZE - TUTORIAL_PORTCULLIS_OVERHANG_PX;
     const right = (def.x2 + 1) * TILE_SIZE + TUTORIAL_PORTCULLIS_OVERHANG_PX;
     const top = (def.y1 - TUTORIAL_PORTCULLIS_ABOVE_ROW_TILES) * TILE_SIZE;
     const bottom = (def.y2 + 1) * TILE_SIZE;
     return (
       left >= camera.x &&
-      right <= camera.x + worldViewWidth() &&
+      right <= camera.x + camera.viewWidth &&
       top >= camera.y &&
-      bottom <= camera.y + worldViewHeight()
+      bottom <= camera.y + camera.viewHeight
     );
   }
 
-  private isOnScreen(def: GateDef, camera: { readonly x: number; readonly y: number }): boolean {
+  private isOnScreen(def: GateDef, camera: Camera): boolean {
     const reach = TUTORIAL_PORTCULLIS_REACH_TILES * TILE_SIZE;
     const left = def.x1 * TILE_SIZE - reach;
     const right = (def.x2 + 1) * TILE_SIZE;
@@ -515,9 +515,9 @@ export class TutorialGates {
     const bottom = (def.y2 + 1) * TILE_SIZE;
     return (
       right > camera.x &&
-      left < camera.x + worldViewWidth() &&
+      left < camera.x + camera.viewWidth &&
       bottom > camera.y &&
-      top < camera.y + worldViewHeight()
+      top < camera.y + camera.viewHeight
     );
   }
 

@@ -44,6 +44,7 @@ import {
   FRAME_W,
   HUMAN_ROW_TABLE,
   HUMAN_ROWS,
+  type HumanRowMeta,
   type HumanRowName,
   MINE_ROWS,
   ORIGIN_X,
@@ -272,7 +273,8 @@ function strip(
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const source = { id: showing.figure.def.id, painting: showing.figure.painting };
   const placement = stowedPlacementOfHeld(look);
-  const holster = HUMAN_ROW_TABLE[row].holster !== undefined;
+  const rowMeta: HumanRowMeta = HUMAN_ROW_TABLE[row];
+  const holster = rowMeta.holster !== undefined;
   for (let frame = 0; frame < frames; frame++) {
     beginFigureFrame();
     const x = frame * cellWidth + TILE_LEFT_SHARE * tile;
@@ -456,10 +458,10 @@ function gripCrop(view: CardinalView, roll: number, look: HeldVisualDef): Canvas
     y: (ORIGIN_Y + hand.centre.y * HUMAN_CELL_PX_PER_UNIT * axes.y) * HAND_DENSITY,
   };
   const composite = createCanvas(width, height);
-  const ctx = asGameContext(composite.getContext('2d'));
-  ctx.drawImage(back, 0, 0);
+  const compositeCtx = composite.getContext('2d');
+  compositeCtx.drawImage(back, 0, 0);
   compositeHeldItem(
-    ctx,
+    asGameContext(compositeCtx),
     look,
     heldTransformAt(
       { ...hand, centre },
@@ -467,7 +469,7 @@ function gripCrop(view: CardinalView, roll: number, look: HeldVisualDef): Canvas
     ),
     'painted',
   );
-  ctx.drawImage(front, 0, 0);
+  compositeCtx.drawImage(front, 0, 0);
   const side = HAND_CROP_HALF * 2 * HAND_DENSITY;
   const crop = createCanvas(side, side);
   const cropCtx = crop.getContext('2d');

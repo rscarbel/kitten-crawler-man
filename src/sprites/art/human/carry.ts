@@ -80,7 +80,7 @@ function busy(pose: BipedPose): boolean {
  * runs on down the line of the fist. A fist brought down — a hammer-fist —
  * lands with its heel, and the item is carried as it is between blows.
  */
-function thrustsWithRightFist(row: RowSpec): boolean {
+function thrustsWithRightFist(row: RowSpec<string>): boolean {
   const strike = row.strike;
   if (row.role !== 'strike' || strike === undefined) return false;
   return strike.reachLimb === 'hand' && strike.drive !== 'down';
@@ -259,15 +259,25 @@ function withCarriedHandle(pose: BipedPose, grip: CarriedGrip): BipedPose {
   };
 }
 
+function letGo(row: RowSpec<string>, frame: number): boolean {
+  const from = row.letsGoOfCarriedFrom;
+  return from !== undefined && frame >= from;
+}
+
 /**
  * Closes his right fist round a carried item on any row that leaves that
- * hand free. An armed row holds it as it was authored to, on the carried
- * item's handle.
+ * hand free, until a fall opens it on the floor. An armed row holds it as it
+ * was authored to, on the carried item's handle.
  */
-export function carryInMainHand(pose: BipedPose, row: RowSpec, grip: CarriedGrip): BipedPose {
+export function carryInMainHand(
+  pose: BipedPose,
+  row: RowSpec<string>,
+  frame: number,
+  grip: CarriedGrip,
+): BipedPose {
   const { style } = grip;
   if (row.motionSet !== undefined) return withCarriedHandle(pose, grip);
-  if (busy(pose)) return pose;
+  if (busy(pose) || letGo(row, frame)) return pose;
   const thrusting = style === 'low' && thrustsWithRightFist(row);
   const haftAngle = thrusting
     ? reflectedFor(wristAngle(drawnRightArm(pose, row.view).arm), row.view)

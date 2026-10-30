@@ -43,15 +43,16 @@ import { SpellSystem } from '../src/systems/SpellSystem.js';
 import type { DoorSide, TilePoint } from '../src/systems/bossRooms/bossRoomLayout.js';
 import {
   DOOR_SIDES,
-  DOOR_SEARCH_MAX_SEEDS,
   buildEnvironment,
+  findFloorWithRoom,
   gauntletBossRoom,
-  generateFloor,
   type FoundRoom,
   type RoomEnvironment,
+  type RoomFinder,
 } from './bossRooms/harness.js';
 import { KRAKEN_BOSS_TYPE } from '../src/core/mobs/bossTypes.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 installCanvasGlobals();
 
@@ -168,15 +169,13 @@ function placeAtTile(body: { x: number; y: number }, tile: TilePoint): void {
 
 /** The first floor from `FIRST_SEED` on whose Kraken room opens on `side`. */
 function findKrakenRoom(side: DoorSide): FoundRoom | null {
-  for (let offset = 0; offset < DOOR_SEARCH_MAX_SEEDS; offset++) {
-    const seed = FIRST_SEED + offset;
-    const { gameMap, levelDef } = generateFloor(KRAKEN_FLOOR, seed);
-    const room = gauntletBossRoom(gameMap, levelDef, KRAKEN_BOSS_TYPE);
-    if (room?.doorSide !== side) continue;
-    return { seed, gameMap, levelDef, room };
-  }
-  return null;
+  return findFloorWithRoom(KRAKEN_PUMP_ROOM, FIRST_SEED, side);
 }
+
+const KRAKEN_PUMP_ROOM: RoomFinder = {
+  floor: KRAKEN_FLOOR,
+  locate: (gameMap, levelDef) => gauntletBossRoom(gameMap, levelDef, KRAKEN_BOSS_TYPE),
+};
 
 /**
  * Her pump room on the floor found from the seed, with her standing at her spawn (or
@@ -209,6 +208,7 @@ function buildArena(side: DoorSide, bossAtPx?: TilePoint): Arena {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { env, boss, roster, loop: new MobUpdateLoop(), ctx };
 }

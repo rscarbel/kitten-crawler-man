@@ -48,11 +48,13 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld.js';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop.js';
 import { SpellSystem } from '../../src/systems/SpellSystem.js';
 import {
-  DOOR_SEARCH_MAX_SEEDS,
+  findFloorWithRoom,
   gauntletBossRoom,
-  generateFloor,
   type LocatedRoom,
+  type RoomFinder,
 } from './harness.js';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 // ── The scripted crawler ─────────────────────────────────────────────────────
 
@@ -142,15 +144,13 @@ export const SIM_FIRST_SEED = 1;
 
 /** A floor with the lair's doorway on `side`, and the room on it. */
 export function findTrashGremlinFloor(side: DoorSide, startSeed = SIM_FIRST_SEED) {
-  for (let offset = 0; offset < DOOR_SEARCH_MAX_SEEDS; offset++) {
-    const seed = startSeed + offset;
-    const { gameMap, levelDef } = generateFloor(1, seed);
-    const room = gauntletBossRoom(gameMap, levelDef, TRASH_GREMLIN_BOSS_TYPE);
-    if (room?.doorSide !== side) continue;
-    return { seed, gameMap, levelDef, room };
-  }
-  return null;
+  return findFloorWithRoom(TRASH_GREMLIN_LAIR, startSeed, side);
 }
+
+const TRASH_GREMLIN_LAIR: RoomFinder = {
+  floor: 1,
+  locate: (gameMap, levelDef) => gauntletBossRoom(gameMap, levelDef, TRASH_GREMLIN_BOSS_TYPE),
+};
 
 /** One staged fight: everything a frame advances, and the parts the metrics read. */
 export interface StagedTrashGremlinFight {
@@ -216,6 +216,7 @@ export function stageTrashGremlinFight(side: DoorSide): StagedTrashGremlinFight 
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [],
     bossRoom,
   };
@@ -436,7 +437,7 @@ export function simulateTrashGremlinFight(
       if (swingCooldown === 0) {
         const struck = punchTarget(fight);
         if (struck !== null) {
-          struck.takeDamageFrom(SIM_PUNCH_DAMAGE, fight.crawler, 'melee');
+          struck.takeHit(harnessHit(fight.crawler, SIM_PUNCH_DAMAGE, 'melee'));
           swingCooldown = SIM_SWING_FRAMES;
         }
       }

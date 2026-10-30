@@ -15,10 +15,10 @@
  * can play.
  */
 
-import type { AudioManager } from '../../audio/AudioManager';
-import type { JingleId, MusicTrackId, SoundId } from '../../audio/sounds';
-import type { MusicStemOf } from '../../audio/music/stemSets';
-import { AMBIENT_RAMP_MS, type LoopLevel } from '../../audio/loopLevels';
+import type { AudioManager } from './AudioManager';
+import type { JingleId, MusicTrackId, SoundId } from './sounds';
+import type { MusicStemOf } from './music/stemSets';
+import { AMBIENT_RAMP_MS, type LoopLevel } from './loopLevels';
 
 export const MISSING_CATS_CUES = {
   /** A missing-cat notice read off the plaza board, heard as the notices pinned there. */

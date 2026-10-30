@@ -89,6 +89,7 @@ import {
 import type { DynamicLightSink, DynamicLightSource } from './lighting/dynamicLights';
 import { drawPuddleGlints } from '../map/tiles/puddleGlints';
 import { UINT32_SPAN } from '../core/world/WorldRandom';
+import type { Camera } from '../core/rendering/camera';
 
 // ── Tuning ──────────────────────────────────────────────────────────────────
 
@@ -803,13 +804,8 @@ export class DungeonLightingSystem implements GameSystem {
    * Draws the darkness over everything drawn so far in the view, then the
    * lights' colour. Called after the bodies and before every warning.
    */
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     if (this.mapWidth === 0) return;
     this.syncCanvasGeneration();
     const nowMs = this.deps.now();
@@ -881,12 +877,10 @@ export class DungeonLightingSystem implements GameSystem {
    */
   renderEyeShine(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
+    camera: Camera,
     creatures: Iterable<EyeShineSubject>,
   ): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const nowMs = this.deps.now();
     for (const creature of creatures) {
       if (!creature.isAlive || !creature.isHostile) continue;

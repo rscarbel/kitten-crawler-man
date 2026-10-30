@@ -10,7 +10,7 @@
 import type { PlacedTownInteriorProp } from '../map/GameMap';
 import { TOWN_INTERIOR_PROPS } from '../sprites/art/townInterior/townInteriorProps';
 import type { AmbientEmitter } from './AmbientSoundSystem';
-import { interiorAmbienceSound } from './interiorAmbienceCues';
+import { interiorAmbienceSound } from '../audio/interiorAmbienceCues';
 
 const HALF = 0.5;
 

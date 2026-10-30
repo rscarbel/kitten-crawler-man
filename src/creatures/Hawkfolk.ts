@@ -240,12 +240,12 @@ export class Hawkfolk extends Mob {
    * Any hit turns this Hawkfolk aggressive for the rest of its life.
    * Also bumps movement speed to the angry sprint value.
    */
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ) {
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (amount > 0) this.provoke();
   }
 

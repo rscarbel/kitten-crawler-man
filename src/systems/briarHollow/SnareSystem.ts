@@ -34,6 +34,8 @@ import { snareConvertChance } from '../../core/labour/craftPerks';
 import type { SnareLook } from '../../sprites/art/snareArt';
 import { drawSnareBinding } from '../../sprites/art/snareArt';
 import { crawlerMeleeStrikeDamage } from '../CombatSystem';
+import { hitTrainingOn, resolveCrawlerHit } from '../../core/combat/outgoingHit';
+import { UNTAGGED_HIT } from '../../core/combat/damageTags';
 import { type DefenseStructures, structureKey } from './DefenseStructures';
 import type { ConvertedAllyController } from './ConvertedAllyController';
 import type { StructureCallouts } from './structureCallouts';
@@ -269,8 +271,18 @@ export class SnareSystem {
     if (builder.zeroDamage) return;
     for (const mob of hold.caught) {
       if (!mob.isAlive || mob.rootedBy !== hold.token) continue;
-      // Struck by nothing that swung: it cannot be guarded, and a kill trains no weapon skill.
-      mob.takeCreditedDamage(crawlerMeleeStrikeDamage(builder), builder, null, null);
+      // Struck by nothing that swung: it cannot be guarded, and a kill trains no
+      // weapon skill. The spikes are no weapon of hers, so they carry no tags.
+      const cut = resolveCrawlerHit({
+        dealer: builder,
+        delivery: builder.meleeDelivery,
+        blowAt: (melee) => crawlerMeleeStrikeDamage(builder, melee),
+        tags: UNTAGGED_HIT,
+        training: hitTrainingOn(mob),
+        damageType: null,
+        struckBy: 'unguardable',
+      });
+      mob.takeHit(cut);
     }
   }
 

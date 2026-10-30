@@ -6,7 +6,7 @@ import {
   type CanvasSurface,
 } from '../../core/rendering/canvasSurface';
 import { perfMonitor } from '../../core/perf/PerfMonitor';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import type { Camera } from '../../core/rendering/camera';
 import {
   MAZE_CURTAINS,
   MAZE_FINAL_CHAMBER,
@@ -553,15 +553,16 @@ export class StarlightTentLighting {
    * lights are down. One blit and at most a handful of rectangles, each
    * filled with a ramp built on the first frame that needed it.
    */
-  renderDarkness(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderDarkness(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const startedAt = perfMonitor.begin();
-    blitWorldMask(ctx, this.maskSurface(), camX, camY);
+    const { x: camX } = camera;
+    blitWorldMask(ctx, this.maskSurface(), camera);
     const left = Math.max(0, -camX);
-    const right = Math.min(viewportWidth(), MAZE_WIDTH * TILE_SIZE - camX);
+    const right = Math.min(camera.viewWidth, MAZE_WIDTH * TILE_SIZE - camX);
     if (right > left) {
       for (const zone of this.zones) {
         const down = (1 - this.zoneLevel(zone)) * LIGHTS_DOWN_ALPHA;
-        if (down > 0) this.fillZone(ctx, zone, down, left, right, camY);
+        if (down > 0) this.fillZone(ctx, zone, down, left, right, camera);
       }
     }
     perfMonitor.end('lighting', startedAt);
@@ -579,11 +580,12 @@ export class StarlightTentLighting {
     down: number,
     left: number,
     right: number,
-    camY: number,
+    camera: Camera,
   ): void {
+    const { y: camY } = camera;
     const { top, bottom } = zoneSpan(zone);
     const drawTop = Math.max(0, top - camY);
-    const drawBottom = Math.min(viewportHeight(), bottom - camY);
+    const drawBottom = Math.min(camera.viewHeight, bottom - camY);
     if (drawBottom <= drawTop) return;
     ctx.save();
     try {
@@ -615,12 +617,8 @@ export class StarlightTentLighting {
   }
 
   /** Additive light for everything lit this frame. */
-  renderLiveLights(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    live: LiveLights,
-  ): void {
+  renderLiveLights(ctx: CanvasRenderingContext2D, camera: Camera, live: LiveLights): void {
+    const { x: camX, y: camY } = camera;
     const startedAt = perfMonitor.begin();
     const previousOperation = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'lighter';
@@ -630,7 +628,7 @@ export class StarlightTentLighting {
         const x = (tile.x + HALF) * TILE_SIZE - camX;
         const y = (tile.y + HALF) * TILE_SIZE - camY;
         const radius = style.radiusTiles * TILE_SIZE;
-        if (!reachesView(x, y, radius)) return;
+        if (!reachesView(camera, x, y, radius)) return;
         ctx.globalAlpha = Math.min(1, strength);
         drawRadialGlow(ctx, x, y, radius, style.stops);
       };
@@ -652,10 +650,13 @@ export class StarlightTentLighting {
   }
 }
 
-/** Whether a light of `radius` centred at (x, y), in screen pixels, touches the view at all. */
-function reachesView(x: number, y: number, radius: number): boolean {
+/** Whether a light of `radius` centred at (x, y), offset from the camera's top-left, touches its view at all. */
+function reachesView(camera: Camera, x: number, y: number, radius: number): boolean {
   return (
-    x >= -radius && y >= -radius && x <= viewportWidth() + radius && y <= viewportHeight() + radius
+    x >= -radius &&
+    y >= -radius &&
+    x <= camera.viewWidth + radius &&
+    y <= camera.viewHeight + radius
   );
 }
 
@@ -664,12 +665,8 @@ function reachesView(x: number, y: number, radius: number): boolean {
  * rectangle is snapped to whole mask pixels so the stretch stays an exact
  * integer factor, and kept inside the mask's clear pad.
  */
-function blitWorldMask(
-  ctx: CanvasRenderingContext2D,
-  mask: CanvasSurface,
-  camX: number,
-  camY: number,
-): void {
+function blitWorldMask(ctx: CanvasRenderingContext2D, mask: CanvasSurface, camera: Camera): void {
+  const { x: camX, y: camY } = camera;
   const worldPerMaskPx = 1 / STARLIGHT_TENT_MASK_SCALE;
   const pad = STARLIGHT_TENT_MASK_PAD_PX;
   const originX = -pad * worldPerMaskPx;
@@ -678,11 +675,11 @@ function blitWorldMask(
   const top = Math.max(pad, Math.floor((camY - originY) / worldPerMaskPx));
   const right = Math.min(
     mask.width - pad,
-    Math.ceil((camX + viewportWidth() - originX) / worldPerMaskPx),
+    Math.ceil((camX + camera.viewWidth - originX) / worldPerMaskPx),
   );
   const bottom = Math.min(
     mask.height - pad,
-    Math.ceil((camY + viewportHeight() - originY) / worldPerMaskPx),
+    Math.ceil((camY + camera.viewHeight - originY) / worldPerMaskPx),
   );
   if (right <= left || bottom <= top) return;
   ctx.drawImage(

@@ -56,6 +56,7 @@ import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** How a gate reports; the caller owns the failure count. */
 export interface JourneyGateReporter {
@@ -136,6 +137,7 @@ function makePlace(
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: extras,
   };
   const combat: CombatContext = {

@@ -66,6 +66,7 @@ import type { DialogLine } from '../src/dialog/line';
 import type { ConversationHandle } from '../src/dialog/request';
 import { VillagerSystem } from '../src/systems/briarHollow/VillagerSystem';
 import { Conversation } from '../src/dialog/Conversation';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 installCanvasGlobals();
 
@@ -314,6 +315,7 @@ function contextFor(rig: Rig): SystemContext {
     activeIsMoving: rig.human.isMoving,
     roster: rig.roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: targets.length > 0 ? targets : undefined,
   };
 }

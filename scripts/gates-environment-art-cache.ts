@@ -101,6 +101,7 @@ const { BYTES_PER_MEGABYTE, CanvasContextUnavailableError } =
 const { beginRenderFrame, holdIdleClock, releaseIdleClock } =
   await import('../src/core/rendering/renderFrameClock.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { worldPx } = await import('../src/core/rendering/camera.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { EnvironmentSheetResidentSet, FACADE_LIFE_RING, FACADE_RING } =
   await import('../src/systems/EnvironmentSheetResidentSet.js');
@@ -763,6 +764,7 @@ check(hasEnvironmentSheet(IDLE_KEY), 'a sheet let go by the idle sweep never rep
 
 const VIEW_W = 1280;
 const VIEW_H = 720;
+const RESIDENCY_VIEW = { viewWidth: worldPx(VIEW_W), viewHeight: worldPx(VIEW_H) };
 setViewportSize(VIEW_W, VIEW_H);
 const UPDATES_PER_SECOND = 60;
 const WALK_TILES_PER_FRAME = FASTEST_WALK_TILES_PER_SECOND / UPDATES_PER_SECOND;
@@ -815,8 +817,8 @@ function walkAwayAndBack(): WalkReport {
   let framesMissingInView = 0;
   const step = (): void => {
     const focus = { x: partyTileX * TILE_SIZE, y: PLACED_AREA.y * TILE_SIZE };
-    residency.update(() => ({ focus: [focus], covered: false }));
-    if (tilesUntilInView(focus, PLACED_AREA) === 0) {
+    residency.update(() => ({ focus: [focus], view: RESIDENCY_VIEW, covered: false }));
+    if (tilesUntilInView(focus, PLACED_AREA, RESIDENCY_VIEW) === 0) {
       if (!hasEnvironmentSheet(placedKey)) framesMissingInView++;
       getSpriteDefByKey(placedKey);
     }

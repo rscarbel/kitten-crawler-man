@@ -22,7 +22,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import { Mob, type MobDamageSource } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { drawLitDynamiteStick } from '../sprites/dynamiteSprite';
 import { type FuseBurnOptions, paintFuseFloorGlow } from '../sprites/fuseEffects';
 import {
@@ -628,11 +628,12 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
   }
 
   /** Scorches, the shadows under everything in the air, and the sticks' circles. Under creatures. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     // A siege leaves scorches across the whole village for twenty seconds at a
     // time, each a couple of dozen blits, so only those in view are drawn.
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
     for (const mark of this.scorches) {
       const screenX = mark.x - camX;
       const screenY = mark.y - camY;

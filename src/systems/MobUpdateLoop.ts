@@ -44,15 +44,13 @@ const PLAYER_MASS = 3;
  * Whether the mob loop ticks `mob` wherever it stands, not only inside a
  * crawler's activation radius.
  *
- * Mobs that require evasion (e.g. GrotesqueSpider) roam the full map and must
- * tick even when far off-screen. Same for a mob under forceAggro: a scripted
- * encounter that ignores aggro range would otherwise freeze the moment the
- * player outran the radius. And same, for the opposite reason, for a summon
- * that opted out of the radius entirely: its whole job is to close the gap the
- * radius measures.
+ * A mob under forceAggro is: a scripted encounter that ignores aggro range
+ * would otherwise freeze the moment the player outran the radius. So is any
+ * mob that opts out through `exemptFromAiActivationRadius` — a boss that roams
+ * the map, or a summon whose whole job is to close the gap the radius measures.
  */
 export function isExemptFromAiRadius(mob: Mob): boolean {
-  return mob.requiresEvasion || mob.forceAggro || mob.exemptFromAiActivationRadius;
+  return mob.forceAggro || mob.exemptFromAiActivationRadius;
 }
 
 /**
@@ -178,7 +176,6 @@ export class MobUpdateLoop implements GameSystem {
     }
     setAirspaceBodies(airspaceBodies);
 
-    // Only activate mobs near players
     // Seeded from the steered crawler, who is always on this map; an away
     // crawler's coordinates belong to another map and wake nothing here.
     const lead = human.isAway ? cat : human;

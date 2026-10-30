@@ -22,7 +22,7 @@ import {
   type PipeBoard,
   type PipeFlowTrace,
 } from '../../systems/cloggedBathroom/pipeBoard';
-import type { BathroomCue } from '../../systems/cloggedBathroom/bathroomSoundCues';
+import type { BathroomCue } from '../../audio/bathroomSoundCues';
 import {
   GAUGE_RED_SHARE,
   type PipeBoardPicture,

@@ -35,6 +35,7 @@ import { setDungeonFloorTheme } from '../src/map/dungeon/floorTheme.js';
 import { DungeonLightingSystem } from '../src/systems/DungeonLightingSystem.js';
 import { CRAWLER_LIGHT_REACH_TILES } from '../src/systems/lighting/lightKinds.js';
 import { setViewportSize } from '../src/core/rendering/Viewport.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 import { PIPE_WALL_BEACON_FOOTPRINT } from '../src/systems/cloggedBathroom/CloggedBathroomSystem.js';
 import { drawObjectiveBeacon } from '../src/ui/ObjectiveBeacon.js';
 import { worldPalette } from '../src/ui/theme/worldInk.js';
@@ -223,6 +224,7 @@ function renderRoom(gameMap: GameMap, room: BathroomRoomData, state: RoomState):
     const stand = room.pipeWallStandTile;
     drawObjectiveBeacon(
       target,
+      { viewWidth: worldPx(viewW), viewHeight: worldPx(viewH) },
       stand.x * TILE_SIZE - camX,
       stand.y * TILE_SIZE - camY,
       TILE_SIZE,
@@ -262,7 +264,13 @@ function renderRoom(gameMap: GameMap, room: BathroomRoomData, state: RoomState):
   beam(ctx);
 
   const decorations: SortedDraw[] = gameMap
-    .getVisibleDecorationTiles(camX, camY, viewW, viewH)
+    .getVisibleDecorationTiles({
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(viewW),
+      viewHeight: worldPx(viewH),
+      zoom: UNZOOMED,
+    })
     .map((deco) => ({
       sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx,
       draw: (target) => gameMap.drawDecorationAt(target, deco.tx, deco.ty, camX, camY),
@@ -300,7 +308,13 @@ function renderRoom(gameMap: GameMap, room: BathroomRoomData, state: RoomState):
         CRAWLER_LIGHT_REACH_TILES,
       ),
   });
-  lighting.render(ctx, camX, camY, viewW, viewH);
+  lighting.render(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   lighting.renderOverDarkness(ctx, 1, { paintOverDarkness: beam });
   return canvas;
 }

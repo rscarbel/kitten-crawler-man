@@ -1,7 +1,7 @@
+import type { Camera } from '../../core/rendering/camera';
 import { TILE_SIZE } from '../../core/constants';
 import type { CanvasSurface } from '../../core/rendering/canvasSurface';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
-import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GrotesqueSpider } from '../../creatures/GrotesqueSpider';
 import {
@@ -695,8 +695,9 @@ export class SpiderLabDressing
 
   // ── Rendering ──────────────────────────────────────────────────────────────
 
-  override renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.isInView(camX, camY)) return;
+  override renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    if (!this.isInView(camera)) return;
+    const { x: camX, y: camY } = camera;
     let spinning = 0;
     for (const [key, framesLeft] of this.regrowing) {
       if (spinning >= MAX_WEBS_REGROWING) break;
@@ -755,8 +756,9 @@ export class SpiderLabDressing
     return 1 + (beat % (COCOON_IDLE_FRAMES - 1));
   }
 
-  override renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.isInView(camX, camY)) return;
+  override renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    if (!this.isInView(camera)) return;
+    const { x: camX, y: camY } = camera;
     for (const p of this.particles) {
       if (p.kind !== 'haze') continue;
       const age = 1 - p.life / p.maxLife;
@@ -817,14 +819,15 @@ export class SpiderLabDressing
   }
 
   /** Whether any of the lab is within a couple of tiles of the view: nothing of it is drawn otherwise. */
-  isInView(camX: number, camY: number): boolean {
+  isInView(camera: Camera): boolean {
+    const { x: camX, y: camY } = camera;
     const b = darknessBounds(this.room);
     const margin = VIEW_MARGIN_TILES * TILE_SIZE;
     return (
       (b.x + b.w) * TILE_SIZE >= camX - margin &&
-      b.x * TILE_SIZE <= camX + worldViewWidth() + margin &&
+      b.x * TILE_SIZE <= camX + camera.viewWidth + margin &&
       (b.y + b.h) * TILE_SIZE >= camY - margin &&
-      b.y * TILE_SIZE <= camY + worldViewHeight() + margin
+      b.y * TILE_SIZE <= camY + camera.viewHeight + margin
     );
   }
 
@@ -840,10 +843,10 @@ export class SpiderLabDressing
   private blitMask(
     ctx: CanvasRenderingContext2D,
     mask: CanvasSurface,
-    camX: number,
-    camY: number,
+    camera: Camera,
     alpha: number,
   ): void {
+    const { x: camX, y: camY } = camera;
     const bounds = darknessBounds(this.room);
     const worldPerMaskPx = 1 / DARKNESS_MASK_SCALE;
     // Where mask pixel 0 would fall in the world: the room's corner, less the pad.
@@ -854,11 +857,11 @@ export class SpiderLabDressing
     const top = Math.max(pad, Math.floor((camY - originY) / worldPerMaskPx));
     const right = Math.min(
       mask.width - pad,
-      Math.ceil((camX + worldViewWidth() - originX) / worldPerMaskPx),
+      Math.ceil((camX + camera.viewWidth - originX) / worldPerMaskPx),
     );
     const bottom = Math.min(
       mask.height - pad,
-      Math.ceil((camY + worldViewHeight() - originY) / worldPerMaskPx),
+      Math.ceil((camY + camera.viewHeight - originY) / worldPerMaskPx),
     );
     if (right <= left || bottom <= top) return;
     const fading = alpha < 1;
@@ -878,12 +881,12 @@ export class SpiderLabDressing
   }
 
   /** The dark over the room: the current phase's mask, fading in from the last phase's. */
-  renderDarkness(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderDarkness(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const level = this.darknessLevel();
     if (this.lightPhase > 1 && level > 0) {
       const blit = (phase: LabLightPhase, alpha: number): void => {
         if (phase === 1 || alpha <= 0) return;
-        this.blitMask(ctx, this.maskFor(phase), camX, camY, alpha);
+        this.blitMask(ctx, this.maskFor(phase), camera, alpha);
       };
       const fade = Math.min(1, this.lightChangeFrames / DARKNESS_FADE_FRAMES);
       if (this.lightsRestored || fade >= 1) {
@@ -893,7 +896,7 @@ export class SpiderLabDressing
         blit(previous, 1 - fade);
         blit(this.lightPhase, fade);
       }
-      this.renderWebGlimmer(ctx, camX, camY, level);
+      this.renderWebGlimmer(ctx, camera, level);
     }
   }
 
@@ -903,18 +906,14 @@ export class SpiderLabDressing
    * every frame rather than baked into the mask, because the web is cut and
    * regrown after the mask is painted.
    */
-  private renderWebGlimmer(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    level: number,
-  ): void {
+  private renderWebGlimmer(ctx: CanvasRenderingContext2D, camera: Camera, level: number): void {
+    const { x: camX, y: camY } = camera;
     ctx.fillStyle = WEB_GLIMMER_COLOR;
     ctx.globalAlpha = level;
     const minX = Math.floor(camX / TILE_SIZE) - 1;
     const minY = Math.floor(camY / TILE_SIZE) - 1;
-    const maxX = Math.ceil((camX + worldViewWidth()) / TILE_SIZE) + 1;
-    const maxY = Math.ceil((camY + worldViewHeight()) / TILE_SIZE) + 1;
+    const maxX = Math.ceil((camX + camera.viewWidth) / TILE_SIZE) + 1;
+    const maxY = Math.ceil((camY + camera.viewHeight) / TILE_SIZE) + 1;
     for (const key of this.originalWebs) {
       const tile = this.tileOf(key);
       if (tile.x < minX || tile.x > maxX || tile.y < minY || tile.y > maxY) continue;

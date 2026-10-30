@@ -13,6 +13,7 @@
 import { standRing } from './starlightTentRingHarness';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
 import { createCanvas } from 'canvas';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { TILE_SIZE } from '../src/core/constants';
@@ -1038,6 +1039,7 @@ function smokeTestTheTent(): string[] {
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
+  setViewportSize(VIEW_TILES_WIDE * TILE_SIZE, VIEW_TILES_HIGH * TILE_SIZE);
   const frameCtx: SystemContext = {
     human,
     cat,
@@ -1046,9 +1048,9 @@ function smokeTestTheTent(): string[] {
     activeIsMoving: false,
     roster,
     gameMap: mazeMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 
-  setViewportSize(VIEW_TILES_WIDE * TILE_SIZE, VIEW_TILES_HIGH * TILE_SIZE);
   const view = createCanvas(VIEW_TILES_WIDE * TILE_SIZE, VIEW_TILES_HIGH * TILE_SIZE);
   const viewCtx = asGameContext(view.getContext('2d'));
 
@@ -1061,8 +1063,9 @@ function smokeTestTheTent(): string[] {
     const camY = human.y - (VIEW_TILES_HIGH / 2) * TILE_SIZE;
     try {
       maze.update(frameCtx);
-      maze.renderWorld(viewCtx, camX, camY);
-      maze.renderEffects(viewCtx, camX, camY);
+      const camera = cameraAt({ x: camX, y: camY }, UNZOOMED);
+      maze.renderWorld(viewCtx, camera);
+      maze.renderEffects(viewCtx, camera);
       maze.renderPrompts(viewCtx, camX, camY, frameCtx);
       maze.renderUI(viewCtx);
       for (const mob of spawned) mob.render(viewCtx, camX, camY, TILE_SIZE);
@@ -1153,6 +1156,7 @@ function checkOpenedWaysLookOpen(): string[] {
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
+  setViewportSize(TILE_SIZE, TILE_SIZE);
   const frameCtx: SystemContext = {
     human,
     cat,
@@ -1161,16 +1165,16 @@ function checkOpenedWaysLookOpen(): string[] {
     activeIsMoving: false,
     roster,
     gameMap: mazeMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 
-  setViewportSize(TILE_SIZE, TILE_SIZE);
   const tile = createCanvas(TILE_SIZE, TILE_SIZE);
   const tileCtx = asGameContext(tile.getContext('2d'));
 
   /** The barrier tile alone, with the camera parked so it fills the canvas. */
   const paintBarrier = (at: { x: number; y: number }): TileSample => {
     tileCtx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
-    maze.renderWorld(tileCtx, at.x * TILE_SIZE, at.y * TILE_SIZE);
+    maze.renderWorld(tileCtx, cameraAt({ x: at.x * TILE_SIZE, y: at.y * TILE_SIZE }, UNZOOMED));
     return sampleTile(tileCtx);
   };
 

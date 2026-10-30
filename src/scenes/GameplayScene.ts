@@ -22,7 +22,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { PlayerManager } from '../core/party/PlayerManager';
 import type { PauseScreen } from '../ui/screens/pause/PauseScreen';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { cameraAt, UNZOOMED, worldViewSize, type Camera } from '../core/rendering/camera';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import type { SystemContext } from '../systems/GameSystem';
@@ -238,17 +238,24 @@ export abstract class GameplayScene extends Scene {
     return NO_CAMERA_SHAKE;
   }
 
+  /** This frame's camera on `map`: where {@link computeCamera} puts it, never zoomed. */
+  protected frameCamera(map: GameMap): Camera {
+    return cameraAt(this.computeCamera(map), UNZOOMED);
+  }
+
   protected computeCamera(map: GameMap): { x: number; y: number } {
     const player = this.active();
     const focus = this.cameraFocus();
     const focusCentreOffset = TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER;
     const bounds = this.cameraWorldBounds(map);
+    const worldView = worldViewSize(UNZOOMED);
     const viewTop = this.viewportTopInset();
+    const viewBottomInset = this.viewportBottomInset();
     const view: Rect = {
       x: 0,
       y: viewTop,
-      w: viewportWidth(),
-      h: viewportHeight() - this.viewportBottomInset() - viewTop,
+      w: worldView.width,
+      h: worldView.height - viewBottomInset - viewTop,
     };
     const camera = followCamera(
       { x: focus.x + focusCentreOffset, y: focus.y + focusCentreOffset },

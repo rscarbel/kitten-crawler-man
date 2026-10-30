@@ -54,10 +54,6 @@ import {
 
 const TOOL_KINDS = ['axe', 'pickaxe'] as const satisfies readonly ToolKind[];
 
-function isWorkingTool(tool: { kind: WorkingTool['kind']; tier: number }): tool is WorkingTool {
-  return isToolTier(tool.tier);
-}
-
 const CRAWLER_KINDS = ['human', 'cat'] as const satisfies readonly CrawlerKind[];
 
 const failures: string[] = [];
@@ -106,7 +102,9 @@ for (const id of Object.keys(ITEM_DEF).filter(isItemId)) {
 
 const workingTools: WorkingTool[] = [
   ...TOOL_KINDS.flatMap((kind) =>
-    TOOL_TIERS[kind].map((_tier, tier) => ({ kind, tier })).filter(isWorkingTool),
+    TOOL_TIERS[kind].flatMap((_def, tier): WorkingTool[] =>
+      isToolTier(tier) ? [{ kind, tier }] : [],
+    ),
   ),
   { kind: 'scythe', tier: TOOL_TIER_BASIC },
 ];

@@ -32,10 +32,13 @@ import {
   makeShield,
   makeStuck,
   makeStun,
+  FULL_SHARE,
 } from '../core/combat/StatusEffect';
 import type { Mob } from '../creatures/Mob';
 import type { DamageSource, Player, RegenModifierKey } from '../Player';
 import { magicRechargeScale } from '../core/party/crawlerFormulas';
+import { hitTrainingOn, resolveCrawlerHit, type CrawlerDealer } from '../core/combat/outgoingHit';
+import { UNTAGGED_HIT } from '../core/combat/damageTags';
 import type { GearItemState } from './gearState';
 
 /** Multiplier→percentage conversion for generated lines. */
@@ -289,6 +292,8 @@ export interface GearHookContext {
 
 /** A blow or missile of the wearer's that landed on a mob and earned something. */
 export interface GearHit {
+  /** The crawler whose blow it was, and who wears the gear it sets off. */
+  readonly dealer: CrawlerDealer;
   readonly mob: Mob;
   readonly delivery: 'melee' | 'spell';
   /** What the blow dealt. */
@@ -309,8 +314,6 @@ export interface GearSwing {
   readonly dirX: number;
   readonly dirY: number;
   readonly reachPx: number;
-  /** What one blow of the swing deals. */
-  readonly damage: number;
 }
 
 export interface GearKill {
@@ -451,10 +454,10 @@ export function landGearStatus(
       );
       return;
     case 'burn':
-      mob.applyStatus(makeBurn(wearer));
+      mob.applyStatus(makeBurn(FULL_SHARE, wearer));
       return;
     case 'chill':
-      applyChillOnly(mob, durationFrames);
+      applyChillOnly(mob, FULL_SHARE, durationFrames);
       return;
     case 'stun':
       if (takesGearHold(mob)) mob.applyStatus(makeStun(durationFrames ?? GEAR_STUN_FRAMES));
@@ -464,7 +467,7 @@ export function landGearStatus(
       const frames = durationFrames ?? GEAR_WEB_FRAMES;
       mob.root(frames, GEAR_WEB_ROOT_SOURCE);
       // The stuck status carries no hold on a mob; it is there for its web picture.
-      mob.applyStatus(makeStuck(frames));
+      mob.applyStatus(makeStuck(FULL_SHARE, frames));
       return;
     }
     case 'ink':
@@ -496,17 +499,23 @@ function healWearer(wearer: Player, amount: number): void {
 export const MIN_GEAR_STRIKE_DAMAGE = 1;
 
 /**
- * Wounds `mob` in `wearer`'s name with nothing having struck it, the way
- * thorns do: no guard can turn it, and it runs no procs of its own, so one
- * gear strike can never chain into another.
+ * Wounds `mob` in `dealer`'s name for a share of a blow she has already
+ * landed. It runs no procs of its own, so one gear strike can never chain into
+ * another. The share was taken of a blow her stat and her proficiency skills
+ * had already sized, so neither is counted again: it is untagged and grows
+ * with no stat.
  */
-function gearStrike(wearer: Player, mob: Mob, damage: number): void {
-  mob.takeCreditedDamage(
-    Math.max(MIN_GEAR_STRIKE_DAMAGE, Math.round(damage)),
-    wearer,
-    'melee',
-    null,
-  );
+function gearStrike(dealer: CrawlerDealer, mob: Mob, damage: number): void {
+  const strike = resolveCrawlerHit({
+    dealer,
+    delivery: 'unscaled',
+    blow: Math.max(MIN_GEAR_STRIKE_DAMAGE, Math.round(damage)),
+    tags: UNTAGGED_HIT,
+    training: hitTrainingOn(mob),
+    damageType: 'melee',
+    struckBy: 'unguardable',
+  });
+  mob.takeHit(strike);
 }
 
 /** Stuns every enemy within `radiusPx` of a point that a gear hold can take, and shows the ring. */
@@ -525,7 +534,6 @@ function stunAround(
   wearer.gear.live.queueFx({ kind: 'shockwave', x, y, radiusPx, source });
 }
 
-/** The unit direction from `wearer`'s centre to a shooter at `from`, or null when they stand on one point. */
 /** The unit direction from `wearer` back toward where `shot` comes from, or null when it has none. */
 function incomingFrom(wearer: Player, shot: IncomingShot): { x: number; y: number } | null {
   if (shot.kind === 'striker') return towardShooter(wearer, shot.from);
@@ -620,7 +628,7 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
         if (arcs >= t.targets) break;
         if (mob === hit.mob) continue;
         const to = centreOf(mob);
-        gearStrike(ctx.wearer, mob, hit.damage * t.damageShare);
+        gearStrike(hit.dealer, mob, hit.damage * t.damageShare);
         ctx.wearer.gear.live.queueFx({
           kind: 'chainArc',
           fromX: from.x,
@@ -949,7 +957,6 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
         dirX: swing.dirX,
         dirY: swing.dirY,
         rangePx: t.rangeTiles * TILE_SIZE,
-        damage: swing.damage,
       });
     },
   },

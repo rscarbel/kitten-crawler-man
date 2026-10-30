@@ -94,6 +94,8 @@ import { DEATH_FRAMES } from '../src/sprites/art/necromancerFigure';
 import { NECROMANCER_STANDING_PREWARM_LEAD_FRAMES } from '../src/sprites/necromancerSprite';
 import { MAX_MOB_LEVEL } from '../src/levels/spawner';
 import { tileCoordKey } from '../src/map/tileIndex';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const fault = process.argv.find((arg) => arg.startsWith('--fault='))?.split('=')[1] ?? null;
 
@@ -308,6 +310,7 @@ function makeRig(): Rig {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return {
     roster,
@@ -948,7 +951,7 @@ section('Grave Pulse: the lowest-health structure in reach, broken by a direct h
           Math.round(trebuchetDirectDamage(TEST_LEVEL) * necro.blastDamageScale),
         );
         const before = necro.pulsesInterrupted;
-        necro.takeCreditedDamage(direct, rig.human, 'melee', null);
+        necro.takeOwnedHarm(direct, rig.human, 'siegeBoulder');
         interruptWorked = necro.pulsesInterrupted === before + 1;
       }
     }
@@ -998,7 +1001,7 @@ section('Death: a held terminal phase, and justDied latches once');
   const necro = spawnNecromancer(rig, laneOf('south').spawn);
   placeCrawler(rig.human, site.square.bellTile.x, site.square.bellTile.y);
   for (let frame = 0; frame < 30; frame++) step(rig);
-  necro.takeDamageFrom(necro.maxHp * 2, rig.human, 'melee');
+  necro.takeHit(harnessHit(rig.human, necro.maxHp * 2, 'melee'));
   let lastFrameHeld = 0;
   let awake = false;
   for (let frame = 0; frame < UPDATES_PER_SECOND * 10; frame++) {
@@ -1182,7 +1185,7 @@ section('Raised Ratkin: rises immune, then can be hurt; the weakest wave body');
   placeCrawler(rig.cat, start.x, start.y - 21);
   step(rig);
   const full = raised.hp;
-  raised.takeDamageFrom(1, rig.human, 'melee');
+  raised.takeHit(harnessHit(rig.human, 1, 'melee'));
   check(raised.isRising && raised.hp === full, 'a blow while rising does nothing');
   let finalRiseFrame = -1;
   for (let frame = 0; frame < SKELETON_RISE_FRAMES; frame++) {
@@ -1194,7 +1197,7 @@ section('Raised Ratkin: rises immune, then can be hurt; the weakest wave body');
     finalRiseFrame === RISE_FRAMES - 1,
     `the rise row reached its last frame (${finalRiseFrame})`,
   );
-  raised.takeDamageFrom(1, rig.human, 'melee');
+  raised.takeHit(harnessHit(rig.human, 1, 'melee'));
   check(raised.hp === full - 1, 'once out of the ground it takes the blow');
   const others = [
     new SkeletonWarrior(0, 0, TILE_SIZE),

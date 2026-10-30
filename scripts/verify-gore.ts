@@ -21,6 +21,7 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
+import { openFloorGrid } from '../src/map/openFloorGrid.js';
 import { BodyPartGoreSystem } from '../src/systems/BodyPartGoreSystem.js';
 import { COCKROACH_FIGURE } from '../src/sprites/art/cockroachFigure.js';
 import { TRASH_GREMLIN_FIGURE } from '../src/sprites/art/trashGremlinFigure.js';
@@ -70,19 +71,8 @@ import {
 
 installCanvasGlobals();
 
-/**
- * A `GameMap` left on its default tile height measures world pixels against a
- * ten-pixel grid, which silently breaks anything that mixes tiles and pixels.
- */
-const MAP_OPTIONS = { mapSize: 60, tileHeight: TILE_SIZE } as const;
-
-/**
- * The clear ground a corpse needs around it. Pieces glide for about three tiles
- * before they touch down, and the widest of them reaches most of a tile from its
- * own centre, so a smaller room would have them tumbling into whatever walls the
- * generator happened to put nearby — motion this gate has no reason to exercise.
- */
-const OPEN_GROUND_RADIUS_TILES = 5;
+/** Wide enough that nothing dropped in the middle of the arena reaches its edge. */
+const ARENA_SIZE_TILES = 60;
 
 /** Where in a tile its centre point sits. */
 const TILE_CENTRE_RATIO = 0.5;
@@ -95,9 +85,6 @@ const FRAMES_TO_SETTLE = 240;
  * the constant it is testing can only prove the code agrees with itself.
  */
 const EXPECTED_MAX_SETTLED_PARTS = 200;
-
-/** How many random dungeons to try before giving up on finding a wide enough room. */
-const ARENA_GENERATION_ATTEMPTS = 40;
 
 /**
  * Roach corpses the swarm leaves behind during the fight. Eight pieces apiece,
@@ -119,44 +106,20 @@ function check(passed: boolean, description: string): void {
   failures++;
 }
 
-function findOpenGroundCentre(map: GameMap): { x: number; y: number } | null {
-  for (let tileY = OPEN_GROUND_RADIUS_TILES; tileY < MAP_OPTIONS.mapSize; tileY++) {
-    for (let tileX = OPEN_GROUND_RADIUS_TILES; tileX < MAP_OPTIONS.mapSize; tileX++) {
-      let allWalkable = true;
-      for (
-        let dy = -OPEN_GROUND_RADIUS_TILES;
-        dy <= OPEN_GROUND_RADIUS_TILES && allWalkable;
-        dy++
-      ) {
-        for (let dx = -OPEN_GROUND_RADIUS_TILES; dx <= OPEN_GROUND_RADIUS_TILES; dx++) {
-          if (map.isWalkable(tileX + dx, tileY + dy, 'walker')) continue;
-          allWalkable = false;
-          break;
-        }
-      }
-      if (allWalkable) {
-        return {
-          x: (tileX + TILE_CENTRE_RATIO) * TILE_SIZE,
-          y: (tileY + TILE_CENTRE_RATIO) * TILE_SIZE,
-        };
-      }
-    }
-  }
-  return null;
-}
-
 /**
- * A generated dungeon with a room wide enough to drop a corpse in the middle of,
- * and that room's centre. Dungeons are generated at random and a given one may
- * have no room that wide, so this retries rather than trusting the first.
+ * An open floor with nothing to tumble into, and its centre. Built at the game's
+ * own tile size: a `GameMap` left on its default tile height measures world
+ * pixels against a ten-pixel grid, which silently breaks anything that mixes
+ * tiles and pixels.
  */
 function openArena(): { map: GameMap; centre: { x: number; y: number } } {
-  for (let attempt = 0; attempt < ARENA_GENERATION_ATTEMPTS; attempt++) {
-    const map = new GameMap(MAP_OPTIONS);
-    const centre = findOpenGroundCentre(map);
-    if (centre !== null) return { map, centre };
-  }
-  throw new Error('no generated dungeon offered a room wide enough to drop a corpse in');
+  const map = new GameMap({
+    tileHeight: TILE_SIZE,
+    prebuiltStructure: openFloorGrid(ARENA_SIZE_TILES),
+  });
+  const centreTile = Math.floor(ARENA_SIZE_TILES / 2);
+  const centrePx = (centreTile + TILE_CENTRE_RATIO) * TILE_SIZE;
+  return { map, centre: { x: centrePx, y: centrePx } };
 }
 
 function step(gore: BodyPartGoreSystem, frames: number): void {

@@ -25,7 +25,7 @@
  *
  * The patrols, the spotlights and every suspicion stop, the party's input is
  * withheld, the guard shouts, the screen fades to black (through
- * {@link fadeSurface}), and while it is black both crawlers are put in the
+ * {@link surfaces}), and while it is black both crawlers are put in the
  * first holding cell, its door is re-boarded and every patrol, spotlight and
  * suspicion goes back to the start of its loop. Combat keeps ticking under
  * the fade, so a shot or a stick already in the air still lands; whatever
@@ -67,7 +67,7 @@ import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import type { SpatialGrid } from '../../core/world/SpatialGrid';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import type { Camera } from '../../core/rendering/camera';
 import type { Mob, PlayerDamageType } from '../../creatures/Mob';
 import { PrisonCellDoor } from '../../creatures/PrisonCellDoor';
 import { PrisonerGoblin } from '../../creatures/PrisonerGoblin';
@@ -84,6 +84,12 @@ import {
   type PrisonTile,
 } from '../../map/goblinPrisonPlan';
 import type { Player } from '../../Player';
+import {
+  hitTrainingOn,
+  resolveCrawlerHit,
+  type CrawlerDealer,
+} from '../../core/combat/outgoingHit';
+import { UNTAGGED_HIT } from '../../core/combat/damageTags';
 import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import { screenFadeSurface } from '../../ui/ScreenFade';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -126,7 +132,7 @@ import {
   type GuardActivity,
   type GuardPose,
 } from './prisonPatrols';
-import { playPrisonCue, PRISON_CUES, type PrisonCue } from './prisonSoundCues';
+import { playPrisonCue, PRISON_CUES, type PrisonCue } from '../../audio/prisonSoundCues';
 
 // ── Capture timing ──────────────────────────────────────────────────────────
 
@@ -138,6 +144,7 @@ export const CAPTURE_FADE_OUT_FRAMES = 30;
 export const CAPTURE_HOLD_FRAMES = 48;
 /** The fade back in, the cell door slamming as it starts. */
 export const CAPTURE_FADE_IN_FRAMES = 30;
+const CAPTURE_FADE_SURFACE_ID = 'prison-capture-fade';
 
 /** What the capture toast says when nothing else rewrites it. */
 export const CAPTURE_TOAST = 'Caught! Thrown in a cell.';
@@ -152,6 +159,8 @@ export const CELL_DOOR_PROMPT = 'Break door';
  * swing's wind-up, so the door breaks as the fist or claw comes down.
  */
 const CELL_DOOR_SWING_FRAMES = 10;
+/** What the swing deals the door; any blow at all breaks one, whatever it is worth. */
+const CELL_DOOR_BLOW_DAMAGE = 1;
 
 /** How strongly a light must see a crawler to count at all; anything inside counts. */
 const SEEN_EDGE_WEIGHT_FLOOR = 0;
@@ -330,7 +339,7 @@ interface WoodChip {
 
 interface DoorSwing {
   readonly door: PrisonCellDoor;
-  readonly crawler: Player;
+  readonly crawler: CrawlerDealer;
   framesLeft: number;
 }
 
@@ -471,8 +480,8 @@ export class GoblinPrisonSystem {
   }
 
   /** The full-screen fade the capture runs through; mount once on the scene's `UiRoot`. */
-  fadeSurface(id = 'prison-capture-fade'): Surface {
-    return screenFadeSurface(id, { alpha: () => this.fadeAlpha });
+  surfaces(): Surface[] {
+    return [screenFadeSurface(CAPTURE_FADE_SURFACE_ID, { alpha: () => this.fadeAlpha })];
   }
 
   /**
@@ -631,7 +640,17 @@ export class GoblinPrisonSystem {
     swing.framesLeft--;
     if (swing.framesLeft > 0) return;
     this.doorSwing = null;
-    if (!swing.door.broken) swing.door.takeDamageFrom(1, swing.crawler, 'melee');
+    if (swing.door.broken) return;
+    const blow = resolveCrawlerHit({
+      dealer: swing.crawler,
+      delivery: 'unscaled',
+      blow: CELL_DOOR_BLOW_DAMAGE,
+      tags: UNTAGGED_HIT,
+      training: hitTrainingOn(swing.door),
+      damageType: 'melee',
+      struckBy: 'dealer',
+    });
+    swing.door.takeHit(blow);
   }
 
   private cellRuntimeOf(body: { readonly x: number; readonly y: number }): CellRuntime | null {
@@ -1159,13 +1178,9 @@ export class GoblinPrisonSystem {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  /** The walls, floor and wall furniture, in place of the map's own tiles. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.ground.renderGround(ctx, camX, camY, viewportWidth(), viewportHeight());
-  }
-
   /** Opens the queue that lifts health bars and markers over the darkness drawn in {@link renderEffects}. */
-  renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+  renderWorld(ctx: CanvasRenderingContext2D, camera: Camera, active: Player): void {
+    const { x: camX, y: camY } = camera;
     beginAboveDarkness((worldX, worldY) => this.darknessAt(worldX, worldY));
     const door = this.isCapturing ? null : this.doorPromptFor(active);
     if (door !== null) {
@@ -1174,8 +1189,8 @@ export class GoblinPrisonSystem {
   }
 
   /** Bars and cover, sorted with the bodies. */
-  sortedFigures(camX: number, camY: number): InteriorFigure[] {
-    return this.ground.sortedFigures(camX, camY, viewportWidth(), viewportHeight());
+  roomFigures(camera: Camera): InteriorFigure[] {
+    return this.ground.sortedFigures(camera);
   }
 
   /**
@@ -1183,18 +1198,17 @@ export class GoblinPrisonSystem {
    * under every shot, blast and spell, which carry their own light; then the
    * health bars and markers the sorted pass held back.
    */
-  renderDarkness(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const viewW = viewportWidth();
-    const viewH = viewportHeight();
-    this.lighting.renderDarkness(ctx, camX, camY, viewW, viewH, this.lit, this.lightSources);
+  renderDarkness(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.lighting.renderDarkness(ctx, camera, this.lit, this.lightSources);
     const nowMs = performance.now();
-    this.lighting.renderLiveLights(ctx, camX, camY, viewW, viewH, this.lit, nowMs);
-    this.renderEyeShine(ctx, camX, camY, viewW, viewH, nowMs);
+    this.lighting.renderLiveLights(ctx, camera, this.lit, nowMs);
+    this.renderEyeShine(ctx, camera, nowMs);
     flushAboveDarkness(ctx);
   }
 
   /** The chips off a broken door and the suspicion markers, over everything in the world. */
-  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderEffects(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     this.renderChips(ctx, camX, camY);
     this.renderMarkers(ctx, camX, camY, performance.now());
   }
@@ -1218,14 +1232,8 @@ export class GoblinPrisonSystem {
     return this.lighting.staticDarknessAt(worldX, worldY);
   }
 
-  private renderEyeShine(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-    nowMs: number,
-  ): void {
+  private renderEyeShine(ctx: CanvasRenderingContext2D, camera: Camera, nowMs: number): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const eyes = this.eyeScratch;
     const shine = (body: Mob, seed: number): void => {
       const sx = body.x - camX;

@@ -86,6 +86,7 @@ import {
   makeBloodVomit,
   makeDoubleDamage,
   type StatusEffect,
+  FULL_SHARE,
 } from '../src/core/combat/StatusEffect';
 import type { ItemId } from '../src/core/items/defs/ItemDefs';
 import { applyWheelPrize, type WheelPrizeTarget } from '../src/systems/casino/wheel/wheelPrizes';
@@ -1528,6 +1529,7 @@ function checkStatusDamageScale(): void {
       type: id,
       ticksRemaining: STATUS_SCALE_TICKS,
       totalTicks: STATUS_SCALE_TICKS,
+      survivingShare: FULL_SHARE,
       applier: null,
     };
     for (const [label, source] of [

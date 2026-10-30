@@ -816,7 +816,7 @@ export class TrebuchetSystem {
       // No weapon type: the builder swung nothing, so the kill trains no
       // weapon skill — and, unlike `explosion`, no type still passes the
       // friendly-fire gate, so a boulder can never reach an ally that way.
-      mob.takeCreditedDamage(damage, builder, null, null);
+      mob.takeOwnedHarm(damage, builder, 'siegeBoulder');
       if (boulder.infernal && mob.isAlive) mob.applyStatus(makeCreditedBurn(builder));
       if (mob.isAlive) this.shove(mob, toX, toY, TREBUCHET_KNOCKBACK_TILES);
     }
@@ -887,7 +887,7 @@ export class TrebuchetSystem {
         if (Math.hypot(centre.x - cloud.x, centre.y - cloud.y) > radiusPx) continue;
         mob.applyHazardSlow(MIASMA_SLOW_FRAMES);
         // A tick of a cloud the builder laid: credited, but no weapon swung.
-        if (ticks) mob.takeCreditedDamage(MIASMA_DAMAGE, builder, null, null);
+        if (ticks) mob.takeOwnedHarm(MIASMA_DAMAGE, builder, 'siegeMiasma');
       }
     }
   }

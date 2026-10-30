@@ -1,3 +1,4 @@
+import type { Camera } from '../core/rendering/camera';
 import { TILE_SIZE } from '../core/constants';
 import { crawlerDisplayName } from '../characters/characters';
 import { getSeismicStompStats } from '../abilities/seismicStomp';
@@ -50,9 +51,10 @@ import type { PauseRestriction } from '../ui/screens/pause/PauseScreen';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { TutorialGates, type TutorialGateId, type TutorialGateView } from './tutorialGates';
 import type { TownPropRenderable } from './townPropRenderable';
-import type { TutorialCueAt } from './tutorialSoundCues';
+import type { TutorialCueAt } from '../audio/tutorialSoundCues';
 import { DAVE_NEAR_DISTANCE_TILES } from './DaveGuideSystem';
 import { CHEST_INTERACTION_RANGE } from './TreasureChestSystem';
+import { drawInWorldView } from '../core/rendering/cameraZoom';
 
 // ── State machine
 
@@ -1344,8 +1346,7 @@ export class TutorialController implements ObjectiveBeaconSource {
 
   renderOverlay(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     activePlayerX: number,
     activePlayerY: number,
     renderCtx: TutorialRenderContext,
@@ -1397,28 +1398,9 @@ export class TutorialController implements ObjectiveBeaconSource {
     // Also shows a navigation arrow above the cat pointing toward goblin B when the cat is
     // far from gate G2 — goblin B is behind G2 and may be off-screen on small displays.
     if (this._state === 'CAT_EQUIPPED_MAGIC_MISSILE' && this.goblinB.hp > 0) {
-      drawBouncingArrowAboveEntity(
-        ctx,
-        GOBLIN_B_POS.x * TILE_SIZE,
-        GOBLIN_B_POS.y * TILE_SIZE,
-        camX,
-        camY,
-        worldPalette.guide.accent,
+      drawInWorldView(ctx, camera.zoom, () =>
+        this.renderGoblinBArrows(ctx, camera, activePlayerX, activePlayerY),
       );
-
-      const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_GATE_THRESHOLD_PX;
-      if (!catNearGate) {
-        drawArrowAbovePlayer(
-          ctx,
-          activePlayerX,
-          activePlayerY,
-          (GOBLIN_B_POS.x + TILE_FRACTION_CENTER) * TILE_SIZE,
-          (GOBLIN_B_POS.y + TILE_FRACTION_CENTER) * TILE_SIZE,
-          camX,
-          camY,
-          worldPalette.guide.accent,
-        );
-      }
     }
 
     const target = STATE_ARROW_TARGETS[this._state];
@@ -1429,14 +1411,17 @@ export class TutorialController implements ObjectiveBeaconSource {
         this._state === 'HUMAN_EQUIPPED_SEISMIC_STOMP' &&
         activePlayerX <= TUTORIAL_GATE_SEISMIC_STOMP.clampPxX + NEAR_GATE_THRESHOLD_PX;
       if (!nearSeismicStompGate) {
-        this.renderArrowToTarget(
-          ctx,
-          camX,
-          camY,
-          activePlayerX,
-          activePlayerY,
-          worldTargetCentrePx(target, renderCtx.davePosition),
-          this.interactPromptRangePx(target),
+        const targetCentre = worldTargetCentrePx(target, renderCtx.davePosition);
+        const promptRangePx = this.interactPromptRangePx(target);
+        drawInWorldView(ctx, camera.zoom, () =>
+          this.renderArrowToTarget(
+            ctx,
+            camera,
+            activePlayerX,
+            activePlayerY,
+            targetCentre,
+            promptRangePx,
+          ),
         );
       }
     }
@@ -1871,20 +1856,49 @@ export class TutorialController implements ObjectiveBeaconSource {
     });
   }
 
+  /** The arrow over goblin B, and the one above the cat toward him while she is far from his gate. */
+  private renderGoblinBArrows(
+    ctx: CanvasRenderingContext2D,
+    camera: Camera,
+    activePlayerX: number,
+    activePlayerY: number,
+  ): void {
+    drawBouncingArrowAboveEntity(
+      ctx,
+      GOBLIN_B_POS.x * TILE_SIZE,
+      GOBLIN_B_POS.y * TILE_SIZE,
+      camera.x,
+      camera.y,
+      worldPalette.guide.accent,
+    );
+    const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_GATE_THRESHOLD_PX;
+    if (catNearGate) return;
+    drawArrowAbovePlayer(
+      ctx,
+      activePlayerX,
+      activePlayerY,
+      (GOBLIN_B_POS.x + TILE_FRACTION_CENTER) * TILE_SIZE,
+      (GOBLIN_B_POS.y + TILE_FRACTION_CENTER) * TILE_SIZE,
+      camera.x,
+      camera.y,
+      worldPalette.guide.accent,
+    );
+  }
+
   /**
    * Renders the directional arrow above the active player pointing toward the
-   * target. It stands down once the target's interact prompt shows
+   * target, in the world view's units. It stands down once the target's interact prompt shows
    * (`promptRangePx`), or near a target without one.
    */
   private renderArrowToTarget(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     activePlayerX: number,
     activePlayerY: number,
     targetCentre: { x: number; y: number },
     promptRangePx: number | null,
   ): void {
+    const { x: camX, y: camY } = camera;
     const targetWorldX = targetCentre.x;
     const targetWorldY = targetCentre.y;
 
@@ -1908,9 +1922,9 @@ export class TutorialController implements ObjectiveBeaconSource {
     const playerScreenY = activePlayerY - camY;
     if (
       playerScreenX < -ARROW_OFFSCREEN_MARGIN_PX ||
-      playerScreenX > viewportWidth() + ARROW_OFFSCREEN_MARGIN_PX ||
+      playerScreenX > camera.viewWidth + ARROW_OFFSCREEN_MARGIN_PX ||
       playerScreenY < -ARROW_OFFSCREEN_MARGIN_PX ||
-      playerScreenY > viewportHeight() + ARROW_OFFSCREEN_MARGIN_PX
+      playerScreenY > camera.viewHeight + ARROW_OFFSCREEN_MARGIN_PX
     ) {
       return;
     }

@@ -7,6 +7,7 @@
  *   awaiting_hacking → hacking → hacking_failed → cutscene → boss_fight → complete
  */
 
+import type { Camera } from '../core/rendering/camera';
 import type { QuestId } from '../core/quests/QuestManager';
 import { TILE_SIZE } from '../core/constants';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
@@ -83,7 +84,7 @@ import {
   spiderTutorialPagesDue,
   type SpiderTutorialPageId,
 } from '../ui/screens/dialogs/spiderTutorial';
-import type { SpiderQuestCue } from './spiderQuest/spiderQuestSoundCues';
+import type { SpiderQuestCue } from '../audio/spiderQuestSoundCues';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider' as const satisfies QuestId;
 
@@ -1073,20 +1074,16 @@ export class SpiderQuestSystem implements GameSystem {
    * hide a warning — her floor telegraphs, her puddles, her eggs and the
    * brood's eye-shine, and last the lab's prompts and the terminal's arrow.
    */
-  renderLabDarkness(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active?: Player,
-  ): void {
+  renderLabDarkness(ctx: CanvasRenderingContext2D, camera: Camera, active?: Player): void {
     if (this.phase === 'inactive') return;
     const lab = this.labDressing;
     if (lab === null || this.roomData === null) return;
-    if (!lab.isInView(camX, camY)) {
+    const { x: camX, y: camY } = camera;
+    if (!lab.isInView(camera)) {
       this._renderLabPrompts(ctx, camX, camY, active);
       return;
     }
-    lab.renderDarkness(ctx, camX, camY);
+    lab.renderDarkness(ctx, camera);
     lab.renderCeiling(ctx, camX, camY);
     if (lab.isDark) {
       this._renderLabWarnings(ctx, camX, camY);
@@ -1176,17 +1173,15 @@ export class SpiderQuestSystem implements GameSystem {
     this._renderLifeMachines(ctx, camX, camY, active, true);
   }
 
-  /** The cutscene's shutdown caption and tint, and the sealed lab's border; the hack's own screens are surfaces. */
-  renderUI(ctx: CanvasRenderingContext2D, camX = 0, camY = 0): void {
-    if (this.phase === 'inactive') return;
+  /** The cutscene's shutdown caption and tint, in screen space; the hack's own screens are surfaces. */
+  renderUI(ctx: CanvasRenderingContext2D): void {
+    if (this.phase === 'cutscene') this._renderCutsceneUI(ctx);
+  }
 
-    if (this.phase === 'cutscene') {
-      this._renderCutsceneUI(ctx);
-    }
-
-    if (this._roomLocked && this.roomData !== null) {
-      this._renderLockedRoomBorder(ctx, camX, camY);
-    }
+  /** World paint, under the camera's zoom: the sealed lab's pulsing border. */
+  renderLockedRoomBorder(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.phase === 'inactive' || !this._roomLocked) return;
+    this._renderLockedRoomBorder(ctx, camX, camY);
   }
 
   /**

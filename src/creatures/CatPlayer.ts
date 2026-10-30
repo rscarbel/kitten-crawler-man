@@ -2,6 +2,7 @@ import { gearModifiers, wornClaws } from '../gear/gearHooks';
 import { ClimberFooting } from './climberFooting';
 import type { MobilityClass } from '../map/mobility';
 import { weaponHitTags, type DamageTags } from '../core/combat/damageTags';
+import type { WeaponDelivery } from '../core/items/equipment/weapons';
 import { Player, type FigureMouth, type StatusFigureBox } from '../Player';
 import { intoxicationDilatesPupils, intoxicationOf } from '../core/combat/Intoxication';
 
@@ -91,7 +92,7 @@ export class CatPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
   readonly crawlerKind = CAT_CRAWLER_KIND;
 
-  override get isCrawler(): boolean {
+  override get isCrawler(): true {
     return true;
   }
 
@@ -285,9 +286,10 @@ export class CatPlayer extends Player {
     this.inventory.placeOnHotbar('health_potion', CatPlayer.POTION_HOTBAR_SLOT);
   }
 
-  getMissileDamage(): number {
+  /** What a missile is worth with `magic` behind it, her own magic unless a hit's resolver names one. */
+  getMissileDamage(magic = this.magic): number {
     const stats = getMagicMissileStats(this.getMagicMissileLevel());
-    return missileDamage(this.magic, stats.damageMultiplier);
+    return missileDamage(magic, stats.damageMultiplier);
   }
 
   /** Crawlers dodge; the mobs they fight do not. */
@@ -330,14 +332,18 @@ export class CatPlayer extends Player {
     this.animator.play('groom_paw');
   }
 
+  /** How her swipe leaves her, which names the stat it grows with. */
+  readonly meleeDelivery = 'claw' as const satisfies WeaponDelivery;
+
   /** What kind of blow her swipe is: her worn claws' family, or none for a bare paw. */
   meleeHitTags(): DamageTags {
     return weaponHitTags(wornClaws(this));
   }
 
-  getMeleeDamage(): number {
+  /** What a swipe is worth with `melee` behind it, her own melee unless a hit's resolver names one. */
+  getMeleeDamage(melee = this.melee): number {
     const clawMultiplier = wornClaws(this)?.damageMultiplier ?? 1;
-    return bareClawDamage(this.melee) * clawMultiplier + this.statusMeleeDamageBonus;
+    return bareClawDamage(melee) * clawMultiplier + this.statusMeleeDamageBonus;
   }
 
   getMeleeRange(): number {

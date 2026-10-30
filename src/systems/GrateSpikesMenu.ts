@@ -29,6 +29,7 @@ import {
   SPIKES_COST,
   discountedCost,
 } from './briarHollow/structureRules';
+import { worldToScreenRect, type Camera } from '../core/rendering/camera';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -135,7 +136,7 @@ export class GrateSpikesMenu {
     return true;
   }
 
-  private model(camX: number, camY: number): StructurePopoverModel | null {
+  private model(camera: Camera): StructurePopoverModel | null {
     const grateIdx = this.grateIdx;
     if (grateIdx === null) return null;
     const barrier = this.deps.defendQuest.spikeableBarrierNear(this.active());
@@ -159,7 +160,12 @@ export class GrateSpikesMenu {
         },
         { label: 'Cancel', style: 'cancel', action: () => void this.close() },
       ],
-      anchor: { x: barrier.worldX - camX, y: barrier.worldY - camY, w: TILE_SIZE, h: TILE_SIZE },
+      anchor: worldToScreenRect(camera, {
+        x: barrier.worldX,
+        y: barrier.worldY,
+        w: TILE_SIZE,
+        h: TILE_SIZE,
+      }),
     };
   }
 
@@ -176,12 +182,9 @@ export class GrateSpikesMenu {
    *
    * @param camera Where the camera is, for anchoring the menu to the grate.
    */
-  surface(camera: () => { readonly x: number; readonly y: number }): Surface {
+  surface(camera: () => Camera): Surface {
     return this.menu.surface('grate-spikes', {
-      model: () => {
-        const { x, y } = camera();
-        return this.model(x, y);
-      },
+      model: () => this.model(camera()),
       stockOf: (id) => partyCount(this.deps.human, this.deps.cat, id),
       onKey: (key, mods) => this.handleKeyDown(key, mods.repeat === true),
       close: () => void this.close(),

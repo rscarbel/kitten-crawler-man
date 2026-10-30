@@ -52,6 +52,7 @@ import {
   type SlamTentacleMarker,
 } from '../creatures/Kraken';
 import { GameMap } from '../map/GameMap';
+import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { previewInk } from '../ui/theme/previewInk';
 
@@ -190,7 +191,7 @@ const SLAM_DIVE_START = SLAM_RISE_SHARE + SLAM_LOOM_SHARE;
 const SLAM_RISE_OFFSET_FRACTION = 0.22;
 
 export class KrakenPreviewScene extends PreviewScene {
-  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly map = new GameMap({ prebuiltStructure: openFloorGrid(PREVIEW_MAP_SIZE) });
   private readonly gore = new BodyPartGoreSystem(this.map);
 
   private zoomIndex = ZOOM_LEVELS.indexOf(ZOOM_DOUBLE);

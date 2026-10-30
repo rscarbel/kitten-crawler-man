@@ -1,3 +1,5 @@
+import { WADE_SPEED_FACTOR } from '../core/constants';
+import type { GameMap } from './GameMap';
 import { LAB_WEB } from './tileTypes';
 
 /** Share of walking pace a crawler keeps on the spider lab's webbing. */
@@ -20,6 +22,23 @@ const TILE_SPEED_FACTORS: ReadonlyMap<number, number> = new Map([[LAB_WEB, LAB_W
 /** The share of walking pace a crawler keeps on this tile type; 1 for ordinary ground. */
 export function tileSpeedFactor(tileType: number): number {
   return TILE_SPEED_FACTORS.get(tileType) ?? 1;
+}
+
+/**
+ * The share of walking pace a crawler keeps with its feet on this tile: the
+ * river's wade and the ground's own drag together; 1 off the map.
+ */
+export function footingFactorAt(
+  gameMap: Pick<GameMap, 'isWadeable' | 'structure'>,
+  tileX: number,
+  tileY: number,
+): number {
+  const riverFactor = gameMap.isWadeable(tileX, tileY) ? WADE_SPEED_FACTOR : 1;
+  const { structure } = gameMap;
+  const insideMap =
+    tileY >= 0 && tileY < structure.length && tileX >= 0 && tileX < structure[tileY].length;
+  const groundFactor = insideMap ? tileSpeedFactor(structure[tileY][tileX].type) : 1;
+  return riverFactor * groundFactor;
 }
 
 /** The slowest pace any ground leaves a crawler, for gates that must pass at the worst case. */

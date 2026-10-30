@@ -19,7 +19,7 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { REFRESHED_SPEED_FACTOR } from '../core/combat/StatusEffect';
 import { SPEED_FIZZ_MULTIPLIER } from '../Player';
 import type { TileRect } from '../map/town/townPlan';
@@ -50,22 +50,31 @@ export function tileFocus(tile: { readonly x: number; readonly y: number }): Res
   return { x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE };
 }
 
+/** How much of the world the camera shows, which decides how soon an entry can come into view. */
+export type ResidencyView = Pick<Camera, 'viewWidth' | 'viewHeight'>;
+
 /**
- * What the next frames may show: the points they may be drawn around, and
- * whether the world is covered while the party waits to be put at one of them.
+ * What the next frames may show: the points they may be drawn around, the
+ * view they are drawn with, and whether the world is covered while the party
+ * waits to be put at one of them.
  */
 export interface ResidencyOutlook {
   readonly focus: ReadonlyArray<ResidencyFocus>;
+  readonly view: ResidencyView;
   readonly covered: boolean;
 }
 
 /**
- * How far, in tiles, a camera centred on `focus` must move before any of
- * `area` comes into view: zero while some of it is in view already.
+ * How far, in tiles, a camera showing `view` and centred on `focus` must move
+ * before any of `area` comes into view: zero while some of it is in view already.
  */
-export function tilesUntilInView(focus: ResidencyFocus, area: TileRect): number {
-  const halfViewW = worldViewWidth() / 2 / TILE_SIZE;
-  const halfViewH = worldViewHeight() / 2 / TILE_SIZE;
+export function tilesUntilInView(
+  focus: ResidencyFocus,
+  area: TileRect,
+  view: ResidencyView,
+): number {
+  const halfViewW = view.viewWidth / 2 / TILE_SIZE;
+  const halfViewH = view.viewHeight / 2 / TILE_SIZE;
   const focusTileX = focus.x / TILE_SIZE;
   const focusTileY = focus.y / TILE_SIZE;
   const dx = Math.max(area.x - focusTileX, 0, focusTileX - (area.x + area.w)) - halfViewW;
@@ -167,9 +176,9 @@ interface WarmthTally {
 interface Registration {
   settle(outlook: ResidencyOutlook): void;
   releaseAll(): void;
-  isWarmAround(focus: ResidencyFocus): boolean;
-  forgiveAndWarmAround(focus: ResidencyFocus): void;
-  tallyWarmthAround(focus: ResidencyFocus, tally: WarmthTally): void;
+  isWarmAround(focus: ResidencyFocus, view: ResidencyView): boolean;
+  forgiveAndWarmAround(focus: ResidencyFocus, view: ResidencyView): void;
+  tallyWarmthAround(focus: ResidencyFocus, view: ResidencyView, tally: WarmthTally): void;
   /** Whether the set bakes for a loading screen. */
   readonly bakes: boolean;
   bakeFor(budgetMs: number, mustProgress: boolean): void;
@@ -206,7 +215,7 @@ class SetRegistration<Entry> implements Registration {
   settle(outlook: ResidencyOutlook): void {
     let owedWithinHold = false;
     let owedNearCrawler = false;
-    const nearest = this.nearestFirst(outlook.focus);
+    const nearest = this.nearestFirst(outlook.focus, outlook.view);
     this.releaseVanished(nearest);
     // Nearest first, so the cache's queue fills what the camera reaches first.
     for (const near of nearest) {
@@ -232,23 +241,23 @@ class SetRegistration<Entry> implements Registration {
     this.lastEntries.clear();
   }
 
-  isWarmAround(focus: ResidencyFocus): boolean {
-    for (const near of this.nearestFirst([focus])) {
+  isWarmAround(focus: ResidencyFocus, view: ResidencyView): boolean {
+    for (const near of this.nearestFirst([focus], view)) {
       if (near.tiles > this.holdTiles) break;
       if (this.set.warmth(near.entry) !== 'warm') return false;
     }
     return true;
   }
 
-  forgiveAndWarmAround(focus: ResidencyFocus): void {
-    for (const near of this.nearestFirst([focus])) {
+  forgiveAndWarmAround(focus: ResidencyFocus, view: ResidencyView): void {
+    for (const near of this.nearestFirst([focus], view)) {
       if (near.tiles > this.holdTiles) break;
       this.set.warm(near.entry, 'forgiving');
     }
   }
 
-  tallyWarmthAround(focus: ResidencyFocus, tally: WarmthTally): void {
-    for (const near of this.nearestFirst([focus])) {
+  tallyWarmthAround(focus: ResidencyFocus, view: ResidencyView, tally: WarmthTally): void {
+    for (const near of this.nearestFirst([focus], view)) {
       if (near.tiles > this.holdTiles) break;
       tally.near++;
       const warmth = this.set.warmth(near.entry);
@@ -285,14 +294,17 @@ class SetRegistration<Entry> implements Registration {
   }
 
   /** Each entry's distance from the nearest focus, nearest first. */
-  private nearestFirst(focus: ReadonlyArray<ResidencyFocus>): EntryDistance<Entry>[] {
+  private nearestFirst(
+    focus: ReadonlyArray<ResidencyFocus>,
+    view: ResidencyView,
+  ): EntryDistance<Entry>[] {
     const nearestByKey = new Map<string, EntryDistance<Entry>>();
     for (const placement of this.set.placements()) {
       const key = this.set.keyOf(placement.entry);
       let tiles = Number.POSITIVE_INFINITY;
       let crawlerTiles = Number.POSITIVE_INFINITY;
       for (const point of focus) {
-        const pointTiles = tilesUntilInView(point, placement.area);
+        const pointTiles = tilesUntilInView(point, placement.area, view);
         tiles = Math.min(tiles, pointTiles);
         if (point.landing !== true) crawlerTiles = Math.min(crawlerTiles, pointTiles);
       }
@@ -354,18 +366,19 @@ export class WorldResidency {
 
   /**
    * Whether every entry of every set within its hold ring of `focus` is
-   * warm: for a warp, which must not put the party down among cold art.
+   * warm, seen through `view`: for a warp, which must not put the party down
+   * among cold art.
    */
-  isWarmAround(focus: ResidencyFocus): boolean {
-    return this.registrations.every((registration) => registration.isWarmAround(focus));
+  isWarmAround(focus: ResidencyFocus, view: ResidencyView): boolean {
+    return this.registrations.every((registration) => registration.isWarmAround(focus, view));
   }
 
   /**
    * Asks again, forgivingly, for every entry within its hold ring of `focus`:
    * for a loading screen covering a warp there.
    */
-  forgiveAndWarmAround(focus: ResidencyFocus): void {
-    for (const registration of this.registrations) registration.forgiveAndWarmAround(focus);
+  forgiveAndWarmAround(focus: ResidencyFocus, view: ResidencyView): void {
+    for (const registration of this.registrations) registration.forgiveAndWarmAround(focus, view);
   }
 
   /**
@@ -391,9 +404,11 @@ export class WorldResidency {
    * that are warm, and whether any still missing is queued: none means every
    * cache has baked or given up on all of them.
    */
-  warmthAround(focus: ResidencyFocus): ResidentWarmthAround {
+  warmthAround(focus: ResidencyFocus, view: ResidencyView): ResidentWarmthAround {
     const tally: WarmthTally = { near: 0, warm: 0, anyQueued: false };
-    for (const registration of this.registrations) registration.tallyWarmthAround(focus, tally);
+    for (const registration of this.registrations) {
+      registration.tallyWarmthAround(focus, view, tally);
+    }
     if (tally.near === 0) return { share: 1, anyQueued: false };
     return { share: tally.warm / tally.near, anyQueued: tally.anyQueued };
   }

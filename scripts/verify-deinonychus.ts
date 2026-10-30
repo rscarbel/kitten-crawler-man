@@ -23,6 +23,8 @@
  */
 
 import { level3 } from '../src/levels/level3';
+import { level2 } from '../src/levels/level2';
+import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
@@ -72,6 +74,8 @@ import { deinonychusExplainerEntry } from '../src/ui/screens/dialogs/deinonychus
 import { PetNamePrompt } from '../src/ui/screens/dialogs/petNamePrompt';
 import { MissingPetNames, attackCowPortrait } from '../src/systems/petNaming';
 import { SafeRoomSystem } from '../src/systems/SafeRoomSystem';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 /** Level 3's own size: Briar Hollow is always sited, and only fits on the real map. */
 const MAP_SIZE = level3.mapSize;
@@ -248,6 +252,7 @@ function makeContext(
     activeIsMoving: true,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 
@@ -958,7 +963,7 @@ console.log('\nwho he picks a fight with');
     // check that the quarry tier means "the cat hit *this* mob" rather than "the
     // cat hit something near it". If it meant the latter, both would rank alike
     // and the nearer bystander would win.
-    if (tier === "the cat's quarry") contender.takeDamageFrom(1, h.cat, 'melee');
+    if (tier === "the cat's quarry") contender.takeHit(harnessHit(h.cat, 1, 'melee'));
 
     for (let frame = 0; frame < TARGETING_SETTLE_FRAMES; frame++) {
       // Only Deinonychus is ticked, and the hostiles' aggro is pinned by hand. Running
@@ -1261,7 +1266,11 @@ console.log('\na safe room lets its allies in');
   // him straight back, and the next frame would turn him out again — a teleport
   // loop that runs as long as the party stands inside.
   const SAFE_ROOM_FRAMES = 120;
-  const map = new GameMap({ mapSize: MAP_SIZE, tileHeight: TILE_SIZE });
+  const map = new GameMap({
+    mapSize: level2.mapSize,
+    tileHeight: TILE_SIZE,
+    dungeon: dungeonOptionsForLevel(level2),
+  });
   if (map.safeRooms.length === 0) {
     check(false, 'the dungeon generated a safe room to stand in');
   } else {
@@ -1287,7 +1296,7 @@ console.log('\na safe room lets its allies in');
       new PetNameBook(),
     );
     system.unlocked = true;
-    const safeRoom = new SafeRoomSystem(map, { kind: 'floor', level: 'level1' });
+    const safeRoom = new SafeRoomSystem(map, { kind: 'floor', level: level2.id });
     const ctx = makeContext(human, cat, map, roster);
     const deinonychus = system.summon(cat, map);
     if (deinonychus === null) {

@@ -30,6 +30,7 @@ import { type CardinalView } from '../../facingView';
 import {
   HUMAN_ROW_TABLE,
   type HumanGait,
+  type HumanRowDef,
   type HumanRowMeta,
   type HumanRowName,
   ORIGIN_X,
@@ -246,7 +247,11 @@ export function probeHumanJoints(
   frame: number,
   look: HumanLook,
 ): HumanJointProbe {
-  const spec = HUMAN_ROW_TABLE[row];
+  return probeRowJoints(HUMAN_ROW_TABLE[row], frame, look);
+}
+
+/** {@link probeHumanJoints} for any row on the rig, the crawler's or one a figure on it adds. */
+export function probeRowJoints(spec: HumanRowDef, frame: number, look: HumanLook): HumanJointProbe {
   const toCell = cellMapOf(look, spec.view);
   const view = VIEWS[spec.view];
   const pose = poseAsDrawn(withLookBuild(spec.pose(frame), look), view);
@@ -328,8 +333,7 @@ const WALK_GROUND_PX_PER_FRAME = WALK_GROUND_PER_CYCLE_PX / WALK_FRAMES;
  *
  * A row that does not travel covers none.
  */
-export function groundPxPerFrame(row: HumanRowName): number {
-  const spec: HumanRowMeta = HUMAN_ROW_TABLE[row];
+export function groundPxPerFrame(spec: HumanRowMeta): number {
   if (spec.locomotion !== 'travelling') return 0;
   if (spec.role === 'stomp') return SEISMIC_STOMP_GROUND_PX_PER_FRAME;
   if (spec.role === 'strike') return (HUMAN_SWING_FRAMES / spec.frameCount) * PLAYER_SPEED;
@@ -365,8 +369,8 @@ const FLOOR_SLIDE_SHARE: Readonly<Record<CardinalView, number>> = {
  * row's view draws the floor. A planted foot has to slide back by exactly
  * this much to hold its place on the floor.
  */
-export function floorDriftPerFrameCellPx(row: HumanRowName): number {
-  const share = FLOOR_SLIDE_SHARE[HUMAN_ROW_TABLE[row].view];
+export function floorDriftPerFrameCellPx(row: HumanRowMeta): number {
+  const share = FLOOR_SLIDE_SHARE[row.view];
   return groundPxPerFrame(row) * CELL_PX_PER_WORLD_PX * share;
 }
 

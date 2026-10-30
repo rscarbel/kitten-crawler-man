@@ -40,6 +40,7 @@ import { processingStationsOf } from '../../src/systems/briarHollow/processingSt
 import { pointedGuidanceTarget } from '../../src/systems/briarHollow/questGuidance';
 import { CALLOUT_FRAMES } from '../../src/systems/briarHollow/structureCallouts';
 import { queuedPrompts, setInteractionPromptsSuppressed } from '../../src/ui/InteractionPrompt';
+import { UNZOOMED, cameraAt } from '../../src/core/rendering/camera';
 import { testConversationFlow } from '../dialogFlowTestHelpers';
 import { standAt, UPDATES_PER_SECOND } from '../villageSiegeHarness';
 import { blueprintsRig } from './fence';
@@ -217,7 +218,7 @@ export function verifySwingOwnsThePrompt(check: Check): void {
 
   rig.kit.questGuide?.update();
   const guideBefore = recordingContext();
-  rig.kit.renderAbove(guideBefore.ctx, 0, 0);
+  rig.kit.renderAbove(guideBefore.ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED));
   check(
     guideBefore.texts.includes(HARVEST_CAPTION),
     'before the swing the guide captions the field',
@@ -240,7 +241,7 @@ export function verifySwingOwnsThePrompt(check: Check): void {
   const instruction = scytheSwingInstruction(keybindings.labelFor('attack'));
   check(barDuring.texts.includes(instruction), `the swing bar says "${instruction}"`);
   const guideDuring = recordingContext();
-  rig.kit.renderAbove(guideDuring.ctx, 0, 0);
+  rig.kit.renderAbove(guideDuring.ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED));
   check(
     !guideDuring.texts.includes(HARVEST_CAPTION),
     "mid-swing the guide's arrow and caption stand down off the swing bar",

@@ -18,8 +18,8 @@ const MAX_SOFTENING_CREDIT = 1;
  * charges its incoming damage here in *both* of `Mob`'s damage entry points,
  * because they are genuinely two doors rather than one wrapping the other:
  * `takeDamage` is what a mob swinging at a player-like target calls,
- * `takeDamageFrom` is what a mob swinging at another *mob* calls — the golem's
- * boulders go through the second — and it writes
+ * `receiveDamage` is where a blow on a *mob* lands, a crawler's or another
+ * mob's — the golem's boulders go through the second — and it writes
  * hp itself rather than delegating. Softened in one place only, half the things
  * on the floor would ignore the resistance entirely. Because neither method
  * calls the other, charging both cannot double-apply.
@@ -63,7 +63,7 @@ export class DamageLedger {
    *
    * @param mayLandForNothing whether the blow is allowed to charge zero. True
    *   wherever nothing reads a "did not connect" answer — every status tick, and
-   *   `takeDamageFrom`, which returns nothing at all. False only for a blow
+   *   `receiveDamage`, which returns nothing at all. False only for a blow
    *   arriving through `takeDamage`, where returning false means "missed" and
    *   attackers use it to hold back the status riders they swing alongside.
    */

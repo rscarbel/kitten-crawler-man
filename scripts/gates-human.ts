@@ -40,10 +40,10 @@ import {
 import {
   GROUND_OFFSET_IN_TILE,
   undressedHumanFigure,
+  HUMAN_ROW_BOOK,
   HUMAN_ROW_NAMES,
   HUMAN_ROW_TABLE,
   HUMAN_ROWS,
-  humanRowOf,
   type HumanRowName,
   ORIGIN_X,
   ORIGIN_Y,
@@ -80,11 +80,12 @@ import {
   type ProbedArm,
   type ProbedLeg,
   probeHumanJoints,
+  probeRowJoints,
   TRAVEL_DIRECTION,
   floorDriftPerFrameCellPx,
 } from '../src/sprites/art/human/probe.js';
-import { humanSocketsAt, stampAnchorOf } from '../src/sprites/art/human/sockets.js';
-import { type CarriedGrip, carryStyleOf } from '../src/sprites/art/human/carry.js';
+import { stampAnchorOf } from '../src/sprites/art/human/sockets.js';
+import { type CarriedGrip, carriedGripKey, carryStyleOf } from '../src/sprites/art/human/carry.js';
 import { type Pt } from '../src/sprites/art/bipedArt.js';
 import { type BareSegment, bareSegmentEdges } from '../src/sprites/art/biped/limbs.js';
 import { HEAD_ON_TOE_DROP } from '../src/sprites/art/biped/feet.js';
@@ -98,6 +99,7 @@ import {
 } from '../src/sprites/art/biped/figure.js';
 import { DAVE_DENIM } from '../src/sprites/garments/human/daveTrousers.js';
 import { DAVE_LOOK } from '../src/sprites/looks/humans/dave.js';
+import { BROTHER_ANSELM_LOOK } from '../src/sprites/looks/humans/brotherAnselm.js';
 import { MALE_LIGHT_LOOK } from '../src/sprites/looks/humans/maleLight.js';
 import type { HumanCrawlerLookId } from '../src/characters/crawlerChoices.js';
 import { HUMAN_CRAWLER_LOOKS } from '../src/characters/humanCrawlerLooks.js';
@@ -151,7 +153,6 @@ import {
   rowFrameHolds,
   rowLengthInTicks,
   humanRowView,
-  heldPxPerUnit,
   residentViewSpans,
   setHumanLook,
 } from '../src/sprites/humanSprite.js';
@@ -172,7 +173,8 @@ import {
   humanFigureFor,
   humanFigureWearing,
 } from '../src/sprites/art/human/appearance.js';
-import { type FigureDef } from '../src/sprites/figure/figureDef.js';
+import { type RigFigure, type RigRows, rigRowsOf } from './rigFigure.js';
+import { type FigureDef, figureStates } from '../src/sprites/figure/figureDef.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import {
   COMBO_WINDOW_TICKS,
@@ -206,7 +208,7 @@ interface GateFailure {
   readonly id: string;
   readonly message: string;
   /** The row the failure is about, when it is about one; what per-row pending keys on. */
-  readonly row?: HumanRowName;
+  readonly row?: string;
 }
 
 const failures: GateFailure[] = [];
@@ -227,7 +229,7 @@ export const PENDING_GATES: ReadonlySet<string> = new Set<string>();
 /** Rows one gate is not yet held to, and why. */
 interface PendingRows {
   readonly roles: readonly HumanRowRole[];
-  readonly names: readonly HumanRowName[];
+  readonly names: readonly string[];
   readonly why: string;
 }
 
@@ -244,10 +246,10 @@ interface PendingRows {
  */
 export const PENDING_ROWS: ReadonlyMap<string, PendingRows> = new Map<string, PendingRows>();
 
-function isPendingRow(id: string, row: HumanRowName | undefined): boolean {
+function isPendingRow(id: string, row: string | undefined): boolean {
   const pending = PENDING_ROWS.get(id);
   if (pending === undefined || row === undefined) return false;
-  const { role }: HumanRowMeta = HUMAN_ROW_TABLE[row];
+  const role = gateRows.rowOf(row)?.role;
   return pending.names.includes(row) || (role !== undefined && pending.roles.includes(role));
 }
 
@@ -255,7 +257,7 @@ function isPendingRow(id: string, row: HumanRowName | undefined): boolean {
 const REACH_DIGITS = 3;
 const TILE_DIGITS = 4;
 
-function fail(id: string, message: string, row?: HumanRowName): void {
+function fail(id: string, message: string, row?: string): void {
   failures.push(row === undefined ? { id, message } : { id, message, row });
 }
 
@@ -280,11 +282,37 @@ function failUnlessMeasured(gateId: string, measured: number, what: string): voi
  */
 let gateLook: HumanLook = MALE_LIGHT_LOOK;
 let gateOutfit: Outfit<'human'> = defaultOutfitOf(gateLook);
-let gateFigure: FigureDef = undressedHumanFigure(gateLook);
+/**
+ * The clothes G27 measures the chest of: the crawler's own base clothes, which
+ * every outfit of his is worn over, or the whole outfit of a figure on the rig
+ * whose base garments are hidden under its own.
+ */
+let gateTorsoOutfit: Outfit<'human'> = outfitOf(gateLook, []);
+/** The crawler's rows, which every gate holds his looks to. */
+const CRAWLER_RIG_ROWS: RigRows = rigRowsOf(HUMAN_ROW_BOOK, humanFigureFor);
+
+/** The row book the gates paint from, and the rows of it the per-row gates measure. */
+let gateRows: RigRows = CRAWLER_RIG_ROWS;
+let gatedRows: readonly RowSpec<string>[] = gateRows.rows;
+
+const gateFigures = new Map<string, RigFigure>();
+
+/** The gated look in `outfit`, painted from the gated book; built once per book, look, outfit and grip. */
+function gateFigureFor(outfit: Outfit<'human'>, held: CarriedGrip | null = null): RigFigure {
+  const grip = held === null ? 'empty' : carriedGripKey(held);
+  const key = `${gateRows.id}:${gateLook.id}:${outfit.key}:${grip}`;
+  const known = gateFigures.get(key);
+  if (known !== undefined) return known;
+  const built = gateRows.figureFor(gateLook, outfit, held);
+  gateFigures.set(key, built);
+  return built;
+}
+
+let gateFigure: FigureDef = gateFigureFor(gateOutfit).def;
 
 /** The look's figure in the outfit every row was authored in. */
-function authoredFigure(): HumanFigure {
-  return humanFigureFor(gateLook, defaultOutfitOf(gateLook), null);
+function authoredFigure(): RigFigure {
+  return gateFigureFor(defaultOutfitOf(gateLook));
 }
 
 const alphaByCell = new Map<string, Uint8ClampedArray>();
@@ -354,8 +382,8 @@ function median(values: readonly number[]): number {
   return (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function rowNamed(name: string, gateId: string): RowSpec | null {
-  const row = humanRowOf(name);
+function rowNamed(name: string, gateId: string): RowSpec<string> | null {
+  const row = gateRows.rowOf(name);
   if (row === undefined) {
     fail(gateId, `there is no row named "${name}" — the gate below it measured nothing`);
     return null;
@@ -366,7 +394,10 @@ function rowNamed(name: string, gateId: string): RowSpec | null {
 // ── G1: structure ────────────────────────────────────────────────────────────
 
 function gateStructure(): void {
-  for (const failure of figureStructuralFailures(gateFigure)) fail('G1', failure);
+  const frames: Record<string, number> = {};
+  for (const row of gatedRows) frames[row.name] = row.frameCount;
+  const gated = { ...gateFigure, states: figureStates(frames) };
+  for (const failure of figureStructuralFailures(gated)) fail('G1', failure);
 }
 
 // ── G2: the cell geometry still describes the painted figure ─────────────────
@@ -558,8 +589,8 @@ function failOnSeamPop(
  */
 function gateLoopClosure(): void {
   let loopsMeasured = 0;
-  const baseFigure = humanFigureWearing(gateLook, outfitOf(gateLook, []));
-  for (const row of HUMAN_ROWS) {
+  const baseFigure = gateFigureFor(outfitOf(gateLook, [])).def;
+  for (const row of gatedRows) {
     if (row.kind !== 'loop') continue;
     loopsMeasured++;
     const cells = Array.from({ length: row.frameCount }, (_unused, frame) =>
@@ -653,18 +684,23 @@ const HALF_TURN_SLACK_FRAMES = 1;
  * stick back past his head — and without it a throw's steps are measured on
  * an empty fist.
  */
-function motionCellAlpha(row: HumanRowName, frame: number): Uint8ClampedArray {
-  const held = explosiveHeldDraw(HELD_VISUALS.prop_dynamite, { row, frame, flipX: false });
+function motionCellAlpha(row: string, frame: number): Uint8ClampedArray {
+  const crawlerRow = HUMAN_ROW_BOOK.rowOf(row)?.name;
+  const held =
+    crawlerRow === undefined
+      ? null
+      : explosiveHeldDraw(HELD_VISUALS.prop_dynamite, { row: crawlerRow, frame, flipX: false });
   const authored = authoredFigure();
   if (held === null) return cellAlpha(row, frame, authored.def);
   const cell = bakeFigureCell(authored.def, row, frame);
-  const source = { id: authored.def.id, painting: authored.painting };
-  const socket = humanSocketsAt(source, row, frame).sockets.mainHand;
+  const frames = authored.socketsAt(row, frame);
+  if (frames === null) return cellAlpha(row, frame, authored.def);
+  const socket = frames.sockets.mainHand;
   const ctx = asGameContext(cell.getContext('2d'));
   compositeHeldItem(
     ctx,
     held.look,
-    heldTransformAt(socket, heldPxPerUnit(source), held.phase),
+    heldTransformAt(socket, authored.heldPxPerUnit, held.phase),
     'painted',
   );
   const { data } = cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight);
@@ -722,7 +758,7 @@ function isPixelIdentical(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
  * the only frames a player reads as an impact. G6 is what holds the spike to
  * exactly that step.
  */
-function isDeclaredSpike(row: HumanRowName, step: number): boolean {
+function isDeclaredSpike(row: string, step: number): boolean {
   const stomp = STOMP_ROWS.find((candidate) => candidate.row === row);
   if (stomp !== undefined && step === stomp.impact - 1) return true;
   return gateSpec().declaredSpikes.some((spike) => spike.row === row && spike.step === step);
@@ -757,7 +793,7 @@ function isDeclaredSpike(row: HumanRowName, step: number): boolean {
  */
 function gateMotionContinuity(): void {
   let stepsMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     const cells = Array.from({ length: row.frameCount }, (_unused, frame) =>
       motionCellAlpha(row.name, frame),
     );
@@ -850,7 +886,7 @@ function jointJumpPx(before: HumanJointProbe, after: HumanJointProbe): number {
 
 function gateLoopJointSpikes(): void {
   let loopsMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.kind !== 'loop') continue;
     const probes = probesOf(row);
     const steps = probes.map((probe, frame) =>
@@ -876,11 +912,11 @@ function gateLoopJointSpikes(): void {
 
 // ── Pose-stream gates ────────────────────────────────────────────────────────
 
-function authoredPosesOf(row: RowSpec): BipedPose[] {
+function authoredPosesOf(row: RowSpec<string>): BipedPose[] {
   return Array.from({ length: row.frameCount }, (_unused, frame) => row.pose(frame));
 }
 
-function posesOf(row: RowSpec): BipedPose[] {
+function posesOf(row: RowSpec<string>): BipedPose[] {
   return Array.from({ length: row.frameCount }, (_unused, frame) =>
     withLookBuild(row.pose(frame), gateLook),
   );
@@ -1028,7 +1064,7 @@ function downLandingFrame(heights: readonly number[]): number {
  */
 function gateStrikePeaksOnImpact(): void {
   let rowsMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.role !== 'strike') continue;
     const limb = row.strike?.reachLimb;
     if (limb === undefined) {
@@ -1115,7 +1151,7 @@ function footLift(pose: BipedPose, side: LegSide): number {
  * impact. Read from the pose, not from a declaration, so a row cannot name one
  * foot and stamp with the other.
  */
-function stampingSide(row: RowSpec, impact: number): LegSide {
+function stampingSide(row: RowSpec<string>, impact: number): LegSide {
   const apex = row.pose(Math.max(0, impact - 1));
   return footLift(apex, 'left') > footLift(apex, 'right') ? 'left' : 'right';
 }
@@ -1667,12 +1703,12 @@ function footDown(probe: HumanJointProbe, side: LegSide): boolean {
 /** Probed joints by look and row: the looks solve the same row to different joints. */
 const probesByLookRow = new Map<string, HumanJointProbe[]>();
 
-function probesOf(row: RowSpec): HumanJointProbe[] {
+function probesOf(row: RowSpec<string>): HumanJointProbe[] {
   const key = `${gateLook.id}/${row.name}`;
   const cached = probesByLookRow.get(key);
   if (cached !== undefined) return cached;
   const probes = Array.from({ length: row.frameCount }, (_unused, frame) =>
-    probeHumanJoints(row.name, frame, gateLook),
+    probeRowJoints(row, frame, gateLook),
   );
   probesByLookRow.set(key, probes);
   return probes;
@@ -1814,7 +1850,8 @@ const FOOT_SLIP_LIMIT_IN_GAME_PX = 0.5;
  * its feet simply may not move. The drift is the furthest the tracked point
  * strays from where the stance began.
  */
-function gateFootSlip(): void {
+/** G10, its premise: the crawler's runtime paces his gait by the distance the slip check carries the floor by. */
+function gateRuntimeGaitPacing(): void {
   const { radiansPerTick, gait } = runtimeGaitAtBaseSpeed();
   const expected = PLAYER_SPEED * gaitRadiansPerPx(gait);
   if (!(radiansPerTick > 0) || Math.abs(radiansPerTick - expected) > GAIT_RATE_TOLERANCE) {
@@ -1823,13 +1860,15 @@ function gateFootSlip(): void {
       `the runtime advanced the ${gait} by ${radiansPerTick} rad in a tick at base speed, where ` +
         `its distance pacing gives ${expected} — the travel this gate adds is not the runtime's`,
     );
-    return;
   }
+}
+
+function gateFootSlip(): void {
   let stepsMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.locomotion === 'none') continue;
     const probes = probesOf(row);
-    const travel = floorDriftPerFrameCellPx(row.name);
+    const travel = floorDriftPerFrameCellPx(row);
     const direction = TRAVEL_DIRECTION[row.view];
     let rowSteps = 0;
     for (const side of LEG_SIDES) {
@@ -1909,7 +1948,7 @@ function armSwingOffsets(probes: readonly HumanJointProbe[], side: LegSide): num
  */
 function gateArmPhase(): void {
   let contactsMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     // A gait cycle only: a start or stop begins or ends on a standing frame,
     // where the arms hang and nothing lands.
     if (row.view !== 'side' || row.locomotion !== 'travelling' || row.kind !== 'loop') continue;
@@ -1997,7 +2036,7 @@ const SHORTEST_BLINKING_LOOP_TICKS = 2 * TICKS_PER_SECOND;
  */
 function gateBlink(): void {
   let blinksMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.kind !== 'loop') continue;
     const clockPaced = row.ticksPerFrame !== undefined || row.frameTicks !== undefined;
     const loopTicks = clockPaced ? rowLengthInTicks(row) : undefined;
@@ -2074,7 +2113,7 @@ function gateBlink(): void {
 function gateLegReach(): void {
   let chainsMeasured = 0;
   let clampedChains = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     const probes = probesOf(row);
     let rowClamped = 0;
     let worstDemand = 0;
@@ -2139,9 +2178,9 @@ const FLIGHT_SHARE_MAX = 0.45;
  * the human covers ground only a run can, so the absence of a run row is the
  * defect, not an exemption.
  */
-function gateFlight(): void {
+function gateWalkFootDown(): void {
   let walksMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.gait !== 'walk') continue;
     walksMeasured++;
     const airborne = probesOf(row)
@@ -2156,6 +2195,10 @@ function gateFlight(): void {
     );
   }
   failUnlessMeasured('G14', walksMeasured, 'walk rows');
+}
+
+/** G14, the run: the crawler's run cycles hold a flight phase in band. */
+function gateRunFlight(): void {
   const runRows = HUMAN_ROWS.filter((row) => row.gait === 'run');
   if (runRows.length === 0) {
     fail(
@@ -2950,7 +2993,7 @@ function rasterOf(canvas: Canvas): Raster {
 }
 
 /** A cell baked as the cache bakes it, then blitted at the 32-px tile as the game blits it. */
-function inGameRaster(state: HumanRowName, frame: number, figure: FigureDef = gateFigure): Raster {
+function inGameRaster(state: string, frame: number, figure: FigureDef = gateFigure): Raster {
   const baked = bakeFigureCell(figure, state, frame);
   const width = Math.round(frameWidth * IN_GAME_PX_PER_CELL_PX);
   const height = Math.round(frameHeight * IN_GAME_PX_PER_CELL_PX);
@@ -3110,7 +3153,7 @@ const MUSCLE_FRAMES: ReadonlyArray<{
  */
 const MUSCLE_RASTERS: ReadonlyArray<{
   readonly name: string;
-  readonly raster: (row: HumanRowName, frame: number, figure: FigureDef) => Raster;
+  readonly raster: (row: string, frame: number, figure: FigureDef) => Raster;
 }> = [
   { name: 'full bake', raster: inGameRaster },
   {
@@ -3300,7 +3343,7 @@ function gateOutlinePolicy(): void {
   const frame = 0;
   const shipped = rasterOf(bakeFigureCell(gateFigure, row.name, frame));
   const bare = rasterOf(composedCell(row, frame, { look: gateLook, silhouetteOutline: false }));
-  const probe = probeHumanJoints(row.name, frame, gateLook);
+  const probe = probeRowJoints(row, frame, gateLook);
   let examined = 0;
   let outlineInside = 0;
   let partInk = 0;
@@ -3697,7 +3740,7 @@ function replayGuardDrop(view: CardinalView, facing: Pt): void {
  */
 function gateHandOff(): void {
   let handOffsMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     const ends: ReadonlyArray<readonly [string, number | undefined, number]> = [
       ['entry', row.entryFootPhase, 0],
       ['exit', row.exitFootPhase, row.frameCount - 1],
@@ -3716,8 +3759,8 @@ function gateHandOff(): void {
         continue;
       }
       handOffsMeasured++;
-      const own = probeHumanJoints(row.name, frame, gateLook);
-      const target = probeHumanJoints(run.name, phase * run.frameCount, gateLook);
+      const own = probeRowJoints(row, frame, gateLook);
+      const target = probeRowJoints(run, phase * run.frameCount, gateLook);
       for (const side of LEG_SIDES) {
         const a = legOf(own, side).ankle;
         const b = legOf(target, side).ankle;
@@ -3914,7 +3957,7 @@ const RIGHT_SHOULDER_SCREEN_SIDE: Readonly<Partial<Record<CardinalView, number>>
  */
 function gateHandedness(): void {
   let framesMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     const expected = RIGHT_SHOULDER_SCREEN_SIDE[row.view];
     if (expected === undefined) continue;
     probesOf(row).forEach((probe, frame) => {
@@ -3941,18 +3984,17 @@ function gateHandedness(): void {
  * the carried item wherever a row leaves it free.
  */
 function gateMainHandSide(): void {
-  const carrying = humanFigureFor(gateLook, outfitOf(gateLook, []), {
+  const carrying = gateFigureFor(outfitOf(gateLook, []), {
     handle: 'standard',
     style: 'low',
     motionSet: 'unarmed',
   });
-  const source = { id: carrying.def.id, painting: carrying.painting };
   let framesMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (RIGHT_SHOULDER_SCREEN_SIDE[row.view] === undefined) continue;
     probesOf(row).forEach((probe, frame) => {
-      const main = humanSocketsAt(source, row.name, frame).sockets.mainHand;
-      if (!main.occupied) return;
+      const main = carrying.socketsAt(row.name, frame)?.sockets.mainHand;
+      if (main?.occupied !== true) return;
       framesMeasured++;
       // Measured to each whole hand, wrist to knuckles: the socket is in the
       // fist, and with the hands brought together one fist's knuckles can
@@ -4035,7 +4077,7 @@ const DRAW_VIEW: Readonly<Record<CardinalView, typeof drawBipedFront>> = {
  * `options`. Built from the same transform and dressed pose as
  * `paintDressedHumanFrame`, so with no options it matches the shipped cell.
  */
-function composedCell(row: RowSpec, frame: number, options: BipedComposeOptions): Canvas {
+function composedCell(row: RowSpec<string>, frame: number, options: BipedComposeOptions): Canvas {
   const cell = createCanvas(frameWidth, frameHeight);
   const ctx = asGameContext(cell.getContext('2d'));
   scaleIntoCell(ctx, row.view);
@@ -4044,7 +4086,7 @@ function composedCell(row: RowSpec, frame: number, options: BipedComposeOptions)
   return cell;
 }
 
-function unboundedCell(row: RowSpec, frame: number): Uint8ClampedArray {
+function unboundedCell(row: RowSpec<string>, frame: number): Uint8ClampedArray {
   return composedCell(row, frame, { look: gateLook, layerMargin: UNBOUNDED_LAYER_MARGIN })
     .getContext('2d')
     .getImageData(0, 0, frameWidth, frameHeight).data;
@@ -4061,7 +4103,7 @@ function unboundedCell(row: RowSpec, frame: number): Uint8ClampedArray {
  */
 function gateLayerHoldsInk(): void {
   let cellsCompared = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     for (let frame = 0; frame < row.frameCount; frame++) {
       const shipped = bakeFigureCell(gateFigure, row.name, frame)
         .getContext('2d')
@@ -4137,7 +4179,7 @@ function distanceToSegment(point: Pt, from: Pt, to: Pt): number {
  */
 function gateProfileFaceShows(): void {
   let framesMeasured = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.view !== 'side') continue;
     for (let frame = 0; frame < row.frameCount; frame++) {
       const pose = poseAsDrawn(withLookBuild(row.pose(frame), gateLook), VIEWS.side);
@@ -4176,6 +4218,8 @@ function gateProfileFaceShows(): void {
  * too little to let a head grow a size.
  */
 const PROFILE_HEAD_DEPTH_SLACK = 0.01;
+/** Decimal places a head-to-chest share is printed to. */
+const SHARE_DIGITS = 3;
 /**
  * The most Dave's profile head — back of the hair to the tip of the nose —
  * may measure against the jacket's chest depth. His head is drawn larger than
@@ -4184,14 +4228,26 @@ const PROFILE_HEAD_DEPTH_SLACK = 0.01;
  * measures 0.899 of the chest (`cross_side`), and the limit is that and the
  * slack.
  */
-const DAVE_PROFILE_HEAD_TO_CHEST_LIMIT = 0.899 + PROFILE_HEAD_DEPTH_SLACK;
+const DAVE_DEEPEST_PROFILE_HEAD_SHARE = 0.899;
+const DAVE_PROFILE_HEAD_TO_CHEST_LIMIT = DAVE_DEEPEST_PROFILE_HEAD_SHARE + PROFILE_HEAD_DEPTH_SLACK;
+/**
+ * Brother Anselm's tonsure is cropped close to the skull, so edge-on his head
+ * is far shallower than the habit's chest: the deepest of the profile frames
+ * he plays measures 0.622 of it (`death_side`), and the limit is that and the
+ * slack.
+ */
+const ANSELM_DEEPEST_PROFILE_HEAD_SHARE = 0.622;
+const ANSELM_PROFILE_HEAD_TO_CHEST_LIMIT =
+  ANSELM_DEEPEST_PROFILE_HEAD_SHARE + PROFILE_HEAD_DEPTH_SLACK;
 /**
  * The male crawler is drawn to a real lean man's proportions: his head, hair and beard
  * about an eighth of his height deep, his chest the same, so edge-on his head
  * is about as deep as his chest. His deepest upright profile frame measures
  * 0.911 of the chest (`idle_side`), and the limit is that and the slack.
  */
-const MALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT = 0.911 + PROFILE_HEAD_DEPTH_SLACK;
+const MALE_CRAWLER_DEEPEST_PROFILE_HEAD_SHARE = 0.911;
+const MALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT =
+  MALE_CRAWLER_DEEPEST_PROFILE_HEAD_SHARE + PROFILE_HEAD_DEPTH_SLACK;
 /**
  * The female crawler's chest stands deeper edge-on for her bust, and her head
  * carries a ponytail or braid hanging behind it. Her deepest upright profile
@@ -4272,9 +4328,9 @@ function paintPartUpright(
 const TORSO_PIECES = ['jacket', 'collar', 'collarRim'] as const;
 
 /**
- * The gate look's torso garment alone — the jacket, a shirt, whatever its
- * base outfit wears over the torso — painted through the outfit as the
- * compositor paints it, with nothing worn over it.
+ * The torso garment of {@link gateTorsoOutfit} alone — the jacket, a shirt, a
+ * habit, whatever is worn over the torso — painted through the outfit as the
+ * compositor paints it.
  */
 function paintTorsoGarment(
   ctx: CanvasRenderingContext2D,
@@ -4282,7 +4338,7 @@ function paintTorsoGarment(
   pose: BipedPose,
 ): void {
   const view = VIEWS.side;
-  const base = outfitOf(gateLook, []);
+  const base = gateTorsoOutfit;
   const dressed = { ...pose, outfit: stillOutfit(base) };
   const { context } = humanWornOn(dressed, view, gateLook);
   const torso = torsoFrame(skeleton, dressed, gateLook);
@@ -4311,7 +4367,7 @@ function gateProfileHeadDepth(): void {
   let framesMeasured = 0;
   let worst = 0;
   let worstAt = '';
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.view !== 'side') continue;
     for (let frame = 0; frame < row.frameCount; frame++) {
       const pose = poseAsDrawn(withLookBuild(row.pose(frame), gateLook), view);
@@ -4354,14 +4410,16 @@ function gateProfileHeadDepth(): void {
       if (share <= gateSpec().profileHeadToChestLimit) continue;
       fail(
         'G27',
-        `${row.name}[${frame}] draws the head ${share.toFixed(3)} of the chest's depth ` +
+        `${row.name}[${frame}] draws the head ${share.toFixed(SHARE_DIGITS)} of the chest's depth ` +
           `(limit ${gateSpec().profileHeadToChestLimit}) — edge-on it reads as big as his torso`,
         row.name,
       );
     }
   }
   failUnlessMeasured('G27', framesMeasured, 'upright profile frames');
-  console.log(`  G27 profile head depth: worst ${worst.toFixed(3)} of the chest at ${worstAt}`);
+  console.log(
+    `  G27 profile head depth: worst ${worst.toFixed(SHARE_DIGITS)} of the chest at ${worstAt}`,
+  );
 }
 
 // ── G26: a head-on leg keeps its length on the move ─────────────────────────
@@ -4407,7 +4465,7 @@ function gateHeadOnLegLength(): void {
   let plantedMeasured = 0;
   let worstGrowth = Number.NEGATIVE_INFINITY;
   let worstStretch = 0;
-  for (const row of HUMAN_ROWS) {
+  for (const row of gatedRows) {
     if (row.view === 'side' || row.locomotion !== 'travelling') continue;
     probesOf(row).forEach((probe, frame) => {
       for (const side of LEG_SIDES) {
@@ -4470,7 +4528,7 @@ interface HumanLookGateSpec {
    * its median step for a reason of the look's own, with the floor it is held
    * to instead.
    */
-  readonly loopSeamFloors: ReadonlyMap<HumanRowName, number>;
+  readonly loopSeamFloors: ReadonlyMap<string, number>;
   /**
    * G4: single steps that on this look exceed their row's allowance for a
    * reason of the look's own, each held exempt like the stomp's impact step:
@@ -4481,11 +4539,11 @@ interface HumanLookGateSpec {
 
 /** One frame-to-frame step of one row that G4 lets past its allowance. */
 interface DeclaredSpike {
-  readonly row: HumanRowName;
+  readonly row: string;
   readonly step: number;
 }
 
-const NO_SEAM_FLOORS: ReadonlyMap<HumanRowName, number> = new Map();
+const NO_SEAM_FLOORS: ReadonlyMap<string, number> = new Map();
 
 const MALE_CRAWLER_GATE_SPEC: HumanLookGateSpec = {
   slimLimbsAtTile: true,
@@ -4504,20 +4562,14 @@ const MALE_CRAWLER_GATE_SPEC: HumanLookGateSpec = {
  *
  * `build_side` wraps at 0.474 of its median step, so its floor is that with
  * a little room; a seam collapsed to a held frame still measures near zero.
- * On `twohand_channel_side` the palm opening, from frame
- * `FEMALE_CHANNEL_PALM_OPENS_AFTER` to the next, measures 1.43–1.45 of its
- * runner-up against the 1.35 every other step of every look is held to; a
- * teleported limb on any other step of the row still fails.
  */
 const FEMALE_BUILD_SIDE_SEAM_FLOOR = 0.42;
-const FEMALE_CHANNEL_PALM_OPENS_AFTER = 1;
 
 const FEMALE_CRAWLER_GATE_SPEC: HumanLookGateSpec = {
   ...MALE_CRAWLER_GATE_SPEC,
   besideArmDeepTones: [STONE_TROUSER_CLOTH.cloth.deep, JACKET_BELT_LEATHER, GOLD_WATCH_DEEP],
   profileHeadToChestLimit: FEMALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT,
   loopSeamFloors: new Map([['build_side', FEMALE_BUILD_SIDE_SEAM_FLOOR]]),
-  declaredSpikes: [{ row: 'twohand_channel_side', step: FEMALE_CHANNEL_PALM_OPENS_AFTER }],
 };
 
 const CRAWLER_LOOK_GATE_SPECS: Readonly<Record<HumanCrawlerLookId, HumanLookGateSpec>> = {
@@ -4534,6 +4586,16 @@ const LOOK_GATE_SPECS: ReadonlyMap<string, HumanLookGateSpec> = new Map([
       slimLimbsAtTile: false,
       profileHeadToChestLimit: DAVE_PROFILE_HEAD_TO_CHEST_LIMIT,
       besideArmDeepTones: [DAVE_DENIM.cloth.deep],
+      loopSeamFloors: NO_SEAM_FLOORS,
+      declaredSpikes: [],
+    },
+  ],
+  [
+    BROTHER_ANSELM_LOOK.id,
+    {
+      slimLimbsAtTile: false,
+      profileHeadToChestLimit: ANSELM_PROFILE_HEAD_TO_CHEST_LIMIT,
+      besideArmDeepTones: [],
       loopSeamFloors: NO_SEAM_FLOORS,
       declaredSpikes: [],
     },
@@ -4563,11 +4625,13 @@ const GATES: ReadonlyArray<readonly [string, () => void]> = [
   ['G8', gateRuntimeStates],
   ['G9', gateWarmRowSize],
   ['G9b', gateWorkingSet],
+  ['G10', gateRuntimeGaitPacing],
   ['G10', gateFootSlip],
   ['G11', gateArmPhase],
   ['G12', gateBlink],
   ['G13', gateLegReach],
-  ['G14', gateFlight],
+  ['G14', gateWalkFootDown],
+  ['G14', gateRunFlight],
   ['G15', gateImpactTiming],
   ['G16', gateViewConsistency],
   ['G17', gateMuscleRead],
@@ -4592,27 +4656,81 @@ export function humanGateFailures(
 ): string[] {
   gateLook = look;
   gateOutfit = outfit;
+  gateTorsoOutfit = outfitOf(look, []);
+  gateRows = CRAWLER_RIG_ROWS;
+  gatedRows = gateRows.rows;
   gateFigure = humanFigureWearing(look, outfit);
   // The gates that drive a HumanPlayer or the animator measure whichever look
   // the human crawler is painted as, so it is the gated one for the run.
   const playerLook = activeHumanLook();
   setHumanLook(look);
   try {
-    return gateFailuresOfGateLook();
+    return gateFailuresOf(GATES);
   } finally {
     setHumanLook(playerLook);
   }
 }
 
-function gateFailuresOfGateLook(): string[] {
+/**
+ * The gates on a figure's own art, for a figure on the rig that is not the
+ * crawler: every one that measures its rows alone, none that drives the
+ * crawler's animator or sizes his working set.
+ */
+const RIG_FIGURE_GATES: ReadonlyArray<readonly [string, () => void]> = [
+  ['G1', gateStructure],
+  ['G3', gateLoopClosure],
+  ['G4', gateMotionContinuity],
+  ['G5', gateStrikePeaksOnImpact],
+  ['G10', gateFootSlip],
+  ['G11', gateArmPhase],
+  ['G12', gateBlink],
+  ['G13', gateLegReach],
+  ['G14', gateWalkFootDown],
+  ['G22', gateHandedness],
+  ['G23', gateLayerHoldsInk],
+  ['G25', gateProfileFaceShows],
+  ['G26', gateHeadOnLegLength],
+  ['G27', gateProfileHeadDepth],
+];
+
+/**
+ * Runs the gates on a figure's own art on `played`, the rows of `rows` the
+ * figure plays, painted in `look` and `outfit`, and returns one message per
+ * failure that should fail the run.
+ */
+export function rigFigureGateFailures(
+  rows: RigRows,
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  played: ReadonlySet<string>,
+): string[] {
+  const previous = { gateLook, gateOutfit, gateTorsoOutfit, gateRows, gatedRows, gateFigure };
+  gateLook = look;
+  gateOutfit = outfit;
+  gateTorsoOutfit = outfit;
+  gateRows = rows;
+  gatedRows = rows.rows.filter((row) => played.has(row.name));
+  gateFigure = gateFigureFor(outfit).def;
+  try {
+    const unknown = [...played].filter((name) => rows.rowOf(name) === undefined);
+    return [
+      ...unknown.map((name) => `G1: ${look.id} plays "${name}", which its rows do not hold`),
+      ...gateFailuresOf(RIG_FIGURE_GATES),
+    ];
+  } finally {
+    ({ gateLook, gateOutfit, gateTorsoOutfit, gateRows, gatedRows, gateFigure } = previous);
+  }
+}
+
+function gateFailuresOf(gates: ReadonlyArray<readonly [string, () => void]>): string[] {
   alphaByCell.clear();
   failures.length = 0;
-  const known = new Set(GATES.map(([id]) => id));
+  const known = new Set(gates.map(([id]) => id));
   for (const id of PENDING_GATES) {
     if (!known.has(id))
       failures.push({ id, message: `PENDING_GATES names ${id}, which is no gate` });
   }
-  for (const [, run] of GATES) run();
+  for (const [, run] of gates) run();
 
   const blocking: string[] = [];
   const pendingRed = new Set<string>();

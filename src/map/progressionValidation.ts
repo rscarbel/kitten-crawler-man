@@ -604,12 +604,12 @@ function validateBathroomChoke(
   fail: (id: string, message: string) => void,
 ): void {
   const { grid, startTile, bathroomRooms } = data;
-  const gauntletIndex = data.progressionLayout?.bathroomGauntletIndex ?? null;
+  const gauntletIndex = data.progressionLayout.bathroomGauntletIndex;
   if (gauntletIndex === null) {
     fail('S6', 'this floor expects bathrooms on a gauntlet and seated none');
     return;
   }
-  const branches = data.progressionLayout?.gauntletBranchChains[gauntletIndex] ?? [];
+  const branches = data.progressionLayout.gauntletBranchChains[gauntletIndex] ?? [];
   if (gauntletIndex >= gatewaySafeRooms.length) {
     fail('S6', `the bathroom gauntlet ${gauntletIndex} has no gateway safe room`);
     return;
@@ -701,8 +701,8 @@ function validateStealthGate(
 ): void {
   const { grid, startTile } = data;
   const room = data.stealthGateRoom;
-  const spine = data.progressionLayout?.spine ?? null;
-  const planned = data.progressionLayout?.stealthGate ?? null;
+  const spine = data.progressionLayout.spine;
+  const planned = data.progressionLayout.stealthGate;
   if (room === null || planned === null || spine === null) {
     fail('S7', 'this floor expects a stealth gate room on its spine and seated none');
     return;
@@ -864,11 +864,6 @@ export function validateProgression(
   }
 
   if (gauntletCount === 0) return failures;
-
-  if (layout === undefined) {
-    fail('I8', 'progression floor generated without gauntlet layout data');
-    return failures;
-  }
 
   const roomIndexOf = (rect: Rect): number =>
     layout.roomBounds.findIndex(
@@ -1598,7 +1593,7 @@ function validateSpiderLabBranch(
   expectNeighbours('spider lab', labIndex, [stationIndex]);
   expectNeighbours('lab station', stationIndex, [labIndex, hostIndex]);
 
-  const spine = data.progressionLayout?.spine ?? null;
+  const spine = data.progressionLayout.spine;
   if (spine !== null && !spine.chain.some((room) => roomIndexOf(room) === hostIndex)) {
     fail('S3', 'the lab’s branch does not leave from a spine chain room');
   }

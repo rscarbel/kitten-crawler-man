@@ -18,6 +18,7 @@ import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlo
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { partyOwnsGear } from '../src/loot/gearPools.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -99,8 +100,20 @@ const ctx = canvas.getContext('2d');
 ctx.scale(SCALE, SCALE);
 const gameCtx = asGameContext(ctx);
 
-map.renderCanvas(gameCtx, 0, 0, viewW, viewH);
-map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
+map.renderCanvas(gameCtx, {
+  x: 0,
+  y: 0,
+  viewWidth: worldPx(viewW),
+  viewHeight: worldPx(viewH),
+  zoom: UNZOOMED,
+});
+map.renderDecorationsOverlay(gameCtx, {
+  x: 0,
+  y: 0,
+  viewWidth: worldPx(viewW),
+  viewHeight: worldPx(viewH),
+  zoom: UNZOOMED,
+});
 club.renderFloor(gameCtx, 0, 0);
 
 const figures = [...club.sortedRenderables(), ...people, human, cat].sort((a, b) => a.y - b.y);
@@ -141,8 +154,20 @@ for (const crop of CROPS) {
     const cropGameCtx = asGameContext(cropCtx);
     const camX = crop.tiles.x0 * TILE_SIZE;
     const camY = crop.tiles.y0 * TILE_SIZE;
-    map.renderCanvas(cropGameCtx, camX, camY, cropW, cropH);
-    map.renderDecorationsOverlay(cropGameCtx, camX, camY, cropW, cropH);
+    map.renderCanvas(cropGameCtx, {
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(cropW),
+      viewHeight: worldPx(cropH),
+      zoom: UNZOOMED,
+    });
+    map.renderDecorationsOverlay(cropGameCtx, {
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(cropW),
+      viewHeight: worldPx(cropH),
+      zoom: UNZOOMED,
+    });
     club.renderFloor(cropGameCtx, camX, camY);
     for (const figure of figures) figure.render(cropGameCtx, camX, camY, TILE_SIZE);
     const file = `${OUT_DIR}/${crop.name}-${scale}x.png`;

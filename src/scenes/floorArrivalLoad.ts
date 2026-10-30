@@ -27,6 +27,7 @@ import {
   figurePrewarmDepth,
   figurePrewarmOwed,
 } from '../sprites/figure/figureFrameCache';
+import type { WorldPx } from '../core/rendering/camera';
 
 /**
  * Steps one sheet not yet queued is expected to take: about a facade's paint
@@ -71,8 +72,8 @@ export interface FloorArrivalLoadDeps {
   readonly gameMap: ArrivalGroundArt;
   /** Top-left of the camera the first frame of play will draw from, in world px. */
   readonly camera: () => { readonly x: number; readonly y: number };
-  /** The viewport the first frame of play will draw, in CSS px. */
-  readonly viewport: () => { readonly width: number; readonly height: number };
+  /** The world view the first frame of play will draw, in world px: the screen divided by the camera's zoom. */
+  readonly viewport: () => { readonly width: WorldPx; readonly height: WorldPx };
   /** The floor's fetched sprite groups, already loading. */
   readonly spriteGroupsReady: Promise<unknown>;
 }

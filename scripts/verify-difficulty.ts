@@ -107,6 +107,7 @@ import { Mantid, MANTID_MAX_SPEED } from '../src/creatures/Mantid';
 import { MantisCrony, MANTIS_MAX_SPEED } from '../src/creatures/MantisCrony';
 import { HAWKFOLK_TOUGH_FAMILY, Hawkfolk } from '../src/creatures/Hawkfolk';
 import { GameMap } from '../src/map/GameMap';
+import { openFloorGrid } from '../src/map/openFloorGrid';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { LittleRooster } from '../src/creatures/LittleRooster';
@@ -179,6 +180,8 @@ import {
 } from '../src/systems/DynamiteSystem';
 import { EventBus } from '../src/core/EventBus';
 import { DarkKnight } from '../src/creatures/DarkKnight';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera';
 
 /**
  * Levels probed past {@link MAX_MOB_LEVEL} for the shape checks. A curve that is
@@ -1388,7 +1391,7 @@ function provokedHawkfolkChase(level: number): { stepPx: number; moveSpeed: numb
   hawkfolk.applyMobLevel(level);
   const target = new HumanPlayer(CHASE_TARGET_TILE, CHASE_HAWKFOLK_TILE, TILE_SIZE);
   target.godMode = true;
-  hawkfolk.takeDamageFrom(1, target, 'explosion');
+  hawkfolk.takeHit(harnessHit(target, 1, 'explosion'));
   hawkfolk.updateAI([target]);
   const startX = hawkfolk.x;
   const startY = hawkfolk.y;
@@ -1593,7 +1596,7 @@ section('progression regions');
 
   // A room's tag has to agree with where it physically is, or the escalation is
   // attached to the wrong half of the floor and nothing on screen would say so.
-  const bounds = data.progressionLayout?.gauntletRoomBounds ?? [];
+  const bounds = data.progressionLayout.gauntletRoomBounds;
   let tagsMatchGeometry = true;
   for (const point of data.mobSpawnPoints) {
     const owning = bounds.findIndex((rects) =>
@@ -1982,6 +1985,7 @@ function runBomberThrow(type: BomberType, mobLevel: number): BomberThrowRun {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [stander],
   };
   const run: BomberThrowRun = {
@@ -2841,7 +2845,11 @@ function allInHandlingLevel(partyLevel: number): number {
   return partyLevel;
 }
 
-const explosiveMap = new GameMap({ mapSize: EXPLOSIVE_MAP_SIZE, tileHeight: TILE_SIZE });
+const explosiveMap = new GameMap({
+  tileHeight: TILE_SIZE,
+  prebuiltStructure: openFloorGrid(EXPLOSIVE_MAP_SIZE),
+});
+explosiveMap.startTile = { x: EXPLOSIVE_MAP_SIZE / 2, y: EXPLOSIVE_MAP_SIZE / 2 };
 
 /**
  * Drops `sticks` sticks at once at the human's feet beside a levelled mob and
@@ -2873,6 +2881,7 @@ function blastAgainstLevelledMob(
     activeIsMoving: false,
     roster,
     gameMap: explosiveMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   for (let stick = 0; stick < sticks; stick++) {
     dynamite.beginCharge(0, human, 'dynamite');
@@ -2972,6 +2981,7 @@ function crawlerThrow(
     activeIsMoving: false,
     roster,
     gameMap: explosiveMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   dynamite.beginCharge(0, thrower, 'dynamite');
   if (switchMidCharge) {

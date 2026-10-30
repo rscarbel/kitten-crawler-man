@@ -347,15 +347,15 @@ export class Mercenary extends Mob {
     return super.takeDamage(this.survival.soften(amount, isStatusTick), source, options);
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (this.survival.downed) return;
     // Free to charge nothing: this door returns void, so no caller is waiting
     // to be told whether the blow connected.
-    super.takeDamageFrom(this.survival.soften(amount, true), attacker, damageType);
+    super.receiveDamage(this.survival.soften(amount, true), attacker, damageType);
   }
 
   get isDowned(): boolean {

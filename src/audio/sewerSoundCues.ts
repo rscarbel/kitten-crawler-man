@@ -4,7 +4,7 @@
  * is always decoded before the party can hear it.
  */
 
-import type { SoundId } from '../../audio/sounds';
+import type { SoundId } from './sounds';
 
 export const SEWER_CUES = {
   /** One haul on a sluice's valve wheel. */

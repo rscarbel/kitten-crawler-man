@@ -58,6 +58,7 @@ import { createCanvas, type Canvas } from 'canvas';
 import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -90,6 +91,7 @@ const { TownDecorSystem } = await import('../src/systems/TownDecorSystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
 const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
 const { WorldResidency, tileFocus } = await import('../src/systems/WorldResidency.js');
+const { worldPx } = await import('../src/core/rendering/camera.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
@@ -271,7 +273,8 @@ setRenderScaleValue(REVIEW_DEVICE_PIXEL_RATIO);
 // Decided once the viewport is set, which decides what is within reach of it.
 const residency = new WorldResidency();
 residency.register(new CrowdResidentSet({ people: () => [...townLife.people, ...market.vendors] }));
-const plazaOutlook = { focus: [tileFocus(plazaCentre)], covered: false };
+const plazaView = { viewWidth: worldPx(viewportW), viewHeight: worldPx(viewportH) };
+const plazaOutlook = { focus: [tileFocus(plazaCentre)], view: plazaView, covered: false };
 residency.settleNow(plazaOutlook);
 
 const camX = plazaCentre.x * TILE_SIZE - viewportW / 2;
@@ -336,6 +339,7 @@ for (let frame = 0; frame < frameCount; frame++) {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   });
   const updateMs = performance.now() - updateStart;
 
@@ -459,6 +463,7 @@ for (let i = 0; i < BURST_FRAMES; i++) {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   });
   beginFigureFrame();
   const visible = townLife.people.filter(

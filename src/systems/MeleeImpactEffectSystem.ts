@@ -1,5 +1,5 @@
 import type { GameSystem } from './GameSystem';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 
 /**
  * The small dust puff and streak burst a crawler's fist or foot throws at the
@@ -173,10 +173,11 @@ export class MeleeImpactEffectSystem implements GameSystem {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  render(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (this.puffs.length === 0 && this.streaks.length === 0) return;
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
 
     ctx.save();
     for (const p of this.puffs) {

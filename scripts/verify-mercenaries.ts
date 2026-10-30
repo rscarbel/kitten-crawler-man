@@ -97,6 +97,7 @@ import { verifyHirelingSurvival } from './verifyMercenaries/survival';
 import { HIRELING_REVIVE_WINDOW_FRAMES } from '../src/creatures/mercenaries/hirelingSurvival';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { getPlaytestPreset } from '../src/dev/playtestPresets';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 // ── Harness ────────────────────────────────────────────────────────────────
 
@@ -332,6 +333,7 @@ function buildShell(hire: HiredMercenary | null): ShellHarness {
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const combat: CombatContext = {
     human,

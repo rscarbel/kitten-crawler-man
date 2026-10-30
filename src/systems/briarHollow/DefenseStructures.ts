@@ -827,7 +827,7 @@ export class DefenseStructures {
     if (source === 'melee' && attacker !== null && attacker.isHostile && attacker.isAlive) {
       const credited = this.deps.crawler(record.spikesBy ?? 'human');
       const thorns = Math.min(amount, attacker.maxHp * SPIKES_THORNS_MAX_SHARE);
-      attacker.takeCreditedDamage(thorns, credited, 'melee', null);
+      attacker.takeOwnedHarm(thorns, credited, 'defenseSpikes');
       this.playBlowSound(SPIKES_IMPALE_SOUND, attacker);
     }
     const absorbed = Math.min(spikes, amount);

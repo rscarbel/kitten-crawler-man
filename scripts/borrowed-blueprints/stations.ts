@@ -78,6 +78,7 @@ import type { CrawlerKind } from '../../src/core/skills/SkillManager';
 import { DefenseStructures } from '../../src/systems/briarHollow/DefenseStructures';
 import type { QuestGuidance } from '../../src/systems/briarHollow/questGuidance';
 import { VillageQuestGuide } from '../../src/systems/briarHollow/VillageQuestGuide';
+import { UNZOOMED, cameraAt } from '../../src/core/rendering/camera';
 
 const STATIONS_MAP_SIZE = 280;
 const STATIONS_MAP_SEED = 1;
@@ -699,7 +700,9 @@ function recordFrame(draw: (ctx: CanvasRenderingContext2D) => void): RecordedFra
 
 /** Every word the stations' over-body pass drew, with the colour it was drawn in. */
 function captionFrame(rig: StationsRig, camX: number, camY: number): readonly DrawnText[] {
-  return recordFrame((ctx) => rig.quest.stations.renderAbove(ctx, camX, camY)).texts;
+  return recordFrame((ctx) =>
+    rig.quest.stations.renderAbove(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED)),
+  ).texts;
 }
 
 /** Whether `drawn` holds `text`, drawn in `color`. */
@@ -797,7 +800,9 @@ export function verifyStationMarksStandDown(check: Check): void {
   rig.plea.phase = 'fortifying';
 
   rig.cat.isKnockedOut = true;
-  const catDown = recordFrame((ctx) => rig.quest.stations.renderAbove(ctx, camX, camY));
+  const catDown = recordFrame((ctx) =>
+    rig.quest.stations.renderAbove(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED)),
+  );
   check(
     !hasCaption(catDown.texts) && catDown.fills.length === 0,
     `with the cat down the saw has no frame and no caption (${catDown.fills.length} fills)`,
@@ -811,7 +816,9 @@ export function verifyStationMarksStandDown(check: Check): void {
   standBeside(rig, saw);
   rig.quest.tryUpgradeStation(rig.human);
   rig.quest.stations.update();
-  const channelling = recordFrame((ctx) => rig.quest.stations.renderAbove(ctx, camX, camY));
+  const channelling = recordFrame((ctx) =>
+    rig.quest.stations.renderAbove(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED)),
+  );
   const withoutSpaces = (color: string): string => color.replace(/\s/g, '');
   const barColor = withoutSpaces(WORLD_BAR.build.track);
   check(
@@ -886,8 +893,8 @@ export function verifyPleaProcessOverMarkedStation(check: Check): void {
   const camX = saw.footprint.x * TILE_SIZE - CAPTION_CAMERA_INSET_PX;
   const camY = saw.footprint.y * TILE_SIZE - CAPTION_CAMERA_INSET_PX;
   const drawBoth = (ctx: CanvasRenderingContext2D): void => {
-    rig.quest.stations.renderAbove(ctx, camX, camY);
-    guide.renderAbove(ctx, camX, camY);
+    rig.quest.stations.renderAbove(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED));
+    guide.renderAbove(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED));
   };
 
   guide.update();

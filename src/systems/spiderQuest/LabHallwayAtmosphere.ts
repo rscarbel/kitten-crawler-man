@@ -31,7 +31,12 @@ import {
 import type { WallFixture } from '../../map/dungeon/wallFixtures';
 import { mulberry32 } from '../../sprites/person/rng';
 import type { TownPropRenderable } from '../townPropRenderable';
-import { playSpiderQuestCueAt, spiderQuestLoop, type SpiderQuestCue } from './spiderQuestSoundCues';
+import {
+  playSpiderQuestCueAt,
+  spiderQuestLoop,
+  type SpiderQuestCue,
+} from '../../audio/spiderQuestSoundCues';
+import type { Camera } from '../../core/rendering/camera';
 
 type Ctx = CanvasRenderingContext2D;
 type Rand = () => number;
@@ -321,7 +326,8 @@ export class LabHallwayAtmosphere {
   }
 
   /** The curtains and motes over the bodies, when the approach is in view. */
-  render(ctx: Ctx, camX: number, camY: number, viewW: number, viewH: number): void {
+  render(ctx: Ctx, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const { bounds } = this.decor;
     const left = bounds.x * TILE_SIZE;
     const top = bounds.y * TILE_SIZE;

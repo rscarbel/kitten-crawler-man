@@ -1,3 +1,4 @@
+import type { Camera } from '../core/rendering/camera';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { WOOD_SMASHING_SOUNDS, type SoundId } from '../audio/sounds';
@@ -41,7 +42,7 @@ import {
   ExerciseBalls,
   type ExerciseBallFloor,
 } from './bossRooms/gymExerciseBalls';
-import { GYM_CUES } from './bossRooms/gymSoundCues';
+import { GYM_CUES } from '../audio/gymSoundCues';
 import { escapeFromCircleZones } from './circleHazardEscape';
 import { GYM_EXERCISE_BALL_COLOURS, drawKettlebellShadow } from '../sprites/art/gymKettlebellArt';
 import { SPRITE_BUILDING_OVERLAY_FPS } from '../map/tiles/overlayAnimation';
@@ -1167,10 +1168,10 @@ export class GymRoomSystem
 
   override renderGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
+    const { x: camX, y: camY } = camera;
     const layout = this.layout;
     if (layout === null) return;
     const ts = TILE_SIZE;
@@ -1228,7 +1229,8 @@ export class GymRoomSystem
     );
   }
 
-  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (this.layout === null) return;
     const lane = this.bigRooster?.plateRollLane ?? null;
     if (lane !== null && lane.length >= 2) this.drawPlateLane(ctx, lane, camX, camY);
@@ -1368,7 +1370,8 @@ export class GymRoomSystem
     return this.renderables;
   }
 
-  override renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     // Drawn by the room rather than by Big Rooster, so a dumbbell thrown across
     // the gym stays in the air while he is off screen.
     const thrown = this.bigRooster?.thrownDumbbell ?? null;

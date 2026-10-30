@@ -27,6 +27,8 @@ Every `verify:*` and `gates:*` npm script runs through `scripts/gate.ts`:
 - `GATE_VERBOSE=1 npm run verify:x` streams everything live.
 - A pass that still printed `FAIL`, `✗` or `MISSED` is flagged, because a script that reports a failure without exiting non-zero would otherwise vanish.
 
+A gate whose work splits into units that share nothing hands them to child processes of its own script with `runUnitsInChildren` (`scripts/childUnits.ts`), half the cores at a time, each child's output printed whole when it exits; `gates:equipment`, `gates:boss-rooms`, `verify:arrival-load` and `verify:floor-sweep` do. Under `verify:affected`, which runs gates side by side, `GATE_CHILD_BUDGET` (`CHILD_BUDGET_ENV`) caps each gate's children so together they fill the cores once.
+
 A new gate must exit non-zero on any failed check, must be invoked as `tsx scripts/<file>.ts` (several entry guards compare `process.argv[1]` with the module's own path), and is wired as `"verify:x": "tsx scripts/gate.ts tsx scripts/verify-x.ts"`.
 
 `verify:affected` traces each gate's imports with esbuild, so it needs no mapping table. Files read from disk rather than imported are not in any graph; `RUNTIME_ASSET_GATES` in `scripts/verify-affected.ts` maps those path prefixes to gates. Sweeps that take minutes (`SLOW_GATES`) run only with `--slow`. Gates run longest-first across half the cores, using the timings each run records in `node_modules/.cache/gates/`.
@@ -53,7 +55,7 @@ npm run verify:slots         # slot engine: paylines, wilds, scatters, jackpot p
 npm run verify:wheel         # Wheel of Fortune: board red share, bet upgrades, retired prizes, landings, the wipe's save latch
 npm run verify:audio         # music director, library and credits, voices, ramped stops, scopes, captions, mute/mono/background
 npm run verify:ai-actions    # AI action registry: schemas vs tool definitions, fuzzed calls through the governor's fairness rules
-npm run verify:residency     # a floor-3 tour of two interiors holds no more per owner at Briar Hollow than going straight there (~5.5 min)
+npm run verify:residency     # a floor-3 tour of two interiors holds no more per owner at Briar Hollow than going straight there (~13 min)
 npm run report:residency     # bytes and surfaces per owner along scripted routes, per floor; never fails (-- --floor=3|scaled-city --route=<name>)
 npm run report:slots-rtp     # slot RTP / hit-rate / win-tier report for tuning; never fails (-- --spins=N --seed=S --bet=B)
 npm run bench:slots          # times the slots MEGA WIN celebration on a phone-sized canvas (-- idle for the resting machine)
@@ -72,7 +74,7 @@ npm run bench:slots          # times the slots MEGA WIN celebration on a phone-s
 - `npm run lint` also runs `check:audio`, which fails on a file added or swapped without a re-measure: run `npm run measure:audio` (needs ffmpeg and ffprobe) after any audio file change. See `add-sound`.
 - `npm run lint` and `npm run check` also run `check:server-imports`, which bundles `server/index.ts` and fails when it loads art, audio, dialog, UI, scene or DOM code. The server validates saves with the game's own `parseGameProgress`, so a save parser that needs ids from such a module takes them from a data-only leaf module instead (see "Saving and wiping" in `game-architecture`).
 - These scripts exist because browser `requestAnimationFrame` throttles to roughly one frame a second when the tab is occluded, so nothing about timing or motion can be honestly claimed from browser automation. Everything that could be made deterministic was moved into them; the rest is left to a human.
-- A new script must be listed by name in `tsconfig.scripts.json`'s `include`. Scripts typecheck is opt-in — an unregistered script is never checked and the gate still passes.
+- `typecheck:scripts` covers every `.ts` file under `scripts/` through `tsconfig.scripts.json`'s `scripts/**/*.ts` include, so a new script is checked without being registered.
 
 ## Crawler figures and equipment
 

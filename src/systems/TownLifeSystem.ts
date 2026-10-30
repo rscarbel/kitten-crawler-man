@@ -39,7 +39,7 @@ import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SpatialGrid } from '../core/world/SpatialGrid';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { buildingKeeper, residentSpecies } from './townResidents';
 import type { CrowdSpecies, TownSpecies } from './townSpecies';
 import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';
@@ -386,14 +386,15 @@ export class TownLifeSystem implements GameSystem {
    * resident set holds, which goes by where citizens stand, so a loiterer
    * hidden at reduced quality is still warm the frame it is drawn again.
    */
-  renderablePeople(camX: number, camY: number): ReadonlyArray<Townsperson> {
+  renderablePeople(camera: Camera): ReadonlyArray<Townsperson> {
+    const { x: camX, y: camY, viewWidth, viewHeight } = camera;
     if (this.fullDetail()) return this.townsfolk;
     const minX = camX - REDUCED_DETAIL_VIEW_MARGIN_PX;
     const minY = camY - REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const maxX = camX + worldViewWidth() + REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const maxY = camY + worldViewHeight() + REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const viewCentreX = camX + worldViewWidth() / 2;
-    const viewCentreY = camY + worldViewHeight() / 2;
+    const maxX = camX + viewWidth + REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const maxY = camY + viewHeight + REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const viewCentreX = camX + viewWidth / 2;
+    const viewCentreY = camY + viewHeight / 2;
     const drawn = this.renderScratch;
     const nearest = this.nearestLoiterers;
     const nearestDistancesSq = this.nearestLoitererDistancesSq;
@@ -423,8 +424,8 @@ export class TownLifeSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     this.frameCounter++;
-    const { active } = ctx;
-    const fullUpdateRadiusSq = this.fullUpdateRadiusSq();
+    const { active, camera } = ctx;
+    const fullUpdateRadiusSq = this.fullUpdateRadiusSq(camera);
 
     for (let i = 0; i < this.townsfolk.length; i++) {
       const person = this.townsfolk[i];
@@ -447,13 +448,13 @@ export class TownLifeSystem implements GameSystem {
    * How far a citizen may be from the player and still update every frame.
    *
    * Never less than the visible area: a citizen who is drawn but only stepped
-   * one frame in four visibly stutters, and the viewport is the canvas, which
-   * is the window. The constant floor keeps a small window from making the
-   * crowd's behaviour depend on window size.
+   * one frame in four visibly stutters, and the camera's view grows with the
+   * window and with any zoom out. The constant floor keeps a small window from
+   * making the crowd's behaviour depend on window size.
    */
-  private fullUpdateRadiusSq(): number {
-    const halfViewW = worldViewWidth() / 2;
-    const halfViewH = worldViewHeight() / 2;
+  private fullUpdateRadiusSq(camera: Pick<Camera, 'viewWidth' | 'viewHeight'>): number {
+    const halfViewW = camera.viewWidth / 2;
+    const halfViewH = camera.viewHeight / 2;
     const visibleReach = Math.hypot(halfViewW, halfViewH) + TILE_SIZE;
     const radius = Math.max(FULL_UPDATE_RADIUS_PX, visibleReach);
     return radius * radius;

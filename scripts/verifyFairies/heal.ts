@@ -65,6 +65,7 @@ import {
   playFairySystemCues,
   type FairyCuePlayer,
 } from '../../src/systems/fairyAudioCues';
+import { harnessHit } from '../crawlerHitHarness';
 
 const FRAMES_PER_SECOND = 60;
 const HEALER_TILE = 8;
@@ -301,7 +302,7 @@ function risingAllyRun(make?: HealerFactory) {
       ? s.addHealer(HEALER_TILE, HEALER_TILE)
       : addMadeHealer(s, make, HEALER_TILE, HEALER_TILE);
   const rising = s.add('goblin', HEALER_TILE + NEIGHBOR_OFFSET_TILES, HEALER_TILE);
-  rising.takeDamageFrom(LETHAL_BLOW, s.pm.human);
+  rising.takeHit(harnessHit(s.pm.human, LETHAL_BLOW));
   rising.justDied = false;
   s.roster.grid.remove(rising);
   rising.reviveInPlace(BAD_WOUND, s.roster.grid);
@@ -805,7 +806,7 @@ function checkDeathWave(report: FairyGateReport): void {
     boss.hp = 1;
     far.hp = 1;
     if (reportDeath) s.kill(healer);
-    else healer.takeDamageFrom(Number.MAX_SAFE_INTEGER, s.pm.human);
+    else healer.takeHit(harnessHit(s.pm.human, Number.MAX_SAFE_INTEGER));
     for (let frame = 0; frame < HEAL_WAVE_EXPAND_FRAMES + WAVE_SETTLE_FRAMES; frame++)
       s.fairies.update(s.ctx());
     const overheal = full.statusEffects.find((effect) => effect.type === OVERHEAL_STATUS);

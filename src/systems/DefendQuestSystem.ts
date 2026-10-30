@@ -6,6 +6,7 @@
  *   complete_pending → complete | failed
  */
 
+import type { Camera } from '../core/rendering/camera';
 import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/progression/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import type { MusicClaims } from '../audio/AudioScope';
@@ -985,7 +986,7 @@ export class DefendQuestSystem implements GameSystem {
     if (spikes > 0) {
       const credited = barrier.spikesBy === 'cat' ? this.party?.cat : this.party?.human;
       if (attacker?.isAlive === true) {
-        attacker.takeCreditedDamage(damage, credited ?? null, 'melee', null);
+        attacker.takeOwnedHarm(damage, credited ?? null, 'defenseSpikes');
       }
       const absorbed = Math.min(spikes, remainingBlow);
       const spikesLeft = spikes - absorbed;
@@ -1635,11 +1636,11 @@ export class DefendQuestSystem implements GameSystem {
    */
   renderObjects(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     active?: { x: number; y: number },
     activeCrawler?: HumanPlayer | CatPlayer,
   ): void {
+    const { x: camX, y: camY } = camera;
     if (this.phase === 'inactive') return;
     const nowMs = performance.now();
 
@@ -1655,7 +1656,7 @@ export class DefendQuestSystem implements GameSystem {
         const mood = this.highlightMood(activeCrawler);
         this.roomData.grateTiles.forEach((grate, grateIdx) => {
           if (!this.isGrateOpen(grateIdx)) return;
-          drawAreaHighlightGround(ctx, this.grateScreenRect(grate, camX, camY), {
+          drawAreaHighlightGround(ctx, camera, this.grateScreenRect(grate, camX, camY), {
             color: NURSERY_GUIDE_COLOR,
             nowMs,
             mood,
@@ -1825,10 +1826,10 @@ export class DefendQuestSystem implements GameSystem {
    */
   renderAbove(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     activeCrawler?: HumanPlayer | CatPlayer,
   ): void {
+    const { x: camX, y: camY } = camera;
     if (this.phase === 'inactive' || !this.roomData) return;
     const nowMs = performance.now();
 
@@ -1836,7 +1837,7 @@ export class DefendQuestSystem implements GameSystem {
       const mood = this.highlightMood(activeCrawler);
       this.roomData.grateTiles.forEach((grate, grateIdx) => {
         if (!this.isGrateOpen(grateIdx)) return;
-        drawAreaHighlightFrame(ctx, this.grateScreenRect(grate, camX, camY), {
+        drawAreaHighlightFrame(ctx, camera, this.grateScreenRect(grate, camX, camY), {
           color: NURSERY_GUIDE_COLOR,
           nowMs,
           mood,

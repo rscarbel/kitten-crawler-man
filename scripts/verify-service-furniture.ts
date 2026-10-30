@@ -67,6 +67,7 @@ import {
   SERVICE_PROP_KINDS,
   SERVICE_PROP_KIND_LIST,
 } from '../src/systems/destruction/serviceLevelPropKinds';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const GRID_SIZE = 24;
 const FLOOR_NUMBER = 2;
@@ -308,6 +309,7 @@ function blastDamageAt(tilesAway: number): number {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const props = new DestructiblePropSystem(gameMap, new LootSystem(gameMap), FLOOR_NUMBER);
   const dynamite = new DynamiteSystem(gameMap, props);

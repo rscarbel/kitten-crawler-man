@@ -1,4 +1,4 @@
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { drawLightBeam, lightBeamBounds, type LightBeamPlacement } from '../sprites/lightBeam';
 
 /**
@@ -96,14 +96,18 @@ function placementFor(
   };
 }
 
-function isOffScreen(placement: LightBeamPlacement, tileSize: number): boolean {
+function isOffScreen(
+  placement: LightBeamPlacement,
+  tileSize: number,
+  view: Pick<Camera, 'viewWidth' | 'viewHeight'>,
+): boolean {
   const bounds = lightBeamBounds(placement);
   const margin = tileSize * OFFSCREEN_MARGIN_TILES;
   return (
     bounds.right < -margin ||
-    bounds.left > worldViewWidth() + margin ||
+    bounds.left > view.viewWidth + margin ||
     bounds.bottom < -margin ||
-    bounds.top > worldViewHeight() + margin
+    bounds.top > view.viewHeight + margin
   );
 }
 
@@ -111,10 +115,11 @@ function isOffScreen(placement: LightBeamPlacement, tileSize: number): boolean {
  * The beam: ground pool, shaft and rising motes. Draw it before the Y-sorted
  * world, so the marked place and anyone near it stand in front of it.
  *
- * Skips itself entirely when the beam falls outside the viewport, so the caller
- * only has to convert world coordinates to screen ones.
+ * Skips itself entirely when the beam falls outside the camera's view, so the
+ * caller only has to convert world coordinates to offsets from the view's corner.
  *
- * @param ctx       Canvas context, in screen space
+ * @param ctx       Canvas context, under the world transform with the camera's offset taken out
+ * @param view      How much of the world the camera shows, which the beam is culled against
  * @param screenX   Screen-x of the anchor tile's left edge
  * @param screenY   Screen-y of the anchor tile's top edge
  * @param tileSize  Tile size in pixels, which the beam scales itself against
@@ -124,6 +129,7 @@ function isOffScreen(placement: LightBeamPlacement, tileSize: number): boolean {
  */
 export function drawObjectiveBeacon(
   ctx: CanvasRenderingContext2D,
+  view: Pick<Camera, 'viewWidth' | 'viewHeight'>,
   screenX: number,
   screenY: number,
   tileSize: number,
@@ -132,6 +138,6 @@ export function drawObjectiveBeacon(
   footprint: ObjectiveBeaconFootprint = {},
 ): void {
   const placement = placementFor(screenX, screenY, tileSize, color, nowMs, footprint);
-  if (isOffScreen(placement, tileSize)) return;
+  if (isOffScreen(placement, tileSize, view)) return;
   drawLightBeam(ctx, placement);
 }

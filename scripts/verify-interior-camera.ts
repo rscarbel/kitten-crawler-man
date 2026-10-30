@@ -78,6 +78,7 @@ import type { Density } from '../src/ui/theme/tokens';
 import { measureText } from '../src/ui/widgets/text';
 import { STARLIGHT_TENT_ENTRY_KIND } from '../src/map/OverworldGenerator';
 import { isMazeBarrierTile, planStarlightTentMaze } from '../src/map/starlightTentMazeLayout';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera';
 
 /** Any world deals the Starlight Tent a maze of the same shape; only the hall's board differs. */
 const GATE_WORLD_SEED = 1;
@@ -264,9 +265,21 @@ function measureDrawnBounds(map: GameMap): WorldRect {
   const gameCtx = asGameContext(nodeCtx);
   const camX = -pad;
   const camY = -pad;
-  map.renderCanvas(gameCtx, camX, camY, width, height);
+  map.renderCanvas(gameCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(width),
+    viewHeight: worldPx(height),
+    zoom: UNZOOMED,
+  });
   drawTownInteriorGroundProps(gameCtx, map, camX, camY, TILE_SIZE);
-  map.renderDecorationsOverlay(gameCtx, camX, camY, width, height);
+  map.renderDecorationsOverlay(gameCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(width),
+    viewHeight: worldPx(height),
+    zoom: UNZOOMED,
+  });
   const figures = [...townInteriorPropFigures(map)].sort((a, b) => a.y - b.y);
   for (const figure of figures) figure.render(gameCtx, camX, camY, TILE_SIZE);
 

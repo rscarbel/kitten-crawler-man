@@ -71,6 +71,7 @@ import {
 import { propSheetPlanMismatches, propSheetSize } from '../src/sprites/sheets/propSheetPlan.js';
 import type { FramePainter, PropSheetPlan } from '../src/sprites/sheets/propSheetPlan.js';
 import { getSpriteDefByKey } from '../src/core/spriteAssets/SpriteLoader.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 const fault = process.argv.find((arg) => arg.startsWith('--fault='))?.slice('--fault='.length);
 
@@ -248,9 +249,21 @@ function centreTilePixels(gameMap: GameMap, passes: { overlay: boolean }): Uint8
   const canvas = createCanvas(TEST_MAP_PX, TEST_MAP_PX);
   const nodeCtx = canvas.getContext('2d');
   const ctx = asGameContext(nodeCtx);
-  gameMap.renderCanvas(ctx, 0, 0, TEST_MAP_PX, TEST_MAP_PX);
+  gameMap.renderCanvas(ctx, {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(TEST_MAP_PX),
+    viewHeight: worldPx(TEST_MAP_PX),
+    zoom: UNZOOMED,
+  });
   if (passes.overlay) {
-    for (const { tx, ty } of gameMap.getVisibleDecorationTiles(0, 0, TEST_MAP_PX, TEST_MAP_PX)) {
+    for (const { tx, ty } of gameMap.getVisibleDecorationTiles({
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(TEST_MAP_PX),
+      viewHeight: worldPx(TEST_MAP_PX),
+      zoom: UNZOOMED,
+    })) {
       gameMap.drawDecorationAt(ctx, tx, ty, 0, 0);
     }
   }
@@ -328,7 +341,13 @@ for (const contract of TILE_CONTRACTS) {
   );
   check(
     gameMap
-      .getVisibleDecorationTiles(0, 0, TEST_MAP_PX, TEST_MAP_PX)
+      .getVisibleDecorationTiles({
+        x: 0,
+        y: 0,
+        viewWidth: worldPx(TEST_MAP_PX),
+        viewHeight: worldPx(TEST_MAP_PX),
+        zoom: UNZOOMED,
+      })
       .some((entry) => entry.tx === TEST_TILE && entry.ty === TEST_TILE),
     scope,
     'missing from DECORATION_OVERLAY_TYPES (GameMap), so the Y-sorted pass never draws it',

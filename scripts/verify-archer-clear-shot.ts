@@ -24,6 +24,7 @@ import type { GameSystem } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const MAP_SIZE = level3.mapSize;
 /** Per side: six apart keeps the pair inside the archer's four-to-seven-tile band. */
@@ -133,6 +134,7 @@ function runDuel(map: GameMap, crossing: Crossing, bowman: Bowman): Outcome {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 
   let loosed = 0;

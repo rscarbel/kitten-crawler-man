@@ -55,7 +55,7 @@ import type { MobRoster } from '../kits/SceneWorld';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import type { ObjectiveBeaconSource, TrackerEntry, TrackerTarget } from '../questTracker';
 import { DUNGEON_BEACON_BRIGHTNESS } from '../../ui/ObjectiveBeacon';
-import { playPrisonCue, type PrisonCue } from './prisonSoundCues';
+import { playPrisonCue, type PrisonCue } from '../../audio/prisonSoundCues';
 import type {
   StealthKeySnatchCheckpoint,
   StealthKeySnatchPhase,

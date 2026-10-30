@@ -26,7 +26,7 @@ import { QuestManager, type QuestId, type QuestStatus } from '../../core/quests/
 import { settings } from '../../core/input/Settings';
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { makeRefreshed } from '../../core/combat/StatusEffect';
-import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
+import type { Camera } from '../../core/rendering/camera';
 import {
   BathroomGoblin,
   bathroomSeedFraction,
@@ -98,7 +98,7 @@ import {
   PIPE_BOARD_MUSIC,
   playBathroomCue,
   type BathroomCue,
-} from './bathroomSoundCues';
+} from '../../audio/bathroomSoundCues';
 import type { MusicTrackId } from '../../audio/sounds';
 import {
   createPipeBoard,
@@ -1224,13 +1224,13 @@ export class CloggedBathroomSystem
 
   // ── Rendering ────────────────────────────────────────────────────────────
 
-  private copyInView(copy: BathroomCopy, camX: number, camY: number): boolean {
+  private copyInView(copy: BathroomCopy, camera: Camera): boolean {
     const { reach } = copy;
     return (
-      (reach.x + reach.w) * TILE_SIZE >= camX &&
-      reach.x * TILE_SIZE <= camX + worldViewWidth() &&
-      (reach.y + reach.h) * TILE_SIZE >= camY &&
-      reach.y * TILE_SIZE <= camY + worldViewHeight()
+      (reach.x + reach.w) * TILE_SIZE >= camera.x &&
+      reach.x * TILE_SIZE <= camera.x + camera.viewWidth &&
+      (reach.y + reach.h) * TILE_SIZE >= camera.y &&
+      reach.y * TILE_SIZE <= camera.y + camera.viewHeight
     );
   }
 
@@ -1248,16 +1248,16 @@ export class CloggedBathroomSystem
    */
   renderGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     if (!this.isPresent) return;
+    const { x: camX, y: camY } = camera;
     const target = promptFor === undefined ? null : this.targetFor(promptFor);
     const plumbing: BathroomPlumbing = this.isSolved ? 'fixed' : 'broken';
     const timeSeconds = performance.now() / MILLISECONDS_PER_SECOND;
     for (const copy of this.copies) {
-      if (!this.copyInView(copy, camX, camY)) continue;
+      if (!this.copyInView(copy, camera)) continue;
       drawBathroomRoomFixtures(ctx, copy.room, camX, camY, TILE_SIZE, {
         plumbing,
         stalls: this.stallLooks(copy),

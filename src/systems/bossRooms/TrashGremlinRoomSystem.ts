@@ -1,5 +1,5 @@
+import type { Camera } from '../../core/rendering/camera';
 import { TILE_SIZE } from '../../core/constants';
-import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { Cockroach } from '../../creatures/Cockroach';
@@ -736,7 +736,8 @@ export class TrashGremlinRoomSystem
 
   // ── Drawing ───────────────────────────────────────────────────────────────
 
-  override renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const { nest } = this.layout;
     drawSpriteKey(
       ctx,
@@ -749,7 +750,8 @@ export class TrashGremlinRoomSystem
     );
   }
 
-  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const topple = this.topple;
     if (topple === null) return;
     // The line darkens as the tower rocks, and its warning fills as the fall
@@ -823,7 +825,8 @@ export class TrashGremlinRoomSystem
     return this.renderables;
   }
 
-  override renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const falling =
       this.topple !== null && this.topple.frames >= TOWER_WOBBLE_FRAMES
         ? this.topple
@@ -859,7 +862,7 @@ export class TrashGremlinRoomSystem
           break;
       }
     }
-    this.renderFlies(ctx, camX, camY);
+    this.renderFlies(ctx, camera);
     // It hangs from the ceiling, so it draws over every body; it is a few
     // pixels across, so it never hides one.
     drawHangingBulb(ctx, this.bulb.bulbX - camX, this.bulb.bulbY - camY);
@@ -870,12 +873,13 @@ export class TrashGremlinRoomSystem
    * the shared overlay clock and phased by a fixed spread so no two move
    * together. A handful of rectangles a frame and no state at all.
    */
-  private renderFlies(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderFlies(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const view = {
       left: -CULL_MARGIN_PX,
       top: -CULL_MARGIN_PX,
-      right: worldViewWidth() + CULL_MARGIN_PX,
-      bottom: worldViewHeight() + CULL_MARGIN_PX,
+      right: camera.viewWidth + CULL_MARGIN_PX,
+      bottom: camera.viewHeight + CULL_MARGIN_PX,
     };
     const tick = Math.floor(frameTime * OVERLAY_FPS) / OVERLAY_FPS;
     let drawn = 0;

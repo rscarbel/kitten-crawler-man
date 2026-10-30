@@ -76,6 +76,7 @@ import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ANCHOR_INDOORS_REFUSAL, refuseAnchorIndoors } from '../src/systems/kits/hotbarActions';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
 
@@ -228,6 +229,7 @@ function step(rig: Rig, frames: number): void {
     activeIsMoving: false,
     roster: rig.roster,
     gameMap: rig.map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   for (let f = 0; f < frames; f++) rig.recall.update(ctx);
 }

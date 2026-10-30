@@ -8,6 +8,7 @@
 
 import { drawDangerLane } from '../../sprites/dangerTelegraph';
 import { worldPalette } from '../theme/worldInk';
+import type { WorldPx } from '../../core/rendering/camera';
 
 /** A point in world pixels. */
 export interface SensePoint {
@@ -79,8 +80,8 @@ const HALF = 0.5;
 export interface SensePaintView {
   readonly camX: number;
   readonly camY: number;
-  readonly width: number;
-  readonly height: number;
+  readonly width: WorldPx;
+  readonly height: WorldPx;
   readonly nowMs: number;
 }
 

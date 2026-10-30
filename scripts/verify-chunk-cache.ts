@@ -37,6 +37,7 @@ const { perfMonitor } = await import('../src/core/perf/PerfMonitor.js');
 const { CHUNK_TILES } = await import('../src/map/tiles/chunkTiles.js');
 const { FloorTypeValue } = await import('../src/map/tileTypes.js');
 const { surfaceTallies } = await import('../src/core/rendering/canvasSurface.js');
+const { UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 
 const WORLD_SEED = 7919;
 const VIEW_W = 1280;
@@ -118,7 +119,13 @@ function moveCamera(dx: number, dy: number): void {
 }
 
 function frame(): void {
-  map.renderCanvas(ctx, cameraX, cameraY, VIEW_W, VIEW_H);
+  map.renderCanvas(ctx, {
+    x: cameraX,
+    y: cameraY,
+    viewWidth: worldPx(VIEW_W),
+    viewHeight: worldPx(VIEW_H),
+    zoom: UNZOOMED,
+  });
   perfMonitor.endFrame(performance.now());
 }
 

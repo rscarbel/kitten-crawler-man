@@ -22,8 +22,8 @@
  * and paid out by the same kill resolution.
  */
 
-import { outgoingHitDamageOn } from '../core/combat/outgoingHit';
-import { MAGIC_HIT, type DamageTags } from '../core/combat/damageTags';
+import { hitTrainingOn, resolveCrawlerHit } from '../core/combat/outgoingHit';
+import { MAGIC_HIT } from '../core/combat/damageTags';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
 import { STORMCALLER_LIGHTNING } from '../sprites/art/stormcallerPalette';
@@ -285,9 +285,16 @@ export class StormcallerStrikeSystem implements WeaponProc {
       struck.add(mob);
       ctx.spells.addChainLightningBolt(source.x, source.y, centre.x, centre.y);
       this.chainedThisTick = true;
-      const bolt = crawlerMeleeStrikeDamage(human);
-      const tags: DamageTags = [...human.meleeHitTags(), ...MAGIC_HIT];
-      mob.takeDamageFrom(outgoingHitDamageOn(human, mob, bolt, tags), human, 'melee');
+      const bolt = resolveCrawlerHit({
+        dealer: human,
+        delivery: human.meleeDelivery,
+        blowAt: (melee) => crawlerMeleeStrikeDamage(human, melee),
+        tags: [...human.meleeHitTags(), ...MAGIC_HIT],
+        training: hitTrainingOn(mob),
+        damageType: 'melee',
+        struckBy: 'dealer',
+      });
+      mob.takeHit(bolt);
       if (!mob.blowsEarnNothing) ctx.hitLanded = true;
     }
   }

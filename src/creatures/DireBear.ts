@@ -89,12 +89,12 @@ export class DireBear extends Mob {
     this.gaitSampleY = this.y;
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (this.painGrowlCooldown === 0) {
       this.damageSoundPending = true;
       this.painGrowlCooldown = PAIN_GROWL_COOLDOWN;

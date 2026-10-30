@@ -38,6 +38,8 @@ import type { DoorSide, TilePoint } from '../../src/systems/bossRooms/bossRoomLa
 import { MobRoster } from '../../src/systems/kits/SceneWorld.js';
 import { buildEnvironment, findFloorWithRoom, gameGauntletDressings } from './harness.js';
 import { powerLabRoom } from './powerLab.js';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** The party level the scripted crawler is built at, and the level the boss is raised to. */
 export const SIM_PARTY_LEVEL = 8;
@@ -175,6 +177,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     bossRoom,
   };
   const combat: CombatContext = {
@@ -256,7 +259,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
         centreOf(boss).y - centreOf(human).y,
       );
       if (distance <= reach) {
-        boss.takeDamageFrom(attack.damage, human, attack.damageType);
+        boss.takeHit(harnessHit(human, attack.damage, attack.damageType));
         swingCooldown = attack.frames;
       }
     }

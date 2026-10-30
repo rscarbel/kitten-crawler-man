@@ -76,6 +76,7 @@ import { buildSiegeRig, standAt } from './villageSiegeHarness';
 import { mulberry32 } from '../src/sprites/person/rng';
 import type { QuestRewardSpec } from '../src/ui/questReward/types';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { harnessHit } from './crawlerHitHarness';
 
 useDevPlayerIdentity();
 
@@ -736,11 +737,11 @@ section('9. The retry and the turn-in');
       if (!mob.isAlive || !mob.isHostile || mob.siegeCapable === null) continue;
       if (mob instanceof Necromancer) {
         if (state.quest.assaultWaveIndex === lastWaveIndex) return true;
-        if (!mob.isFadingAway) mob.takeDamageFrom(OVERKILL, human, 'melee');
+        if (!mob.isFadingAway) mob.takeHit(harnessHit(human, OVERKILL, 'melee'));
         beatenEarly.add(mob);
         continue;
       }
-      mob.takeDamageFrom(OVERKILL, human, 'melee');
+      mob.takeHit(harnessHit(human, OVERKILL, 'melee'));
       killedEarly.add(mob);
     }
     return false;
@@ -773,7 +774,7 @@ section('9. The retry and the turn-in');
   check(living.length > 0, `the rest of his wave is still standing (${living.length})`);
   const killed = new Set<Mob>();
   bus.on('mobKilled', ({ mob }) => killed.add(mob));
-  necro?.takeDamageFrom(OVERKILL, human, 'melee');
+  necro?.takeHit(harnessHit(human, OVERKILL, 'melee'));
   rig.step();
   rig.step();
   check(state.quest.phase === 'victory', 'his death wins the siege');

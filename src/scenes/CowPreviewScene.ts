@@ -34,6 +34,7 @@ import { COW_HAPPY_FRAMES } from '../sprites/cowTiming';
 import { cowPollPoint, restCowPose } from '../sprites/art/cowArt';
 import { cowLookOf } from '../sprites/art/cowLooks';
 import { GameMap } from '../map/GameMap';
+import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { previewInk } from '../ui/theme/previewInk';
 
@@ -107,7 +108,7 @@ interface Walker {
 }
 
 export class CowPreviewScene extends PreviewScene {
-  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly map = new GameMap({ prebuiltStructure: openFloorGrid(PREVIEW_MAP_SIZE) });
   private readonly gore = new BodyPartGoreSystem(this.map);
   private readonly walkers: Walker[] = COW_AGES.flatMap((age) =>
     COW_COATS.map((coat, i) => ({

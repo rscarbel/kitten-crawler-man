@@ -25,6 +25,7 @@
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { setViewportSize } from '../src/core/rendering/Viewport';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera';
 import { gameContext } from './nodeGameContext';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { GameMap } from '../src/map/GameMap';
@@ -111,7 +112,7 @@ import { DIAGONAL_PENALTY } from '../src/systems/PlayerMovementSystem';
 import { footingSpeedFactor } from '../src/systems/GameLoopPhases';
 import { FairyCorpseLedger } from '../src/creatures/fairies/fairyCorpses';
 import { clamp } from '../src/utils';
-import { makeStuck } from '../src/core/combat/StatusEffect';
+import { FULL_SHARE, makeStuck } from '../src/core/combat/StatusEffect';
 import { SEPARATION_RADIUS } from '../src/systems/mobSeparation';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpiderQuestSystem, type SpiderQuestCheckpoint } from '../src/systems/SpiderQuestSystem';
@@ -122,6 +123,7 @@ import type { SoundId } from '../src/audio/sounds';
 import { findBossRoomDoorways, type DoorSide } from '../src/systems/bossRooms/bossRoomLayout';
 import { generateFloor } from './bossRooms/harness';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { harnessHit } from './crawlerHitHarness';
 
 useDevPlayerIdentity();
 
@@ -689,6 +691,7 @@ function buildLab(options: LabOptions): Lab {
       activeIsMoving: false,
       roster,
       gameMap: map,
+      camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     }),
   };
   for (const player of [human, cat]) {
@@ -1655,7 +1658,7 @@ function screechAudioCancelled(how: CutShort): boolean {
   };
   if (how === 'given up at the lock') {
     while (attackOf(spider) === 'screech' && spider.attackFrame < lockBegins - 1) stepOnce();
-    human.applyStatus(makeStuck(PROBE_ROOT_FRAMES));
+    human.applyStatus(makeStuck(FULL_SHARE, PROBE_ROOT_FRAMES));
     stepOnce();
     return heard.cancelled && attackOf(spider) !== 'screech';
   }
@@ -1667,7 +1670,7 @@ function screechAudioCancelled(how: CutShort): boolean {
     stepOnce();
   }
   if (how === 'called off') spider.resetAttackState();
-  else spider.takeDamageFrom(spider.hp, human, 'melee');
+  else spider.takeHit(harnessHit(human, spider.hp, 'melee'));
   stepOnce();
   return heard.cancelled;
 }
@@ -1749,7 +1752,7 @@ function broodAudio(): void {
   };
 
   const smashedCues = cuesFor(() => {
-    firstOf(eggsOf(lab))?.takeDamageFrom(1, lab.human, 'melee');
+    firstOf(eggsOf(lab))?.takeHit(harnessHit(lab.human, 1, 'melee'));
     step(lab, standOff(lab));
   }, 'eggBurstSoundPending');
 
@@ -2741,7 +2744,7 @@ function runRootSeed(seed: number, stats: RootRunStats, shoves: boolean): void {
   for (let frame = 0; frame < ROOT_RUN_FRAMES; frame++) {
     const chipFloor = spider.maxHp * ROOT_RUN_HP_FLOOR_FRACTION;
     if (frame % ROOT_RUN_CHIP_INTERVAL === 0 && spider.hp - ROOT_RUN_CHIP_DAMAGE > chipFloor) {
-      spider.takeDamageFrom(ROOT_RUN_CHIP_DAMAGE, human, 'melee');
+      spider.takeHit(harnessHit(human, ROOT_RUN_CHIP_DAMAGE, 'melee'));
     }
     if (frame % LOITER_REPICK_FRAMES === 0) {
       for (const player of players) {
@@ -3329,7 +3332,7 @@ function retargetSpitProbe(): void {
       }
     }
     if (spitting && spider.attackFrame === RETARGET_ROOT_ON_FRAME && !cat.hasStatus('stuck')) {
-      cat.applyStatus(makeStuck(RETARGET_ROOT_FRAMES));
+      cat.applyStatus(makeStuck(FULL_SHARE, RETARGET_ROOT_FRAMES));
       catRooted = true;
     }
     step(lab, new Map<Player, Vec | null>([[human, humanMove]]));
@@ -3506,7 +3509,7 @@ function applyEggFaults(lab: Lab): void {
           return undefined;
         });
       }
-      if (fault === 'egg-tough') wrapMethod(egg, 'takeDamageFrom', () => undefined);
+      if (fault === 'egg-tough') wrapMethod(egg, 'receiveDamage', () => undefined);
       if (fault === 'egg-heavy') {
         const HEAVY_EGG_MASS = 1000;
         egg.mass = HEAVY_EGG_MASS;
@@ -3722,7 +3725,7 @@ function eggDamageTypes(): void {
       if (damageType === undefined) break;
       remaining = remaining.slice(1);
       const accepts = egg.takesPlayerDamage(damageType);
-      if (accepts) egg.takeDamageFrom(TOKEN_HIT_DAMAGE, lab.human, damageType);
+      if (accepts) egg.takeHit(harnessHit(lab.human, TOKEN_HIT_DAMAGE, damageType));
       const destroyed = !egg.isAlive && egg.ending === 'destroyed';
       allDestroyed = allDestroyed && accepts && destroyed;
       results.push(`${damageType}:${destroyed ? 'smashed' : accepts ? 'survived' : 'refused'}`);
@@ -3733,7 +3736,7 @@ function eggDamageTypes(): void {
   const SETTLE = EGG_HATCH_FRAMES + MIN_IMPACT_HOLD_FRAMES;
   // Nothing new may hatch from a smashed egg; any egg laid since is smashed too.
   for (let frame = 0; frame < SETTLE; frame++) {
-    for (const egg of eggsOf(lab)) egg.takeDamageFrom(TOKEN_HIT_DAMAGE, lab.human, 'melee');
+    for (const egg of eggsOf(lab)) egg.takeHit(harnessHit(lab.human, TOKEN_HIT_DAMAGE, 'melee'));
     step(lab, standOff(lab));
     applyEggFaults(lab);
   }
@@ -3889,7 +3892,7 @@ function broodCapAndCooldown(): void {
         const born = bornAt.get(hatchling) ?? lab.frame;
         bornAt.set(hatchling, born);
         if (lab.frame - born >= HATCHLING_LIFETIME_FRAMES) {
-          hatchling.takeDamageFrom(hatchling.hp, lab.human, 'melee');
+          hatchling.takeHit(harnessHit(lab.human, hatchling.hp, 'melee'));
         }
       }
       peak = Math.max(peak, eggsOf(lab).length + hatchlingsOf(lab).length);
@@ -4023,7 +4026,7 @@ function bannerWaitsForHerDeath(): void {
   lab.combat.bus.on('questRewardShown', () => {
     screenRequests.count++;
   });
-  lab.spider.takeDamageFrom(lab.spider.hp, lab.human, 'melee');
+  lab.spider.takeHit(harnessHit(lab.human, lab.spider.hp, 'melee'));
   let framesToBanner = 0;
   let completedBeforeBanner = false;
   let corpseClockAtBanner = NaN;
@@ -4101,7 +4104,7 @@ function deathClearsHerAttacks(): void {
   callPrivate(spider, 'fireSpitProjectile', []);
   const puddlesBefore = spider.spitPuddles.length;
   const globBefore = spitGlob(spider) !== null;
-  spider.takeDamageFrom(spider.hp, human, 'melee');
+  spider.takeHit(harnessHit(human, spider.hp, 'melee'));
   step(lab);
   const globAfterDeath = spitGlob(spider) !== null;
   const dryingOnDeath =
@@ -4236,7 +4239,7 @@ function gateCleanup(): void {
   {
     const lab = labWithBrood(RUN_SEED + CLEANUP_SEED_OFFSETS.bossDeath);
     const hadBrood = eggsOf(lab).length + hatchlingsOf(lab).length;
-    lab.spider.takeDamageFrom(lab.spider.hp, lab.human, 'melee');
+    lab.spider.takeHit(harnessHit(lab.human, lab.spider.hp, 'melee'));
     settle(lab);
     record(
       '10',
@@ -4313,7 +4316,7 @@ function bossMusicSurvivesADeathRetry(): void {
   const retryClaim = quest.bossMusicStartPending;
   quest.bossMusicStartPending = false;
   quest.bossMusicStopPending = false;
-  lab.spider.takeDamageFrom(lab.spider.hp, lab.human, 'melee');
+  lab.spider.takeHit(harnessHit(lab.human, lab.spider.hp, 'melee'));
   settle(lab);
   const released = quest.bossMusicStopPending;
   record(
@@ -4708,7 +4711,7 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
             : null;
       if (victim === null) continue;
       if (victim instanceof SpiderEgg) eggsSmashed++;
-      victim.takeDamageFrom(nextAttack.damage, player, nextAttack.damageType);
+      victim.takeHit(harnessHit(player, nextAttack.damage, nextAttack.damageType));
       member.swing.cooldown = nextAttack.frames;
       member.swing.cycleIndex++;
     }
@@ -5344,12 +5347,12 @@ function gateDarkDrawOrder(): void {
   const maskSurfaces = new Set<unknown>(masks.values());
   if (fault === 'dark-over-warnings') {
     wrapMethod(dressing, 'renderDarkness', () => undefined);
-    quest.renderLabDarkness(ctx, 0, 0, human);
+    quest.renderLabDarkness(ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED), human);
     Reflect.deleteProperty(dressing, 'renderDarkness');
-    dressing.renderDarkness(ctx, 0, 0);
+    dressing.renderDarkness(ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED));
     spider.renderGroundTelegraphs(ctx, 0, 0);
   } else {
-    quest.renderLabDarkness(ctx, 0, 0, human);
+    quest.renderLabDarkness(ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED), human);
   }
   const maskAt = log.findIndex(
     (entry) => entry.call === 'drawImage' && maskSurfaces.has(entry.source),
@@ -5389,7 +5392,7 @@ function gateLitCeilingOrder(): void {
   const { quest, dressing, human, ctx, spans, spanOf } = staged;
   spanOf(dressing, 'renderCeiling', 'the ceiling');
   if (fault === 'dark-over-warnings') wrapMethod(quest, '_renderLabWarnings', () => undefined);
-  quest.renderLabDarkness(ctx, 0, 0, human);
+  quest.renderLabDarkness(ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED), human);
   const ceiling = spans.find((span) => span.what === 'the ceiling');
   const warningsAfter = spans.filter(
     (span) => span.what !== 'the ceiling' && ceiling !== undefined && span.from >= ceiling.to,

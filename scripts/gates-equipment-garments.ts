@@ -271,13 +271,26 @@ function alphaOf(target: Surface): Uint8ClampedArray {
   return alpha;
 }
 
-/** Ink pixels with no envelope under them. */
-function spill(ink: Uint8ClampedArray, envelope: Uint8ClampedArray): number {
-  let count = 0;
-  for (let i = 0; i < ink.length; i++) {
-    if (ink[i] >= INK && envelope[i] === 0) count++;
+/**
+ * A garment piece's ink read against its part's envelope: whether it inked
+ * anything, and how many of its ink pixels have no envelope under them. The
+ * envelope is read only for a piece that inked.
+ */
+function inkAgainst(
+  ink: Surface,
+  envelopeAlpha: () => Uint8ClampedArray,
+): { readonly inked: boolean; readonly outside: number } {
+  const { data } = ink.ctx.getImageData(0, 0, ink.size, ink.size);
+  let inked = false;
+  let outside = 0;
+  let envelope: Uint8ClampedArray | null = null;
+  for (let pixel = 0; pixel * RGBA < data.length; pixel++) {
+    if (data[pixel * RGBA + ALPHA] < INK) continue;
+    inked = true;
+    envelope ??= envelopeAlpha();
+    if (envelope[pixel] === 0) outside++;
   }
-  return count;
+  return { inked, outside };
 }
 
 /** How one wearer's cells are painted with a measuring dressing. */
@@ -389,38 +402,51 @@ function passes<W extends GarmentWearer>(
 
 function checkPass<W extends GarmentWearer>(
   harness: Wearer<W>,
+  rows: Wearer<W>['rows'],
   outfit: Outfit<W>,
   wanted: ReadonlySet<string>,
   failures: string[],
   measured: Map<string, number>,
 ): void {
+  const measuredGarments = outfit.garments.filter((garment) => wanted.has(garment.id));
+  // Only the parts a measured garment is worn on: a pass for one hat need not
+  // sweep the envelopes of his legs and feet on every frame.
+  const measuredParts = new Set<string>(measuredGarments.flatMap((garment) => garment.region));
   const envelopes = new Map(
-    harness.parts.map((part) => [part, surface(harness.surfacePx)] as const),
+    harness.parts
+      .filter((part) => measuredParts.has(part))
+      .map((part) => [part, surface(harness.surfacePx)] as const),
   );
   const ink = new Map<string, Surface>();
-  for (const garment of outfit.garments) {
-    if (!wanted.has(garment.id)) continue;
+  for (const garment of measuredGarments) {
     for (const part of garment.region) {
       ink.set(inkKey(garment.id, part), surface(harness.surfacePx));
     }
   }
   const scratch = surface(harness.surfacePx);
-  for (const row of harness.rows) {
+  for (const row of rows) {
     for (let frame = 0; frame < row.frameCount; frame++) {
       clear(scratch);
       for (const target of [...envelopes.values(), ...ink.values()]) clear(target);
       const measure: Measure = { envelopes, ink, painted: new Set() };
       harness.paintCell(asGameContext(scratch.ctx), row.name, frame, outfit, measure);
-      for (const garment of outfit.garments) {
+      const envelopeAlphas = new Map<string, Uint8ClampedArray>();
+      const envelopeAlphaOf = (part: string, envelope: Surface): Uint8ClampedArray => {
+        const known = envelopeAlphas.get(part);
+        if (known !== undefined) return known;
+        const read = alphaOf(envelope);
+        envelopeAlphas.set(part, read);
+        return read;
+      };
+      for (const garment of measuredGarments) {
         for (const part of garment.region) {
           const key = inkKey(garment.id, part);
           const target = ink.get(key);
           const envelope = envelopes.get(part);
           if (target === undefined || envelope === undefined || !measure.painted.has(key)) continue;
-          const inkAlpha = alphaOf(target);
-          if (!inkAlpha.some((alpha) => alpha >= INK)) continue;
+          const { inked, outside } = inkAgainst(target, () => envelopeAlphaOf(part, envelope));
+          if (!inked) continue;
           measured.set(garment.id, (measured.get(garment.id) ?? 0) + 1);
-          const outside = spill(inkAlpha, alphaOf(envelope));
           if (outside > 0) {
             failures.push(
               `E5: ${garment.name} (${garment.id}) paints ${outside} px outside ${harness.possessive} ${part}'s envelope in ${row.name}[${frame}]`,
@@ -458,27 +484,138 @@ function humanGarmentOfItem(id: string): GarmentDef<'human'> | null {
   return look?.kind === 'garment' ? wornGarmentOf('human', look.garment) : null;
 }
 
-function wearerFailures<W extends GarmentWearer>(
+/**
+ * One share of a wearer's E5 pass: what failed on its rows, and how many
+ * inked pieces each garment showed there, by garment id. Shares of one wearer
+ * are summed before a garment is called unmeasured.
+ */
+export interface EnvelopeMeasurement {
+  readonly failures: readonly string[];
+  readonly measured: Readonly<Record<string, number>>;
+}
+
+function measureRows<W extends GarmentWearer>(
   harness: Wearer<W>,
   garments: readonly GarmentDef<W>[],
-): string[] {
+  rows: Wearer<W>['rows'],
+): EnvelopeMeasurement {
   const failures: string[] = [];
-  if (garments.length === 0) return failures;
-  const wanted = new Set<string>(garments.map((garment) => garment.id));
   const measured = new Map<string, number>();
-  const toMeasure = new Set(wanted);
+  const toMeasure = new Set<string>(garments.map((garment) => garment.id));
   for (const outfit of passes(
     harness.base,
     garments.flatMap((garment) => (garment.base ? [] : [garment])),
   )) {
-    checkPass(harness, outfit, toMeasure, failures, measured);
+    checkPass(harness, rows, outfit, toMeasure, failures, measured);
     for (const garment of outfit.garments) if (garment.base) toMeasure.delete(garment.id);
   }
-  for (const garment of garments) {
+  return { failures, measured: Object.fromEntries(measured) };
+}
+
+function unmeasuredGarments<W extends GarmentWearer>(
+  harness: Wearer<W>,
+  garments: readonly GarmentDef<W>[],
+  measured: ReadonlyMap<string, number>,
+): string[] {
+  return garments.flatMap((garment) => {
     const pieces = measured.get(garment.id) ?? 0;
     const what = `inked pieces of ${harness.label}'s ${garment.name} (${garment.id})`;
-    failures.push(...nothingMeasuredFailures(pieces, what).map((f) => `E5: ${f}`));
+    return nothingMeasuredFailures(pieces, what).map((f) => `E5: ${f}`);
+  });
+}
+
+/**
+ * How many shares each wearer's rows are split into. A share is the unit a
+ * parallel run hands to one process, and one look's every row in every pass
+ * is minutes of painting.
+ */
+const ROW_SHARES = 3;
+
+/** One wearer and the garments E5 fits on it, measurable a share of its rows at a time. */
+interface WearerPlan {
+  readonly id: string;
+  measureShare(share: number): EnvelopeMeasurement;
+  unmeasured(measured: ReadonlyMap<string, number>): string[];
+}
+
+function wearerPlan<W extends GarmentWearer>(
+  id: string,
+  harness: Wearer<W>,
+  garments: readonly GarmentDef<W>[],
+): WearerPlan | null {
+  if (garments.length === 0) return null;
+  const shareLength = Math.ceil(harness.rows.length / ROW_SHARES);
+  return {
+    id,
+    measureShare: (share) =>
+      measureRows(
+        harness,
+        garments,
+        harness.rows.slice(share * shareLength, (share + 1) * shareLength),
+      ),
+    unmeasured: (measured) => unmeasuredGarments(harness, garments, measured),
+  };
+}
+
+function wearerPlans(only: string | null): WearerPlan[] {
+  const catGarments = garmentsNamed('cat', only, catGarmentOfItem);
+  const humanGarments = garmentsNamed('human', only, humanGarmentOfItem);
+  const plans = [
+    ...CAT_LOOKS.map((look) => wearerPlan(`cat:${look.id}`, catWearer(look), catGarments)),
+    ...HUMAN_LOOKS.map((look) =>
+      wearerPlan(`human:${look.id}`, humanWearer(look), wornBy(look, humanGarments)),
+    ),
+  ];
+  return plans.filter((plan) => plan !== null);
+}
+
+const UNIT_SEPARATOR = '#';
+
+/** Every unit of E5 work for `only`, by id: a wearer and a share of its rows. */
+export function garmentEnvelopeUnitIds(only: string | null = null): string[] {
+  if (typeof document === 'undefined') installCanvasGlobals();
+  return wearerPlans(only).flatMap((plan) =>
+    Array.from({ length: ROW_SHARES }, (_unused, share) => `${plan.id}${UNIT_SEPARATOR}${share}`),
+  );
+}
+
+/** Measures one unit {@link garmentEnvelopeUnitIds} named. */
+export function measureGarmentEnvelopeUnit(
+  unitId: string,
+  only: string | null = null,
+): EnvelopeMeasurement {
+  if (typeof document === 'undefined') installCanvasGlobals();
+  const split = unitId.lastIndexOf(UNIT_SEPARATOR);
+  const plan = wearerPlans(only).find((candidate) => candidate.id === unitId.slice(0, split));
+  const share = Number(unitId.slice(split + UNIT_SEPARATOR.length));
+  if (plan === undefined || !Number.isInteger(share)) {
+    throw new Error(`no garment envelope unit "${unitId}"`);
   }
+  return plan.measureShare(share);
+}
+
+/** E5's failures, given every unit's measurement by unit id. */
+export function garmentEnvelopeVerdict(
+  only: string | null,
+  measurements: ReadonlyMap<string, EnvelopeMeasurement>,
+): string[] {
+  const failures: string[] = [];
+  for (const plan of wearerPlans(only)) {
+    const measured = new Map<string, number>();
+    for (let share = 0; share < ROW_SHARES; share++) {
+      const measurement = measurements.get(`${plan.id}${UNIT_SEPARATOR}${share}`);
+      if (measurement === undefined) {
+        failures.push(`E5: ${plan.id} share ${share} was never measured`);
+        continue;
+      }
+      failures.push(...measurement.failures);
+      for (const [id, pieces] of Object.entries(measurement.measured)) {
+        measured.set(id, (measured.get(id) ?? 0) + pieces);
+      }
+    }
+    failures.push(...plan.unmeasured(measured));
+  }
+  failures.push(...unwornFailures(garmentsNamed('human', only, humanGarmentOfItem)));
   return failures;
 }
 
@@ -492,19 +629,12 @@ export function gatesGarment(only: string): boolean {
 
 /** E5 for every garment of both crawlers, or for the garment or item `only` names. */
 export function garmentEnvelopeFailures(only: string | null = null): string[] {
-  if (typeof document === 'undefined') installCanvasGlobals();
-  return [
-    ...CAT_LOOKS.flatMap((look) =>
-      wearerFailures(catWearer(look), garmentsNamed('cat', only, catGarmentOfItem)),
+  const measurements = new Map(
+    garmentEnvelopeUnitIds(only).map(
+      (unitId) => [unitId, measureGarmentEnvelopeUnit(unitId, only)] as const,
     ),
-    ...HUMAN_LOOKS.flatMap((look) =>
-      wearerFailures(
-        humanWearer(look),
-        wornBy(look, garmentsNamed('human', only, humanGarmentOfItem)),
-      ),
-    ),
-    ...unwornFailures(garmentsNamed('human', only, humanGarmentOfItem)),
-  ];
+  );
+  return garmentEnvelopeVerdict(only, measurements);
 }
 
 const invokedDirectly = import.meta.url === pathToFileURL(process.argv[1]).href;

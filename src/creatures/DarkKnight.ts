@@ -379,7 +379,7 @@ export class DarkKnight extends Mob {
     return Math.max(super.silhouetteMarginTiles, SWEEP_RADIUS_TILES);
   }
 
-  /** He telegraphs, so he must keep thinking while the party is off-screen. */
+  /** The companion sidesteps him: every one of his attacks is telegraphed. */
   override get requiresEvasion(): boolean {
     return true;
   }

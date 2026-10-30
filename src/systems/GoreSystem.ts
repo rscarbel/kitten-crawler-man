@@ -1,7 +1,7 @@
 import type { GameSystem } from './GameSystem';
 import { randomInt } from '../utils';
 import { getSpriteDef } from '../core/spriteAssets/SpriteLoader';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 
 const PUDDLE_LIFETIME = 18000; // 300s @ 60fps
 const PUDDLE_FADE_START = 3000; // start fading 50s before despawn
@@ -185,15 +185,16 @@ export class GoreSystem implements GameSystem {
     }
   }
 
-  renderPuddles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderPuddles(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const def = getSpriteDef('blood_puddle');
     if (!def) return;
     const stateDef = def.states.get('puddle');
     if (!stateDef) return;
     const { img, frameWidth, frameHeight } = def;
 
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
 
     ctx.save();
     for (const p of this.puddles) {
@@ -219,7 +220,8 @@ export class GoreSystem implements GameSystem {
     ctx.restore();
   }
 
-  renderParticles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderParticles(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const def = getSpriteDef('blood_particle');
     if (!def) return;
     const dropState = def.states.get('drop');
@@ -227,8 +229,8 @@ export class GoreSystem implements GameSystem {
     if (!dropState || !tearState) return;
     const { img, frameWidth, frameHeight } = def;
 
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
 
     ctx.save();
     for (const p of this.particles) {

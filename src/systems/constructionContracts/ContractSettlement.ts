@@ -22,7 +22,7 @@ import { completeContract } from './contractGenerator';
 import { CONSTRUCTION_CONTRACT_QUEST_ID, CONSTRUCTION_CONTRACT_QUEST_NAME } from './contractQuest';
 import type { GearId } from '../../loot/gearPools';
 import { grantQuestGear, type GearParty } from '../../loot/questGear';
-import { playContractCue } from './contractSoundCues';
+import { playContractCue } from '../../audio/contractSoundCues';
 
 /** Whoever collects a contract's payment. */
 export type ContractPayee = Pick<Player, 'earnCoins' | 'x' | 'y'>;

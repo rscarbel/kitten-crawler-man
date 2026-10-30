@@ -32,6 +32,7 @@ import {
   surfaceContext,
   type CanvasSurface,
 } from '../../core/rendering/canvasSurface';
+import type { Camera } from '../../core/rendering/camera';
 import { perfMonitor } from '../../core/perf/PerfMonitor';
 import { rectContainsTile, type ParsedPrisonLayout } from '../../map/goblinPrisonPlan';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
@@ -357,13 +358,11 @@ export class PrisonLighting {
   /** The dark, with every light and extra pool cut out of it. */
   renderDarkness(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
+    camera: Camera,
     lights: ReadonlyArray<LitPrisonLight>,
     sources: Iterable<PrisonLightSource>,
   ): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const startedAt = perfMonitor.begin();
     const { surface, ctx: cut } = this.cutBuffer(viewW, viewH);
     cut.setTransform(1, 0, 0, 1, 0, 0);
@@ -430,13 +429,11 @@ export class PrisonLighting {
   /** The live layer: cone washes, disc rims and beams, the catching tint, lamp flicker. */
   renderLiveLights(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
+    camera: Camera,
     lights: ReadonlyArray<LitPrisonLight>,
     nowMs: number,
   ): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const startedAt = perfMonitor.begin();
     ctx.save();
     ctx.translate(-camX, -camY);

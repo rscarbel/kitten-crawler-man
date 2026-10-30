@@ -36,6 +36,7 @@ import {
   TURN_PREVIEW_RANGE_TILES,
   WALL_HUNG_DRESSING_KINDS,
 } from '../src/systems/StarlightTentMazeSystem';
+import type { InteriorEncounterRequest } from '../src/systems/InteriorEncounterRequest';
 import {
   starlightTentWallFace,
   buildStarlightTentFloorIndex,
@@ -70,7 +71,7 @@ import {
   STARLIGHT_TENT_AMBIENT_BED,
   STARLIGHT_TENT_MUSIC,
   starlightTentCueSoundIds,
-} from '../src/systems/starlightTent/starlightTentSoundCues';
+} from '../src/audio/starlightTentSoundCues';
 import {
   BELL_HOLD_FRAMES,
   STARLIGHT_TENT_MAZE_ROWS,
@@ -153,6 +154,7 @@ import { settings } from '../src/core/input/Settings';
 import { runMirrorBoardChecks, SWEEP_ATTEMPTS } from './starlightTentMirrorBoardChecks';
 import { runInteriorFixtureChecks } from './interiorFixtureChecks';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
 
@@ -1763,6 +1765,7 @@ function buildMazeHarness(progress: StarlightTentProgress = createStarlightTentP
     activeIsMoving: false,
     roster,
     gameMap: mazeMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { maze, mazeMap, ctx, human, cat, spawnedMobs, ring };
 }
@@ -1770,6 +1773,95 @@ function buildMazeHarness(progress: StarlightTentProgress = createStarlightTentP
 function placeAt(entity: { x: number; y: number }, tile: MazeTile): void {
   entity.x = tile.x * TILE_SIZE;
   entity.y = tile.y * TILE_SIZE;
+}
+
+const SCENE_VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
+/** A one-tile doorway, for a structure table that names no door for the tent. */
+const FALLBACK_DOORWAY_TILES = 1;
+
+/**
+ * Builds the real circus-tent interior, walks the party through every curtain
+ * with the scene's own update, and reports whether the scene left both crawlers
+ * following once the ring opened.
+ *
+ * The scene modules are imported here, after the browser shim, because they
+ * read the browser at import.
+ */
+async function sceneReleasesBothAtTheRing(): Promise<boolean> {
+  const { installBrowserShim } = await import('./browserShim.js');
+  installBrowserShim(SCENE_VIEWPORT);
+  const { gameContext } = await import('./nodeGameContext.js');
+  const { settleArrival } = await import('./settleArrival.js');
+  const { SceneManager } = await import('../src/core/Scene.js');
+  const { InputManager } = await import('../src/core/input/InputManager.js');
+  const { snapPlayer } = await import('../src/core/save/PlayerSnapshot.js');
+  const { level3 } = await import('../src/levels/level3.js');
+  const { STARLIGHT_TENT_ENTRY_KIND } = await import('../src/map/OverworldGenerator.js');
+  const { CIRCUS_STRUCTURES } = await import('../src/map/overworld/circusGroundsLayout.js');
+  const { createShopStock } = await import('../src/economy/shopStock.js');
+  const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
+
+  const sceneCtx = gameContext(SCENE_VIEWPORT.width, SCENE_VIEWPORT.height);
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(1, 0, TILE_SIZE);
+  human.isActive = true;
+  const doorwayWidth = CIRCUS_STRUCTURES.starlight_tent.door?.width ?? FALLBACK_DOORWAY_TILES;
+  const scene = new BuildingInteriorScene(
+    {
+      doorTile: { x: 0, y: 0 },
+      id: 'taloncrest_circus_tent',
+      type: STARLIGHT_TENT_ENTRY_KIND,
+      doorway: { x0: 0, width: doorwayWidth },
+    },
+    snapPlayer(human),
+    snapPlayer(cat),
+    level3.xpDiminishingTiers,
+    level3.arrivalLoadingScreen,
+    new InputManager(),
+    new SceneManager(),
+    () => undefined,
+    createShopStock(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { starlightTent: createStarlightTentProgress(), worldSeed: TEST_WORLD_SEED },
+  );
+  if (!(await settleArrival(scene, sceneCtx))) return false;
+  const tent = scene['encounter'];
+  if (!(tent instanceof StarlightTentMazeSystem)) return false;
+  for (const curtain of MAZE_CURTAINS) {
+    placeAt(scene.pm.human, { x: curtain.humanRoom.x0, y: curtain.humanRoom.y0 });
+    placeAt(scene.pm.cat, { x: curtain.catRoom.x0, y: curtain.catRoom.y0 });
+    scene.update();
+    tent.dismissDialog();
+  }
+  const companion = scene['companion'];
+  return (
+    companion.getMovementMode(true) === 'follow' && companion.getMovementMode(false) === 'follow'
+  );
+}
+
+/** Drains the tent's requests the way the scene does once a frame, keeping those of `kind`. */
+function drainedRequests<K extends InteriorEncounterRequest['kind']>(
+  maze: StarlightTentMazeSystem,
+  kind: K,
+): Array<Extract<InteriorEncounterRequest, { kind: K }>> {
+  return maze
+    .drainRequests()
+    .filter((request): request is Extract<InteriorEncounterRequest, { kind: K }> => {
+      return request.kind === kind;
+    });
+}
+
+/** Whether the tent asked the scene to re-park both crawlers since the last drain. */
+function askedForReset(maze: StarlightTentMazeSystem): boolean {
+  return drainedRequests(maze, 'party_reset').length > 0;
+}
+
+/** Whether the tent asked the scene to release both crawlers to follow since the last drain. */
+function askedForRelease(maze: StarlightTentMazeSystem): boolean {
+  return drainedRequests(maze, 'party_release').length > 0;
 }
 
 /**
@@ -1807,12 +1899,12 @@ function framesUntilCaught(
   tile: MazeTile,
   partner: MazeTile,
 ): number {
-  maze.partyResetPending = false;
+  maze.drainRequests();
   for (let frame = 0; frame < BURNOUT_SEARCH_FRAMES; frame++) {
     placeAt(human, tile);
     placeAt(cat, partner);
     maze.update(ctx);
-    if (maze.partyResetPending) return frame;
+    if (askedForReset(maze)) return frame;
   }
   return -1;
 }
@@ -1970,7 +2062,7 @@ console.log('\nDriving the curtains and the section resets…');
       placeAt(human, { x: firstCell.tileX, y: firstCell.tileY });
       placeAt(cat, menagerie.catSpawn);
       maze.update(ctx);
-      if (maze.partyResetPending) caughtAtFrame = frame;
+      if (askedForReset(maze)) caughtAtFrame = frame;
     }
     check(
       caughtAtFrame >= 0,
@@ -2145,25 +2237,20 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
 
   const companion = new CompanionSystem(mazeMap, MAZE_RING_CENTRE_TILE.x, MAZE_RING_CENTRE_TILE.y);
   check(
-    maze.followDisabled && !maze.partyReleasePending,
+    maze.followDisabled && !askedForRelease(maze),
     'the acts refuse the follow command and leave both crawlers parked',
   );
   openCurtains(maze, ctx, human, cat, MAZE_CURTAINS.length - 1);
   check(
-    maze.followDisabled && !maze.partyReleasePending,
+    maze.followDisabled && !askedForRelease(maze),
     'and still do with only the last act left to open',
   );
   openCurtains(maze, ctx, human, cat);
   check(maze.currentAct === 'finale', 'the party has performed every act');
+  const asksForRelease = askedForRelease(maze);
   check(
-    !maze.followDisabled && maze.partyReleasePending,
+    !maze.followDisabled && asksForRelease,
     'the ring takes the follow command and asks the scene to release both anchors',
-  );
-  check(
-    /if \(this\.starlightTentMaze\?\.partyReleasePending === true\) \{\s*this\.starlightTentMaze\.partyReleasePending = false;\s*this\.companion\.followBoth\(\);/.test(
-      sceneSource,
-    ),
-    'and the scene puts both crawlers on follow when it does',
   );
   const followFrom = RING_GUARD_POSTS[RING_GUARD_POSTS.length - 2];
   const followTo = RING_GUARD_POSTS[2];
@@ -2173,8 +2260,7 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
     // Parked where they stand, as the acts leave them, so an anchored
     // companion has no reason of its own to cross the ring.
     companion.anchorBoth(human, cat);
-    if (maze.partyReleasePending) companion.followBoth();
-    maze.partyReleasePending = false;
+    if (asksForRelease) companion.followBoth();
     check(
       companion.getMovementMode(true) === 'follow' && companion.getMovementMode(false) === 'follow',
       'both crawlers are on follow, whichever the switch key hands the drive to',
@@ -2187,6 +2273,10 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
       `the companion walks over to fight beside the active crawler (gap ${(startGap / TILE_SIZE).toFixed(1)} → ${(endGap / TILE_SIZE).toFixed(1)} tiles)`,
     );
   }
+  check(
+    await sceneReleasesBothAtTheRing(),
+    'and the scene puts both crawlers on follow when the ring opens',
+  );
   check(finale.guards.length === 0, 'the guards wait until a crawler steps into the ring');
   for (let frame = 0; frame < RING_SETTLE_FRAMES; frame++) {
     placeAt(human, MAZE_RING_CENTRE_TILE);
@@ -2995,7 +3085,7 @@ console.log('\nChecking a mirror is only ever asked about from its own room…')
           ) {
             throughTheWall++;
           }
-          maze.partyResetPending = false;
+          maze.drainRequests();
           placeAt(crawler, { x, y });
           if (mirrorsSection !== undefined) {
             placeAt(
@@ -3095,7 +3185,7 @@ console.log('\nChecking every turn preview against the blow that follows it…')
       continue;
     }
     for (let blow = 0; blow < target.cycleLength; blow++) {
-      maze.partyResetPending = false;
+      maze.drainRequests();
       placeAt(crawler, standing);
       if (mirrorsSection !== undefined) {
         placeAt(partner, half === 'human' ? mirrorsSection.catSpawn : mirrorsSection.humanSpawn);
@@ -3113,7 +3203,7 @@ console.log('\nChecking every turn preview against the blow that follows it…')
       facingsPreviewed.set(target.mirrorId, previewed);
       const stale = traceSignature(maze.hall.traceOf(boardId));
       blowOn(maze, ctx, target);
-      if (maze.partyResetPending) burned++;
+      if (askedForReset(maze)) burned++;
       const after = traceSignature(maze.hall.traceOf(boardId));
       comparisons++;
       if (traceSignature(preview.trace) !== after) mismatches++;
@@ -3196,7 +3286,7 @@ console.log('\nChecking the encore…');
       const arrangement = lighting.solution ?? constructedSolution(board);
       for (const target of blowsTo(targets, arrangement, lengths)) blowOn(maze, ctx, target);
       let paid = 0;
-      for (const reward of maze.drainRewards()) {
+      for (const reward of drainedRequests(maze, 'coin_drop')) {
         check(
           reward.coins === MAZE_ENCORE_REWARD_COINS &&
             reward.tile.x === foot.x &&
@@ -3211,7 +3301,7 @@ console.log('\nChecking the encore…');
         const length = lengths[targets.indexOf(target)] ?? 1;
         for (let blow = 0; blow < length; blow++) blowOn(maze, ctx, target);
       }
-      paid += maze.drainRewards().length;
+      paid += drainedRequests(maze, 'coin_drop').length;
       return { shone, paid };
     };
     const progress = createStarlightTentProgress();
@@ -3274,6 +3364,7 @@ console.log('\nChanging the difficulty while the show is on…');
     activeIsMoving: false,
     roster,
     gameMap: mazeMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   // Stood up the way the scene stands the tent up, restarted through the
   // same shared restart the scene calls.

@@ -21,8 +21,8 @@ import {
   runSwingHooks,
 } from '../gear/gearHooks';
 import type { GearWorld } from '../gear/traits';
-import { outgoingHitDamageOn } from '../core/combat/outgoingHit';
-import { MAGIC_HIT } from '../core/combat/damageTags';
+import { hitTrainingOn, resolveCrawlerHit, type ResolvedHit } from '../core/combat/outgoingHit';
+import { MAGIC_HIT, UNTAGGED_HIT } from '../core/combat/damageTags';
 import {
   COILED_FIST_UNCOIL_DAMAGE_SHARE,
   QUICK_SERPENT_BITE_DAMAGE_SHARE,
@@ -138,6 +138,8 @@ export function splitKillXp(input: KillXpSplitInput): KillXpSplit {
 const MISSILE_SPLASH_LEVEL = 5;
 /** Splash damage as a fraction of direct missile damage. */
 const MISSILE_SPLASH_DAMAGE_FRACTION = 0.4;
+/** Least a splash deals, so a weak missile's share never rounds to nothing. */
+const MISSILE_SPLASH_MIN_DAMAGE = 1;
 
 /**
  * How far the level-5 splash reaches from the point of impact, in tiles.
@@ -186,6 +188,10 @@ const SEISMIC_STOMP_HEAL_CHANCE = 0.2;
 const SEISMIC_STOMP_HEAL_FRACTION = 0.5;
 /** Stun duration in frames for seismic stomp non-boss stun. */
 const SEISMIC_STOMP_STUN_FRAMES = 150;
+/** Least a stomp deals anything it reaches, however far out in the ring. */
+const SEISMIC_STOMP_MIN_DAMAGE = 1;
+/** The multiple a strike lands at when nothing scales it: no weapon, gear or ring. */
+const UNSCALED_STRIKE = 1;
 /** Shown over a creature the stomp passes under. */
 export const SEISMIC_STOMP_IMMUNE_LABEL = DAMAGE_IMMUNE_LABEL;
 
@@ -246,18 +252,21 @@ function missileExplosionVariant(missile: Missile): ExplosionVariant {
 }
 
 /**
- * What one of this crawler's basic melee strikes deals: the same number the
- * swing below lands, the human's Powerful Strike roll included. Shared so anything
- * that strikes "as the crawler would" — a spiked snare — cannot drift from
- * the real blow when the formula is retuned.
+ * What one of this crawler's basic melee strikes deals with `melee` behind
+ * it: the same number the swing below lands, the human's Powerful Strike roll
+ * included. Shared so anything that strikes "as the crawler would" — a spiked
+ * snare — cannot drift from the real blow when the formula is retuned.
  *
  * Rolled per call rather than inside `getMeleeDamage`, which stays
  * deterministic: the companion AI reads it to budget its own damage, and a
  * random doubling would make that estimate flap frame to frame.
  */
-export function crawlerMeleeStrikeDamage(crawler: HumanPlayer | CatPlayer): number {
-  if (crawler instanceof CatPlayer) return crawler.getMeleeDamage();
-  const damage = crawler.getStrikeDamage();
+export function crawlerMeleeStrikeDamage(
+  crawler: HumanPlayer | CatPlayer,
+  melee = crawler.melee,
+): number {
+  if (crawler instanceof CatPlayer) return crawler.getMeleeDamage(melee);
+  const damage = crawler.getStrikeDamage(melee);
   const powerfulStrikeChance =
     POWERFUL_STRIKE_CHANCE_PER_LEVEL * crawler.effectiveSkillLevel('powerful_strike');
   const strikeMultiplier =
@@ -280,21 +289,67 @@ export function landGearProcs(
 ): void {
   // A guarded blow never touched the mob, so nothing rides in on it.
   if (delivery === 'melee' && mob.lastBlowWasGuarded) return;
-  runHitHooks(crawler, { mob, delivery, damage, world: ctx.gearWorld ?? null });
+  runHitHooks({ dealer: crawler, mob, delivery, damage, world: ctx.gearWorld ?? null });
 }
 
 /**
- * `damage` as worn gear scales it for a blow about to land on `mob` — an
- * armed riposte, a strike on an enemy that never saw her coming. Asked once
- * per blow, before it lands, since landing it is what makes the mob notice.
+ * What worn gear multiplies a blow about to land on `mob` by — an armed
+ * riposte, a strike on an enemy that never saw her coming. Asked once per
+ * blow, before it lands, since landing it is what makes the mob notice, and
+ * spending a riposte is part of asking.
  */
-export function gearScaledDamage(
+function gearStrikeScale(
   crawler: HumanPlayer | CatPlayer,
   mob: Mob,
   delivery: 'melee' | 'spell',
-  damage: number,
 ): number {
-  return damage * runStrikeHooks(crawler, { mob, delivery });
+  return runStrikeHooks(crawler, { mob, delivery });
+}
+
+/**
+ * One melee strike of `crawler`'s landing on `mob`, `scale` times the blow:
+ * the weapon's multiple, the gear's, both, or one for a plain strike.
+ */
+function meleeStrikeHit(crawler: HumanPlayer | CatPlayer, mob: Mob, scale: number): ResolvedHit {
+  return resolveCrawlerHit({
+    dealer: crawler,
+    delivery: crawler.meleeDelivery,
+    blowAt: (melee) => scale * crawlerMeleeStrikeDamage(crawler, melee),
+    tags: crawler.meleeHitTags(),
+    training: hitTrainingOn(mob),
+    damageType: 'melee',
+    struckBy: 'dealer',
+  });
+}
+
+/**
+ * Seismic Stomp landing on `mob`, `scale` times a punch: a stomp is the
+ * human's foot, not his weapon, so it carries no weapon's tags.
+ */
+function seismicStompHit(human: HumanPlayer, mob: Mob, scale: number): ResolvedHit {
+  return resolveCrawlerHit({
+    dealer: human,
+    delivery: 'melee',
+    blowAt: (melee) =>
+      Math.max(SEISMIC_STOMP_MIN_DAMAGE, Math.round(human.getMeleeDamage(melee) * scale)),
+    tags: UNTAGGED_HIT,
+    training: hitTrainingOn(mob),
+    damageType: 'seismic_stomp',
+    struckBy: 'dealer',
+  });
+}
+
+/** One of the cat's missiles, or its splash, landing on `mob` for what `blowAt` makes of her magic. */
+function missileHit(cat: CatPlayer, mob: Mob, blowAt: (magic: number) => number): ResolvedHit {
+  return resolveCrawlerHit({
+    dealer: cat,
+    delivery: 'spell',
+    blowAt,
+    tags: MAGIC_HIT,
+    training: hitTrainingOn(mob),
+    damageType: 'missile',
+    struckBy: 'dealer',
+  });
 }
 
 /**
@@ -303,9 +358,16 @@ export function gearScaledDamage(
  * runs no procs of its own: a bonus hit that could trigger another would chain.
  */
 function tattooBonusStrike(crawler: HumanPlayer | CatPlayer, mob: Mob, damageShare: number): void {
-  const blow = Math.round(damageShare * crawlerMeleeStrikeDamage(crawler));
-  const damage = outgoingHitDamageOn(crawler, mob, blow, crawler.meleeHitTags());
-  mob.takeDamageFrom(damage, crawler, 'melee');
+  const hit = resolveCrawlerHit({
+    dealer: crawler,
+    delivery: crawler.meleeDelivery,
+    blowAt: (melee) => Math.round(damageShare * crawlerMeleeStrikeDamage(crawler, melee)),
+    tags: crawler.meleeHitTags(),
+    training: hitTrainingOn(mob),
+    damageType: 'melee',
+    struckBy: 'dealer',
+  });
+  mob.takeHit(hit);
 }
 
 /**
@@ -364,16 +426,15 @@ export type WeaponProcs = Readonly<Record<WeaponProcId, WeaponProc>>;
  */
 export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: number): boolean {
   const { human } = ctx;
-  const edge = damageMultiplier * crawlerMeleeStrikeDamage(human);
   // Read once: the cut itself can flip a phased boss into an immune phase, and
   // the blow that earned its way in still pays out.
   const earnsNothing = mob.blowsEarnNothing;
-  const blow = earnsNothing ? edge : gearScaledDamage(human, mob, 'melee', edge);
-  const damage = outgoingHitDamageOn(human, mob, blow, human.meleeHitTags());
-  mob.takeDamageFrom(damage, human, 'melee');
+  const gearScale = earnsNothing ? UNSCALED_STRIKE : gearStrikeScale(human, mob, 'melee');
+  const hit = meleeStrikeHit(human, mob, damageMultiplier * gearScale);
+  mob.takeHit(hit);
   if (earnsNothing) return false;
   ctx.hitLanded = true;
-  landGearProcs(ctx, human, mob, 'melee', damage);
+  landGearProcs(ctx, human, mob, 'melee', hit.damage);
   landTattooStrikeProcs(human, mob);
   return true;
 }
@@ -453,7 +514,6 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const hc = centerOf(human);
     const range = human.getMeleeRange();
     const damage = human.getMeleeDamage();
-    const punchTags = human.meleeHitTags();
     // Widened by a tile because the grid measures a mob's origin while the test
     // below measures its centre: without the slack, reach is a third shorter
     // swinging up or left than it is swinging down or right, and the narrow
@@ -475,18 +535,16 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       if (!human.zeroDamage && mob.blowsEarnNothing) {
-        const punch = crawlerMeleeStrikeDamage(human);
-        mob.takeDamageFrom(outgoingHitDamageOn(human, mob, punch, punchTags), human, 'melee');
+        mob.takeHit(meleeStrikeHit(human, mob, UNSCALED_STRIKE));
         humanHit = true;
         continue;
       }
       if (!human.zeroDamage) {
-        const punch = gearScaledDamage(human, mob, 'melee', crawlerMeleeStrikeDamage(human));
-        const blow = outgoingHitDamageOn(human, mob, punch, punchTags);
-        mob.takeDamageFrom(blow, human, 'melee');
+        const punch = meleeStrikeHit(human, mob, gearStrikeScale(human, mob, 'melee'));
+        mob.takeHit(punch);
         ctx.hitLanded = true;
         humanHit = true;
-        landGearProcs(ctx, human, mob, 'melee', blow);
+        landGearProcs(ctx, human, mob, 'melee', punch.damage);
         landTattooStrikeProcs(human, mob);
       }
     }
@@ -516,14 +574,12 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const cc = centerOf(cat);
     const range = cat.getMeleeRange();
     const damage = cat.getMeleeDamage();
-    const swipeTags = cat.meleeHitTags();
     runSwingHooks(cat, {
       originX: cc.x,
       originY: cc.y,
       dirX: cat.facingX,
       dirY: cat.facingY,
       reachPx: range,
-      damage,
     });
     const nearCat = mobGrid.queryCircle(cc.x, cc.y, range + TILE_SIZE);
     let catHit = false;
@@ -540,18 +596,16 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
       if (!cat.zeroDamage && mob.blowsEarnNothing) {
-        const swipe = crawlerMeleeStrikeDamage(cat);
-        mob.takeDamageFrom(outgoingHitDamageOn(cat, mob, swipe, swipeTags), cat, 'melee');
+        mob.takeHit(meleeStrikeHit(cat, mob, UNSCALED_STRIKE));
         catHit = true;
         continue;
       }
       if (!cat.zeroDamage) {
-        const swipe = gearScaledDamage(cat, mob, 'melee', crawlerMeleeStrikeDamage(cat));
-        const blow = outgoingHitDamageOn(cat, mob, swipe, swipeTags);
-        mob.takeDamageFrom(blow, cat, 'melee');
+        const swipe = meleeStrikeHit(cat, mob, gearStrikeScale(cat, mob, 'melee'));
+        mob.takeHit(swipe);
         ctx.hitLanded = true;
         catHit = true;
-        landGearProcs(ctx, cat, mob, 'melee', blow);
+        landGearProcs(ctx, cat, mob, 'melee', swipe.damage);
         landTattooStrikeProcs(cat, mob);
       }
     }
@@ -570,7 +624,6 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const seismicStompLevel = ctx.abilityManager.getLevel('seismic_stomp');
     const stats = getSeismicStompStats(seismicStompLevel);
     const hc = centerOf(human);
-    const baseDamage = human.getMeleeDamage();
     const innerRadius = stats.innerBlastRadius * TILE_SIZE;
     const outerRadius = stats.outerBlastRadius * TILE_SIZE;
 
@@ -610,23 +663,23 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         continue;
       }
       if (!human.zeroDamage && mob.blowsEarnNothing) {
-        mob.takeDamageFrom(baseDamage, human, 'seismic_stomp');
+        mob.takeHit(seismicStompHit(human, mob, UNSCALED_STRIKE));
         continue;
       }
       if (!human.zeroDamage) {
         const isInner = dist <= innerRadius;
         const mult = isInner ? stats.damageMultiplier : stats.outerDamageMultiplier;
-        const bossMult = mob.isBoss ? stats.bossDamageMultiplier : 1.0;
-        const damage = Math.max(1, Math.round(baseDamage * mult * bossMult));
-        // Death resolves synchronously inside `takeDamageFrom`, so the health
-        // either side of the call is what says whether this stomp did it. The
+        const bossMult = mob.isBoss ? stats.bossDamageMultiplier : UNSCALED_STRIKE;
+        const stomp = seismicStompHit(human, mob, mult * bossMult);
+        // Death resolves synchronously inside `takeHit`, so the health either
+        // side of the call is what says whether this stomp did it. The
         // `justDied` flag cannot answer: it stays latched for a whole frame.
         const wasAlive = mob.hp > 0;
-        mob.takeDamageFrom(damage, human, 'seismic_stomp');
+        mob.takeHit(stomp);
         if (wasAlive && mob.hp <= 0 && mob.isHostile) seismicStompKills++;
         ctx.hitLanded = true;
         seismicStompConnected = true;
-        totalSeismicStompDamage += damage;
+        totalSeismicStompDamage += stomp.damage;
 
         // Level 5+: stun non-boss enemies
         if (isInner && stats.stunSmallEnemies && !mob.isBoss) {
@@ -771,20 +824,24 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
             break;
           }
           if (!cat.zeroDamage && mob.blowsEarnNothing) {
-            mob.takeDamageFrom(outgoingHitDamageOn(cat, mob, damage, MAGIC_HIT), cat, 'missile');
+            mob.takeHit(missileHit(cat, mob, (magic) => cat.getMissileDamage(magic)));
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
           } else if (!cat.zeroDamage) {
-            const spell = gearScaledDamage(cat, mob, 'spell', damage);
-            const blow = outgoingHitDamageOn(cat, mob, spell, MAGIC_HIT);
-            mob.takeDamageFrom(blow, cat, 'missile');
+            const gearScale = gearStrikeScale(cat, mob, 'spell');
+            const struck = missileHit(cat, mob, (magic) => gearScale * cat.getMissileDamage(magic));
+            mob.takeHit(struck);
             ctx.hitLanded = true;
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
 
-            landGearProcs(ctx, cat, mob, 'spell', blow);
+            landGearProcs(ctx, cat, mob, 'spell', struck.damage);
 
             // Level 5+: AoE magic splash
             if (missileLevel >= MISSILE_SPLASH_LEVEL) {
-              const splashDamage = Math.max(1, Math.round(damage * MISSILE_SPLASH_DAMAGE_FRACTION));
+              const splashBlowAt = (magic: number): number =>
+                Math.max(
+                  MISSILE_SPLASH_MIN_DAMAGE,
+                  Math.round(cat.getMissileDamage(magic) * MISSILE_SPLASH_DAMAGE_FRACTION),
+                );
               const nearSplash = mobGrid.queryCircle(
                 missile.x,
                 missile.y,
@@ -796,8 +853,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
                 const splashDx = splashMob.x + HALF_TILE - missile.x;
                 const splashDy = splashMob.y + HALF_TILE - missile.y;
                 if (Math.hypot(splashDx, splashDy) < splashRadius) {
-                  const splash = outgoingHitDamageOn(cat, splashMob, splashDamage, MAGIC_HIT);
-                  splashMob.takeDamageFrom(splash, cat, 'missile');
+                  splashMob.takeHit(missileHit(cat, splashMob, splashBlowAt));
                 }
               }
             }
@@ -886,11 +942,16 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const mc = centerOf(mob);
         if (Math.hypot(rock.x - mc.x, rock.y - mc.y) >= rockHitRadius) continue;
         if (!human.zeroDamage) {
-          mob.takeDamageFrom(
-            outgoingHitDamageOn(human, mob, damage, rock.tags),
-            human,
-            'slingshot',
-          );
+          const stone = resolveCrawlerHit({
+            dealer: human,
+            delivery: 'sling',
+            blowAt: (ranged) => human.getSlingshotDamage(ranged),
+            tags: rock.tags,
+            training: hitTrainingOn(mob),
+            damageType: 'slingshot',
+            struckBy: 'dealer',
+          });
+          mob.takeHit(stone);
           if (!mob.blowsEarnNothing) ctx.hitLanded = true;
           ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         }

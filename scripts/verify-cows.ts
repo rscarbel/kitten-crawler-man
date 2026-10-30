@@ -99,6 +99,8 @@ import {
   measureFigureFrameBytes,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 // The herd's ledger paints rows to measure what the cache would store of them.
 installCanvasGlobals();
@@ -334,6 +336,7 @@ function buildWorld(seed: number): World | null {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return {
     map,
@@ -847,11 +850,19 @@ function damageSection(): void {
     );
   }
   const before = cow.hp;
-  cow.takeDamageFrom(OVERKILL_DAMAGE, world.human, 'melee');
+  cow.takeHit(harnessHit(world.human, OVERKILL_DAMAGE, 'melee'));
   check(cow.hp === before, 'a punch changes nothing');
-  cow.takeDamageFrom(OVERKILL_DAMAGE, world.human, 'slingshot');
+  cow.takeHit(harnessHit(world.human, OVERKILL_DAMAGE, 'slingshot'));
   check(cow.hp === before, 'nor does a sling stone');
-  cow.takeCreditedDamage(OVERKILL_DAMAGE, world.human, 'melee', world.human);
+  const hireling = new Mercenary(
+    Math.floor(cow.x / TILE_SIZE) + 1,
+    Math.floor(cow.y / TILE_SIZE),
+    TILE_SIZE,
+    world.human,
+    'crush',
+    'Crush',
+  );
+  cow.takeCreditedDamage(OVERKILL_DAMAGE, world.human, 'melee', hireling);
   check(cow.hp === before, "nor a hireling's blow, credited to the party");
   check(!cow.isHostile && !cow.isPetAttackable, 'a cow is neither hostile nor prey');
   check(
@@ -1008,7 +1019,7 @@ function respawnSection(): void {
     const homeX = cow.x;
     const homeY = cow.y;
     const maxHp = cow.maxHp;
-    cow.takeDamageFrom(OVERKILL_DAMAGE, human, 'explosion');
+    cow.takeHit(harnessHit(human, OVERKILL_DAMAGE, 'explosion'));
     check(!cow.isAlive, `seed ${seed}: the cow is dead`);
 
     tick(JUST_BEFORE_RESPAWN_FRAMES);

@@ -75,7 +75,8 @@ import {
   teachingStarsOf,
   type MarqueePlacement,
 } from './hallMarquees';
-import { isOnScreen } from './tentView';
+import { isOnScreen, type TentView } from './tentView';
+import { worldPx, type Camera } from '../../core/rendering/camera';
 
 /** Which of the two boards a mirror, a star or a trace belongs to. */
 export type HallBoardId = 'hall' | 'teaching';
@@ -338,11 +339,16 @@ class BoardStage implements SettlingBoard {
   }
 }
 
+/** A view of no width, against which nothing is on screen. */
+const NOTHING_IN_VIEW: TentView = { viewWidth: worldPx(0), viewHeight: worldPx(0) };
+
 /** A splitter's pane as the scene's Y-sorted pass takes it, so a crawler north of it is drawn behind it. */
 class SplitterFigure implements InteriorFigure {
   readonly y: number;
   /** The frame the pane's glint is at; set by the hall before each draw. */
   phase = 0;
+  /** The view the pane is culled against; set by the hall before each draw. */
+  view: TentView = NOTHING_IN_VIEW;
 
   constructor(
     private readonly tile: MazeTile,
@@ -354,7 +360,7 @@ class SplitterFigure implements InteriorFigure {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const x = this.tile.x * tileSize - camX;
     const y = this.tile.y * tileSize - camY;
-    if (isOnScreen(x, y, PROP_LIFT_TILES)) {
+    if (isOnScreen(this.view, x, y, PROP_LIFT_TILES)) {
       drawMazeSplitter(ctx, x, y, tileSize, this.diagonal, this.phase);
     }
   }
@@ -489,8 +495,11 @@ export class MirrorHall {
   }
 
   /** The splitters' panes, for the scene's Y-sorted pass. */
-  sortedFigures(frame: number): ReadonlyArray<InteriorFigure> {
-    for (const figure of this.splitterFigures) figure.phase = frame;
+  sortedFigures(frame: number, view: TentView): ReadonlyArray<InteriorFigure> {
+    for (const figure of this.splitterFigures) {
+      figure.phase = frame;
+      figure.view = view;
+    }
     return this.splitterFigures;
   }
 
@@ -651,14 +660,15 @@ export class MirrorHall {
    * the windows. Furniture, drawn under the stage lights with the rest of it.
    * The splitters stand on the floor and go through {@link sortedFigures}.
    */
-  renderPieces(ctx: CanvasRenderingContext2D, camX: number, camY: number, frame: number): void {
+  renderPieces(ctx: CanvasRenderingContext2D, camera: Camera, frame: number): void {
+    const { x: camX, y: camY } = camera;
     for (const boardId of BOARD_IDS) {
       const stage = this.stages[boardId];
       for (const light of stage.board.limelights) {
         const tile = stage.toTent(light.tile);
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
-        if (!isOnScreen(x, y, PROP_LIFT_TILES)) continue;
+        if (!isOnScreen(camera, x, y, PROP_LIFT_TILES)) continue;
         if (stage.burns) drawMazeLimelight(ctx, x, y, TILE_SIZE, light.heading, frame);
         else drawFootlightLamp(ctx, x, y, TILE_SIZE, light.heading, light.colour, frame);
       }
@@ -666,7 +676,7 @@ export class MirrorHall {
         const tile = stage.toTent(window);
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
-        if (isOnScreen(x, y)) drawMazeWallWindow(ctx, x, y, TILE_SIZE, frame);
+        if (isOnScreen(camera, x, y)) drawMazeWallWindow(ctx, x, y, TILE_SIZE, frame);
       }
     }
   }
@@ -680,46 +690,49 @@ export class MirrorHall {
    */
   renderReadouts(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     frame: number,
     lightOn: boolean,
     preview: MazeTurnPreview | null,
   ): void {
+    const { x: camX, y: camY } = camera;
     for (const boardId of BOARD_IDS) {
       const stage = this.stages[boardId];
       for (const plate of lightOn ? stage.plates : stage.darkPlates) {
         const x = plate.tile.x * TILE_SIZE - camX;
         const y = plate.tile.y * TILE_SIZE - camY;
-        if (!isOnScreen(x, y)) continue;
+        if (!isOnScreen(camera, x, y)) continue;
         plate.art.phase = frame;
         drawPuzzleStar(ctx, x, y, TILE_SIZE, plate.art);
       }
     }
-    for (const sign of this.signs) this.drawSign(ctx, camX, camY, sign, frame);
+    for (const sign of this.signs) this.drawSign(ctx, camera, sign, frame);
     if (!lightOn) return;
     for (const boardId of BOARD_IDS) {
       for (const { tile, runs } of this.stages[boardId].runs) {
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
-        if (isOnScreen(x, y)) drawLightBeamTile(ctx, x, y, TILE_SIZE, runs, frame);
+        if (isOnScreen(camera, x, y)) drawLightBeamTile(ctx, x, y, TILE_SIZE, runs, frame);
       }
     }
-    if (preview !== null) this.renderPreview(ctx, camX, camY, frame, preview);
+    if (preview !== null) this.renderPreview(ctx, camera, frame, preview);
   }
 
   private drawSign(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     sign: MarqueeSign,
     frame: number,
   ): void {
+    const { x: camX, y: camY } = camera;
     const { placement } = sign;
     const x = placement.x * TILE_SIZE - camX;
     const y = placement.y * TILE_SIZE - camY;
     const right = x + placement.widthTiles * TILE_SIZE;
-    if (!isOnScreen(x, y, PROP_LIFT_TILES) && !isOnScreen(right - TILE_SIZE, y, PROP_LIFT_TILES)) {
+    if (
+      !isOnScreen(camera, x, y, PROP_LIFT_TILES) &&
+      !isOnScreen(camera, right - TILE_SIZE, y, PROP_LIFT_TILES)
+    ) {
       return;
     }
     sign.art.phase = frame;
@@ -730,11 +743,11 @@ export class MirrorHall {
   /** The ghost of the next blow: dots along the light it would add, and a ring on every star it would light. */
   private renderPreview(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     frame: number,
     preview: MazeTurnPreview,
   ): void {
+    const { x: camX, y: camY } = camera;
     const mirror = this.stages[preview.boardId].mirrors.find(
       (candidate) => candidate.mirrorId === preview.mirrorId,
     );
@@ -743,12 +756,12 @@ export class MirrorHall {
     for (const step of ghost.steps) {
       const x = step.tile.x * TILE_SIZE - camX;
       const y = step.tile.y * TILE_SIZE - camY;
-      if (isOnScreen(x, y)) drawTurnPreviewTile(ctx, x, y, TILE_SIZE, step.heading, frame);
+      if (isOnScreen(camera, x, y)) drawTurnPreviewTile(ctx, x, y, TILE_SIZE, step.heading, frame);
     }
     for (const tile of ghost.rings) {
       const x = tile.x * TILE_SIZE - camX;
       const y = tile.y * TILE_SIZE - camY;
-      if (isOnScreen(x, y)) drawTurnPreviewStarRing(ctx, x, y, TILE_SIZE, frame);
+      if (isOnScreen(camera, x, y)) drawTurnPreviewStarRing(ctx, x, y, TILE_SIZE, frame);
     }
   }
 
@@ -759,16 +772,16 @@ export class MirrorHall {
    */
   renderEffects(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     frame: number,
     lightOn: boolean,
   ): void {
+    const { x: camX, y: camY } = camera;
     if (!lightOn) return;
     for (const step of this.hotSpan) {
       const x = step.tentTile.x * TILE_SIZE - camX;
       const y = step.tentTile.y * TILE_SIZE - camY;
-      if (!isOnScreen(x, y)) continue;
+      if (!isOnScreen(camera, x, y)) continue;
       drawMazeBeamTile(ctx, x, y, TILE_SIZE, {
         hot: true,
         heading: step.heading,
@@ -780,7 +793,7 @@ export class MirrorHall {
       for (const contact of this.stages[boardId].contacts) {
         const x = contact.tile.x * TILE_SIZE - camX;
         const y = contact.tile.y * TILE_SIZE - camY;
-        if (!isOnScreen(x, y)) continue;
+        if (!isOnScreen(camera, x, y)) continue;
         drawBeamMirrorFlare(ctx, x, y, TILE_SIZE, {
           hot: contact.hot,
           absorbed: contact.absorbed,

@@ -57,7 +57,7 @@ import {
 } from '../../sprites/art/sewer/sewerPropArt';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { objectiveBandEntry, type ObjectiveLine } from '../../ui/hud/objectiveLine';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import type { Camera } from '../../core/rendering/camera';
 import type { SystemContext } from '../GameSystem';
 import { exitFixtureOnTile, type InteriorExitFixtureSystem } from '../interiorExitFixtures';
 import type { PartyTransferRequest } from '../partySplit/partyTransfer';
@@ -66,7 +66,7 @@ import type { WorkChannelBuilder } from '../WorkChannel';
 import { questMobLevel } from '../questMobLevel';
 import { WaterAnimationSystem } from '../WaterAnimationSystem';
 import { SewerLighting } from './sewerLighting';
-import { SEWER_CUES, type SewerCue } from './sewerSoundCues';
+import { SEWER_CUES, type SewerCue } from '../../audio/sewerSoundCues';
 
 /** Hauls on a sluice's valve wheel to turn it all the way. */
 const SEWER_VALVE_PRESSES = 5;
@@ -406,8 +406,9 @@ export class SewerSectionSystem {
     return { text: 'Follow the drain to the tower cistern', tone: 'success' };
   }
 
-  renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number, _active: Player): void {
-    this.water.renderGround(ctx, camX, camY);
+  renderWorld(ctx: CanvasRenderingContext2D, camera: Camera, _active: Player): void {
+    const { x: camX, y: camY } = camera;
+    this.water.renderGround(ctx, camera);
     const ts = TILE_SIZE;
     for (const grate of this.section.streetGrates) {
       paintGrateLightOnFloor(ctx, grate.x * ts - camX, grate.y * ts - camY, ts);
@@ -458,13 +459,13 @@ export class SewerSectionSystem {
     }
   }
 
-  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.water.renderSplashes(ctx, camX, camY);
+  renderEffects(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.water.renderSplashes(ctx, camera.x, camera.y);
   }
 
-  renderDarkness(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderDarkness(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const lit = this.deps.presentCrawlers();
-    this.lighting.renderDarkness(ctx, camX, camY, viewportWidth(), viewportHeight(), lit);
+    this.lighting.renderDarkness(ctx, camera, lit);
   }
 
   /** The valves' prompts and progress bars, over the dark. */

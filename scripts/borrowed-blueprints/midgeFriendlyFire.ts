@@ -14,7 +14,7 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { makeBurn, makePoison } from '../../src/core/combat/StatusEffect';
+import { FULL_SHARE, makeBurn, makePoison } from '../../src/core/combat/StatusEffect';
 import { Cow } from '../../src/creatures/Cow';
 import { Goblin } from '../../src/creatures/Goblin';
 import { Deinonychus } from '../../src/creatures/Deinonychus';
@@ -25,6 +25,7 @@ import { MIDGE_COAT } from '../../src/systems/briarHollow/LivestockSystem';
 import { standAt } from '../villageSiegeHarness';
 import { blueprintsRig } from './fence';
 import type { Check } from './fenna';
+import { harnessHit } from '../crawlerHitHarness';
 
 /** Updates for Midge to answer the party at Merrit's gate and go on the lead. */
 const PICKUP_UPDATES = 30;
@@ -136,13 +137,13 @@ export function verifyMidgeFriendlyFire(check: Check): void {
     for (const weapon of EVERY_PARTY_WEAPON) {
       partyProbes.push({
         name: `the ${crawler === human ? 'human' : 'cat'}'s ${weapon}`,
-        hit: (target) => target.takeDamageFrom(PROBE_DAMAGE, crawler, weapon),
+        hit: (target) => target.takeHit(harnessHit(crawler, PROBE_DAMAGE, weapon)),
       });
     }
     partyProbes.push({
       name: `a burn the ${crawler === human ? 'human' : 'cat'} laid`,
       hit: (target) => {
-        target.applyStatus(makeBurn(crawler));
+        target.applyStatus(makeBurn(FULL_SHARE, crawler));
         tickStatuses(target);
       },
     });
@@ -193,7 +194,7 @@ export function verifyMidgeFriendlyFire(check: Check): void {
     },
     {
       name: "a trebuchet boulder's credited splash",
-      hit: (target) => target.takeCreditedDamage(PROBE_DAMAGE, human, null, null),
+      hit: (target) => target.takeOwnedHarm(PROBE_DAMAGE, human, 'siegeBoulder'),
     },
   );
 
@@ -233,7 +234,7 @@ export function verifyMidgeFriendlyFire(check: Check): void {
     {
       name: 'a burn an ambusher laid',
       hit: (target) => {
-        target.applyStatus(makeBurn(hostile));
+        target.applyStatus(makeBurn(FULL_SHARE, hostile));
         tickStatuses(target);
       },
     },

@@ -22,6 +22,7 @@ import {
   type CanvasSurface,
 } from '../../core/rendering/canvasSurface';
 import { perfMonitor } from '../../core/perf/PerfMonitor';
+import type { Camera } from '../../core/rendering/camera';
 import type { SewerTile } from '../../map/sewer/sewerPlan';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
 import { LIGHTING_TUNING } from '../lighting/lightingTuning';
@@ -126,12 +127,10 @@ export class SewerLighting {
   /** The dark over the world, with the party's light cut out of it, and the grates' shafts. */
   renderDarkness(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
+    camera: Camera,
     party: Iterable<SewerLightSource>,
   ): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const startedAt = perfMonitor.begin();
     const { surface, ctx: cut } = this.cutBuffer(viewW, viewH);
     cut.setTransform(1, 0, 0, 1, 0, 0);

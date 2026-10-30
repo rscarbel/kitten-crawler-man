@@ -20,7 +20,7 @@ import type { EventBus } from '../core/EventBus';
 import { CURABLE_AILMENT_STATUSES } from '../core/combat/StatusEffect';
 import type { SafeRoomClinicLayout } from '../map/safeRoomClinicLayout';
 import { safeRoomIdIn, type SafeRoomScope } from '../map/safeRoomId';
-import { worldViewHeight, worldViewWidth } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Conversation } from '../dialog/Conversation';
@@ -142,17 +142,16 @@ export interface DoctorCheckpoint {
   visitedRooms: ReadonlySet<number>;
 }
 
-/** Whether a tile lies within the view of a camera at (`cameraX`, `cameraY`) grown by `marginTiles`. */
+/** Whether a tile lies within the view of `camera` grown by `marginTiles`. */
 function viewTest(
-  cameraX: number,
-  cameraY: number,
+  camera: Camera,
   marginTiles: number,
 ): (tile: { x: number; y: number }) => boolean {
   const margin = marginTiles * TILE_SIZE;
-  const viewMinX = cameraX - margin;
-  const viewMinY = cameraY - margin;
-  const viewMaxX = cameraX + worldViewWidth() + margin;
-  const viewMaxY = cameraY + worldViewHeight() + margin;
+  const viewMinX = camera.x - margin;
+  const viewMinY = camera.y - margin;
+  const viewMaxX = camera.x + camera.viewWidth + margin;
+  const viewMaxY = camera.y + camera.viewHeight + margin;
   return (tile) => {
     const x = tile.x * TILE_SIZE;
     const y = tile.y * TILE_SIZE;
@@ -631,15 +630,14 @@ export class DoctorSystem implements GameSystem {
   }
 
   /**
-   * Queues the bake of every doctor within reach of a camera at
-   * (`cameraX`, `cameraY`). For a scene's constructor, once the party is set
+   * Queues the bake of every doctor within reach of `camera`. For a scene's constructor, once the party is set
    * down and before its arrival loader begins, so the loading screen covers
    * the bake of a doctor the party arrives beside: a cell on the human rig
    * costs far more than one frame's bake budget, and a doctor first drawn cold
    * would stand blank for a moment.
    */
-  prewarmInView(cameraX: number, cameraY: number): void {
-    const withinReach = viewTest(cameraX, cameraY, DOCTOR_PREWARM_MARGIN_TILES);
+  prewarmInView(camera: Camera): void {
+    const withinReach = viewTest(camera, DOCTOR_PREWARM_MARGIN_TILES);
     for (const entry of this.entries) {
       if (withinReach(entry.layout.doctorTile)) prewarmDoctor(entry.look);
     }
@@ -657,10 +655,10 @@ export class DoctorSystem implements GameSystem {
    * cache's idle window would be released and painted cold when the treatment
    * or the cabinet visit starts.
    */
-  sortedFigures(cameraX: number, cameraY: number): ReadonlyArray<InteriorFigure> {
+  sortedFigures(camera: Camera): ReadonlyArray<InteriorFigure> {
     this.figures.length = 0;
-    const inView = viewTest(cameraX, cameraY, DOCTOR_CULL_MARGIN_TILES);
-    const withinReach = viewTest(cameraX, cameraY, DOCTOR_PREWARM_MARGIN_TILES);
+    const inView = viewTest(camera, DOCTOR_CULL_MARGIN_TILES);
+    const withinReach = viewTest(camera, DOCTOR_PREWARM_MARGIN_TILES);
     for (const entry of this.entries) {
       const { doctorTile, bagTile } = entry.layout;
       if (withinReach(doctorTile)) keepDoctorWarm(entry.look);

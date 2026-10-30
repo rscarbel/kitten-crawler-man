@@ -34,6 +34,7 @@
 
 import type { PlayerDamageType } from '../src/creatures/Mob.js';
 import { installBrowserShim } from './browserShim.js';
+import { harnessHit } from './crawlerHitHarness';
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 installBrowserShim(VIEWPORT);
@@ -304,13 +305,13 @@ function checkDoorBreaks(
   return (harness: PrisonHarness): void => {
     makeBlastProof(harness);
     const door = firstDoor(harness);
-    const takeDamageFrom = door.takeDamageFrom.bind(door);
+    const takeHit = door.takeHit.bind(door);
     const record: { brokenBy: PlayerDamageType | null } = { brokenBy: null };
-    door.takeDamageFrom = (amount, attacker, damageType) => {
-      if (fault === 'door-refuses-seismic-stomp' && damageType === 'seismic_stomp') return;
+    door.takeHit = (hit) => {
+      if (fault === 'door-refuses-seismic-stomp' && hit.damageType === 'seismic_stomp') return;
       const wasBroken = door.broken;
-      takeDamageFrom(amount, attacker, damageType);
-      if (!wasBroken && door.broken) record.brokenBy = damageType ?? null;
+      takeHit(hit);
+      if (!wasBroken && door.broken) record.brokenBy = hit.damageType;
     };
     if (fault === 'door-stays-blocked') {
       harness.scene['map'].setBodyBlock = (): void => undefined;
@@ -430,7 +431,7 @@ function checkGuardsUnmoved(harness: PrisonHarness): void {
   ] as const;
   for (const guard of prison.guardMobs) {
     const before = { x: guard.x, y: guard.y, hp: guard.hp };
-    for (const type of types) guard.takeDamageFrom(GUARD_PROBE_DAMAGE, human, type);
+    for (const type of types) guard.takeHit(harnessHit(human, GUARD_PROBE_DAMAGE, type));
     guard.applyKnockback(1, 0, KNOCKBACK_PROBE_PX, KNOCKBACK_PROBE_FRAMES);
     guard.applyStatus(makeStun(STUN_TICKS));
     guard.takeDamage(GUARD_PROBE_DAMAGE);
@@ -497,7 +498,7 @@ function checkPromptOnlyInCell(harness: PrisonHarness): void {
       door,
     'inside a cell it names that cell’s door',
   );
-  door.takeDamageFrom(1, harness.human, 'melee');
+  door.takeHit(harnessHit(harness.human, 1, 'melee'));
   harness.step(1);
   check(
     prison.doorPromptFor({ x: cell.tiles[0].x * TILE_SIZE, y: cell.tiles[0].y * TILE_SIZE }) ===
@@ -616,10 +617,10 @@ function checkGuardsFiledWhereTheyStand(harness: PrisonHarness): void {
   harness.cat.isActive = false;
   faceTile(human, { x: guard.x / TILE_SIZE, y: guard.y / TILE_SIZE });
   let landed = 0;
-  const takeDamageFrom = guard.takeDamageFrom.bind(guard);
-  guard.takeDamageFrom = (amount, attacker, damageType) => {
+  const takeHit = guard.takeHit.bind(guard);
+  guard.takeHit = (hit) => {
     landed++;
-    takeDamageFrom(amount, attacker, damageType);
+    takeHit(hit);
   };
   human.triggerAttack(guard);
   runUntil(harness, SWING_SETTLE_FRAMES, () => landed > 0);
@@ -632,9 +633,9 @@ function checkStruckGuardLooksAtAttacker(harness: PrisonHarness): void {
   const guard = elementAt(prison.guardMobs, 0);
   if (guard === undefined) return;
   if (fault === 'strike-heard-at-guard') {
-    const takeDamageFrom = guard.takeDamageFrom.bind(guard);
-    guard.takeDamageFrom = (amount, attacker, damageType) => {
-      takeDamageFrom(amount, attacker, damageType);
+    const takeHit = guard.takeHit.bind(guard);
+    guard.takeHit = (hit) => {
+      takeHit(hit);
       guard.lastStrike = null;
     };
   }
@@ -642,7 +643,7 @@ function checkStruckGuardLooksAtAttacker(harness: PrisonHarness): void {
   const standoff = TILE_SIZE * STRUCK_FROM_TILES;
   human.x = guard.x - Math.cos(guard.facingAngle) * standoff;
   human.y = guard.y - Math.sin(guard.facingAngle) * standoff;
-  guard.takeDamageFrom(1, human, 'slingshot');
+  guard.takeHit(harnessHit(human, 1, 'slingshot'));
   harness.step(1);
   const runtime = elementAt(prison['guards'], 0);
   const plan = runtime?.investigation?.plan ?? null;
@@ -687,7 +688,7 @@ function checkStruckFromBeyondTheRadius(harness: PrisonHarness): void {
     if (guard === undefined) continue;
     human.x = guard.x - Math.cos(guard.facingAngle) * standoff;
     human.y = guard.y - Math.sin(guard.facingAngle) * standoff;
-    guard.takeDamageFrom(1, human, 'slingshot');
+    guard.takeHit(harnessHit(human, 1, 'slingshot'));
     harness.step(1);
     const index = prison.guardMobs.indexOf(guard);
     const investigating = elementAt(prison['guards'], index)?.investigation ?? null;

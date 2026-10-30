@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { Player } from '../Player';
 import {
   HIRELING_REVIVE_WINDOW_FRAMES,
@@ -134,12 +134,12 @@ export function hirelingDownedArrowCandidate(
   ctx: CanvasRenderingContext2D,
   body: DownedBody,
   active: Player,
-  camX: number,
-  camY: number,
+  camera: Camera,
   visibleRadiusPx: number,
   avoidRect?: Rect,
 ): ArrowCandidate | null {
   if (!body.survival.downed) return null;
+  const { x: camX, y: camY } = camera;
   const bodyCenterX = body.x + TILE_SIZE * CENTER_OFFSET;
   const bodyCenterY = body.y + TILE_SIZE * CENTER_OFFSET;
   const insideViewport = isWorldPointOnScreen(
@@ -147,8 +147,8 @@ export function hirelingDownedArrowCandidate(
     bodyCenterY,
     camX,
     camY,
-    worldViewWidth(),
-    worldViewHeight(),
+    camera.viewWidth,
+    camera.viewHeight,
     0,
   );
   const distanceFromActive = Math.hypot(body.x - active.x, body.y - active.y);

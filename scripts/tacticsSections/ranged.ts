@@ -34,6 +34,8 @@ import {
   REGROUP_HP_FRACTION,
   REGROUP_MAX_FRAMES,
 } from '../../src/creatures/tactics/retreat';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** The pass/fail reporting `verify-tactics.ts` owns, so its failure count covers these too. */
 export interface TacticsHarness {
@@ -108,6 +110,7 @@ function makeArena(map: GameMap, humanTile: TilePoint, catTile: TilePoint): Aren
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { map, roster, loop: new MobUpdateLoop(), ctx, human, cat };
 }
@@ -117,7 +120,7 @@ const PROBE_BLOW_DAMAGE = 1;
 
 /** Wound `mob` by `share` of its health from `crawler`, so it counts as in the fight. */
 function bloody(mob: Mob, crawler: HumanPlayer, share: number): void {
-  mob.takeDamageFrom(PROBE_BLOW_DAMAGE, crawler, 'explosion');
+  mob.takeHit(harnessHit(crawler, PROBE_BLOW_DAMAGE, 'explosion'));
   mob.hp = Math.max(1, Math.round(mob.maxHp * (1 - share)));
 }
 

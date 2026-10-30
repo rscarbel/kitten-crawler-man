@@ -95,6 +95,7 @@ const { TOWN_CATS } = await import('../src/systems/critters/TownCats.js');
 const { prewarmTowerCarrier } = await import('../src/sprites/art/towerCarrierFigure.js');
 const { bakeFigurePrewarmFor } = await import('../src/sprites/figure/figureFrameCache.js');
 const { TOWN_CAT_IDS } = await import('../src/core/state/townCatIds.js');
+const { cameraAt, UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 const { TOWER_BINDING_PILLARS, BINDING_PILLAR_VARIANT, bindingPillarId } =
   await import('../src/map/town/interiors/townCenterTower.js');
 type TownCatId = import('../src/core/state/townCatIds.js').TownCatId;
@@ -239,6 +240,7 @@ function standWorks(
     activeIsMoving: false,
     roster: new MobRoster(map, new SpellSystem()),
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   works?.enter?.(frameCtx);
   for (let frame = 0; frame < WORKS_FRAMES_BEFORE_SNAPSHOT; frame++) works?.update(frameCtx);
@@ -270,11 +272,17 @@ for (const storey of TOWER_STOREY_IDS) {
     const ctx = canvas.getContext('2d');
     ctx.scale(SCALE, SCALE);
     const gameCtx = asGameContext(ctx);
-    map.renderCanvas(gameCtx, 0, 0, viewW, viewH);
+    map.renderCanvas(gameCtx, {
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(viewW),
+      viewHeight: worldPx(viewH),
+      zoom: UNZOOMED,
+    });
     drawTownInteriorGroundProps(gameCtx, map, 0, 0, TILE_SIZE);
     setViewportSize(viewW, viewH);
     const water = new WaterAnimationSystem(map, () => true);
-    water.renderGround(gameCtx, 0, 0);
+    water.renderGround(gameCtx, cameraAt({ x: 0, y: 0 }, UNZOOMED));
     water.dispose();
     const stood = standWorks(storey, map, state);
     const hidden = new Set([
@@ -284,9 +292,21 @@ for (const storey of TOWER_STOREY_IDS) {
     stood.works?.renderWorld?.(gameCtx, 0, 0);
     stood.mechanisms.renderGround(gameCtx, 0, 0);
     if (!stood.senses.isEmpty) {
-      stood.senses.paint(gameCtx, { camX: 0, camY: 0, width: viewW, height: viewH, nowMs: 0 });
+      stood.senses.paint(gameCtx, {
+        camX: 0,
+        camY: 0,
+        width: worldPx(viewW),
+        height: worldPx(viewH),
+        nowMs: 0,
+      });
     }
-    map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
+    map.renderDecorationsOverlay(gameCtx, {
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(viewW),
+      viewHeight: worldPx(viewH),
+      zoom: UNZOOMED,
+    });
     const figures = [
       ...townInteriorPropFigures(map, hidden),
       ...stood.mechanisms.sortedFigures(),
@@ -410,10 +430,22 @@ function renderMoment(
   const ctx = canvas.getContext('2d');
   ctx.scale(SCALE, SCALE);
   const gameCtx = asGameContext(ctx);
-  map.renderCanvas(gameCtx, 0, 0, viewW, viewH);
+  map.renderCanvas(gameCtx, {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   drawTownInteriorGroundProps(gameCtx, map, 0, 0, TILE_SIZE);
   setViewportSize(viewW, viewH);
-  map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
+  map.renderDecorationsOverlay(gameCtx, {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   const figures = [...townInteriorPropFigures(map, new Set()), ...cats.roomFigures()].sort(
     (a, b) => (a.depthY ?? a.y) - (b.depthY ?? b.y),
   );

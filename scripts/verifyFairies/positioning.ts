@@ -47,6 +47,7 @@ import {
   SHIELD_PREFERRED_RANGE_TILES,
 } from '../../src/creatures/fairies/fairyTuning';
 import { GameMap } from '../../src/map/GameMap';
+import { openFloorGrid } from '../../src/map/openFloorGrid';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import type { MobSpawnPoint } from '../../src/map/DungeonGenerator';
 import type { Player } from '../../src/Player';
@@ -57,6 +58,7 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import type { FairyGateReport } from './report';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 const GOBLIN_WEAPON = 'sword';
 /** The lowest level the HP share is checked at. */
@@ -187,6 +189,7 @@ function buildFloor(grid: TileGrid, rooms: readonly RectSpec[], start: RectSpec)
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [],
   });
   const add = <T extends Mob>(mob: T): T => {
@@ -257,7 +260,7 @@ function hpShare(makeFairy: () => Fairy | null, floorNumber: number, level: numb
 }
 
 function verifyHp(report: FairyGateReport): void {
-  const map = new GameMap({ tileHeight: TILE_SIZE, mapSize: HP_MAP_SIZE });
+  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: openFloorGrid(HP_MAP_SIZE) });
   const spawned = (): Fairy | null => {
     const mob = spawnMob(
       FAIRY_SPAWN_KEYS.healer,

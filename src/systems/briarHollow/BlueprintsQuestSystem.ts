@@ -86,6 +86,7 @@ import { stationUpgradeCost, StationUpgrades } from './blueprints/StationUpgrade
 import type { ProcessingStationKind } from './processingStations';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../map/overworld/briarHollowLayout';
 import { createMidgeEscortCarry } from '../../core/quests/midgeEscortCarry';
+import type { Camera } from '../../core/rendering/camera';
 
 /** The journal's hint while the Plea's siege has the village's questlines standing down. */
 export const BLUEPRINTS_SIEGE_HINT = 'Briar Hollow is under attack.';
@@ -547,10 +548,11 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
   }
 
   /** Under every body. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     this.harvest.renderGround(ctx, camX, camY);
     this.fence.renderGround(ctx, camX, camY);
-    this.stations.renderGround(ctx, camX, camY);
+    this.stations.renderGround(ctx, camera);
   }
 
   /**
@@ -572,9 +574,10 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
   }
 
   /** Over every body. */
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     this.fence.renderAbove(ctx, camX, camY);
-    this.stations.renderAbove(ctx, camX, camY);
+    this.stations.renderAbove(ctx, camera);
     this.escort.renderAbove(ctx, camX, camY);
     this.moments.renderAbove(ctx, camX, camY);
   }

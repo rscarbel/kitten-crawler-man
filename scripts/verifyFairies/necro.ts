@@ -84,6 +84,7 @@ import {
   setVisibleWorldView,
   type VisibleWorldView,
 } from '../../src/core/rendering/visibleWorldView';
+import { harnessHit } from '../crawlerHitHarness';
 
 const NECRO_TILE = 10;
 /** A crawler this far off is noticed but outside the wave's trigger: a fight on, nobody to shove. */
@@ -1310,7 +1311,7 @@ function deathSkeletons(
   if (level > 1) necro.applyMobLevel(level);
   necro.stampPotency(difficulty);
   if (reportDeath) s.kill(necro);
-  else necro.takeDamageFrom(Number.MAX_SAFE_INTEGER, s.pm.human);
+  else necro.takeHit(harnessHit(s.pm.human, Number.MAX_SAFE_INTEGER));
   for (let frame = 0; frame < DEATH_RAISE_FRAMES; frame++) s.step(necro, true);
   return { risen: livingArmy(s.roster.mobs), stage: s };
 }

@@ -530,11 +530,11 @@ export interface LevelDef {
    */
   fairies?: FairySpawnTable;
   /**
-   * Forces the order a floor's bosses are met in. When present the generator replaces free
-   * room placement with the declared gauntlets — spawn at map centre, branch
-   * chains, gateway safe room, gateway boss room, repeated per gauntlet — and
-   * only then generates a free-roam region. Absent means the classic free-roam
-   * layout from the first room.
+   * Forces the order a floor's bosses are met in: the generator lays out the
+   * declared gauntlets — spawn at map centre, branch chains, gateway safe room,
+   * gateway boss room, repeated per gauntlet — and only then generates a
+   * free-roam region. Every generated dungeon floor declares one; the overworld
+   * and the hand-built tutorial have none.
    */
   progression?: ProgressionDef;
 }

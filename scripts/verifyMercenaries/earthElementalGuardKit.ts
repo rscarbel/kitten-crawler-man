@@ -71,6 +71,7 @@ import {
   EARTH_ELEMENTAL_PUNCH_TICKS_PER_FRAME,
   earthElementalOneShotFrame,
 } from '../../src/sprites/earthElementalTiming';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** How a gate reports; the caller owns the failure count. */
 export interface EarthElementalGuardGateReporter {
@@ -174,6 +175,7 @@ function build(id: MercenaryTemplateId, extras: Player[] = []): Harness | null {
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: extras,
   };
   system.update(ctx);

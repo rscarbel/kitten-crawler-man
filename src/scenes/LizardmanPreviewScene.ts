@@ -20,6 +20,7 @@ import { LIZARDMAN_BODY_PART_KEY, drawLizardmanSprite } from '../sprites/lizardm
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { GameMap } from '../map/GameMap';
+import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { LIZARDMAN_FIGURE } from '../sprites/art/lizardmanFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
@@ -128,7 +129,7 @@ function tongueExtendAt(strikeProgress: number): number {
 }
 
 export class LizardmanPreviewScene extends PreviewScene {
-  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly map = new GameMap({ prebuiltStructure: openFloorGrid(PREVIEW_MAP_SIZE) });
   private readonly gore = new BodyPartGoreSystem(this.map);
 
   private zoomIndex = ZOOM_LEVELS.indexOf(ZOOM_DOUBLE);

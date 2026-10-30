@@ -39,7 +39,6 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Rat } from '../src/creatures/Rat';
 import { GameMap } from '../src/map/GameMap';
-import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level3 } from '../src/levels/level3';
 import { BOULDER_LARGE, BOULDER_SMALL, TREE } from '../src/map/tileTypes';
 import { mulberry32 } from '../src/sprites/person/rng';
@@ -59,6 +58,7 @@ import {
   TREE_HARVESTS_MAX,
   TREE_HARVESTS_MIN,
 } from '../src/systems/briarHollow/harvestNodes';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 let failures = 0;
 let checks = 0;
@@ -318,7 +318,6 @@ const gameMap = new GameMap({
   mapSize: level3.mapSize,
   tileHeight: TILE_SIZE,
   mapType: 'overworld',
-  dungeon: dungeonOptionsForLevel(level3),
   worldSeed: WORLD_SEED,
 });
 
@@ -599,6 +598,7 @@ function contextFor(rig: Rig, active: HumanPlayer | CatPlayer): SystemContext {
     activeIsMoving: false,
     roster: rig.roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 

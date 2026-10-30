@@ -44,7 +44,7 @@ import {
   type DifficultyProfile,
 } from '../../core/difficulty/difficultyProfiles';
 import type { MidgeEscortCarry } from '../../core/quests/midgeEscortCarry';
-import { isWorldPointInView, visibleWorldView } from '../../core/rendering/visibleWorldView';
+import { isWorldPointInView } from '../../core/rendering/visibleWorldView';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';
@@ -58,6 +58,8 @@ import { isUnseenSpawn, placeAmong, spawnDue, type OffscreenSpawnRules } from '.
 import { spawnMob } from '../../levels/spawnFunnel';
 import type { MobKind } from '../../levels/mobKinds';
 import type { MusicClaims } from '../../audio/AudioScope';
+import { worldToScreen, type Camera } from '../../core/rendering/camera';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 
 const UPDATES_PER_SECOND = 60;
 const TILE_CENTRE = 0.5;
@@ -907,16 +909,12 @@ export class EscortAmbushSystem {
   /**
    * Screen space, over the fog: a marker at the screen's edge pointing at
    * each ambusher still in the fight that the player cannot see yet, so a
-   * wave out of sight is never a war horn and nothing else. Placed against
-   * the view the scene last published, which is the camera it drew with.
+   * wave out of sight is never a war horn and nothing else. Placed on the
+   * screen through `camera`, the one the world was drawn with.
    */
-  renderIncoming(ctx: CanvasRenderingContext2D, nowMs: number): void {
-    const view = visibleWorldView();
-    if (view === null) return;
-    const camX = view.left;
-    const camY = view.top;
-    const width = view.width;
-    const height = view.height;
+  renderIncoming(ctx: CanvasRenderingContext2D, camera: Camera, nowMs: number): void {
+    const width = viewportWidth();
+    const height = viewportHeight();
     const centreX = width / 2;
     const centreY = height / 2;
     const reachX = centreX - INCOMING_MARKER_INSET_PX;
@@ -933,8 +931,9 @@ export class EscortAmbushSystem {
       const worldX = mob.x + TILE_SIZE * TILE_CENTRE;
       const worldY = mob.y + TILE_SIZE * TILE_CENTRE;
       if (isWorldPointInView(worldX, worldY, 0)) continue;
-      const towardX = worldX - camX - centreX;
-      const towardY = worldY - camY - centreY;
+      const onScreen = worldToScreen(camera, worldX, worldY);
+      const towardX = onScreen.x - centreX;
+      const towardY = onScreen.y - centreY;
       if (towardX === 0 && towardY === 0) continue;
       // Out along the line to it until that line meets the inset screen edge.
       const toEdge = Math.min(

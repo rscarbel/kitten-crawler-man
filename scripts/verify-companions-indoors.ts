@@ -128,6 +128,7 @@ import {
   isSplitPartyFault,
   type SplitPartyFault,
 } from './companionsIndoors/splitParty';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
 
@@ -235,6 +236,7 @@ function contextFor(party: Party, map: GameMap, roster: MobRoster, extras: Playe
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: extras,
   };
   return ctx;
@@ -1637,7 +1639,7 @@ function checkSceneWiring(): void {
     inOrder(combat, 'combat.resolveKills()', 'this.deinonychusSystem.update(ctx)'),
     'Deinonychus’s system runs after kills resolve',
   );
-  const context = methodBody(interior, 'private buildSystemContext(): SystemContext {');
+  const context = methodBody(interior, 'private buildSystemContext(camera: Camera');
   check(
     context?.includes('extraTargets: this.companionTargets()') === true,
     'hostiles are handed the companions as targets',

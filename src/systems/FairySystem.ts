@@ -366,7 +366,7 @@ export class FairySystem implements GameSystem {
       const centre = playerCentre(target);
       if (Math.hypot(centre.x - x, centre.y - y) > radiusPx) continue;
       if (this.iceBolts.immunity.blocks(target, 'ice')) continue;
-      applyIceHit(target, { freezeAllowed: false, magic: true });
+      applyIceHit(target, target.survivingShare('magic'), { freezeAllowed: false });
     }
     this.partyScratch.length = 0;
     this.chillBlasts.push({ x, y, seed: this.seed(), age: 0 });

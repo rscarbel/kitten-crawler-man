@@ -23,7 +23,7 @@ import {
   unpinTrashGremlinEncounterRows,
 } from '../sprites/trashGremlinSprite';
 import { pinGremlinBile, prewarmGremlinBile, unpinGremlinBile } from '../sprites/gremlinBileSprite';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
@@ -395,11 +395,11 @@ const BORDER_CROSS_LINE_WIDTH = 2;
 
 /**
  * How near the camera's crawler a Trash Gremlin must be for it to be drawn: the
- * screen's half-diagonal, plus the overhang its art may reach past its tile.
- * Read each frame, since the viewport changes with the window.
+ * camera view's half-diagonal, plus the overhang its art may reach past its
+ * tile. Read each frame, since the view changes with the window and the zoom.
  */
-function trashGremlinSightingRangePx(): number {
-  const halfDiagonalPx = Math.hypot(worldViewWidth(), worldViewHeight()) / 2;
+function trashGremlinSightingRangePx(camera: Pick<Camera, 'viewWidth' | 'viewHeight'>): number {
+  const halfDiagonalPx = Math.hypot(camera.viewWidth, camera.viewHeight) / 2;
   return halfDiagonalPx + TILE_SIZE * MAX_MOB_CULL_MARGIN_TILES;
 }
 
@@ -1268,7 +1268,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
 
     this.cacheLiveKrakens(mobs);
-    this.syncTrashGremlins(ctx.roster, human.isActive ? human : cat);
+    this.syncTrashGremlins(ctx.roster, human.isActive ? human : cat, ctx.camera);
     this.spawnKrakenTentacles(ctx.roster);
     this.tickSummonedMobTTLs(mobs, mobGrid);
     // The boss's shots and the acid they leave run on the hostile world's
@@ -1508,7 +1508,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * on screen, and holds its fight's rows in the cache while any fight is
    * sealed.
    */
-  private syncTrashGremlins(roster: MobRoster, viewer: HumanPlayer | CatPlayer): void {
+  private syncTrashGremlins(
+    roster: MobRoster,
+    viewer: HumanPlayer | CatPlayer,
+    camera: Camera,
+  ): void {
     const { mobs } = roster;
     // Counted rather than filtered into a new array, and only once a live
     // gremlin is known to exist: this runs every frame on every floor, and on
@@ -1526,7 +1530,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       return;
     }
 
-    const sightingRangePx = trashGremlinSightingRangePx();
+    const sightingRangePx = trashGremlinSightingRangePx(camera);
     let anySealed = false;
     for (const mob of mobs) {
       if (!(mob instanceof TrashGremlin) || !mob.isAlive) continue;

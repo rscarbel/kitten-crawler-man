@@ -91,6 +91,8 @@ import { checkTierTableFitsFloors } from './tacticsSections/tierTable';
 import { checkGravediggerBeetleTactics } from './tacticsSections/gravediggerBeetle';
 import { checkFallBackSandwich } from './tacticsSections/sandwich';
 import { chasedKitesRunOn, describeKiteLengths } from './tacticsSections/chasedKites';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera';
 
 // ── Harness ────────────────────────────────────────────────────────────────
 
@@ -519,7 +521,7 @@ function runStreakProbe(
   try {
     for (let blow = 0; blow < blows; blow++) {
       healFully(mob);
-      mob.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+      mob.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
       const guarded = mob.lastBlowWasGuarded;
       if (guarded) guardFrames.push(frame);
       if (guarded && previousGuarded) consecutive++;
@@ -595,11 +597,11 @@ const REFUSED_CHANNELS: readonly RefusedChannel[] = [
   },
   {
     label: 'an owned damage-over-time tick',
-    strike: (mob, human) => mob.takeDamageFrom(PROBE_BLOW_DAMAGE, human, null),
+    strike: (mob, human) => mob.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, null)),
   },
   ...SPELL_AND_AREA_TYPES.map((type): RefusedChannel => ({
     label: `a crawler's ${type}`,
-    strike: (mob, human) => mob.takeDamageFrom(PROBE_BLOW_DAMAGE, human, type),
+    strike: (mob, human) => mob.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, type)),
   })),
   {
     label: 'unowned environmental melee',
@@ -653,7 +655,7 @@ function checkRefusedChannels(map: GameMap): void {
   let controlGuards = 0;
   for (let attempt = 0; attempt < REFUSED_CHANNEL_ATTEMPTS; attempt++) {
     healFully(control);
-    control.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'slingshot');
+    control.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'slingshot'));
     if (control.lastBlowWasGuarded) controlGuards++;
     control.tactics.clearLiveState();
   }
@@ -675,12 +677,12 @@ function checkLowHpNeverGuards(map: GameMap): void {
   let aboveGuards = 0;
   for (let attempt = 0; attempt < REFUSED_CHANNEL_ATTEMPTS; attempt++) {
     blocker.hp = lowHp;
-    blocker.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+    blocker.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
     if (blocker.lastBlowWasGuarded) lowGuards++;
     blocker.tactics.clearLiveState();
     // One point above the line: the nearest blow that *may* be guarded.
     blocker.hp = lowHp + 1;
-    blocker.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+    blocker.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
     if (blocker.lastBlowWasGuarded) aboveGuards++;
     blocker.tactics.clearLiveState();
   }
@@ -729,13 +731,14 @@ function traceGuardShove(map: GameMap, mob: Mob, human: HumanPlayer, cat: CatPla
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const loop = new MobUpdateLoop();
 
   let guarded = false;
   for (let attempt = 0; attempt < GUARD_WAIT_ATTEMPTS && !guarded; attempt++) {
     healFully(mob);
-    mob.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+    mob.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
     guarded = mob.lastBlowWasGuarded;
   }
 
@@ -938,7 +941,7 @@ function checkCreditedBlows(map: GameMap): void {
     spent && latchedBefore && reflected === 'landed' && !latched.tactics.isGuardReady,
     `thorns after a guard: reflection ${reflected}, guard ready afterwards: ${latched.tactics.isGuardReady} (must stay spent)`,
   );
-  latched.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+  latched.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
   check(latched.tactics.isGuardReady, 'control: a real blow after the cooldown readies the guard');
 
   // A hireling's blow is a creature's: never guarded, but it is a clean hit.
@@ -975,7 +978,7 @@ function checkCreditedBlows(map: GameMap): void {
   let shovedGuarded = false;
   for (let attempt = 0; attempt < GUARD_WAIT_ATTEMPTS && !shovedGuarded; attempt++) {
     healFully(shoved);
-    shoved.takeCreditedDamage(PROBE_BLOW_DAMAGE, human, 'melee', northStriker);
+    shoved.takeHit(harnessHit(northStriker, PROBE_BLOW_DAMAGE, 'melee'));
     shovedGuarded = shoved.lastBlowWasGuarded;
   }
   const awayX = shoved.x - northStriker.x;
@@ -1006,7 +1009,7 @@ function checkCreditedBlows(map: GameMap): void {
 function spendGuard(mob: Mob, human: HumanPlayer): boolean {
   for (let attempt = 0; attempt < GUARD_WAIT_ATTEMPTS; attempt++) {
     healFully(mob);
-    mob.takeDamageFrom(PROBE_BLOW_DAMAGE, human, 'melee');
+    mob.takeHit(harnessHit(human, PROBE_BLOW_DAMAGE, 'melee'));
     if (mob.lastBlowWasGuarded) return true;
   }
   return false;
@@ -1030,7 +1033,7 @@ function checkTraitsSurviveResets(map: GameMap): void {
       label: 'reviveForCheckpoint',
       run: () => {
         // Killed by a blast, which a guard never meets, so the kill is certain.
-        mob.takeDamageFrom(mob.hp, human, 'explosion');
+        mob.takeHit(harnessHit(human, mob.hp, 'explosion'));
         mob.reviveForCheckpoint();
       },
     },
@@ -1085,6 +1088,7 @@ function makeArena(
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { map, roster, loop: new MobUpdateLoop(), ctx, human, cat };
 }
@@ -1129,7 +1133,7 @@ function addTactician(
  * A share of zero leaves it at full health but still bloodied.
  */
 function bloody(mob: Mob, crawler: HumanPlayer, share: number): void {
-  mob.takeDamageFrom(PROBE_BLOW_DAMAGE, crawler, 'explosion');
+  mob.takeHit(harnessHit(crawler, PROBE_BLOW_DAMAGE, 'explosion'));
   mob.hp = Math.max(1, Math.round(mob.maxHp * (1 - share)));
 }
 
@@ -1930,7 +1934,7 @@ function measureGuardToImpact(map: GameMap, traits: readonly TacticsTrait[]): nu
       // Struck back the moment a blow lands: the swing that landed it is past
       // its impact, so whatever lands next belongs to a fresh swing.
       healFully(goblin);
-      goblin.takeDamageFrom(PROBE_BLOW_DAMAGE, arena.human, 'melee');
+      goblin.takeHit(harnessHit(arena.human, PROBE_BLOW_DAMAGE, 'melee'));
       if (goblin.lastBlowWasGuarded) guardFrame = frame;
     }
   } finally {
@@ -2005,7 +2009,16 @@ function makeTelemetryCtx(
 ): SystemContext {
   const roster = new MobRoster(map, new SpellSystem());
   roster.add(mob);
-  return { human, cat, active: human, partner: cat, activeIsMoving: false, roster, gameMap: map };
+  return {
+    human,
+    cat,
+    active: human,
+    partner: cat,
+    activeIsMoving: false,
+    roster,
+    gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
+  };
 }
 
 function runTelemetryFrames(

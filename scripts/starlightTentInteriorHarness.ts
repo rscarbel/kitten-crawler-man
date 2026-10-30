@@ -15,6 +15,7 @@ import type { StarlightTentFinale } from '../src/systems/starlightTent/Starlight
 import { standRing } from './starlightTentRingHarness';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import { createCanvas, type Canvas } from 'canvas';
+import { worldPx, cameraAt, UNZOOMED } from '../src/core/rendering/camera';
 
 import { TILE_SIZE } from '../src/core/constants.js';
 import { setViewportSize } from '../src/core/rendering/Viewport.js';
@@ -54,6 +55,7 @@ import type { SystemContext } from '../src/systems/GameSystem.js';
 import { SpellSystem } from '../src/systems/SpellSystem.js';
 import { MobRoster } from '../src/systems/kits/SceneWorld.js';
 import { asGameContext } from './nodeGameContext.js';
+import { setDangerTelegraphClock } from '../src/sprites/dangerTelegraph.js';
 
 /** A standing tent, plus the frame counter the maze keeps privately. */
 export interface TentHarness {
@@ -75,6 +77,14 @@ export interface TentHarness {
   frame: number;
   section: MazeSection;
 }
+
+/**
+ * The ground warnings' stripes and dashes stand still in every frame drawn
+ * here: a gate compares a frame with another of the same scene, and stripes
+ * paced by the wall clock would land wherever the scheduler put the two.
+ */
+const FROZEN_TELEGRAPH_CLOCK_MS = 0;
+setDangerTelegraphClock(() => FROZEN_TELEGRAPH_CLOCK_MS);
 
 /** A fixed floor-3 world seed, so the hall deals the same board every run. */
 export const TEST_WORLD_SEED = 0x5eed_b16;
@@ -118,6 +128,7 @@ export function buildTent(artSeed: number, options: TentOptions = {}): TentHarne
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const raise = (tentPlan: typeof plan, finale: StarlightTentFinale): StarlightTentMazeSystem =>
     new StarlightTentMazeSystem(
@@ -538,30 +549,32 @@ export function renderTentFrame(
   const ctx = asGameContext(nodeCtx);
   options.wrapContext?.(ctx);
   const { camX, camY, widthPx, heightPx } = view;
+  const camera = cameraAt({ x: camX, y: camY }, UNZOOMED);
 
   ctx.fillStyle = OFF_MAP_FILL;
   ctx.fillRect(0, 0, widthPx, heightPx);
   const lighting = options.lighting ?? 'lit';
-  tent.map.renderCanvas(ctx, camX, camY, widthPx, heightPx);
+  tent.map.renderCanvas(ctx, camera);
   options.hooks?.overMap?.(ctx, view);
   const bareStage = options.bareStage === true;
   if (lighting === 'lit' && !bareStage) {
-    tent.maze.renderWorld(ctx, camX, camY);
+    tent.maze.renderWorld(ctx, camera);
   } else {
     // Only a frame the game never draws orders the maze's layers by hand.
-    tent.maze.renderProps(ctx, camX, camY);
-    if (lighting === 'lit') tent.maze.renderLighting(ctx, camX, camY);
-    if (!bareStage) tent.maze.renderTelegraphs(ctx, camX, camY);
+    tent.maze.renderProps(ctx, camera);
+    if (lighting === 'lit') tent.maze.renderLighting(ctx, camera);
+    if (!bareStage) tent.maze.renderTelegraphs(ctx, camera);
   }
   options.hooks?.overGround?.(ctx, view);
 
   const sorted: Array<{ sortY: number; draw: () => void }> = [];
-  for (const { tx, ty, sortYAnchorPx } of tent.map.getVisibleDecorationTiles(
-    camX,
-    camY,
-    widthPx,
-    heightPx,
-  )) {
+  for (const { tx, ty, sortYAnchorPx } of tent.map.getVisibleDecorationTiles({
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(widthPx),
+    viewHeight: worldPx(heightPx),
+    zoom: UNZOOMED,
+  })) {
     sorted.push({
       sortY: ty * TILE_SIZE + sortYAnchorPx,
       draw: () => tent.map.drawDecorationAt(ctx, tx, ty, camX, camY),
@@ -572,7 +585,7 @@ export function renderTentFrame(
     .filter((mob) => mob.belongsInMobGrid)
     .map((mob) => ({ y: mob.y, render: () => mob.render(ctx, camX, camY, TILE_SIZE) }));
   if (options.withMobs !== false) {
-    for (const figure of tent.maze.sortedFigures()) {
+    for (const figure of tent.maze.roomFigures(camera)) {
       figures.push({ y: figure.y, render: () => figure.render(ctx, camX, camY, TILE_SIZE) });
     }
   }
@@ -589,8 +602,8 @@ export function renderTentFrame(
   for (const entry of sorted) entry.draw();
   options.hooks?.overFigures?.(ctx, view);
 
-  if (!bareStage) tent.maze.renderEffects(ctx, camX, camY);
-  if (lighting === 'darkTelegraph') tent.maze.renderLighting(ctx, camX, camY);
+  if (!bareStage) tent.maze.renderEffects(ctx, camera);
+  if (lighting === 'darkTelegraph') tent.maze.renderLighting(ctx, camera);
   options.hooks?.overEffects?.(ctx, view);
   return canvas;
 }

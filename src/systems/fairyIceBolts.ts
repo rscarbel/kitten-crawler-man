@@ -168,11 +168,12 @@ export class FairyIceBolts {
     const connected = target.takeDamage(damage, source);
     if (!connected || !target.isAlive) return;
     if (bolt.owner.isAlive) bolt.owner.noteStruckPlayer(target);
+    const share = target.survivingShare('magic');
     if (target instanceof Mob) {
-      applyIceHit(target, { freezeAllowed: false, magic: true });
+      applyIceHit(target, share, { freezeAllowed: false });
       return;
     }
-    applyIceHit(target, { magic: true });
+    applyIceHit(target, share);
   }
 
   private shatter(x: number, y: number): void {

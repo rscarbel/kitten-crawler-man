@@ -154,10 +154,10 @@ export const spiderRoom: BossRoomHarness = {
     const lab = quest.labDressing;
     if (lab === null) throw new Error('the spider quest built no lab dressing');
     return dressingUnderTest(lab, env, {
-      renderGround: (ctx, camX, camY) => quest.render(ctx, camX, camY),
-      renderAbove: (ctx, camX, camY) => {
-        quest.renderLifeMachinesForeground(ctx, camX, camY);
-        quest.renderLabDarkness(ctx, camX, camY);
+      renderGround: (ctx, camera) => quest.render(ctx, camera.x, camera.y),
+      renderAbove: (ctx, camera) => {
+        quest.renderLifeMachinesForeground(ctx, camera.x, camera.y);
+        quest.renderLabDarkness(ctx, camera);
       },
       driveToState: (state) => driveLab(quest, lab, env, state),
     });

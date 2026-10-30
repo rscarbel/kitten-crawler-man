@@ -30,7 +30,7 @@ import {
   CAPTURE_CUE_FADED_BY_S,
   CAPTURE_KRASUE_LANDS_AT_S,
   CAPTURE_LIFT_OFF_AT_S,
-} from './missingCatsSoundCues';
+} from '../../audio/missingCatsSoundCues';
 
 /** The bodies the capture lends its script, besides the crawlers. */
 export const CAPTURE_ACTOR_IDS = ['capture_krasue', 'capture_carrier'] as const;

@@ -29,6 +29,7 @@ import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { setDungeonFloorTheme } from '../src/map/dungeon/floorTheme.js';
 import { DungeonLightingSystem } from '../src/systems/DungeonLightingSystem.js';
 import { setViewportSize } from '../src/core/rendering/Viewport.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 const OUT_DIR = `${PREVIEW_DIR}/stealth-gate`;
 const DEFAULT_SEED_LIMIT = 60;
@@ -67,7 +68,13 @@ function renderRoom(gameMap: GameMap, room: StealthGateRoomData): Canvas {
   setViewportSize(viewW, viewH);
   renderCanvas(ctx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
   const decorations = gameMap
-    .getVisibleDecorationTiles(camX, camY, viewW, viewH)
+    .getVisibleDecorationTiles({
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(viewW),
+      viewHeight: worldPx(viewH),
+      zoom: UNZOOMED,
+    })
     .map((deco) => ({ sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx, deco }))
     .sort((a, b) => a.sortY - b.sortY);
   for (const { deco } of decorations) gameMap.drawDecorationAt(ctx, deco.tx, deco.ty, camX, camY);
@@ -76,7 +83,13 @@ function renderRoom(gameMap: GameMap, room: StealthGateRoomData): Canvas {
     now: () => LIGHTING_CLOCK_MS,
     additiveGlows: () => true,
   });
-  lighting.render(ctx, camX, camY, viewW, viewH);
+  lighting.render(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   return canvas;
 }
 

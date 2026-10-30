@@ -46,6 +46,7 @@ import {
 } from '../labApproach';
 import { UINT32_SPAN } from '../../core/world/WorldRandom';
 import type { BreakMaterial } from '../../systems/destruction/breakMaterials';
+import type { Camera } from '../../core/rendering/camera';
 
 export type WallFixtureKind =
   | 'sconce'
@@ -745,12 +746,10 @@ function rowsOf(fixtures: ReadonlyArray<WallFixture>): ReadonlyArray<WallFixture
  */
 export function collectVisibleWallFixtures(
   fixtures: ReadonlyArray<WallFixture>,
-  camX: number,
-  camY: number,
-  viewW: number,
-  viewH: number,
+  camera: Camera,
   out: WallFixture[],
 ): WallFixture[] {
+  const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
   out.length = 0;
   const rows = rowsOf(fixtures);
   const firstRow = Math.max(0, Math.floor(camY / TILE_SIZE) - FIXTURE_REACH_TILES);

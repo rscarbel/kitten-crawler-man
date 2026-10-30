@@ -51,23 +51,6 @@ function check(ok: boolean, message: string): void {
   if (!ok) failures++;
 }
 
-/**
- * The start room's tile bounds. `progressionLayout.startRoom` is set on every
- * forced-progression floor; a free-roam floor's start room is instead the tile
- * neighbourhood around `startTile`, since it carves no rectangular room record
- * of its own.
- */
-function startRoomBounds(data: DungeonData): { x: number; y: number; w: number; h: number } {
-  if (data.progressionLayout?.startRoom !== undefined) return data.progressionLayout.startRoom;
-  const FREE_ROAM_START_HALF_WIDTH = 3;
-  return {
-    x: data.startTile.x - FREE_ROAM_START_HALF_WIDTH,
-    y: data.startTile.y - FREE_ROAM_START_HALF_WIDTH,
-    w: FREE_ROAM_START_HALF_WIDTH * 2,
-    h: FREE_ROAM_START_HALF_WIDTH * 2,
-  };
-}
-
 function checkFloor(name: string, levelDef: LevelDef): void {
   const options = { ...dungeonOptionsForLevel(levelDef), size: levelDef.mapSize };
   let violations = 0;
@@ -84,7 +67,7 @@ function checkFloor(name: string, levelDef: LevelDef): void {
       continue;
     }
     generated++;
-    const room = startRoomBounds(data);
+    const room = data.progressionLayout.startRoom;
     const minX = room.x - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;
     const maxX = room.x + room.w + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;
     const minY = room.y - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;

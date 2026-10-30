@@ -83,13 +83,13 @@ export class Lion extends Mob {
     this.hurtSnarlCooldown = 0;
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const previousHp = this.hp;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     const wasHurt = this.hp < previousHp;
     if (wasHurt && this.hurtSnarlCooldown === 0) {
       this.damageSoundPending = true;

@@ -10,7 +10,7 @@
  * `tutorial` group in `src/audio/sfxGroups.ts`.
  */
 
-import type { SoundId } from '../audio/sounds';
+import type { SoundId } from './sounds';
 import { TILE_SIZE } from '../core/constants';
 
 export const TUTORIAL_CUES = {

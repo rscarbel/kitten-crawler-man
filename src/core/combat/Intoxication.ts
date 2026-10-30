@@ -134,6 +134,17 @@ export function applyIntoxicatedWalkWobble(
   return { dx: dx * cos - dy * sin, dy: dx * sin + dy * cos };
 }
 
+/**
+ * The share of its pace a crawler under `intoxication` is sure to make toward
+ * where it is headed: the wobble's widest veer spends the rest sideways. 1 when
+ * sober.
+ */
+export function intoxicatedHeadwayShare(intoxication: Intoxication | null): number {
+  return intoxication === null
+    ? 1
+    : Math.cos(INTOXICATION_FEEL[intoxication].walkWobble.maxRadians);
+}
+
 /** Extra melee damage `intoxication` puts behind a swing; nothing when sober. */
 export function intoxicationMeleeBonus(intoxication: Intoxication | null): number {
   return intoxication === null ? 0 : INTOXICATION_FEEL[intoxication].meleeDamageBonus;

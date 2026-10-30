@@ -81,6 +81,7 @@ import {
 import { findGymFloor, runGymFightSuite } from './bossRooms/gymFightSim.js';
 import { stagePlateRoll } from './bossRooms/gymScenario.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { harnessHit } from './crawlerHitHarness';
 
 useDevPlayerIdentity();
 
@@ -384,7 +385,7 @@ for (const side of SIDES) {
   if (fault === 'plate-outlives-him') {
     Reflect.defineProperty(bigRooster, 'plateRollLane', { get: () => lane });
   }
-  bigRooster.takeDamageFrom(bigRooster.hp, crawler, 'melee');
+  bigRooster.takeHit(harnessHit(crawler, bigRooster.hp, 'melee'));
   gym.update(env.frame);
   gym.onBossDefeated();
   gym.update(env.frame);

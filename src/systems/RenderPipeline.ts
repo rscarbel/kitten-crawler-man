@@ -60,7 +60,7 @@ import type { PlayerManager } from '../core/party/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { isStandingInWater } from './GameLoopPhases';
 import {
   DEFAULT_DUNGEON_FLOOR_THEME,
@@ -195,8 +195,7 @@ interface DrawEntry {
 
 /** Everything the render pipeline needs, provided by the scene each frame. */
 export interface RenderContext {
-  camX: number;
-  camY: number;
+  camera: Camera;
   gameMap: GameMap;
   pm: PlayerManager;
   active: HumanPlayer | CatPlayer;
@@ -369,15 +368,15 @@ export class RenderPipeline {
   }
 
   /** Queues one prop for the Y-sorted pass, unless it is too far off screen to reach it. */
-  private _pushPropEntry(prop: TownPropRenderable, camX: number, camY: number): void {
+  private _pushPropEntry(prop: TownPropRenderable, camera: Camera): void {
     // Per-prop, because the props differ by an order of magnitude in reach:
     // a shop sign is half a tile wide and a bunting span is sixteen.
     const margin =
       prop.cullMarginTiles === undefined ? PROP_CULL_MARGIN : TILE_SIZE * prop.cullMarginTiles;
-    const minX = camX - margin;
-    const minY = camY - margin;
-    const maxX = camX + worldViewWidth() + margin;
-    const maxY = camY + worldViewHeight() + margin;
+    const minX = camera.x - margin;
+    const minY = camera.y - margin;
+    const maxX = camera.x + camera.viewWidth + margin;
+    const maxY = camera.y + camera.viewHeight + margin;
     if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) return;
     const e = this._getEntry();
     e.sortY = prop.sortY ?? prop.y + ENTITY_SORT_Y_OFFSET;
@@ -391,8 +390,7 @@ export class RenderPipeline {
    */
   renderWorld(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const {
-      camX,
-      camY,
+      camera,
       gameMap,
       active,
       gore,
@@ -402,27 +400,28 @@ export class RenderPipeline {
       stairwell,
       building,
     } = rc;
+    const { x: camX, y: camY } = camera;
 
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, worldViewWidth(), worldViewHeight());
+    ctx.fillRect(0, 0, camera.viewWidth, camera.viewHeight);
 
-    gameMap.renderCanvas(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+    gameMap.renderCanvas(ctx, camera);
     // The Starlight Tent's door light is additive, so it goes straight onto the lot:
     // drawn any later it would also brighten the gore and wash out every
     // telegraph on the forecourt.
     rc.circusGrounds?.renderGround(ctx, camX, camY);
-    gore.renderPuddles(ctx, camX, camY);
+    gore.renderPuddles(ctx, camera);
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
-    rc.destructibles.renderWreckage(ctx, camX, camY);
-    rc.trees?.renderGround(ctx, camX, camY);
+    rc.destructibles.renderWreckage(ctx, camera);
+    rc.trees?.renderGround(ctx, camera);
     // Same slot as the trees, and for the same reason: the river's moving parts
     // belong over the chunk-baked ground and under the Y-sorted pass, so the
     // player wades in front of the highlights rather than beneath them.
-    rc.water?.renderGround(ctx, camX, camY);
+    rc.water?.renderGround(ctx, camera);
     // A boss room's ground props (rafts, a beached carcass, drains) are floor the
     // party stands on, so every danger painted on the floor after this line
     // shows on top of them.
-    bossRoomDressings.renderGround(ctx, camX, camY, rc.gymPromptTargets.bossRoom);
+    bossRoomDressings.renderGround(ctx, camera, rc.gymPromptTargets.bossRoom);
     // Under the Y-sorted pass with the trees and the river: a fire patch is
     // burning floor, and drawn above the entities it would cover the very
     // player it is burning.
@@ -432,7 +431,7 @@ export class RenderPipeline {
     rc.fairies?.renderGround(ctx, camX, camY);
     rc.fairyFireballs?.renderGround(ctx, camX, camY);
     // Scorches, the shadows under bombs in the air, and the burning sticks' circles.
-    rc.goblinBombs?.renderGround(ctx, camX, camY);
+    rc.goblinBombs?.renderGround(ctx, camera);
     // The Seismic Stomp's floor half: its rings and cracks are the ground the human crawler stamps,
     // and drawn over him they wash out the feet the stamp is read from.
     rc.seismicStompFx.renderGround(ctx, camX, camY);
@@ -446,9 +445,9 @@ export class RenderPipeline {
     rc.scriptedDeaths?.renderGround(ctx, camX, camY);
     // Last of the floor: a boss room's warnings stay readable over every pool,
     // scorch, slam shadow and decal painted above.
-    bossRoomDressings.renderGroundWarnings(ctx, camX, camY);
-    stairwell.renderStairwells(ctx, camX, camY);
-    building?.renderDoorHints(ctx, camX, camY);
+    bossRoomDressings.renderGroundWarnings(ctx, camera);
+    stairwell.renderStairwells(ctx, camera);
+    building?.renderDoorHints(ctx, camera);
   }
 
   /** Whether {@link renderGroundWarnings} has anything to draw in this frame's view. */
@@ -457,10 +456,10 @@ export class RenderPipeline {
       rc.globs.hasGroundArt ||
       rc.clownGas.hasGroundArt ||
       rc.fairies?.hasGroundArtIn(
-        rc.camX,
-        rc.camY,
-        rc.camX + worldViewWidth(),
-        rc.camY + worldViewHeight(),
+        rc.camera.x,
+        rc.camera.y,
+        rc.camera.x + rc.camera.viewWidth,
+        rc.camera.y + rc.camera.viewHeight,
       ) === true ||
       rc.fairyFireballs?.hasGroundArt === true ||
       rc.goblinBombs?.hasGroundWarnings === true ||
@@ -476,9 +475,9 @@ export class RenderPipeline {
    * says so.
    */
   renderFlyingGore(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    rc.gore.renderParticles(ctx, rc.camX, rc.camY);
-    rc.bodyPartGore.renderFlying(ctx, rc.camX, rc.camY);
-    rc.destructibles.renderBreak(ctx, rc.camX, rc.camY);
+    rc.gore.renderParticles(ctx, rc.camera);
+    rc.bodyPartGore.renderFlying(ctx, rc.camera.x, rc.camera.y);
+    rc.destructibles.renderBreak(ctx, rc.camera.x, rc.camera.y);
   }
 
   /**
@@ -488,7 +487,8 @@ export class RenderPipeline {
    * to full strength and adds nothing where the floor is lit.
    */
   renderGroundWarnings(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { camX, camY } = rc;
+    const { camera } = rc;
+    const { x: camX, y: camY } = camera;
     rc.globs.renderGround(ctx, camX, camY);
     rc.clownGas.renderGround(ctx, camX, camY);
     rc.fairies?.renderGround(ctx, camX, camY);
@@ -503,8 +503,7 @@ export class RenderPipeline {
    */
   renderEntities(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const {
-      camX,
-      camY,
+      camera,
       gameMap,
       mobGrid,
       active,
@@ -516,6 +515,7 @@ export class RenderPipeline {
       doctor,
       speechBubblePulse,
     } = rc;
+    const { x: camX, y: camY } = camera;
 
     // Before anything in the pass draws: a quest beacon fades as the player
     // closes on it, and the creatures that draw one have no reference to the
@@ -525,8 +525,8 @@ export class RenderPipeline {
     const visibleMobs = mobGrid.queryRect(
       camX - MOB_QUERY_MARGIN,
       camY - MOB_QUERY_MARGIN,
-      worldViewWidth() + MOB_QUERY_MARGIN * 2,
-      worldViewHeight() + MOB_QUERY_MARGIN * 2,
+      camera.viewWidth + MOB_QUERY_MARGIN * 2,
+      camera.viewHeight + MOB_QUERY_MARGIN * 2,
     );
 
     // Reset pool cursor (reuses existing objects)
@@ -537,10 +537,7 @@ export class RenderPipeline {
     // since the prop stands on the floor in front of the wall it hangs on.
     for (const fixture of collectVisibleWallFixtures(
       gameMap.wallFixtures,
-      camX,
-      camY,
-      worldViewWidth(),
-      worldViewHeight(),
+      camera,
       this._visibleFixtures,
     )) {
       const e = this._getEntry();
@@ -551,12 +548,7 @@ export class RenderPipeline {
       e.chestRef = null;
     }
 
-    for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
-      camX,
-      camY,
-      worldViewWidth(),
-      worldViewHeight(),
-    )) {
+    for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(camera)) {
       const e = this._getEntry();
       // Sort by the sprite's visual foot position, derived from manifest
       // geometry. Trees sort on their foot like everything else because
@@ -573,8 +565,8 @@ export class RenderPipeline {
     // (added later) sorts in front of the chest — stable sort preserves insertion order.
     const viewMinX = camX - TILE_SIZE;
     const viewMinY = camY - TILE_SIZE;
-    const viewMaxX = camX + worldViewWidth() + TILE_SIZE;
-    const viewMaxY = camY + worldViewHeight() + TILE_SIZE;
+    const viewMaxX = camX + camera.viewWidth + TILE_SIZE;
+    const viewMaxY = camY + camera.viewHeight + TILE_SIZE;
 
     for (const chest of treasureChests.allChests) {
       const chestX = chest.tileX * TILE_SIZE;
@@ -593,9 +585,9 @@ export class RenderPipeline {
       const margin = TILE_SIZE * mob.cullMarginTiles;
       if (
         mob.x < camX - margin ||
-        mob.x > camX + worldViewWidth() + margin ||
+        mob.x > camX + camera.viewWidth + margin ||
         mob.y < camY - margin ||
-        mob.y > camY + worldViewHeight() + margin
+        mob.y > camY + camera.viewHeight + margin
       ) {
         continue;
       }
@@ -637,7 +629,7 @@ export class RenderPipeline {
     }
     // The doctors stand in front of their cabinets, which are sorted
     // decorations, so they have to sort too or the cabinet paints over them.
-    for (const figure of doctor.sortedFigures(camX, camY)) {
+    for (const figure of doctor.sortedFigures(camera)) {
       const e = this._getEntry();
       e.sortY = figure.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_SAFE_ROOM_FIGURE;
@@ -663,11 +655,11 @@ export class RenderPipeline {
     }
 
     if (townProps !== undefined) {
-      for (const prop of townProps) this._pushPropEntry(prop, camX, camY);
+      for (const prop of townProps) this._pushPropEntry(prop, camera);
     }
-    for (const prop of rc.bossRoomDressings.renderEntities()) this._pushPropEntry(prop, camX, camY);
-    for (const pickup of rc.groundPickups.renderEntities()) this._pushPropEntry(pickup, camX, camY);
-    for (const fixture of rc.sortedFixtures ?? []) this._pushPropEntry(fixture, camX, camY);
+    for (const prop of rc.bossRoomDressings.renderEntities()) this._pushPropEntry(prop, camera);
+    for (const pickup of rc.groundPickups.renderEntities()) this._pushPropEntry(pickup, camera);
+    for (const fixture of rc.sortedFixtures ?? []) this._pushPropEntry(fixture, camera);
 
     // Sort only the active portion of the pool
     const items = this._drawPool;
@@ -689,7 +681,8 @@ export class RenderPipeline {
 
   /** Draws one entry of the Y-sorted pass. */
   private _drawSortedItem(ctx: CanvasRenderingContext2D, rc: RenderContext, item: DrawEntry): void {
-    const { camX, camY, gameMap, active, treasureChests } = rc;
+    const { camera, gameMap, active, treasureChests } = rc;
+    const { x: camX, y: camY } = camera;
     if (item.kind === DRAW_KIND_DECO) {
       // A struck prop shudders for a few frames, so it feels heavy before it breaks.
       const wobble = rc.destructibles.wobbleAt(item.tx, item.ty);
@@ -708,7 +701,7 @@ export class RenderPipeline {
       ctx.save();
       try {
         ctx.beginPath();
-        ctx.rect(0, 0, worldViewWidth(), waterlineScreenY);
+        ctx.rect(0, 0, camera.viewWidth, waterlineScreenY);
         ctx.clip();
         item.entity?.render(ctx, camX, camY, TILE_SIZE);
       } finally {
@@ -730,8 +723,7 @@ export class RenderPipeline {
     renderLevelUpFlash: (ctx: CanvasRenderingContext2D, camX: number, camY: number) => void,
   ): void {
     const {
-      camX,
-      camY,
+      camera,
       gore,
       bodyPartGore,
       barriers,
@@ -741,9 +733,10 @@ export class RenderPipeline {
       crawlerBarks,
       pm,
     } = rc;
+    const { x: camX, y: camY } = camera;
 
     if (rc.goreUnderDarkness !== true) {
-      gore.renderParticles(ctx, camX, camY);
+      gore.renderParticles(ctx, camera);
       bodyPartGore.renderFlying(ctx, camX, camY);
     }
     // Droplets go over the entities: water thrown up by a crawler stepping into
@@ -751,16 +744,16 @@ export class RenderPipeline {
     // water system draws is surface, and stays under them in `renderGround`.
     rc.water?.renderSplashes(ctx, camX, camY);
     rc.destructibles.renderEffects(ctx, camX, camY, rc.goreUnderDarkness === true);
-    rc.trees?.render(ctx, camX, camY);
+    rc.trees?.render(ctx, camera);
     barriers.render(ctx, camX, camY, rc.gymPromptTargets.barrier);
-    spells.renderEnergyShield(ctx, camX, camY);
+    spells.renderEnergyShield(ctx, camera);
     spells.renderCatMiniShield(ctx, camX, camY, pm.cat);
     spells.renderChainLightning(ctx, camX, camY);
     rc.stormcallerFx.render(ctx, camX, camY);
-    rc.gearFx.render(ctx, camX, camY);
+    rc.gearFx.render(ctx, camera);
     spells.renderShockwaveRipples(ctx, camX, camY);
     spells.renderEntanglements(ctx, camX, camY);
-    rc.smokeClouds.render(ctx, camX, camY);
+    rc.smokeClouds.render(ctx, camera);
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);
     dynamite.renderThrowPath(ctx, camX, camY);
@@ -782,13 +775,13 @@ export class RenderPipeline {
     rc.knightMissiles.render(ctx, camX, camY);
     // Falling junk, sparks and spray belong to the room, and cross in front of
     // whoever they are landing on.
-    rc.bossRoomDressings.renderAbove(ctx, camX, camY);
+    rc.bossRoomDressings.renderAbove(ctx, camera);
     rc.scriptedDeaths?.renderAbove(ctx, camX, camY);
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.
     rc.seismicStompFx.render(ctx, camX, camY);
-    rc.meleeFx.render(ctx, camX, camY);
-    rc.missileFx.render(ctx, camX, camY);
+    rc.meleeFx.render(ctx, camera);
+    rc.missileFx.render(ctx, camera);
 
     // Cat speech bubble for Deinonychus summon/recall
     deinonychusSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
@@ -803,13 +796,14 @@ export class RenderPipeline {
    * active player. Defeats the browser-zoom exploit without affecting normal play.
    */
   renderVisibilityFog(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { camX, camY, active } = rc;
+    const { camera, active } = rc;
+    const { x: camX, y: camY } = camera;
 
     const innerR = VISIBILITY_INNER_RADIUS_PX;
     const outerR = VISIBILITY_RADIUS_PX;
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
-    const halfDiag = Math.hypot(worldViewWidth() / 2, worldViewHeight() / 2);
+    const halfDiag = Math.hypot(camera.viewWidth / 2, camera.viewHeight / 2);
     if (halfDiag <= innerR) return;
 
     const cx = active.x + TILE_SIZE / 2 - camX;
@@ -825,12 +819,12 @@ export class RenderPipeline {
     ctx.fillStyle = FOG_SOLID_COLOR;
     const discRight = discLeft + disc.width;
     const discBottom = discTop + disc.height;
-    ctx.fillRect(0, 0, worldViewWidth(), Math.max(0, discTop));
-    ctx.fillRect(0, discBottom, worldViewWidth(), Math.max(0, worldViewHeight() - discBottom));
+    ctx.fillRect(0, 0, camera.viewWidth, Math.max(0, discTop));
+    ctx.fillRect(0, discBottom, camera.viewWidth, Math.max(0, camera.viewHeight - discBottom));
     const bandTop = Math.max(0, discTop);
-    const bandHeight = Math.max(0, Math.min(worldViewHeight(), discBottom) - bandTop);
+    const bandHeight = Math.max(0, Math.min(camera.viewHeight, discBottom) - bandTop);
     ctx.fillRect(0, bandTop, Math.max(0, discLeft), bandHeight);
-    ctx.fillRect(discRight, bandTop, Math.max(0, worldViewWidth() - discRight), bandHeight);
+    ctx.fillRect(discRight, bandTop, Math.max(0, camera.viewWidth - discRight), bandHeight);
   }
 
   /** Lazily bakes (and caches) the fog's radial falloff disc. */
@@ -859,7 +853,8 @@ export class RenderPipeline {
    * This keeps the railing in front of any entity standing on a balcony.
    */
   renderTowerBalconyOverlay(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { camX, camY, gameMap } = rc;
+    const { camera, gameMap } = rc;
+    const { x: camX, y: camY } = camera;
     const anchor = gameMap.mainTowerAnchor;
     if (!anchor) return;
     const sx = anchor.x * TILE_SIZE - camX;

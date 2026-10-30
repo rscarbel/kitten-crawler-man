@@ -73,7 +73,7 @@ import { InteriorReadableSystem } from '../src/systems/InteriorReadableSystem';
 import { allResidents, residentById, residentSpecies } from '../src/systems/townResidents';
 import { type ResidentId } from '../src/core/state/residentIds';
 import { partyRoutineBodies, type RoutineBody } from '../src/systems/occupantRoutines';
-import type { OccupantRoutineCue } from '../src/systems/occupantRoutineCues';
+import type { OccupantRoutineCue } from '../src/audio/occupantRoutineCues';
 import { RESIDENT_LINES } from '../src/dialog/scripts/residents';
 import {
   CLUB_GATHERINGS,

@@ -12,6 +12,7 @@
 import { clamp } from '../../utils';
 import type { Rect } from '../../ui/core/geom';
 import type { WorldRect } from './worldRect';
+import type { WorldPx } from './camera';
 
 /** Who may ask the camera to keep a rect in view, and whose ask wins: the higher number. */
 const CAMERA_ZOOM_PRIORITY = {
@@ -39,11 +40,6 @@ function lerp(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
 
-/** `rect` on the screen, in the world view's units: what world chrome drawn under a zoom of `zoom` measures against. */
-export function toWorldViewRect(rect: Rect, zoom: number): Rect {
-  return { x: rect.x / zoom, y: rect.y / zoom, w: rect.w / zoom, h: rect.h / zoom };
-}
-
 /**
  * Runs `draw` in the screen's own units from inside a world pass drawn under
  * a zoom of `zoom`: for screen chrome that has to sit between world layers.
@@ -51,6 +47,25 @@ export function toWorldViewRect(rect: Rect, zoom: number): Rect {
 export function drawUnzoomed(ctx: CanvasRenderingContext2D, zoom: number, draw: () => void): void {
   ctx.save();
   ctx.scale(1 / zoom, 1 / zoom);
+  try {
+    draw();
+  } finally {
+    ctx.restore();
+  }
+}
+
+/**
+ * Runs `draw` in the world view's units from screen space: for world-anchored
+ * guidance drawn after the world pass, so it lands where the zoomed world put
+ * what it points at.
+ */
+export function drawInWorldView(
+  ctx: CanvasRenderingContext2D,
+  zoom: number,
+  draw: () => void,
+): void {
+  ctx.save();
+  ctx.scale(zoom, zoom);
   try {
     draw();
   } finally {
@@ -244,8 +259,8 @@ export class CameraZoom {
   keepInView(
     camera: { readonly x: number; readonly y: number },
     focus: { readonly x: number; readonly y: number },
-    viewW: number,
-    viewH: number,
+    viewW: WorldPx,
+    viewH: WorldPx,
   ): { x: number; y: number } {
     const framing = this.current();
     const { rect, clear, zoom } = framing;

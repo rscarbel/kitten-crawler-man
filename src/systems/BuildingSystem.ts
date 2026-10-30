@@ -8,7 +8,7 @@ const NO_DOOR_HERE = -1;
 import type { GameSystem, SystemContext } from './GameSystem';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { buildingDisplayName } from '../map/buildingIds';
 
 /**
@@ -177,7 +177,8 @@ export class BuildingSystem implements GameSystem {
   }
 
   /** Renders a pulsing ▶ door indicator above each building entrance. */
-  renderDoorHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderDoorHints(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const ts = TILE_SIZE;
     const pulse =
       DOOR_HINT_PULSE_BASE + Math.sin(Date.now() / DOOR_HINT_PULSE_PERIOD) * DOOR_HINT_PULSE_RANGE;
@@ -195,9 +196,9 @@ export class BuildingSystem implements GameSystem {
       const CULLING_HEIGHT_TILES = 3;
       if (
         sx < -ts ||
-        sx > worldViewWidth() + ts ||
+        sx > camera.viewWidth + ts ||
         sy < -ts * CULLING_HEIGHT_TILES ||
-        sy > worldViewHeight() + ts
+        sy > camera.viewHeight + ts
       )
         continue;
 

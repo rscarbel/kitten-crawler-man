@@ -25,6 +25,7 @@ import { FuzzyNightmare } from '../src/creatures/FuzzyNightmare.js';
 import { MobRoster } from '../src/systems/kits/SceneWorld.js';
 import { SpellSystem } from '../src/systems/SpellSystem.js';
 import type { SystemContext } from '../src/systems/GameSystem.js';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const BOARDS = 'quest_wood_board';
 const BOARDS_PER_PICKUP = 8;
@@ -112,6 +113,7 @@ function freshQuest() {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   quest.update(ctx);
   const snapshot = quest.captureCheckpoint();

@@ -5,33 +5,32 @@ import {
   type SoundId,
 } from './sounds';
 import type { BuildingEntry } from '../map/buildingEntry';
-import { interiorSellsSomething } from '../systems/townServices';
-import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
-import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
-import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
-import { SPIDER_QUEST_CUES } from '../systems/spiderQuest/spiderQuestSoundCues';
-import { TUTORIAL_CUES } from '../systems/tutorialSoundCues';
+import { CONTRACT_CUES } from './contractSoundCues';
+import { BATHROOM_CUES } from './bathroomSoundCues';
+import { PRISON_CUES } from './prisonSoundCues';
+import { SPIDER_QUEST_CUES } from './spiderQuestSoundCues';
+import { TUTORIAL_CUES } from './tutorialSoundCues';
 import type { LevelId } from '../levels/levelIds';
-import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
-import { INTERIOR_AMBIENCE_CUES } from '../systems/interiorAmbienceCues';
-import { occupantRoutineSoundIds } from '../systems/occupantRoutineCues';
-import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
-import { BOMBER_GOBLIN_CUES } from '../systems/bomberGoblinSoundCues';
-import { ELECTRIC_GOBLIN_CUES } from '../systems/bossSoundCues';
+import { INTERIOR_CUES } from './interiorInteractionSoundCues';
+import { INTERIOR_AMBIENCE_CUES } from './interiorAmbienceCues';
+import { occupantRoutineSoundIds } from './occupantRoutineCues';
+import { POKER_CUES } from './pokerSoundCues';
+import { BOMBER_GOBLIN_CUES } from './bomberGoblinSoundCues';
+import { ELECTRIC_GOBLIN_CUES } from './bossSoundCues';
 import { GENERATOR_RIG_HUM_LOOP } from './loopLevels';
-import { FLOODED_PUMP_ROOM_CUES } from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
-import { SEWER_CUES } from '../systems/sewer/sewerSoundCues';
-import { CAT_SENSE_CUE } from '../systems/senses/catSenseSoundCues';
-import { TOWER_CUES } from '../systems/tower/towerSoundCues';
+import { FLOODED_PUMP_ROOM_CUES } from './floodedPumpRoomSoundCues';
+import { SEWER_CUES } from './sewerSoundCues';
+import { CAT_SENSE_CUE } from './catSenseSoundCues';
+import { TOWER_CUES } from './towerSoundCues';
 import {
   CAPTURE_CUE,
   MISSING_CATS_CUES,
   REUNION_CUE,
   THIEF_GLIDE_LOOP,
-} from '../systems/missingCats/missingCatsSoundCues';
+} from './missingCatsSoundCues';
 import { STORM_DRAIN_ID, TOWN_TOWER_ID } from '../map/buildingIds';
-import { SCRIPTED_DEATH_CUES } from '../systems/scriptedDeath/scriptedDeathCues';
-import { starlightTentCueSoundIds } from '../systems/starlightTent/starlightTentSoundCues';
+import { SCRIPTED_DEATH_CUES } from './scriptedDeathCues';
+import { starlightTentCueSoundIds } from './starlightTentSoundCues';
 import { MUSIC_STEM_SETS } from './music/stemSets';
 import { KRAKEN_BATTLE_TRACK } from './music/bossTracks';
 
@@ -1396,13 +1395,13 @@ function sfxGroupsOf(levelId: LevelId): readonly SfxGroup[] {
  * it just entered. Every enterable building is on the floor-3 overworld (see
  * `BuildingInteriorScene`'s own comment to that effect), so `level3`'s bundle
  * is already loaded by the time a door opens — this only adds what is
- * specific to what is *behind* the door.
+ * specific to what is *behind* the door. `sellsSomething` is whether coin
+ * changes hands over a counter in there, which decides the commerce cues.
  */
-export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundId[] {
-  const sellsSomething =
-    entry.type === 'club' ||
-    entry.type === 'store' ||
-    (entry.type === 'house' && interiorSellsSomething(entry.id));
+export function sfxGroupsForBuildingEntry(
+  entry: BuildingEntry,
+  { sellsSomething }: { readonly sellsSomething: boolean },
+): readonly SoundId[] {
   const groups: readonly SfxGroup[] = [
     'constructionContracts',
     'interiorInteractions',

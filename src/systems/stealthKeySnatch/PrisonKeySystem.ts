@@ -19,6 +19,7 @@
  * the key cannot skip the walk back, and one without it cannot skip the walk in.
  */
 
+import type { Camera } from '../../core/rendering/camera';
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
 import { drawAreaHighlight } from '../../ui/AreaHighlight';
@@ -54,7 +55,7 @@ import { worldPalette, type WorldTextStyleId } from '../../ui/theme/worldInk';
 import { drawArrowAbovePlayer, ARROW_PRIORITY, type ArrowCandidate } from '../../ui/WorldArrow';
 import { worldLineHeight, worldText } from '../../ui/world/worldText';
 import type { TownPropRenderable } from '../townPropRenderable';
-import { playPrisonCue } from './prisonSoundCues';
+import { playPrisonCue } from '../../audio/prisonSoundCues';
 import {
   PRISON_KEY_ITEM,
   partyHoldsPrisonKey,
@@ -369,17 +370,14 @@ export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationMo
    * What draws over the prison's darkness: the "THE KEY" caption over the
    * pedestal and the exit's frame. `active` sets the beacon's nearness fade.
    */
-  renderOverDarkness(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: Player,
-  ): void {
+  renderOverDarkness(ctx: CanvasRenderingContext2D, camera: Camera, active: Player): void {
+    const { x: camX, y: camY } = camera;
     setQuestBeaconViewer(active.x, active.y);
     if (this.guidesToExit) {
       const exit = this.exitRect;
       drawAreaHighlight(
         ctx,
+        camera,
         { x: exit.x - camX, y: exit.y - camY, w: exit.w, h: exit.h },
         { color: worldPalette.objective.ready, nowMs: this.seconds * MS_PER_SECOND },
       );

@@ -1,6 +1,8 @@
+import type { Camera } from '../../core/rendering/camera';
+import { ELECTRIC_GOBLIN_CUES } from '../../audio/bossSoundCues';
+import type { SoundId } from '../../audio/sounds';
 import { TILE_SIZE } from '../../core/constants';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
-import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import {
@@ -94,6 +96,7 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
   private readonly waterPrewarm: TilePoint[];
   /** The floor art and his figure are warmed on the first frame, before any water. */
   private firstFramePrewarmed = false;
+  private readonly pendingSounds: Array<readonly SoundId[]> = [];
 
   constructor(
     readonly gameMap: GameMap,
@@ -118,10 +121,28 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
 
   override update(ctx: SystemContext): void {
     this.prewarm();
+    const bossLastFrame = this.boss;
     this.boss = this.findBoss(ctx);
+    if (bossLastFrame !== null && !bossLastFrame.isAlive) {
+      this.pendingSounds.push(ELECTRIC_GOBLIN_CUES.death, ELECTRIC_GOBLIN_CUES.labPowerDown);
+    }
     if (this.boss !== null) {
       this.boss.arena = { bounds: this.bounds, puddles: this.layout.puddles };
     }
+  }
+
+  /**
+   * His dying cry and the lab powering down with him, raised on the frame he
+   * falls rather than on `bossDefeated`, which a load replays for a boss
+   * long dead. Emptied by the call; each entry is one cue's takes.
+   */
+  drainSoundCues(): Array<readonly SoundId[]> {
+    return this.pendingSounds.splice(0, this.pendingSounds.length);
+  }
+
+  override resetForCheckpoint(): void {
+    this.boss = null;
+    this.pendingSounds.length = 0;
   }
 
   private findBoss(ctx: SystemContext): ElectricGoblin | null {
@@ -173,18 +194,18 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
 
   override renderGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     _promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
-    if (!this.onScreen(camX, camY)) return;
-    this.drawRipples(ctx, camX, camY, this.overlayCell());
+    if (!this.onScreen(camera)) return;
+    this.drawRipples(ctx, camera, this.overlayCell());
   }
 
-  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const boss = this.boss;
-    if (boss === null || !this.onScreen(camX, camY)) return;
-    this.drawPuddleCharge(ctx, boss, camX, camY, this.overlayCell());
+    if (boss === null || !this.onScreen(camera)) return;
+    this.drawPuddleCharge(ctx, boss, camera, this.overlayCell());
     const ringPx = SHOCK_GRENADE_RADIUS_TILES * TILE_SIZE;
     for (const grenade of boss.shockGrenades) drawGrenadeRing(ctx, grenade, ringPx, camX, camY);
     const halfWidthPx = SLAM_WAVE_HALF_WIDTH_TILES * TILE_SIZE;
@@ -196,9 +217,10 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
   }
 
   /** The grenades on their lob, and their bursts, go over every body they fly across or catch. */
-  override renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const boss = this.boss;
-    if (boss === null || !this.onScreen(camX, camY)) return;
+    if (boss === null || !this.onScreen(camera)) return;
     const ringPx = SHOCK_GRENADE_RADIUS_TILES * TILE_SIZE;
     for (const burst of boss.shockBursts) drawShockBurst(ctx, burst, ringPx, camX, camY);
     const arcPx = SHOCK_GRENADE_ARC_TILES * TILE_SIZE;
@@ -210,34 +232,30 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
     return Math.floor(frameTime * SPRITE_BUILDING_OVERLAY_FPS);
   }
 
-  private onScreen(camX: number, camY: number): boolean {
+  private onScreen(camera: Camera): boolean {
     const margin = CULL_MARGIN_TILES * TILE_SIZE;
     const b = this.bounds;
     return !(
-      (b.x + b.w) * TILE_SIZE + margin < camX ||
-      (b.y + b.h) * TILE_SIZE + margin < camY ||
-      b.x * TILE_SIZE - margin > camX + worldViewWidth() ||
-      b.y * TILE_SIZE - margin > camY + worldViewHeight()
+      (b.x + b.w) * TILE_SIZE + margin < camera.x ||
+      (b.y + b.h) * TILE_SIZE + margin < camera.y ||
+      b.x * TILE_SIZE - margin > camera.x + camera.viewWidth ||
+      b.y * TILE_SIZE - margin > camera.y + camera.viewHeight
     );
   }
 
-  private tileOnScreen(t: TilePoint, camX: number, camY: number): boolean {
-    const x = t.x * TILE_SIZE - camX;
-    const y = t.y * TILE_SIZE - camY;
-    return x > -TILE_SIZE && y > -TILE_SIZE && x < worldViewWidth() && y < worldViewHeight();
+  private tileOnScreen(t: TilePoint, camera: Camera): boolean {
+    const x = t.x * TILE_SIZE - camera.x;
+    const y = t.y * TILE_SIZE - camera.y;
+    return x > -TILE_SIZE && y > -TILE_SIZE && x < camera.viewWidth && y < camera.viewHeight;
   }
 
-  private drawRipples(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    cell: number,
-  ): void {
+  private drawRipples(ctx: CanvasRenderingContext2D, camera: Camera, cell: number): void {
+    const { x: camX, y: camY } = camera;
     let ripples = 0;
     let drips = 0;
     for (const puddle of this.layout.puddles) {
       for (const t of puddle.tiles) {
-        if (!this.tileOnScreen(t, camX, camY)) continue;
+        if (!this.tileOnScreen(t, camera)) continue;
         const hash = positionHash(t.x, t.y);
         const sx = t.x * TILE_SIZE - camX;
         const sy = t.y * TILE_SIZE - camY;
@@ -265,10 +283,10 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
   private drawPuddleCharge(
     ctx: CanvasRenderingContext2D,
     boss: ElectricGoblin,
-    camX: number,
-    camY: number,
+    camera: Camera,
     cell: number,
   ): void {
+    const { x: camX, y: camY } = camera;
     const charge = boss.puddleCharge;
     if (charge.kind === 'none') return;
     if (charge.puddle >= this.layout.puddles.length) return;
@@ -281,7 +299,7 @@ export class PowerLabRoomSystem extends InertBossRoomDressing {
     const litShare =
       charge.kind === 'tell' ? TELL_FIRST_SHARE + (1 - TELL_FIRST_SHARE) * charge.progress : 1;
     for (const t of puddle.tiles) {
-      if (!this.tileOnScreen(t, camX, camY)) continue;
+      if (!this.tileOnScreen(t, camera)) continue;
       const hash = positionHash(t.x, t.y);
       const sx = t.x * TILE_SIZE - camX;
       const sy = t.y * TILE_SIZE - camY;

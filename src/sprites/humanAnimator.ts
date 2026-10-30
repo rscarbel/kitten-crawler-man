@@ -1288,7 +1288,7 @@ export class HumanAnimator {
 
   /** A start is paced by ground: one of its frames to each frame of its gait's ground covered. */
   private advanceStart(start: RowSpec, groundPx: number): void {
-    const perFrame = groundPxPerFrame(start.name);
+    const perFrame = groundPxPerFrame(start);
     this.oneShotFrames += perFrame > 0 ? groundPx / perFrame : 1;
     if (this.oneShotFrames < start.frameCount) return;
     // The start's last frame is the run's own pose at its exit phase; the

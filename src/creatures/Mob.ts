@@ -6,6 +6,7 @@ import type { MobKind } from '../levels/mobKinds';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageOptions, DamageSource } from '../Player';
 import type { StatusEffect } from '../core/combat/StatusEffect';
+import type { ResolvedHit } from '../core/combat/outgoingHit';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
 import { tileUnderFeet, verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/items/defs/ItemDefs';
@@ -63,6 +64,20 @@ export type AllyRallyAnchor = Readonly<Pick<Player, 'x' | 'y' | 'isAlive'>>;
  */
 export type PlayerDamageType =
   'melee' | 'missile' | 'energy_shield' | 'seismic_stomp' | 'explosion' | 'slingshot';
+
+/**
+ * Harm a crawler owns but did not strike: a share of a mob's blow her gear
+ * sends back, or what something she built deals. Each names the weapon a kill
+ * by it counts as, null for one nobody swung.
+ */
+const OWNED_HARM_DAMAGE_TYPE = {
+  reflectedBlow: 'melee',
+  defenseSpikes: 'melee',
+  siegeBoulder: null,
+  siegeMiasma: null,
+} as const satisfies Record<string, PlayerDamageType | null>;
+
+export type OwnedHarmSource = keyof typeof OWNED_HARM_DAMAGE_TYPE;
 
 /**
  * The one damage type that ignores friendly-fire immunity, so the rule lives in
@@ -1620,7 +1635,7 @@ export abstract class Mob extends Player {
   private ownStrideLastTickPx = 0;
 
   /**
-   * Whether the most recent {@link takeDamageFrom} was turned aside by this
+   * Whether the most recent {@link receiveDamage} was turned aside by this
    * mob's guard. Read by whoever landed the blow straight after the call, so an
    * on-hit rider — a poison proc, a stun — is not applied through a guard.
    */
@@ -1997,6 +2012,9 @@ export abstract class Mob extends Player {
    * When true, the AI-controlled companion uses evasive movement (orbiting/circling)
    * instead of standing still while fighting this mob. Set this on enemies whose attacks
    * are telegraphed and dodgeable so the companion automatically sidesteps.
+   *
+   * It says nothing about where this mob's AI runs: a mob that must think while
+   * the party is far away opts in through `exemptFromAiActivationRadius`.
    */
   get requiresEvasion(): boolean {
     return false;
@@ -2010,9 +2028,10 @@ export abstract class Mob extends Player {
    * not: the thing it is trying to do is get back to the party, so freezing it
    * the moment it falls behind is precisely the failure that leaves a pet stood
    * in an empty corridor with no way to recover. Opt in only for mobs whose
-   * whole existence is following the party, or for a rooted boss whose room is
-   * wider than the radius — the cost is one permanently active mob for as long
-   * as it is in the world.
+   * whole existence is following the party, for a rooted boss whose room is
+   * wider than the radius, or for a boss that roams the whole map — the cost is
+   * one permanently active mob for as long as it is in the world. Never for a
+   * common mob kind: a floor holds dozens of each.
    */
   get exemptFromAiActivationRadius(): boolean {
     // A converted mob follows the crawler who turned it, so it must keep
@@ -2350,7 +2369,7 @@ export abstract class Mob extends Player {
    * Send a share of a landed blow back at this mob when the victim's gear
    * reflects it.
    *
-   * Routed through `takeDamageFrom` with the crawler as the attacker so a kill
+   * Routed through `takeOwnedHarm` with the crawler credited so a kill
    * by reflection credits them — otherwise thorns-style gear would quietly cost
    * the player the XP and loot of everything it killed.
    */
@@ -2359,7 +2378,7 @@ export abstract class Mob extends Player {
     if (pct <= 0) return;
     // Struck by nobody: the mob hurt itself on the gear, so there is no blow
     // to guard and none that should count as breaking a run of guards.
-    this.takeCreditedDamage(Math.max(1, Math.ceil(damage * pct)), target, 'melee', null);
+    this.takeOwnedHarm(Math.max(1, Math.ceil(damage * pct)), target, 'reflectedBlow');
   }
 
   /**
@@ -3156,7 +3175,7 @@ export abstract class Mob extends Player {
 
   /**
    * Share of a blow struck with `damageType` this creature takes, applied by
-   * {@link takeDamageFrom} before its health changes. `null` is a blow nobody
+   * {@link receiveDamage} before its health changes. `null` is a blow nobody
    * aimed a weapon for — an ally's strike, a scripted kill — and a creature
    * that resists mundane weapons resists it too. {@link IMMUNE_DAMAGE_SCALE}
    * refuses the blow outright and labels it. Status ticks do not come through
@@ -3190,7 +3209,7 @@ export abstract class Mob extends Player {
 
   /**
    * Taken as it comes: a mob's status scale is applied in
-   * {@link scaleIncomingDamage}, the door both {@link takeDamageFrom} and
+   * {@link scaleIncomingDamage}, the door both {@link receiveDamage} and
    * {@link takeDamage} share, where it is rounded and capped with the rest.
    */
   protected override statusScaledDamage(amount: number): number {
@@ -3213,7 +3232,7 @@ export abstract class Mob extends Player {
 
   /**
    * The body that physically delivered the blow now resolving in
-   * {@link takeDamageFrom}, when a {@link takeCreditedDamage} call named one
+   * {@link receiveDamage}, when a {@link takeCreditedDamage} call named one
    * other than the credited attacker. Set only for the length of that call, so
    * it reaches the base implementation through every subclass override without
    * each of them having to forward it.
@@ -3221,15 +3240,40 @@ export abstract class Mob extends Player {
   private _creditedStrike: { readonly striker: Player | null } | null = null;
 
   /**
-   * {@link takeDamageFrom} for harm credited to one body but delivered by
-   * another: a hireling's sword or thrown boulder credited to the crawler who
-   * paid for it, or reflect gear credited to its wearer.
-   *
-   * `striker` is what a guard is judged against and shoved away from. `null`
-   * means nothing struck at all — reflected damage — which can neither be
-   * guarded nor count as the clean hit that ends a run of guards.
+   * A hireling's blow credited to the crawler who paid for it: a sword, a
+   * thrown boulder, a shot. `striker` is the hireling, which is what a guard is
+   * judged against and shoved away from. A crawler is never the striker: her
+   * own hits land through {@link takeHit}.
    */
   takeCreditedDamage(
+    amount: number,
+    creditedTo: Player | null,
+    damageType: PlayerDamageType | null,
+    striker: Mob,
+  ): void {
+    this.receiveStruckBy(amount, creditedTo, damageType, striker);
+  }
+
+  /**
+   * Harm `owner` owns but nothing struck: what her gear reflects, or what
+   * something she built deals. It can neither be guarded nor count as the
+   * clean hit that ends a run of guards.
+   */
+  takeOwnedHarm(amount: number, owner: Player | null, source: OwnedHarmSource): void {
+    this.receiveStruckBy(amount, owner, OWNED_HARM_DAMAGE_TYPE[source], null);
+  }
+
+  /** A crawler's hit, as the outgoing-hit resolver sized it. */
+  takeHit(hit: ResolvedHit): void {
+    if (hit.struckBy === 'dealer') {
+      this.receiveDamage(hit.damage, hit.dealer, hit.damageType);
+      return;
+    }
+    this.receiveStruckBy(hit.damage, hit.dealer, hit.damageType, null);
+  }
+
+  /** {@link receiveDamage} credited to `creditedTo`, with `striker` the body a guard is judged against. */
+  private receiveStruckBy(
     amount: number,
     creditedTo: Player | null,
     damageType: PlayerDamageType | null,
@@ -3237,10 +3281,28 @@ export abstract class Mob extends Player {
   ): void {
     this._creditedStrike = { striker };
     try {
-      this.takeDamageFrom(amount, creditedTo, damageType);
+      this.receiveDamage(amount, creditedTo, damageType);
     } finally {
       this._creditedStrike = null;
     }
+  }
+
+  /**
+   * Harm a mob deals, or nobody: another creature's blow, a hazard, a scripted
+   * finish. A crawler cannot be the attacker here, since her hits go through
+   * the outgoing-hit resolver and land through {@link takeHit}.
+   *
+   * `damageType` names the weapon, and takes `null` for harm an attacker owns
+   * but swung nothing for. Everything that keys off `killType` already treats
+   * null as "not killed by a blow", so such a finish trains no weapon skill
+   * while still crediting the kill.
+   */
+  takeDamageFrom(
+    amount: number,
+    attacker: Mob | null,
+    damageType: PlayerDamageType | null = 'melee',
+  ): void {
+    this.receiveDamage(amount, attacker, damageType);
   }
 
   /**
@@ -3258,19 +3320,16 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Deal damage and attribute it to an attacker for kill-credit / XP tracking.
-   * Also triggers the damage flash and shows the health bar.
-   *
-   * `damageType` names the weapon, and takes `null` for harm an attacker owns
-   * but swung nothing for — a damage-over-time tick they applied. Everything
-   * that keys off `killType` already treats null as "not killed by a blow", so
-   * a status finish trains no weapon skill while still crediting the kill.
+   * The door every blow with a dealer attached lands through, whichever public
+   * entry it came in by: deals the damage, attributes it to `attacker` for
+   * kill credit and XP, and triggers the damage flash and the health bar.
+   * A creature that reacts to being struck overrides this.
    */
-  takeDamageFrom(
+  protected receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
-  ) {
+    damageType: PlayerDamageType | null,
+  ): void {
     this._lastBlowWasGuarded = false;
     const striker = this._creditedStrike === null ? attacker : this._creditedStrike.striker;
     if (this.refusesDamage) {

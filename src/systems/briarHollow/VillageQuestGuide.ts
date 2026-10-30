@@ -16,6 +16,7 @@
  * pinned world arrow point at the same thing this system is highlighting.
  */
 
+import type { Camera } from '../../core/rendering/camera';
 import { TILE_SIZE } from '../../core/constants';
 import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { BriarHollowState } from '../../core/quests/briarHollowState';
@@ -439,86 +440,79 @@ export class VillageQuestGuide {
    * not over" order a quest NPC draws its own column in, so the tree, rock or
    * machine being marked stands in front of its own light.
    */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const cache = this.cache;
     if (cache === null) return;
     switch (cache.kind) {
       case 'chop':
       case 'mine': {
         const area = this.harvestHighlightArea(cache);
-        if (area !== null) this.renderGroundHighlight(ctx, camX, camY, area);
+        if (area !== null) this.renderGroundHighlight(ctx, camera, area);
         return;
       }
       case 'process':
         for (const entry of this.unmarkedStations(cache.stations)) {
-          this.renderGroundHighlight(ctx, camX, camY, entry.station.footprint);
+          this.renderGroundHighlight(ctx, camera, entry.station.footprint);
         }
         return;
       case 'build_trebuchet':
         for (const zone of cache.zones) {
-          this.renderGroundHighlight(ctx, camX, camY, zoneToFootprint(zone), {
+          this.renderGroundHighlight(ctx, camera, zoneToFootprint(zone), {
             color: BUILD_ZONE_COLOR,
             mood: 'pending',
           });
         }
         return;
       case 'load_trebuchet':
-        this.renderGroundHighlight(ctx, camX, camY, trebuchetFootprint(cache.at));
+        this.renderGroundHighlight(ctx, camera, trebuchetFootprint(cache.at));
         return;
       case 'upgrade_wall':
-        if (cache.tile !== null) this.renderGroundHighlight(ctx, camX, camY, tileArea(cache.tile));
+        if (cache.tile !== null) this.renderGroundHighlight(ctx, camera, tileArea(cache.tile));
         return;
       case 'repair_bell':
-        this.renderGroundHighlight(ctx, camX, camY, this.bellFootprint());
+        this.renderGroundHighlight(ctx, camera, this.bellFootprint());
         return;
       case 'pointed': {
         if (cache.guidance.kind === 'escort_waypoint') {
-          this.renderEscortRouteGround(ctx, camX, camY, cache.guidance);
+          this.renderEscortRouteGround(ctx, camera, cache.guidance);
         }
         const area = this.pointedHighlightArea(cache.guidance);
-        if (area !== null) this.renderGroundHighlight(ctx, camX, camY, area);
+        if (area !== null) this.renderGroundHighlight(ctx, camera, area);
         return;
       }
     }
   }
 
   /** The frame half of every highlight, then every arrow, icon and caption, drawn over every body. */
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const cache = this.cache;
     if (cache === null) return;
     switch (cache.kind) {
       case 'chop':
-        this.renderHarvestGuide(
-          ctx,
-          camX,
-          camY,
-          cache,
-          'basic_axe',
-          'collect wood',
-          'wood collected',
-        );
+        this.renderHarvestGuide(ctx, camera, cache, 'basic_axe', 'collect wood', 'wood collected');
         break;
       case 'mine':
-        this.renderHarvestGuide(ctx, camX, camY, cache, 'basic_pickaxe', 'mine', 'stone mined');
+        this.renderHarvestGuide(ctx, camera, cache, 'basic_pickaxe', 'mine', 'stone mined');
         break;
       case 'process':
-        for (const entry of cache.stations) this.renderStation(ctx, camX, camY, entry);
+        for (const entry of cache.stations) this.renderStation(ctx, camera, entry);
         break;
       case 'load_trebuchet':
-        this.renderTrebuchetLoad(ctx, camX, camY, cache.at);
+        this.renderTrebuchetLoad(ctx, camera, cache.at);
         break;
       case 'upgrade_wall':
-        if (cache.tile !== null) this.renderUpgradeWall(ctx, camX, camY, cache.tile);
+        if (cache.tile !== null) this.renderUpgradeWall(ctx, camera, cache.tile);
         break;
       case 'repair_bell':
-        this.renderBell(ctx, camX, camY);
+        this.renderBell(ctx, camera);
         break;
       case 'build_trebuchet':
         // The HUD arrow over the Construction button is drawn from `renderConstructionHint`.
         this.renderTrebuchetZoneLabels(ctx, camX, camY, cache.zones);
         break;
       case 'pointed':
-        this.renderPointedGuide(ctx, camX, camY, cache.guidance);
+        this.renderPointedGuide(ctx, camera, cache.guidance);
         break;
     }
   }
@@ -555,12 +549,12 @@ export class VillageQuestGuide {
   /** The frame, arrow and caption over a place a questline pointed at directly. */
   private renderPointedGuide(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     guidance: PointedGuidance,
   ): void {
+    const { x: camX, y: camY } = camera;
     const area = this.pointedHighlightArea(guidance);
-    if (area !== null) this.renderFrameHighlight(ctx, camX, camY, area);
+    if (area !== null) this.renderFrameHighlight(ctx, camera, area);
     switch (guidance.kind) {
       case 'fence_section': {
         const target = pointedGuidanceTarget(guidance);
@@ -620,20 +614,19 @@ export class VillageQuestGuide {
    */
   private renderEscortRouteGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     guidance: Extract<PointedGuidance, { readonly kind: 'escort_waypoint' }>,
   ): void {
+    const { x: camX, y: camY } = camera;
     this.escortTrailShaper.setWalk(this.deps.gameMap, guidance.trail, MIDGE_MOBILITY);
     const shape = this.escortTrailShaper.shape(null);
     this.escortTrail.paint(ctx, shape, camX, camY, performance.now());
     for (const tile of guidance.ahead) {
-      this.renderGroundHighlight(ctx, camX, camY, tileArea(tile), ESCORT_AHEAD_HIGHLIGHT_STYLE);
+      this.renderGroundHighlight(ctx, camera, tileArea(tile), ESCORT_AHEAD_HIGHLIGHT_STYLE);
     }
     this.renderGroundHighlight(
       ctx,
-      camX,
-      camY,
+      camera,
       zoneToFootprint(guidance.yard),
       ESCORT_AHEAD_HIGHLIGHT_STYLE,
     );
@@ -677,18 +670,18 @@ export class VillageQuestGuide {
 
   private renderHarvestGuide(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     cache: HarvestGuideCache,
     icon: ItemId,
     collectVerb: string,
     countedNoun: string,
   ): void {
+    const { x: camX, y: camY } = camera;
     const area = this.harvestHighlightArea(cache);
     if (area === null || cache.tile === null) return;
     // The frame stays at the tree's foot rather than rising round its canopy,
     // where the arrow bouncing over the tree would land on its top brackets.
-    this.renderFrameHighlight(ctx, camX, camY, area);
+    this.renderFrameHighlight(ctx, camera, area);
     if (cache.showCounter) {
       const countLine = `${cache.progress.have}/${cache.progress.target} ${countedNoun}`;
       const keepCollecting = cache.progress.have >= KEEP_COLLECTING_THRESHOLD;
@@ -715,21 +708,15 @@ export class VillageQuestGuide {
    */
   private renderStation(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     entry: MatchedStation,
   ): void {
+    const { x: camX, y: camY } = camera;
     const markedByQuest = this.stationMarkedByQuest(entry.id);
     if (markedByQuest && this.deps.showingSideQuestGuidance()) return;
     const footprint = entry.station.footprint;
     if (!markedByQuest) {
-      this.renderFrameHighlight(
-        ctx,
-        camX,
-        camY,
-        footprint,
-        this.stationFrameRiseTiles(entry.station),
-      );
+      this.renderFrameHighlight(ctx, camera, footprint, this.stationFrameRiseTiles(entry.station));
     }
     const pointedAt = this.stationGuideAnchor(entry.id, footprint);
     this.renderFootprintArrow(ctx, camX, camY, pointedAt);
@@ -754,14 +741,10 @@ export class VillageQuestGuide {
    * screen for it — the two would otherwise say the same thing on top of
    * each other.
    */
-  private renderTrebuchetLoad(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    at: TilePoint,
-  ): void {
+  private renderTrebuchetLoad(ctx: CanvasRenderingContext2D, camera: Camera, at: TilePoint): void {
+    const { x: camX, y: camY } = camera;
     const footprint = trebuchetFootprint(at);
-    this.renderFrameHighlight(ctx, camX, camY, footprint);
+    this.renderFrameHighlight(ctx, camera, footprint);
     if (this.deps.isDefaultTrebuchetPromptShowing(at)) return;
     const line = actionPrompt(activeInputMode(), {
       deed: 'load with stone',
@@ -776,13 +759,9 @@ export class VillageQuestGuide {
    * caption stand down once `ConstructionKit`'s own wall prompt is on screen
    * for it, the same way the trebuchet's load caption yields to its prompt.
    */
-  private renderUpgradeWall(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tile: TilePoint,
-  ): void {
-    this.renderFrameHighlight(ctx, camX, camY, tileArea(tile));
+  private renderUpgradeWall(ctx: CanvasRenderingContext2D, camera: Camera, tile: TilePoint): void {
+    const { x: camX, y: camY } = camera;
+    this.renderFrameHighlight(ctx, camera, tileArea(tile));
     if (this.deps.isDefaultWallPromptShowing()) return;
     const line = actionPrompt(activeInputMode(), {
       deed: 'upgrade',
@@ -805,9 +784,10 @@ export class VillageQuestGuide {
     };
   }
 
-  private renderBell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderBell(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const footprint = this.bellFootprint();
-    this.renderFrameHighlight(ctx, camX, camY, footprint);
+    this.renderFrameHighlight(ctx, camera, footprint);
     this.renderFootprintArrowAndCaption(ctx, camX, camY, footprint, ['Repair the bell tower']);
   }
 
@@ -841,12 +821,12 @@ export class VillageQuestGuide {
   /** The ground half of `area`'s highlight; see `drawAreaHighlightGround`. */
   private renderGroundHighlight(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     area: Footprint,
     style: HighlightStyle = GUIDE_HIGHLIGHT_STYLE,
   ): void {
-    drawAreaHighlightGround(ctx, areaToScreen(area, camX, camY), {
+    const { x: camX, y: camY } = camera;
+    drawAreaHighlightGround(ctx, camera, areaToScreen(area, camX, camY), {
       ...style,
       nowMs: performance.now(),
     });
@@ -859,18 +839,18 @@ export class VillageQuestGuide {
    */
   private renderFrameHighlight(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     area: Footprint,
     riseTiles = 0,
   ): void {
+    const { x: camX, y: camY } = camera;
     const raised: Footprint = {
       x: area.x,
       y: area.y - riseTiles,
       w: area.w,
       h: area.h + riseTiles,
     };
-    drawAreaHighlightFrame(ctx, areaToScreen(raised, camX, camY), {
+    drawAreaHighlightFrame(ctx, camera, areaToScreen(raised, camX, camY), {
       ...GUIDE_HIGHLIGHT_STYLE,
       nowMs: performance.now(),
     });

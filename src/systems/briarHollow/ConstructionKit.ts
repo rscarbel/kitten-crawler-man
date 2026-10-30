@@ -99,6 +99,7 @@ import {
 import type { Villager } from './Villager';
 import { HOLLOW_BELL_LABEL } from './hollowBell';
 import { worldPalette } from '../../ui/theme/worldInk';
+import { worldToScreenRect, type Camera } from '../../core/rendering/camera';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -732,11 +733,7 @@ export class ConstructionKit {
 
   // ── The Structure menu's model ──────────────────────────────────────────
 
-  private structureModel(
-    target: StructureRef,
-    camX: number,
-    camY: number,
-  ): StructurePopoverModel | null {
+  private structureModel(target: StructureRef, camera: Camera): StructurePopoverModel | null {
     const defense = this.defense;
     const construction = this.construction;
     const tiles = defense.footprintOf(target);
@@ -751,12 +748,12 @@ export class ConstructionKit {
       maxX = Math.max(maxX, tile.x + 1);
       maxY = Math.max(maxY, tile.y + 1);
     }
-    const anchor = {
-      x: minX * TILE_SIZE - camX,
-      y: minY * TILE_SIZE - camY,
+    const anchor = worldToScreenRect(camera, {
+      x: minX * TILE_SIZE,
+      y: minY * TILE_SIZE,
       w: (maxX - minX) * TILE_SIZE,
       h: (maxY - minY) * TILE_SIZE,
-    };
+    });
     const record = defense.record(target);
     const options: StructurePopoverOption[] = [];
     const busy = construction.job !== null ? 'Already building' : undefined;
@@ -1329,14 +1326,13 @@ export class ConstructionKit {
    *
    * @param camera Where the camera is, for anchoring the structure menu.
    */
-  surfaces(camera: () => { readonly x: number; readonly y: number }): Surface[] {
+  surfaces(camera: () => Camera): Surface[] {
     return [
       this.structureMenu.surface('structure-menu', {
         model: () => {
           const target = this.structureTarget;
           if (target === null) return null;
-          const { x, y } = camera();
-          return this.structureModel(target, x, y);
+          return this.structureModel(target, camera());
         },
         stockOf: (id) => partyCount(this.deps.human, this.deps.cat, id),
         onKey: (key, mods) => this.handleStructureMenuKey(key, mods),

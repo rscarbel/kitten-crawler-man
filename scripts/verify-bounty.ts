@@ -52,6 +52,7 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 /** Level 3's own size: Briar Hollow is always sited, and only fits on the real map. */
 const MAP_SIZE = level3.mapSize;
@@ -424,6 +425,7 @@ function makeContext(human: HumanPlayer, cat: CatPlayer, map: GameMap): SystemCo
     activeIsMoving: false,
     roster: new MobRoster(map, new SpellSystem()),
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 

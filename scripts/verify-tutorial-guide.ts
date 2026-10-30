@@ -50,17 +50,19 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { harnessHit } from './crawlerHitHarness';
 
 useDevPlayerIdentity();
 
 installCanvasGlobals();
 
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { cameraAt, UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
 const { noteFrameInputMode, resetInputMode } = await import('../src/ui/core/inputMode.js');
 const { worldPalette } = await import('../src/ui/theme/worldInk.js');
 
-type RenderContext = Parameters<InstanceType<typeof TutorialController>['renderOverlay']>[5];
+type RenderContext = Parameters<InstanceType<typeof TutorialController>['renderOverlay']>[4];
 type TutorialState = InstanceType<typeof TutorialController>['state'];
 
 interface Rect {
@@ -223,8 +225,7 @@ function draw(
   const { ctx, drawing } = recordingContext(viewport.width, viewport.height);
   tutorial.renderOverlay(
     ctx,
-    view.camera.x,
-    view.camera.y,
+    cameraAt(view.camera, UNZOOMED),
     view.player.x,
     view.player.y,
     renderCtx,
@@ -976,7 +977,14 @@ const FAR_AWAY_PX = -100000;
 type GateView = Parameters<Controller['updateGates']>[2];
 
 /** What the gates see: a camera, and every dialog box shut unless said otherwise. */
-function gateView(camera: { x: number; y: number }, dialogOpen = false): GateView {
+function gateView(topLeft: { x: number; y: number }, dialogOpen = false): GateView {
+  const camera = {
+    x: topLeft.x,
+    y: topLeft.y,
+    viewWidth: worldPx(DESKTOP.width),
+    viewHeight: worldPx(DESKTOP.height),
+    zoom: UNZOOMED,
+  };
   return { camera, dialogOpen };
 }
 
@@ -1271,7 +1279,7 @@ section("goblin B's door keeps the human off him until the cat's missile kills h
     "and nothing of the human's can hurt goblin B at any range, god-mode Seismic Stomp included: only the cat's missile",
   );
   if (goblinB !== undefined) {
-    goblinB.takeDamageFrom(SEISMIC_STOMP_TEST_DAMAGE, human, 'seismic_stomp');
+    goblinB.takeHit(harnessHit(human, SEISMIC_STOMP_TEST_DAMAGE, 'seismic_stomp'));
     check(goblinB.isAlive, 'a Seismic Stomp landing on him anyway leaves him standing');
   }
   const missileReachPx = cat.attackReachPx();
@@ -1296,7 +1304,7 @@ section('a gate unlocked far from the player is still heard, from its direction'
 {
   const { placedGain } = await import('../src/audio/AudioManager.js');
   const { soundTraits } = await import('../src/audio/soundTraits.js');
-  const { TUTORIAL_CUES, tutorialCueSource } = await import('../src/systems/tutorialSoundCues.js');
+  const { TUTORIAL_CUES, tutorialCueSource } = await import('../src/audio/tutorialSoundCues.js');
   const { TUTORIAL_HUMAN_SPAWN_TILE } = await import('../src/map/TutorialMap.js');
   setViewportSize(DESKTOP.width, DESKTOP.height);
   const human = new HumanPlayer(0, 0, TILE_SIZE);

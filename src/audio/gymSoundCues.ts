@@ -6,7 +6,7 @@
  * `src/audio/sfxGroups.ts`.
  */
 
-import type { SoundId } from '../../audio/sounds';
+import type { SoundId } from './sounds';
 
 export const GYM_CUES = {
   /** A whole rack of kettlebells flung into the air at once. */

@@ -2,7 +2,7 @@ import type { Player } from '../../Player';
 import type { StatId } from '../party/stats';
 import type { ResistanceType } from '../items/defs/ItemDefs';
 import type { GroundHazard } from './groundHazard';
-import { MAGIC_HIT, UNTAGGED_HIT, type DamageTags } from './damageTags';
+import { FIRE_HIT, MAGIC_HIT, UNTAGGED_HIT, type DamageTags } from './damageTags';
 import { BURN_WARD_SKILL, type ProficiencySkillId } from '../skills/proficiency';
 import {
   AEGIS_DAMAGE_SCALE,
@@ -92,15 +92,55 @@ export interface StatusDamageOverTime {
   readonly seizeTicks: number | null;
 }
 
-/** A status that slows its carrier's walking, and the resistance that eases it. */
+/** A status that slows its carrier's walking. */
 export interface StatusMoveSlow {
-  /** Share of normal walking pace left while the status is live, before resistance. */
-  readonly moveSpeedFactor: number;
   /**
-   * The resistance that takes a share of the slow off: the same share a blow
-   * of that channel loses (`Player.survivingShare`).
+   * Share of normal walking pace left while the status is live at full
+   * strength; an effect's {@link StatusEffect.survivingShare} eases it.
    */
-  readonly weakenedBy: ResistanceType;
+  readonly moveSpeedFactor: number;
+}
+
+declare const survivingShareBrand: unique symbol;
+
+/**
+ * The share of a status that survived its bearer's resistance when it was laid
+ * on, in 0..1. Branded so that only {@link FULL_SHARE}, {@link survivingShareOf}
+ * (which `Player.survivingShare` resolves through) and a parsed save produce
+ * one: every constructor of a status a resistance can weaken takes it as a
+ * required argument, so no applier can lay one on without stating its share.
+ */
+export type SurvivingShare = number & { readonly [survivingShareBrand]: true };
+
+/** Whether `value` is a share in 0..1, for a share read back from a save. */
+export function isSurvivingShare(value: unknown): value is SurvivingShare {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+/** `fraction` clamped into 0..1 as a share. */
+export function survivingShareOf(fraction: number): SurvivingShare {
+  const clamped = Math.min(1, Math.max(0, fraction));
+  if (!isSurvivingShare(clamped)) throw new RangeError(`Not a surviving share: ${fraction}`);
+  return clamped;
+}
+
+/** The share a status keeps when nothing resists it: what every non-spell source stamps. */
+export const FULL_SHARE = survivingShareOf(1);
+
+/**
+ * `ticks` after a resistance takes `share` of them. Rounded up, so a resisted
+ * status still lands.
+ */
+function resistedTicks(ticks: number, share: SurvivingShare): number {
+  return Math.ceil(ticks * share);
+}
+
+/**
+ * The share of normal pace a slow of `fullFactor` leaves once only `share` of
+ * it survived resistance.
+ */
+export function weakenedSlowFactor(fullFactor: number, share: SurvivingShare): number {
+  return 1 - (1 - fullFactor) * share;
 }
 
 /** Stat deltas a boon status grants while it is live. */
@@ -139,6 +179,11 @@ export interface StatusDef {
    * pace alone. Read by `Player.statusMoveFactor`, which crawlers and mobs share.
    */
   readonly moveSlow: StatusMoveSlow | null;
+  /**
+   * Whether the share that survived resistance ({@link StatusEffect.survivingShare})
+   * also shortens the status, or only eases its grip.
+   */
+  readonly shareShortensDuration: boolean;
   readonly damageOverTime: StatusDamageOverTime | null;
   /** The proficiency skill that shortens the status on whoever carries it, or null when none does. */
   readonly durationWardedBy: ProficiencySkillId | null;
@@ -162,9 +207,6 @@ const ELECTRIFIED_BITE_INTERVAL_TICKS = 180;
 const ELECTRIFIED_SEIZE_FRAMES = 60;
 const SPIT_VENOM_BITE_INTERVAL_TICKS = 40;
 
-/** Every bite of a burn is fire. */
-const FIRE_BITE: DamageTags = ['fire'];
-
 const DRAINED_FIRST = 0;
 const DRAINED_SECOND = 1;
 
@@ -181,16 +223,11 @@ const PLAIN_STATUS: StatusDef = {
   incomingDamageScale: DAMAGE_UNCHANGED,
   incapacitates: false,
   moveSlow: null,
+  shareShortensDuration: true,
   damageOverTime: null,
   durationWardedBy: null,
   persistence: 'saved',
 };
-
-/**
- * Every chill that reaches a body is an ice fairy's spell, so magic resistance
- * eases all of it: the walking slow here and the action slow `Player` applies.
- */
-export const CHILL_WEAKENED_BY = 'magic' as const satisfies ResistanceType;
 
 const PLAIN_AILMENT: StatusDef = { ...PLAIN_STATUS, cure: 'ailment' };
 
@@ -205,7 +242,7 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
     damageOverTime: {
       intervalTicks: BURN_BITE_INTERVAL_TICKS,
       resistedBy: null,
-      tags: FIRE_BITE,
+      tags: FIRE_HIT,
       seizeTicks: null,
     },
     durationWardedBy: BURN_WARD_SKILL,
@@ -260,13 +297,13 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
   },
   chilled: {
     ...PLAIN_AILMENT,
-    moveSlow: { moveSpeedFactor: CHILLED_MOVE_SPEED_FACTOR, weakenedBy: CHILL_WEAKENED_BY },
+    moveSlow: { moveSpeedFactor: CHILLED_MOVE_SPEED_FACTOR },
   },
   frozen: { ...PLAIN_AILMENT, incapacitates: true },
-  // A lizardman's venom, so whatever turns aside poison eases it too.
   numbed: {
     ...PLAIN_AILMENT,
-    moveSlow: { moveSpeedFactor: NUMBED_MOVE_SPEED_FACTOR, weakenedBy: 'poison' },
+    moveSlow: { moveSpeedFactor: NUMBED_MOVE_SPEED_FACTOR },
+    shareShortensDuration: false,
   },
   shield: { ...PLAIN_STATUS, ward: { drainOrder: DRAINED_SECOND }, heldByCaster: true },
   // Drained before the shield because it decays on its own clock whatever
@@ -305,6 +342,14 @@ export interface StatusEffect {
   ticksRemaining: number;
   /** Original total duration — used to draw the progress bar in the HUD. */
   totalTicks: number;
+  /**
+   * The share of the effect that survived its bearer's resistance when it was
+   * laid on: its duration is already shortened by it, and every grip it exerts
+   * while live (a slow's pace) is eased by it. Stamped once, so gear changed
+   * afterwards neither weakens nor restores it, and a status that no spell laid
+   * is never eased by magic resistance.
+   */
+  readonly survivingShare: SurvivingShare;
   /**
    * Who inflicted this effect, so a tick that lands the killing point of HP is
    * an attributable kill rather than an anonymous one — a mob that dies to the
@@ -394,6 +439,7 @@ export function makeBloodVomit(): StatusEffect {
     type: BLOOD_VOMIT_STATUS,
     ticksRemaining: BLOOD_VOMIT_RETCH_FRAMES,
     totalTicks: BLOOD_VOMIT_RETCH_FRAMES,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }
@@ -411,7 +457,13 @@ export function bloodVomitRetchProgress(effect: StatusEffect): number | null {
 
 /** Double damage for `ticks`, the full five minutes unless a save says otherwise. */
 export function makeDoubleDamage(ticks: number = DOUBLE_DAMAGE_FRAMES): StatusEffect {
-  return { type: DOUBLE_DAMAGE_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+  return {
+    type: DOUBLE_DAMAGE_STATUS,
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
 function wardStatusesInDrainOrder(): ReadonlyArray<StatusId> {
@@ -448,6 +500,7 @@ export function makeFairyWard(applier: Player): StatusEffect {
     type: FAIRY_WARD_STATUS,
     ticksRemaining: FAIRY_WARD_TICKS,
     totalTicks: FAIRY_WARD_TICKS,
+    survivingShare: FULL_SHARE,
     applier,
   };
 }
@@ -462,6 +515,7 @@ export function makeOverheal(amount: number, ticks: number): StatusEffect {
     type: OVERHEAL_STATUS,
     ticksRemaining: ticks,
     totalTicks: ticks,
+    survivingShare: FULL_SHARE,
     applier: null,
     absorbRemaining: amount,
     absorbTotal: amount,
@@ -473,22 +527,58 @@ export function makeOverheal(amount: number, ticks: number): StatusEffect {
  * rather than stacks, like every status.
  */
 export function makeFairyAegis(ticks: number): StatusEffect {
-  return { type: FAIRY_AEGIS_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+  return {
+    type: FAIRY_AEGIS_STATUS,
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
-/** Chilled for `ticks`. Apply through `applyIceHit`/`applyChillOnly` so freezes follow their rules. */
-export function makeChilled(ticks: number = CHILLED_FRAMES): StatusEffect {
-  return { type: CHILLED_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+/**
+ * A status of `type` laid on for `ticks` at full strength, of which only `share`
+ * survived its bearer's resistance: shortened by it now when its definition's
+ * `shareShortensDuration` says so, and eased by it for as long as it holds.
+ */
+function makeResisted(
+  type: StatusId,
+  share: SurvivingShare,
+  ticks: number,
+  applier: Player | null = null,
+): StatusEffect {
+  const resisted = STATUS_DEFS[type].shareShortensDuration ? resistedTicks(ticks, share) : ticks;
+  return {
+    type,
+    ticksRemaining: resisted,
+    totalTicks: resisted,
+    survivingShare: share,
+    applier,
+  };
 }
 
-/** Frozen for `ticks`. Apply through `applyIceHit` so the grace window that follows is honoured. */
-export function makeFrozen(ticks: number = FROZEN_FRAMES): StatusEffect {
-  return { type: FROZEN_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+/**
+ * Chilled for `ticks`, eased by `share`. Apply through `applyIceHit`/`applyChillOnly`
+ * so freezes follow their rules.
+ */
+export function makeChilled(share: SurvivingShare, ticks: number = CHILLED_FRAMES): StatusEffect {
+  return makeResisted(CHILLED_STATUS, share, ticks);
 }
 
-/** Numbed for `ticks`: slower walking, with swings and casts left at full pace. */
-export function makeNumbed(ticks: number = NUMBED_FRAMES): StatusEffect {
-  return { type: NUMBED_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+/**
+ * Frozen for `ticks`, shortened by `share`. Apply through `applyIceHit` so the
+ * grace window that follows is honoured.
+ */
+export function makeFrozen(share: SurvivingShare, ticks: number = FROZEN_FRAMES): StatusEffect {
+  return makeResisted(FROZEN_STATUS, share, ticks);
+}
+
+/**
+ * Numbed for `ticks`, its slow eased by `share` but never its length: slower
+ * walking, with swings and casts left at full pace.
+ */
+export function makeNumbed(share: SurvivingShare, ticks: number = NUMBED_FRAMES): StatusEffect {
+  return makeResisted(NUMBED_STATUS, share, ticks);
 }
 
 /**
@@ -509,6 +599,7 @@ export function makeShield(absorb: number, ticks: number): StatusEffect {
     type: SHIELD_STATUS,
     ticksRemaining: ticks,
     totalTicks: ticks,
+    survivingShare: FULL_SHARE,
     applier: null,
     absorbRemaining: absorb,
     absorbTotal: absorb,
@@ -634,14 +725,14 @@ export const CURABLE_AILMENT_STATUSES: ReadonlyArray<StatusId> = AILMENT_STATUSE
 /** Eight seconds at 60 fps. */
 export const BURN_TICKS = 480;
 
-/** 8-second burn: 1 damage / second for 8 seconds. */
-export function makeBurn(applier: Player | null = null): StatusEffect {
-  return { type: 'burn', ticksRemaining: BURN_TICKS, totalTicks: BURN_TICKS, applier };
+/** 8-second burn, shortened by `share`: 1 damage / second while it lasts. */
+export function makeBurn(share: SurvivingShare, applier: Player | null = null): StatusEffect {
+  return makeResisted('burn', share, BURN_TICKS, applier);
 }
 
 /** A burn credited to `creditedTo` that something they built, not their own hand, set. */
 export function makeCreditedBurn(creditedTo: Player): StatusEffect {
-  return { ...makeBurn(creditedTo), creditOnly: true };
+  return { ...makeBurn(FULL_SHARE, creditedTo), creditOnly: true };
 }
 
 /** Thirty seconds at 60 fps. */
@@ -652,7 +743,13 @@ export function makePoison(
   applier: Player | null = null,
   ticks: number = POISON_TICKS,
 ): StatusEffect {
-  return { type: 'poison', ticksRemaining: ticks, totalTicks: ticks, applier };
+  return {
+    type: 'poison',
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier,
+  };
 }
 
 /** Ten seconds at 60 fps. */
@@ -664,6 +761,7 @@ export function makeMagicBurn(applier: Player | null = null): StatusEffect {
     type: 'magic_burn',
     ticksRemaining: MAGIC_BURN_TICKS,
     totalTicks: MAGIC_BURN_TICKS,
+    survivingShare: FULL_SHARE,
     applier,
   };
 }
@@ -677,6 +775,7 @@ export function makeElectrified(applier: Player | null = null): StatusEffect {
     type: 'electrified',
     ticksRemaining: ELECTRIFIED_TICKS,
     totalTicks: ELECTRIFIED_TICKS,
+    survivingShare: FULL_SHARE,
     applier,
   };
 }
@@ -685,12 +784,12 @@ export function makeElectrified(applier: Player | null = null): StatusEffect {
 const SPIDER_WEB_TICKS = 240;
 
 /**
- * Immobilises the target. Defaults to the spider's web, which is where the
- * effect started; callers that root for a different length pass their own ticks
- * rather than mutating the returned effect.
+ * Immobilises the target, shortened by `share`. Defaults to the spider's web,
+ * which is where the effect started; callers that root for a different length
+ * pass their own ticks rather than mutating the returned effect.
  */
-export function makeStuck(ticks: number = SPIDER_WEB_TICKS): StatusEffect {
-  return { type: 'stuck', ticksRemaining: ticks, totalTicks: ticks, applier: null };
+export function makeStuck(share: SurvivingShare, ticks: number = SPIDER_WEB_TICKS): StatusEffect {
+  return makeResisted('stuck', share, ticks);
 }
 
 /** Four seconds at 60 fps. */
@@ -702,6 +801,7 @@ export function makeSpitVenom(applier: Player | null = null): StatusEffect {
     type: 'spit_venom',
     ticksRemaining: SPIT_VENOM_TICKS,
     totalTicks: SPIT_VENOM_TICKS,
+    survivingShare: FULL_SHARE,
     applier,
   };
 }
@@ -714,12 +814,24 @@ export const INK_STATUS = 'ink' as const satisfies StatusId;
 
 /** Inked for `ticks`. */
 export function makeInk(ticks: number): StatusEffect {
-  return { type: INK_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+  return {
+    type: INK_STATUS,
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
 /** Stun: the target can neither walk nor attack for the given number of ticks. */
 export function makeStun(ticks: number): StatusEffect {
-  return { type: 'stun', ticksRemaining: ticks, totalTicks: ticks, applier: null };
+  return {
+    type: 'stun',
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
 /** The status filed under a Speed Fizz potion — its own constant because {@link Player} checks for it by name to draw motion afterimages. */
@@ -734,6 +846,7 @@ export function makeSpeedFizz(): StatusEffect {
     type: SPEED_FIZZ_STATUS,
     ticksRemaining: SPEED_FIZZ_TICKS,
     totalTicks: SPEED_FIZZ_TICKS,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }
@@ -747,6 +860,7 @@ export function makeJuggJuice(): StatusEffect {
     type: 'jugg_juice',
     ticksRemaining: JUGG_JUICE_TICKS,
     totalTicks: JUGG_JUICE_TICKS,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }
@@ -763,7 +877,13 @@ const DRUNK_TICKS = 1800;
  */
 export function makeDrunk(durationScale = 1): StatusEffect {
   const ticks = Math.max(1, Math.round(DRUNK_TICKS * durationScale));
-  return { type: 'drunk', ticksRemaining: ticks, totalTicks: ticks, applier: null };
+  return {
+    type: 'drunk',
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
 /** A catnip buzz runs as long as a drunk round does: the same trade, poured for the cat. */
@@ -777,7 +897,13 @@ const CATNIP_BUZZ_TICKS = DRUNK_TICKS;
  */
 export function makeCatnipBuzz(durationScale = 1): StatusEffect {
   const ticks = Math.max(1, Math.round(CATNIP_BUZZ_TICKS * durationScale));
-  return { type: 'catnip_buzz', ticksRemaining: ticks, totalTicks: ticks, applier: null };
+  return {
+    type: 'catnip_buzz',
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
 const INTOXICATION_MAKERS = {
@@ -805,6 +931,7 @@ export function makeWhetstone(): StatusEffect {
     type: 'whetstone',
     ticksRemaining: WHETSTONE_TICKS,
     totalTicks: WHETSTONE_TICKS,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }
@@ -818,6 +945,7 @@ export function makeCooldownCrisp(): StatusEffect {
     type: 'cooldown_crisp',
     ticksRemaining: COOLDOWN_CRISP_TICKS,
     totalTicks: COOLDOWN_CRISP_TICKS,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }
@@ -868,7 +996,13 @@ export const ROOM_BOON_STATUSES: ReadonlyArray<StatusId> = [
 ];
 
 function makeRoomBoon(type: StatusId): StatusEffect {
-  return { type, ticksRemaining: ROOM_BOON_TICKS, totalTicks: ROOM_BOON_TICKS, applier: null };
+  return {
+    type,
+    ticksRemaining: ROOM_BOON_TICKS,
+    totalTicks: ROOM_BOON_TICKS,
+    survivingShare: FULL_SHARE,
+    applier: null,
+  };
 }
 
 /** Well Rested: the attic cot's boon. */
@@ -903,6 +1037,7 @@ export function makeHamburgerFed(): StatusEffect {
     type: HAMBURGER_FED_STATUS,
     ticksRemaining: HAMBURGER_FED_TICKS,
     totalTicks: HAMBURGER_FED_TICKS,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }
@@ -930,6 +1065,7 @@ export function makeRefreshed(): StatusEffect {
     type: REFRESHED_STATUS,
     ticksRemaining: REFRESHED_DURATION_TICKS,
     totalTicks: REFRESHED_DURATION_TICKS,
+    survivingShare: FULL_SHARE,
     applier: null,
   };
 }

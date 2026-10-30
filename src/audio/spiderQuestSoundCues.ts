@@ -19,11 +19,11 @@
  * keep their own play sites and are not repeated here.
  */
 
-import type { AudioManager, PlayOptions } from '../../audio/AudioManager';
-import type { LoopLevel } from '../../audio/loopLevels';
-import { AMBIENT_RAMP_MS } from '../../audio/loopLevels';
-import type { SoundId } from '../../audio/sounds';
-import { MIN_STOP_FADE_MS } from '../../audio/voiceFades';
+import type { AudioManager, PlayOptions } from './AudioManager';
+import type { LoopLevel } from './loopLevels';
+import { AMBIENT_RAMP_MS } from './loopLevels';
+import type { SoundId } from './sounds';
+import { MIN_STOP_FADE_MS } from './voiceFades';
 
 export const SPIDER_QUEST_CUES = {
   /**

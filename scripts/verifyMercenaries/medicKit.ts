@@ -44,6 +44,7 @@ import {
   MEND_RELEASE_FRAME,
   MEND_TRIGGER_HP_FRACTION,
 } from '../../src/creatures/mercenaries/medicKit';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -202,6 +203,7 @@ function build(
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   system.update(ctx);
   const merc = system.activeMerc;

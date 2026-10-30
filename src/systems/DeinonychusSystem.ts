@@ -30,7 +30,8 @@ import type { SummonModel } from '../ui/hud/hudModel';
 import { paintOffscreenPetMarker } from '../ui/hud/offscreenPetMarker';
 import { CAT_SPEECH_STYLE, TimedSpeech, drawTimedSpeechBubble } from '../sprites/speechBubble';
 import { ANY_TILE, findNearbyWalkableTile, type TileFilter } from '../map/findWalkableTile';
-import { getWorldZoom, viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { worldToScreen, type Camera } from '../core/rendering/camera';
 import { DEINONYCHUS_LINES } from '../dialog/scripts/deinonychus';
 import { petWords, type PetNames, type PetWords } from '../core/party/petNames';
 
@@ -1068,8 +1069,7 @@ export class DeinonychusSystem implements GameSystem {
    */
   renderOffscreenMarker(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     active: HumanPlayer | CatPlayer,
     visibleRadiusPx: number,
   ): void {
@@ -1077,9 +1077,11 @@ export class DeinonychusSystem implements GameSystem {
     // Nothing to point at during the fade: he is at her feet and on his way out.
     if (deinonychus === null || deinonychus.recallArrived) return;
 
-    const zoom = getWorldZoom();
-    const screenX = (deinonychus.x - camX + TILE_SIZE * TILE_CENTER) * zoom;
-    const screenY = (deinonychus.y - camY + TILE_SIZE * TILE_CENTER) * zoom;
+    const { x: screenX, y: screenY } = worldToScreen(
+      camera,
+      deinonychus.x + TILE_SIZE * TILE_CENTER,
+      deinonychus.y + TILE_SIZE * TILE_CENTER,
+    );
     const width = viewportWidth();
     const height = viewportHeight();
     const insideViewport = screenX >= 0 && screenY >= 0 && screenX <= width && screenY <= height;

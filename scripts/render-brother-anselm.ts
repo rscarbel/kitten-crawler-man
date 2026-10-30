@@ -13,7 +13,9 @@
  *
  * First it re-measures what his sprite freezes off the art — the top of his
  * head over his tile and where his eyes sit — and exits non-zero if either
- * has moved; it prints the measured numbers either way.
+ * has moved; it prints the measured numbers either way. Then it holds every
+ * row he plays, in his look and habit, to the human rig's gates on a figure's
+ * own art (`rigFigureGateFailures` in `gates-human.ts`).
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -23,28 +25,28 @@ import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { reportFigureGates } from './figureGates.js';
 import { paintFigureCell } from './figureSheet.js';
-import {
-  FRAME_H,
-  FRAME_W,
-  HUMAN_ROW_TABLE,
-  type HumanRowName,
-  TILE_X,
-  TILE_Y,
-} from '../src/sprites/art/humanFigure.js';
+import { FRAME_H, FRAME_W, TILE_X, TILE_Y } from '../src/sprites/art/humanFigure.js';
 import { TILE_SCALE } from '../src/sprites/art/human/figureScale.js';
-import { probeHumanJoints } from '../src/sprites/art/human/probe.js';
+import { probeRowJoints } from '../src/sprites/art/human/probe.js';
 import { HEAD_DEPTH, HEAD_RX } from '../src/sprites/art/biped/proportions.js';
 import { EYE_DX, PROFILE_EYE_X } from '../src/sprites/art/biped/head.js';
 import { drawHumanFigureSelection } from '../src/sprites/humanSprite.js';
-import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
+import { beginFigureFrame, setFigureBakeClock } from '../src/sprites/figure/figureFrameCache.js';
 import { BROTHER_ANSELM_LOOK } from '../src/sprites/looks/humans/brotherAnselm.js';
 import { ANSELM_QUARTERSTAFF } from '../src/sprites/held/art/quarterstaffHeld.js';
 import type { CardinalView } from '../src/sprites/facingView.js';
 import type { ViewedEyePlacement } from '../src/sprites/eyePlacement.js';
+import { humanFigureWithRows } from '../src/sprites/art/human/appearance.js';
+import { rigFigureGateFailures } from './gates-human.js';
+import { rigRowsOf } from './rigFigure.js';
 import {
   ANSELM_EYES,
   ANSELM_HEAD_LIFT_TILES,
+  ANSELM_OUTFIT,
+  ANSELM_PLAYED_ROWS,
+  ANSELM_ROW_BOOK,
   ANSELM_ROWS,
+  type AnselmRowName,
   type AnselmRow,
   BROTHER_ANSELM_FIGURE,
 } from '../src/sprites/brotherAnselmSprite.js';
@@ -65,6 +67,7 @@ const ALL_ROWS: readonly AnselmRow[] = [
 const VIEWS: readonly CardinalView[] = ['front', 'side', 'back'];
 
 const BAKE_TILE = TILE_SCALE;
+const FROZEN_BAKE_CLOCK_MS = 0;
 const SMALL_TILE = 32;
 const PIXEL_ZOOM = 3;
 const LABEL_HEIGHT = 18;
@@ -105,7 +108,7 @@ const INK = 8;
 const MEASURE_SLACK = 0.02;
 /** The head is looked for within this many head half-widths of the head's centre, clear of the staff. */
 const HEAD_SEARCH_HALF_WIDTHS = 1.6;
-const STANDING_ROWS: readonly HumanRowName[] = [
+const STANDING_ROWS: readonly AnselmRowName[] = [
   'twohand_rest',
   'twohand_rest_side',
   'twohand_rest_away',
@@ -113,8 +116,8 @@ const STANDING_ROWS: readonly HumanRowName[] = [
 const DIGITS = 2;
 
 /** The highest ink over the head's columns of a standing frame, in cell pixels; the staff is not in the cell. */
-function headTopPx(row: HumanRowName, frame: number): number {
-  const probe = probeHumanJoints(row, frame, BROTHER_ANSELM_LOOK);
+function headTopPx(row: AnselmRowName, frame: number): number {
+  const probe = probeRowJoints(ANSELM_ROW_BOOK.table[row], frame, BROTHER_ANSELM_LOOK);
   const halfWidth = HEAD_RX * HEAD_SEARCH_HALF_WIDTHS * probe.pixelsPerUnit;
   const cell = paintFigureCell(BROTHER_ANSELM_FIGURE.def, row, frame);
   const data = cell.getContext('2d').getImageData(0, 0, cell.width, cell.height).data;
@@ -131,7 +134,7 @@ function headTopPx(row: HumanRowName, frame: number): number {
 function measuredHeadLiftTiles(): number {
   let top = Number.POSITIVE_INFINITY;
   for (const row of STANDING_ROWS) {
-    for (let frame = 0; frame < HUMAN_ROW_TABLE[row].frameCount; frame++) {
+    for (let frame = 0; frame < ANSELM_ROW_BOOK.table[row].frameCount; frame++) {
       top = Math.min(top, headTopPx(row, frame));
     }
   }
@@ -140,8 +143,8 @@ function measuredHeadLiftTiles(): number {
 
 function measuredEyes(): Omit<ViewedEyePlacement, 'sideSpacing' | 'frontMirrors'> {
   const tileCentreX = TILE_X + TILE_SCALE / 2;
-  const front = probeHumanJoints('twohand_rest', 0, BROTHER_ANSELM_LOOK);
-  const side = probeHumanJoints('twohand_rest_side', 0, BROTHER_ANSELM_LOOK);
+  const front = probeRowJoints(ANSELM_ROW_BOOK.table.twohand_rest, 0, BROTHER_ANSELM_LOOK);
+  const side = probeRowJoints(ANSELM_ROW_BOOK.table.twohand_rest_side, 0, BROTHER_ANSELM_LOOK);
   const headScale = BROTHER_ANSELM_LOOK.headScale;
   return {
     sideForward:
@@ -187,8 +190,8 @@ function measurementFailures(): string[] {
 
 // ── The sheets ───────────────────────────────────────────────────────────────
 
-function strip(row: HumanRowName, tile: number, flipX: boolean, floor: string): Canvas {
-  const frames = HUMAN_ROW_TABLE[row].frameCount;
+function strip(row: AnselmRowName, tile: number, flipX: boolean, floor: string): Canvas {
+  const frames = ANSELM_ROW_BOOK.table[row].frameCount;
   const cellWidth = CELL_TILES_W * tile;
   const canvas = createCanvas(Math.ceil(cellWidth * frames), Math.ceil(CELL_TILES_H * tile));
   const ctx = asGameContext(canvas.getContext('2d'));
@@ -227,7 +230,7 @@ function bandsFor(anselmRow: AnselmRow): Band[] {
   const bands: Band[] = [];
   for (const row of names) {
     bands.push({ label: `${anselmRow} — ${row}`, image: strip(row, BAKE_TILE, false, BACKDROP) });
-    if (HUMAN_ROW_TABLE[row].mirrorable) {
+    if (ANSELM_ROW_BOOK.table[row].mirrorable) {
       bands.push({
         label: `${anselmRow} — ${row} facing −X`,
         image: strip(row, BAKE_TILE, true, BACKDROP),
@@ -261,8 +264,23 @@ function stack(bands: readonly Band[]): Canvas {
   return canvas;
 }
 
+function figureGateFailures(): string[] {
+  const rows = rigRowsOf(ANSELM_ROW_BOOK, (look, outfit, held, offHand) =>
+    humanFigureWithRows(ANSELM_ROW_BOOK, look, outfit, held, offHand),
+  );
+  const played = new Set<string>(ANSELM_PLAYED_ROWS);
+  return rigFigureGateFailures(rows, BROTHER_ANSELM_LOOK, ANSELM_OUTFIT, played);
+}
+
+// The cache measures each bake against the frame's wall-clock allowance and
+// paints a cell live, rather than from its bake, once the allowance is spent:
+// by a slow machine, or by any prewarm queued earlier in the process. A clock
+// that never advances makes every bake fit, so every cell of the sheets is
+// its bake whatever ran before.
+setFigureBakeClock(() => FROZEN_BAKE_CLOCK_MS);
+
 console.log('Measuring Brother Anselm…');
-if (reportFigureGates('brother anselm', measurementFailures())) {
+if (reportFigureGates('brother anselm', [...measurementFailures(), ...figureGateFailures()])) {
   for (const row of chosenRows()) {
     const path = writePreviewPng(join(OUT_DIR, `${row}.png`), stack(bandsFor(row)).toBuffer());
     console.log(`  wrote ${path}`);

@@ -26,9 +26,10 @@ import {
   STARLIGHT_TENT_BLOCK_CLEARED_CUES,
   STARLIGHT_TENT_CUES,
   STARLIGHT_TENT_MUSIC,
-} from './starlightTent/starlightTentSoundCues';
+} from '../audio/starlightTentSoundCues';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
+import type { InteriorEncounterDialog, InteriorEncounterRequest } from './InteriorEncounterRequest';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -47,7 +48,7 @@ import { worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
 import { activeInputMode, byInputMode, keycapLabel } from '../ui/core/inputMode';
 import { objectiveBandEntry } from '../ui/hud/objectiveLine';
-import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import {
   drawActArchPost,
   drawFlameVentColumn,
@@ -169,7 +170,7 @@ import {
   type DifficultyGuardHandle,
 } from '../core/difficulty/difficultyChangeGuard';
 import { settings } from '../core/input/Settings';
-import { isOnScreen } from './starlightTent/tentView';
+import { isOnScreen, type TentView } from './starlightTent/tentView';
 import { placeOnMark } from './starlightTent/starlightTentRestart';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { StarlightTentFinale } from './starlightTent/StarlightTentFinale';
@@ -457,7 +458,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
 
   /** The act being warmed during its interval, and the camera windows over it still to paint. */
   private warmSectionId: MazeSectionId | null = null;
-  private warmWindows: Array<{ x: number; y: number }> = [];
+  private warmWindows: Camera[] = [];
   /** The curtain whose act has been queued for warming, so each act is warmed once. */
   private warmedCurtainId: string | null = null;
   /** A one-pixel surface the warm pass paints onto: the bakes are the point, not the pixels. */
@@ -529,13 +530,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * parked one. Without it the anchored follow drive walks whoever the player
    * is not holding straight back out toward the corridor they just failed.
    */
-  partyResetPending = false;
+  private partyResetPending = false;
   /**
    * Set the frame the ring's act begins, so the scene can take both crawlers
    * off the anchors the acts parked them on. Without it the companion stands
    * where the player last left them while the guards come out.
    */
-  partyReleasePending = false;
+  private partyReleasePending = false;
 
   /** Cues raised by the script, drained by the scene's audio pass. */
   private readonly pendingSounds: Array<{ id: SoundId; volume?: number }> = [];
@@ -674,7 +675,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     return [...this.everyProp()];
   }
 
-  // ── Public surface consumed by BuildingInteriorScene ───────────────────────
+  // ── Public surface ─────────────────────────────────────────────────────────
+
+  /** The interludes on the shared conversation, as the scene's Escape sees them. */
+  readonly dialog: InteriorEncounterDialog = {
+    isOpen: () => this.isDialogOpen,
+    dismiss: () => this.dismissDialog(),
+  };
 
   /** Whether an interlude — an act card or a reset notice — is on the shared conversation. */
   get isDialogOpen(): boolean {
@@ -721,8 +728,24 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     return this.currentSectionId !== FIGHTING_ACT;
   }
 
+  /**
+   * Everything the tent needs the scene to do since the last drain: a reset's
+   * re-park ahead of a release, so a burnout on the frame the ring opens still
+   * leaves the party following, then its cues, then its coins.
+   */
+  drainRequests(): InteriorEncounterRequest[] {
+    const requests: InteriorEncounterRequest[] = [];
+    if (this.partyResetPending) requests.push({ kind: 'party_reset' });
+    if (this.partyReleasePending) requests.push({ kind: 'party_release' });
+    this.partyResetPending = false;
+    this.partyReleasePending = false;
+    for (const cue of this.drainSounds()) requests.push({ kind: 'sound', ...cue });
+    for (const reward of this.drainRewards()) requests.push({ kind: 'coin_drop', ...reward });
+    return requests;
+  }
+
   /** Sound cues raised since the last drain, oldest first. */
-  drainSounds(): Array<{ id: SoundId; volume?: number }> {
+  private drainSounds(): Array<{ id: SoundId; volume?: number }> {
     return this.pendingSounds.splice(0, this.pendingSounds.length);
   }
 
@@ -731,7 +754,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * the coins fall and land before they are collected; the maze only decides
    * that they are owed, once per run.
    */
-  drainRewards(): Array<{ tile: MazeTile; coins: number }> {
+  private drainRewards(): Array<{ tile: MazeTile; coins: number }> {
     return this.pendingRewards.splice(0, this.pendingRewards.length);
   }
 
@@ -1380,10 +1403,10 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * warning and marker over the lights at full strength, whatever the local
    * dark.
    */
-  renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.renderProps(ctx, camX, camY);
-    this.renderLighting(ctx, camX, camY);
-    this.renderTelegraphs(ctx, camX, camY);
+  renderWorld(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.renderProps(ctx, camera);
+    this.renderLighting(ctx, camera);
+    this.renderTelegraphs(ctx, camera);
     this.warmStep(ctx);
   }
 
@@ -1420,12 +1443,15 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     this.warmedCurtainId = next.id;
     const section = MAZE_SECTIONS.find((candidate) => candidate.id === next.opens);
     if (section === undefined) return;
-    const stepX = Math.max(TILE_SIZE, viewportWidth());
-    const stepY = Math.max(TILE_SIZE, viewportHeight());
-    const windows: Array<{ x: number; y: number }> = [];
+    const { viewWidth, viewHeight, zoom } = ctx.camera;
+    const stepX = Math.max(TILE_SIZE, viewWidth);
+    const stepY = Math.max(TILE_SIZE, viewHeight);
+    const windows: Camera[] = [];
     const bottom = (section.rowRange.y1 + 1) * TILE_SIZE;
     for (let y = section.rowRange.y0 * TILE_SIZE; y < bottom; y += stepY) {
-      for (let x = 0; x < MAZE_WIDTH * TILE_SIZE; x += stepX) windows.push({ x, y });
+      for (let x = 0; x < MAZE_WIDTH * TILE_SIZE; x += stepX) {
+        windows.push({ x, y, viewWidth, viewHeight, zoom });
+      }
     }
     this.warmSectionId = section.id;
     this.warmWindows = windows;
@@ -1453,16 +1479,16 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
         0,
         0,
       );
-      this.renderProps(scratch, view.x, view.y);
-      this.renderTelegraphs(scratch, view.x, view.y);
-      for (const figure of this.sortedFigures()) {
+      this.renderProps(scratch, view);
+      this.renderTelegraphs(scratch, view);
+      for (const figure of this.roomFigures(view)) {
         if (sectionAtRow(Math.floor(figure.y / TILE_SIZE)).id !== sectionId) continue;
         figure.render(scratch, view.x, view.y, TILE_SIZE);
       }
       for (const prop of this.everyProp()) {
         const propX = prop.x - view.x;
         const propY = prop.y - view.y;
-        if (!isOnScreen(propX, propY, OVERHEAD_PROP_HEIGHT_TILES)) continue;
+        if (!isOnScreen(view, propX, propY, OVERHEAD_PROP_HEIGHT_TILES)) continue;
         if (sectionAtRow(Math.floor(prop.y / TILE_SIZE)).id !== sectionId) continue;
         prop.paintBodyAt(scratch, propX, propY, TILE_SIZE);
       }
@@ -1476,24 +1502,24 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * still shut and the grates behind them, and both limelight housings. All
    * of it goes under the stage lights.
    */
-  renderProps(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.renderDressing(ctx, camX, camY);
-    this.renderActBoards(ctx, camX, camY);
-    this.renderShutBarriers(ctx, camX, camY);
-    this.hall.renderPieces(ctx, camX, camY, this.frame);
+  renderProps(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.renderDressing(ctx, camera);
+    this.renderActBoards(ctx, camera);
+    this.renderShutBarriers(ctx, camera);
+    this.hall.renderPieces(ctx, camera, this.frame);
   }
 
   /** The hall's floor-standing glass that is not a mob, for the scene's Y-sorted pass. */
-  sortedFigures(): ReadonlyArray<InteriorFigure> {
-    return this.hall.sortedFigures(this.frame);
+  roomFigures(view: TentView): ReadonlyArray<InteriorFigure> {
+    return this.hall.sortedFigures(this.frame, view);
   }
 
   /** The dark over the tent, and the live light cut through it. */
-  renderLighting(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.lighting.renderDarkness(ctx, camX, camY);
-    this.lighting.renderLiveLights(ctx, camX, camY, this.liveLights());
-    this.renderFollowSpotCones(ctx, camX, camY);
-    this.renderReflections(ctx, camX, camY);
+  renderLighting(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.lighting.renderDarkness(ctx, camera);
+    this.lighting.renderLiveLights(ctx, camera, this.liveLights());
+    this.renderFollowSpotCones(ctx, camera);
+    this.renderReflections(ctx, camera);
   }
 
   /**
@@ -1501,12 +1527,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * reflection is the lit crawler thrown back, as bright as the crawler is,
    * in a pane the tent's dark has otherwise swallowed.
    */
-  private renderReflections(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderReflections(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     this.reflectionBlits = 0;
-    for (const [pane, reflections] of this.paneReflections(ctx, camX, camY)) {
+    for (const [pane, reflections] of this.paneReflections(ctx, camera)) {
       const x = pane.tile.x * TILE_SIZE - camX;
       const y = pane.tile.y * TILE_SIZE - camY;
-      if (!isOnScreen(x, y)) continue;
+      if (!isOnScreen(camera, x, y)) continue;
       for (const reflection of reflections) {
         drawPaneReflection(
           ctx,
@@ -1591,7 +1618,8 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * Each burning follow-spot's beam through the air, from its lens to the
    * cells it has caught, kept inside the lane it lights.
    */
-  private renderFollowSpotCones(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderFollowSpotCones(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const track of MAZE_SPOTLIGHTS) {
       if (this.trackIsHeld(track.id)) continue;
       if (track.cells.length === 0) continue;
@@ -1611,7 +1639,11 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       const aim = this.followSpotAims.get(track.id) ?? 0;
       const lensX = (pivot.x + Math.cos(aim) * FOLLOW_SPOT_LENS_REACH) * TILE_SIZE - camX;
       const lensY = (pivot.y + Math.sin(aim) * FOLLOW_SPOT_LENS_REACH) * TILE_SIZE - camY;
-      if (!isOnScreen(lensX, lensY) && !isOnScreen(target.x * TILE_SIZE - camX, lensY)) continue;
+      if (
+        !isOnScreen(camera, lensX, lensY) &&
+        !isOnScreen(camera, target.x * TILE_SIZE - camX, lensY)
+      )
+        continue;
       drawFollowSpotCone(
         ctx,
         lensX,
@@ -1657,13 +1689,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * marks, every opened way's green, and the hall's stars, marquees and cold
    * light.
    */
-  renderTelegraphs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.renderRopes(ctx, camX, camY);
-    this.renderVentGrilles(ctx, camX, camY);
-    this.renderVentTelegraphs(ctx, camX, camY);
-    this.renderSpotlightWarnings(ctx, camX, camY);
-    this.renderOpenedWays(ctx, camX, camY);
-    this.hall.renderReadouts(ctx, camX, camY, this.frame, this.hallLightOn, this.turnPreview);
+  renderTelegraphs(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.renderRopes(ctx, camera);
+    this.renderVentGrilles(ctx, camera);
+    this.renderVentTelegraphs(ctx, camera);
+    this.renderSpotlightWarnings(ctx, camera);
+    this.renderOpenedWays(ctx, camera);
+    this.hall.renderReadouts(ctx, camera, this.frame, this.hallLightOn, this.turnPreview);
   }
 
   /** What is lit this frame, for the stage lights' additive pass. */
@@ -1715,11 +1747,12 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     }
   }
 
-  private renderDressing(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderDressing(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const piece of this.dressing) {
       const x = piece.tile.x * TILE_SIZE - camX;
       const y = piece.tile.y * TILE_SIZE - camY;
-      if (!isOnScreen(x, y, OVERHEAD_PROP_HEIGHT_TILES)) continue;
+      if (!isOnScreen(camera, x, y, OVERHEAD_PROP_HEIGHT_TILES)) continue;
       switch (piece.kind) {
         case 'runner':
           drawRingMatRunner(ctx, x, y, TILE_SIZE, piece.owner);
@@ -1802,16 +1835,16 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    */
   private paneReflections(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
   ): ReadonlyMap<Dressing, ReadonlyArray<PaneReflection>> {
+    const { x: camX, y: camY } = camera;
     const reflections = new Map<Dressing, PaneReflection[]>();
     const party = this.lastContext;
     // Only the hall has panes, and only panes on screen are worth a crawler's
     // body painted into a scratch surface.
     if (party === null || this.currentSectionId !== 'mirrors') return reflections;
     const visiblePanes = this.hallPanes.filter((pane) =>
-      isOnScreen(pane.tile.x * TILE_SIZE - camX, pane.tile.y * TILE_SIZE - camY),
+      isOnScreen(camera, pane.tile.x * TILE_SIZE - camX, pane.tile.y * TILE_SIZE - camY),
     );
     if (visiblePanes.length === 0) return reflections;
     const crawlers: ReadonlyArray<Player> = [party.human, party.cat];
@@ -1854,26 +1887,28 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
   }
 
   /** The act names, painted on the boards over the flaps and every arch. */
-  private renderActBoards(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderActBoards(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const board of this.actBoards) {
       const x = board.tile.x * TILE_SIZE - camX;
       const y = board.tile.y * TILE_SIZE - camY;
       // The board spills several tiles either side of its own, so the cull has
       // to be generous horizontally or it pops out while still half on screen.
-      if (!isOnScreen(x, y, OVERHEAD_PROP_HEIGHT_TILES)) continue;
+      if (!isOnScreen(camera, x, y, OVERHEAD_PROP_HEIGHT_TILES)) continue;
       drawActEasel(ctx, x, y, TILE_SIZE, board.label);
     }
   }
 
-  private renderShutBarriers(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderShutBarriers(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const block of MAZE_BLOCKS) {
       const grateX = block.grateTile.x * TILE_SIZE - camX;
       const grateY = block.grateTile.y * TILE_SIZE - camY;
-      if (isOnScreen(grateX, grateY)) drawPulleyGrate(ctx, grateX, grateY, TILE_SIZE);
+      if (isOnScreen(camera, grateX, grateY)) drawPulleyGrate(ctx, grateX, grateY, TILE_SIZE);
       if (this.clearedBlocks.has(block.id)) continue;
       const barrierX = block.barrierTile.x * TILE_SIZE - camX;
       const barrierY = block.barrierTile.y * TILE_SIZE - camY;
-      if (!isOnScreen(barrierX, barrierY)) continue;
+      if (!isOnScreen(camera, barrierX, barrierY)) continue;
       if (block.section === 'menagerie')
         drawCageGateBarrier(ctx, barrierX, barrierY, TILE_SIZE, this.frame);
       else if (block.kind === 'sandbag') drawFireScreenGate(ctx, barrierX, barrierY, TILE_SIZE);
@@ -1883,13 +1918,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     for (const curtain of MAZE_CURTAINS) {
       const windowX = curtain.windowTile.x * TILE_SIZE - camX;
       const windowY = curtain.windowTile.y * TILE_SIZE - camY;
-      if (isOnScreen(windowX, windowY))
+      if (isOnScreen(camera, windowX, windowY))
         drawMazeCurtainWindow(ctx, windowX, windowY, TILE_SIZE, this.frame);
       if (this.openedCurtains.has(curtain.id)) continue;
       for (const tile of [curtain.humanBarrier, curtain.catBarrier]) {
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
-        if (isOnScreen(x, y)) drawMazeCurtain(ctx, x, y, TILE_SIZE, this.frame);
+        if (isOnScreen(camera, x, y)) drawMazeCurtain(ctx, x, y, TILE_SIZE, this.frame);
       }
     }
 
@@ -1898,7 +1933,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       if (!hallShut) break;
       const x = exit.tile.x * TILE_SIZE - camX;
       const y = exit.tile.y * TILE_SIZE - camY;
-      if (!isOnScreen(x, y)) continue;
+      if (!isOnScreen(camera, x, y)) continue;
       if (exit.kind === 'door') drawMazeExitDoor(ctx, x, y, TILE_SIZE, this.frame);
       else drawMazeActGate(ctx, x, y, TILE_SIZE, this.frame);
     }
@@ -1907,17 +1942,18 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       const tile = MAZE_TEACHING_DOORWAYS[half];
       const x = tile.x * TILE_SIZE - camX;
       const y = tile.y * TILE_SIZE - camY;
-      if (isOnScreen(x, y)) drawMazeActGate(ctx, x, y, TILE_SIZE, this.frame);
+      if (isOnScreen(camera, x, y)) drawMazeActGate(ctx, x, y, TILE_SIZE, this.frame);
     }
   }
 
   /** Every way that has given way, in the tent's "go" green. */
-  private renderOpenedWays(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderOpenedWays(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const block of MAZE_BLOCKS) {
       if (!this.clearedBlocks.has(block.id)) continue;
       const x = block.barrierTile.x * TILE_SIZE - camX;
       const y = block.barrierTile.y * TILE_SIZE - camY;
-      if (isOnScreen(x, y))
+      if (isOnScreen(camera, x, y))
         drawMazeWayOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(block.barrierTile));
     }
     for (const curtain of MAZE_CURTAINS) {
@@ -1925,7 +1961,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       for (const tile of [curtain.humanBarrier, curtain.catBarrier]) {
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
-        if (isOnScreen(x, y)) {
+        if (isOnScreen(camera, x, y)) {
           drawMazeCurtainOpen(ctx, x, y, TILE_SIZE, {
             ...this.wayArtFor(tile),
             rise: this.curtainRiseFor(tile),
@@ -1942,7 +1978,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     for (const tile of opened) {
       const x = tile.x * TILE_SIZE - camX;
       const y = tile.y * TILE_SIZE - camY;
-      if (isOnScreen(x, y)) drawMazeWayOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(tile));
+      if (isOnScreen(camera, x, y)) drawMazeWayOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(tile));
     }
   }
 
@@ -1967,7 +2003,8 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * travel to effect, over a pulley block set in the wall between the lanes,
    * instead of guessing which of four grey squares a counterweight belongs to.
    */
-  private renderRopes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderRopes(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const centre = (tile: MazeTile): { x: number; y: number } => ({
       x: (tile.x + TILE_CENTRE) * TILE_SIZE - camX,
       y: (tile.y + TILE_CENTRE) * TILE_SIZE - camY,
@@ -1977,9 +2014,9 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       const pulley = centre(block.grateTile);
       const to = centre(block.barrierTile);
       if (
-        !isOnScreen(pulley.x, pulley.y) &&
-        !isOnScreen(from.x, from.y) &&
-        !isOnScreen(to.x, to.y)
+        !isOnScreen(camera, pulley.x, pulley.y) &&
+        !isOnScreen(camera, from.x, from.y) &&
+        !isOnScreen(camera, to.x, to.y)
       ) {
         continue;
       }
@@ -1997,13 +2034,14 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
   }
 
   /** The grilles are architecture and stay whatever act it is. */
-  private renderVentGrilles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderVentGrilles(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const run of VENT_GRATE_RUNS) {
       const x = run.x0 * TILE_SIZE - camX;
       const y = run.tileY * TILE_SIZE - camY;
       const lastColumn = run.columns[run.columns.length - 1] ?? run.x0;
       const right = (lastColumn + 1) * TILE_SIZE - camX;
-      if (!isOnScreen(Math.min(right - TILE_SIZE, Math.max(x, 0)), y)) continue;
+      if (!isOnScreen(camera, Math.min(right - TILE_SIZE, Math.max(x, 0)), y)) continue;
       drawFireBreatherGrateRun(ctx, run, x, y, TILE_SIZE);
     }
   }
@@ -2012,17 +2050,19 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * Only a set that is still standing warns. A struck act glowing behind the
    * party would be the tent promising a hazard it has retired.
    */
-  private renderVentTelegraphs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderVentTelegraphs(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const vent of this.liveVents) {
       const x = vent.tileX * TILE_SIZE - camX;
       const y = vent.tileY * TILE_SIZE - camY;
-      if (!isOnScreen(x, y)) continue;
+      if (!isOnScreen(camera, x, y)) continue;
       const telegraph = ventTelegraphProgress(vent, this.frame);
       if (telegraph > 0) drawFireBreatherTelegraph(ctx, x, y, TILE_SIZE, telegraph);
     }
   }
 
-  private renderSpotlightWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderSpotlightWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const track of MAZE_SPOTLIGHTS) {
       const held = this.trackIsHeld(track.id);
       for (const cell of track.cells) {
@@ -2031,7 +2071,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
         if (!held && warm <= 0) continue;
         const x = cell.tileX * TILE_SIZE - camX;
         const y = cell.tileY * TILE_SIZE - camY;
-        if (!isOnScreen(x, y)) continue;
+        if (!isOnScreen(camera, x, y)) continue;
         // A bought stretch of boards is marked in its own colour rather than
         // left as bare floor: the player has to be able to see what the ring
         // paid for, and it has to look nothing like the warning it replaced.
@@ -2043,7 +2083,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       if (!bell.isHolding) continue;
       const x = bell.x - camX;
       const y = bell.y - camY;
-      if (!isOnScreen(x, y)) continue;
+      if (!isOnScreen(camera, x, y)) continue;
       drawSpotlightDock(ctx, x, y, TILE_SIZE, bell.holdFraction, this.frame);
     }
   }
@@ -2053,13 +2093,14 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
    * beams, the white-hot span of a limelight, and the
    * chip naming whose job the pulsing target is.
    */
-  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderEffects(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const vent of this.liveVents) {
       const burn = ventFlameProgress(vent, this.frame);
       if (burn <= 0) continue;
       const x = vent.tileX * TILE_SIZE - camX;
       const y = vent.tileY * TILE_SIZE - camY;
-      if (!isOnScreen(x, y, FLAME_COLUMN_HEIGHT_TILES)) continue;
+      if (!isOnScreen(camera, x, y, FLAME_COLUMN_HEIGHT_TILES)) continue;
       const flamePhase = ventFlamePhase(vent, this.frame);
       drawHeatShimmerFlare(ctx, x, y, TILE_SIZE, burn, flamePhase);
       drawFlameVentColumn(ctx, x, y, TILE_SIZE, burn, flamePhase);
@@ -2073,21 +2114,22 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
         if (burn <= 0) continue;
         const x = cell.tileX * TILE_SIZE - camX;
         const y = cell.tileY * TILE_SIZE - camY;
-        if (!isOnScreen(x, y, FLAME_COLUMN_HEIGHT_TILES)) continue;
+        if (!isOnScreen(camera, x, y, FLAME_COLUMN_HEIGHT_TILES)) continue;
         drawSpotlightBeam(ctx, x, y, TILE_SIZE, burn, this.frame);
       }
     }
 
-    this.hall.renderEffects(ctx, camX, camY, this.frame, this.hallLightOn);
+    this.hall.renderEffects(ctx, camera, this.frame, this.hallLightOn);
 
-    this.renderNameChips(ctx, camX, camY);
+    this.renderNameChips(ctx, camera);
   }
 
-  private renderNameChips(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderNameChips(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const chipFor = (mob: Mob, owner: MazeHalf): void => {
       const x = mob.x - camX;
       const y = mob.y - camY;
-      if (!isOnScreen(x, y, OVERHEAD_PROP_HEIGHT_TILES)) return;
+      if (!isOnScreen(camera, x, y, OVERHEAD_PROP_HEIGHT_TILES)) return;
       drawTargetNameChip(ctx, x, y, TILE_SIZE, owner);
     };
     for (const target of this.targets.values()) {

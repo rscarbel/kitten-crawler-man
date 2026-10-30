@@ -65,6 +65,7 @@ const { WALK_UP_MAX_PATH_TILES } = await import('../src/systems/cutscene/Cutscen
 const { carolineLines } = await import('../src/dialog/caroline.js');
 const { pixelToTile } = await import('../src/utils.js');
 const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+const { cameraAt, UNZOOMED } = await import('../src/core/rendering/camera.js');
 useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
@@ -414,7 +415,7 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
           safeRooms,
           conversation: new Conversation(null),
           whereabouts: new DaveWhereabouts(),
-          camera: () => ({ x: 0, y: 0 }),
+          camera: () => cameraAt({ x: 0, y: 0 }, UNZOOMED),
           audio: null,
         },
         roomId,

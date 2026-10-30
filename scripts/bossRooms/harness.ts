@@ -17,6 +17,7 @@ import { createCanvas, type Canvas } from 'canvas';
 import { TILE_SIZE } from '../../src/core/constants.js';
 import { EventBus } from '../../src/core/EventBus.js';
 import { setViewportSize } from '../../src/core/rendering/Viewport.js';
+import { cameraAt, UNZOOMED, worldPx, type Camera } from '../../src/core/rendering/camera.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import { getLevelDef } from '../../src/levels/index.js';
@@ -27,6 +28,8 @@ import {
   setDungeonFloorTheme,
 } from '../../src/map/dungeon/floorTheme.js';
 import { GameMap } from '../../src/map/GameMap.js';
+import { FLOOR_ART_SEEDS } from '../../src/map/ground/artSeedAlphabet.js';
+import { drawFloorArtSeed } from '../../src/map/ground/floorArtSeed.js';
 import { SpellSystem } from '../../src/systems/SpellSystem.js';
 import type { SystemContext } from '../../src/systems/GameSystem.js';
 import type {
@@ -113,10 +116,10 @@ export interface RoomUnderTest {
   /** Advances the room one frame. */
   update(): void;
   /** The room's whole floor layer: its ground, then its ground warnings over it. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /** Live objects merged into the Y-sorted pass with the map's own decorations. */
   renderEntities(): ReadonlyArray<DressingRenderable>;
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /**
    * Puts the room into `state` as the fight would, without a fight. Returns false
    * when the room has no such state, so the caller skips it rather than
@@ -182,6 +185,11 @@ export interface BossRoomHarness {
   invariantTiles?(room: LocatedRoom, gameMap: GameMap): RoomInvariantTiles;
   /** Room-specific checks run on every generated floor of the sweep. */
   gates?(context: RoomGateContext): void;
+  /**
+   * Room-specific checks run once per sweep rather than per floor, by name.
+   * Each stages the floors it needs itself, so each can run on its own.
+   */
+  readonly sweepGates?: Readonly<Record<string, (report: GateReport) => void>>;
 }
 
 /** The share of a room's interior a layout may fill with props, at most. */
@@ -249,6 +257,7 @@ export function gameGauntletDressings(
 export function generateFloor(
   floor: BossFloor,
   seed: number,
+  artSeed: number = drawFloorArtSeed(),
 ): { gameMap: GameMap; levelDef: LevelDef } {
   const levelDef = getLevelDef(`level${floor}`);
   const gameMap = new GameMap({
@@ -257,6 +266,7 @@ export function generateFloor(
     mapType: 'dungeon',
     dungeon: dungeonOptionsForLevel(levelDef),
     worldSeed: seed,
+    artSeed,
   });
   return { gameMap, levelDef };
 }
@@ -283,24 +293,63 @@ export interface FoundRoom {
   readonly room: LocatedRoom;
 }
 
+/** What a floor search needs of a room: which floor it is on and how to find it there. */
+export type RoomFinder = Pick<BossRoomHarness, 'floor' | 'locate'>;
+
+const SEARCH_ART_SEED = FLOOR_ART_SEEDS[0];
+
+/** Whether the floor generated from `seed` puts the room's doorway on `side` (or has the room at all). */
+function floorHasRoom(finder: RoomFinder, seed: number, side: DoorSide | undefined): boolean {
+  // A floor's layout follows its world seed alone; a fixed art seed keeps the
+  // search from drawing on `Math.random`, which a sim may have seeded.
+  const { gameMap, levelDef } = generateFloor(finder.floor, seed, SEARCH_ART_SEED);
+  const room = finder.locate(gameMap, levelDef);
+  return room !== null && (side === undefined || room.doorSide === side);
+}
+
+/**
+ * The seed each search answered with, per finder, keyed by its start seed and
+ * side: the sims stage the same room dozens of times, and a search can
+ * generate a handful of floors at about a second each.
+ */
+const searchedSeeds = new WeakMap<RoomFinder, Map<string, number | null>>();
+
+function firstSeedWithRoom(
+  finder: RoomFinder,
+  startSeed: number,
+  side: DoorSide | undefined,
+): number | null {
+  const searches = searchedSeeds.get(finder) ?? new Map<string, number | null>();
+  searchedSeeds.set(finder, searches);
+  const searchKey = `${startSeed}:${side ?? 'any'}`;
+  const answered = searches.get(searchKey);
+  if (answered !== undefined) return answered;
+  let found: number | null = null;
+  for (let offset = 0; offset < DOOR_SEARCH_MAX_SEEDS && found === null; offset++) {
+    if (floorHasRoom(finder, startSeed + offset, side)) found = startSeed + offset;
+  }
+  searches.set(searchKey, found);
+  return found;
+}
+
 /**
  * The first floor from `startSeed` on whose room has its doorway on `side`, or
  * any floor with the room when `side` is undefined. Null when none is found.
+ * Every call generates the floor afresh, so a caller may stamp props into it
+ * or fight on it without changing what the next caller sees, and draws its
+ * art seed once, whether or not the search was already answered.
  */
 export function findFloorWithRoom(
-  harness: BossRoomHarness,
+  finder: RoomFinder,
   startSeed: number,
   side: DoorSide | undefined,
 ): FoundRoom | null {
-  for (let offset = 0; offset < DOOR_SEARCH_MAX_SEEDS; offset++) {
-    const seed = startSeed + offset;
-    const { gameMap, levelDef } = generateFloor(harness.floor, seed);
-    const room = harness.locate(gameMap, levelDef);
-    if (room === null) continue;
-    if (side !== undefined && room.doorSide !== side) continue;
-    return { seed, gameMap, levelDef, room };
-  }
-  return null;
+  const seed = firstSeedWithRoom(finder, startSeed, side);
+  if (seed === null) return null;
+  const { gameMap, levelDef } = generateFloor(finder.floor, seed);
+  const room = finder.locate(gameMap, levelDef);
+  if (room === null) throw new Error(`the floor from seed ${seed} lost the room it was found with`);
+  return { seed, gameMap, levelDef, room };
 }
 
 /**
@@ -320,6 +369,7 @@ export function buildEnvironment(found: FoundRoom): RoomEnvironment {
     activeIsMoving: false,
     roster: new MobRoster(found.gameMap, new SpellSystem()),
     gameMap: found.gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return {
     gameMap: found.gameMap,
@@ -433,12 +483,25 @@ export function renderRoom(
   const counter = new DrawCallCounter(nodeCtx);
   const ctx = asGameContext(nodeCtx);
   const { camX, camY } = view;
+  const camera: Camera = {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(view.widthPx),
+    viewHeight: worldPx(view.heightPx),
+    zoom: UNZOOMED,
+  };
 
   useFloorTheme(env.levelDef);
-  env.gameMap.renderCanvas(ctx, camX, camY, view.widthPx, view.heightPx);
+  env.gameMap.renderCanvas(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(view.widthPx),
+    viewHeight: worldPx(view.heightPx),
+    zoom: UNZOOMED,
+  });
 
   counter.counting = true;
-  roomUnderTest.renderGround(ctx, camX, camY);
+  roomUnderTest.renderGround(ctx, camera);
 
   interface SortedDraw {
     readonly sortY: number;
@@ -446,12 +509,13 @@ export function renderRoom(
   }
   const sorted: SortedDraw[] = [];
   if (options.withOverlay !== false) {
-    for (const { tx, ty, sortYAnchorPx } of env.gameMap.getVisibleDecorationTiles(
-      camX,
-      camY,
-      view.widthPx,
-      view.heightPx,
-    )) {
+    for (const { tx, ty, sortYAnchorPx } of env.gameMap.getVisibleDecorationTiles({
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(view.widthPx),
+      viewHeight: worldPx(view.heightPx),
+      zoom: UNZOOMED,
+    })) {
       sorted.push({
         sortY: ty * TILE_SIZE + sortYAnchorPx,
         draw: () => env.gameMap.drawDecorationAt(ctx, tx, ty, camX, camY),
@@ -477,11 +541,17 @@ export function renderRoom(
     });
     const bossTypes = env.levelDef.bossRooms?.map((bossRoom) => bossRoom.type) ?? [];
     registerBossRoomMoodLights(lighting, env.gameMap, bossTypes);
-    lighting.render(ctx, camX, camY, view.widthPx, view.heightPx);
+    lighting.render(ctx, {
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(view.widthPx),
+      viewHeight: worldPx(view.heightPx),
+      zoom: UNZOOMED,
+    });
     counter.counting = true;
   }
 
-  roomUnderTest.renderAbove(ctx, camX, camY);
+  roomUnderTest.renderAbove(ctx, camera);
   counter.counting = false;
 
   return { canvas, dressingDrawCalls: counter.counts };
@@ -537,10 +607,11 @@ export function withPlaceholderGround(room: RoomUnderTest, tile: TilePoint): Roo
   return {
     update: () => room.update(),
     renderEntities: () => room.renderEntities(),
-    renderAbove: (ctx, camX, camY) => room.renderAbove(ctx, camX, camY),
+    renderAbove: (ctx, camera) => room.renderAbove(ctx, camera),
     driveToState: (state) => room.driveToState(state),
-    renderGround: (ctx, camX, camY) => {
-      room.renderGround(ctx, camX, camY);
+    renderGround: (ctx, camera) => {
+      room.renderGround(ctx, camera);
+      const { x: camX, y: camY } = camera;
       const near = PLACEHOLDER_INSET_PX;
       const far = TILE_SIZE - PLACEHOLDER_INSET_PX;
       const left = tile.x * TILE_SIZE - camX;
@@ -569,8 +640,8 @@ export function roomRenderPath(id: BossRoomId, state: BossRoomState, side: DoorS
 /** Layers drawn by a room's pre-existing systems alongside its dressing. */
 export interface ExtraRoomLayers {
   update?(): void;
-  renderGround?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
-  renderAbove?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderGround?(ctx: CanvasRenderingContext2D, camera: Camera): void;
+  renderAbove?(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /**
    * Drives the states the dressing's fight hooks alone cannot reach. Returns
    * undefined for a state it leaves to the hooks.
@@ -594,15 +665,15 @@ export function dressingUnderTest(
       dressing.update(env.frame);
       extra.update?.();
     },
-    renderGround: (ctx, camX, camY) => {
-      extra.renderGround?.(ctx, camX, camY);
-      dressing.renderGround(ctx, camX, camY, env.frame.active);
-      dressing.renderGroundWarnings(ctx, camX, camY);
+    renderGround: (ctx, camera) => {
+      extra.renderGround?.(ctx, camera);
+      dressing.renderGround(ctx, camera, env.frame.active);
+      dressing.renderGroundWarnings(ctx, camera);
     },
     renderEntities: () => dressing.renderEntities(),
-    renderAbove: (ctx, camX, camY) => {
-      dressing.renderAbove(ctx, camX, camY);
-      extra.renderAbove?.(ctx, camX, camY);
+    renderAbove: (ctx, camera) => {
+      dressing.renderAbove(ctx, camera);
+      extra.renderAbove?.(ctx, camera);
     },
     driveToState: (state) => {
       const drivenByRoom = extra.driveToState?.(state);

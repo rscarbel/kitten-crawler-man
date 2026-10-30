@@ -1,4 +1,4 @@
-import { TRASH_PILE_ROACH_BURST } from '../systems/bossSoundCues';
+import { TRASH_PILE_ROACH_BURST } from '../audio/bossSoundCues';
 import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import { labApproachZoneAt } from '../map/labApproach';
 import { VILLAGE_CUES } from '../audio/villageSoundCues';
@@ -79,7 +79,7 @@ import {
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/spriteAssets/systemAssetRequirements';
 import { getLevelDef, levelLoadingKicker } from '../levels';
-import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
+import { mapSourceForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { LevelCompleteScreen } from '../ui/screens/dialogs/LevelCompleteScreen';
 import { MENU_TAP_MAX_DISTANCE } from '../ui/core/pointer';
@@ -160,10 +160,10 @@ import {
   workOrderStateFor,
 } from '../systems/constructionContracts/contractIssue';
 import { contractContactName } from '../systems/constructionContracts/contractContacts';
-import { playContractCue } from '../systems/constructionContracts/contractSoundCues';
+import { playContractCue } from '../audio/contractSoundCues';
 import { WORK_ORDERS } from '../dialog/scripts/workOrders';
 import { isVillageUnderSiege } from '../core/quests/villageQuestPhase';
-import { playInteriorCue } from '../systems/interiorInteractionSoundCues';
+import { playInteriorCue } from '../audio/interiorInteractionSoundCues';
 import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
 import { SafeRoomRegroupSystem } from '../systems/SafeRoomRegroupSystem';
 import { DaveGuideSystem, DaveWhereabouts } from '../systems/DaveGuideSystem';
@@ -206,7 +206,7 @@ import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { GoblinBombSystem } from '../systems/GoblinBombSystem';
 import { ExplosionShake } from '../systems/ExplosionShake';
-import { BOMBER_GOBLIN_CUES, FuseSizzleLoops } from '../systems/bomberGoblinSoundCues';
+import { BOMBER_GOBLIN_CUES, FuseSizzleLoops } from '../audio/bomberGoblinSoundCues';
 import { KettlebellWind } from '../systems/bossRooms/gymKettlebellWind';
 import { silenceGeneratorRigHum, updateGeneratorRigHum } from '../systems/generatorRigHum';
 import { silenceCreatureWingLoops, updateCreatureWingLoops } from '../systems/creatureWingLoops';
@@ -251,7 +251,7 @@ import {
 import {
   FLOODED_PUMP_ROOM_CUES,
   type FloodedPumpRoomLoop,
-} from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
+} from '../audio/floodedPumpRoomSoundCues';
 import { PARTY_TRAIL_SPACING_TILES } from '../systems/partyTrail';
 import { walkUpTo } from '../systems/cutscene/walkUp';
 import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
@@ -548,7 +548,7 @@ import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
 import { partyLightSource, type PartyCompanion } from '../systems/lighting/partyLights';
 import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
-import { spiderQuestCueSound, spiderQuestLoop } from '../systems/spiderQuest/spiderQuestSoundCues';
+import { spiderQuestCueSound, spiderQuestLoop } from '../audio/spiderQuestSoundCues';
 import type { SafeRoomService } from '../map/DungeonGenerator';
 import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
 import { stallBeaconTarget, doorwayBeaconTarget } from '../systems/objectiveBeaconTargets';
@@ -637,7 +637,7 @@ import { presentCrawlers, type SystemContext } from '../systems/GameSystem';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
-import { TUTORIAL_CUES, tutorialCueSource } from '../systems/tutorialSoundCues';
+import { TUTORIAL_CUES, tutorialCueSource } from '../audio/tutorialSoundCues';
 import { TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { GravediggerBeetle } from '../creatures/GravediggerBeetle';
@@ -745,15 +745,18 @@ import {
   knockedOutBandEntry,
   updateKnockoutState,
 } from '../systems/KnockoutRevive';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { CameraZoom, drawUnzoomed } from '../core/rendering/cameraZoom';
 import {
-  getWorldZoom,
-  setWorldZoom,
-  viewportHeight,
-  viewportWidth,
-  worldViewHeight,
-  worldViewWidth,
-} from '../core/rendering/Viewport';
-import { CameraZoom, drawUnzoomed, toWorldViewRect } from '../core/rendering/cameraZoom';
+  worldPx,
+  UNZOOMED,
+  cameraAt,
+  screenToWorldView,
+  toWorldViewRect,
+  worldToScreen,
+  worldViewSize,
+  type Camera,
+} from '../core/rendering/camera';
 import type { FloodedPumpRoomSystem } from '../systems/bossRooms/FloodedPumpRoomSystem';
 import { renderQuality } from '../core/perf/RenderQuality';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
@@ -2137,8 +2140,7 @@ export class DungeonScene extends GameplayScene {
         new GameMap({
           mapSize: levelDef.mapSize,
           tileHeight: TILE_SIZE,
-          mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
-          dungeon: dungeonOptionsForLevel(levelDef),
+          ...mapSourceForLevel(levelDef),
           worldSeed: options?.worldSeed,
           artSeed: options?.artSeed,
         });
@@ -2427,10 +2429,10 @@ export class DungeonScene extends GameplayScene {
     });
     this.destruction.loot.onCredited = (loot) => this.flyLootReward(loot);
     this.destruction.groundPickups.onCollected = (itemId, quantity, worldX, worldY) => {
-      const cam = this.camera();
+      const from = worldToScreen(this.camera(), worldX, worldY);
       const name = ITEM_DEF[itemId].name;
       for (let i = 0; i < quantity; i++) {
-        this.rewardFly.enqueueItem(itemId, name, worldX - cam.x, worldY - cam.y);
+        this.rewardFly.enqueueItem(itemId, name, from.x, from.y);
       }
     };
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
@@ -2468,6 +2470,7 @@ export class DungeonScene extends GameplayScene {
       activeIsMoving: false,
       roster: this.world.roster,
       gameMap: this.gameMap,
+      camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
       bossRoom: this.bossRoom,
       crawlerBarks: this.crawlerBarks,
     };
@@ -3039,8 +3042,8 @@ export class DungeonScene extends GameplayScene {
         this.conversation,
         this.audio,
         (coins, worldX, worldY) => {
-          const cam = this.camera();
-          this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+          const from = worldToScreen(this.camera(), worldX, worldY);
+          this.rewardFly.enqueueCoins(coins, from.x, from.y);
         },
       );
       if (bountyGiverTile !== null) {
@@ -3124,8 +3127,8 @@ export class DungeonScene extends GameplayScene {
               travelUnlocks: this.travelUnlocks,
               grantWheelFreeSpin: (questId) => grantQuestFreeSpin(this.wheelLedger, questId),
               flyCoins: (coins, worldX, worldY) => {
-                const cam = this.camera();
-                this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+                const from = worldToScreen(this.camera(), worldX, worldY);
+                this.rewardFly.enqueueCoins(coins, from.x, from.y);
               },
               taloncrestRoomOwnedByStory: (buildingId) =>
                 interiorRoomOwnedByStory(buildingId, {
@@ -3445,7 +3448,7 @@ export class DungeonScene extends GameplayScene {
     // within reach of it is held and queued.
     this.residency.settleNow(this.residencyOutlook());
     const arrivalCamera = this.camera();
-    this.doctor.prewarmInView(arrivalCamera.x, arrivalCamera.y);
+    this.doctor.prewarmInView(arrivalCamera);
     // Last, so every system that queues art or figures on construction — the
     // residency's arrival decision, the residents, the party — has queued it
     // before the loader measures what is owed. Checked on every construction rather than at the
@@ -3459,7 +3462,10 @@ export class DungeonScene extends GameplayScene {
         floorArrivalLoadTasks({
           gameMap: this.gameMap,
           camera: () => this.camera(),
-          viewport: () => ({ width: worldViewWidth(), height: worldViewHeight() }),
+          viewport: () => {
+            const camera = this.camera();
+            return { width: camera.viewWidth, height: camera.viewHeight };
+          },
           spriteGroupsReady,
         }),
     };
@@ -4248,7 +4254,6 @@ export class DungeonScene extends GameplayScene {
     this.menus.dispose();
     this.cutscenes.dispose();
     this.cameraZoom.reset();
-    setWorldZoom(this.cameraZoom.zoom);
     this.inputHandler.unbind();
     this.removeHarvestKeyHook?.();
     this.removeHarvestKeyHook = null;
@@ -4633,21 +4638,21 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Whether {@link renderObjectiveBeacons} would draw anything in the view at
-   * (`camX`, `camY`): a beacon's beam rises well above its tile, so one a few
-   * tiles off screen still counts.
+   * Whether {@link renderObjectiveBeacons} would draw anything in `camera`'s
+   * view: a beacon's beam rises well above its tile, so one a few tiles off
+   * screen still counts.
    */
-  private hasObjectiveBeacons(camX: number, camY: number): boolean {
+  private hasObjectiveBeacons(camera: Camera): boolean {
     if (this.gameOver || this.menus.pauseScreen.isOpen) return false;
     const reach = TILE_SIZE * BEACON_VIEW_REACH_TILES;
     const inView = (tileX: number, tileY: number): boolean => {
       const x = tileX * TILE_SIZE;
       const y = tileY * TILE_SIZE;
       return (
-        x >= camX - reach &&
-        x <= camX + worldViewWidth() + reach &&
-        y >= camY - reach &&
-        y <= camY + worldViewHeight() + reach
+        x >= camera.x - reach &&
+        x <= camera.x + camera.viewWidth + reach &&
+        y >= camera.y - reach &&
+        y <= camera.y + camera.viewHeight + reach
       );
     };
     return this.objectiveBeamTargets().some((target) => inView(target.x, target.y));
@@ -4681,15 +4686,16 @@ export class DungeonScene extends GameplayScene {
    */
   private renderObjectiveBeacons(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     frontBeams: 'withFrontBeams' | 'withoutFrontBeams' = 'withoutFrontBeams',
   ): void {
+    const { x: camX, y: camY } = camera;
     const now = performance.now();
     for (const target of this.objectiveBeamTargets()) {
       if (target.standsInFront === true && frontBeams === 'withoutFrontBeams') continue;
       drawObjectiveBeacon(
         ctx,
+        camera,
         target.x * TILE_SIZE - camX,
         target.y * TILE_SIZE - camY,
         TILE_SIZE,
@@ -4717,6 +4723,7 @@ export class DungeonScene extends GameplayScene {
    */
   private frontObjectiveBeams(): TownPropRenderable[] {
     const renderables: TownPropRenderable[] = [];
+    const view = this.camera();
     for (const target of this.objectiveBeamTargets()) {
       if (target.standsInFront !== true) continue;
       renderables.push({
@@ -4726,6 +4733,7 @@ export class DungeonScene extends GameplayScene {
         render(ctx, camX, camY, tileSize) {
           drawObjectiveBeacon(
             ctx,
+            view,
             target.x * tileSize - camX,
             target.y * tileSize - camY,
             tileSize,
@@ -4751,8 +4759,7 @@ export class DungeonScene extends GameplayScene {
    */
   private pinnedObjectiveArrowCandidate(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
   ): ArrowCandidate | null {
     const pinned = this.pinnedObjectiveEntry;
     // A pin on the bounty is drawn by the bounty's own arrow, which knows
@@ -4762,14 +4769,7 @@ export class DungeonScene extends GameplayScene {
     const target = pinned?.target ?? null;
     if (target === null) return null;
     const aim = target.drawsOwnRoute === true ? null : this.questRoute.aim();
-    return this.objectiveArrowCandidate(
-      ctx,
-      camX,
-      camY,
-      target,
-      ARROW_PRIORITY.PINNED_OBJECTIVE,
-      aim,
-    );
+    return this.objectiveArrowCandidate(ctx, camera, target, ARROW_PRIORITY.PINNED_OBJECTIVE, aim);
   }
 
   /**
@@ -4790,14 +4790,14 @@ export class DungeonScene extends GameplayScene {
    * led from the active crawler's feet. Stands down with the arrow near the
    * destination, where the place is plainly in front of the player.
    */
-  private renderQuestRouteTrail(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderQuestRouteTrail(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!settings.questRouteTrail || this.gameOver || this.menus.pauseScreen.isOpen) return;
     const target = this.routedPinnedTarget();
-    if (target === null || this.isObjectiveArrowSuppressed(target, camX, camY)) return;
+    if (target === null || this.isObjectiveArrowSuppressed(target, camera)) return;
     const active = this.active();
     const shape = this.questRoute.trailShape(crawlerGroundPoint(active));
-    this.questRouteTrail.paint(ctx, shape, camX, camY, performance.now(), {
-      view: { width: worldViewWidth(), height: worldViewHeight() },
+    this.questRouteTrail.paint(ctx, shape, camera.x, camera.y, performance.now(), {
+      view: { width: camera.viewWidth, height: camera.viewHeight },
       body: crawlerSpriteBox(active),
     });
   }
@@ -4817,17 +4817,17 @@ export class DungeonScene extends GameplayScene {
    * would say nothing: within a few tiles, or for a target flagged
    * `hidesArrowOnScreen`, anywhere on screen.
    */
-  private isObjectiveArrowSuppressed(target: TrackerTarget, camX: number, camY: number): boolean {
+  private isObjectiveArrowSuppressed(target: TrackerTarget, camera: Camera): boolean {
     const player = this.active();
     const centre = this.objectiveTargetCentre(target);
     if (target.hidesArrowOnScreen === true) {
       return isWorldPointOnScreen(
         centre.x,
         centre.y,
-        camX,
-        camY,
-        worldViewWidth(),
-        worldViewHeight(),
+        camera.x,
+        camera.y,
+        camera.viewWidth,
+        camera.viewHeight,
       );
     }
     const distanceTiles =
@@ -4845,8 +4845,7 @@ export class DungeonScene extends GameplayScene {
    */
   private roomObjectiveArrowCandidate(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
   ): ArrowCandidate | null {
     // The tutorial's step arrow already points at every place it lights, and a
     // second arrow toward the same beam would only fight it.
@@ -4873,7 +4872,7 @@ export class DungeonScene extends GameplayScene {
       }
     }
     if (nearest === null) return null;
-    return this.objectiveArrowCandidate(ctx, camX, camY, nearest, ARROW_PRIORITY.ROOM_OBJECTIVE);
+    return this.objectiveArrowCandidate(ctx, camera, nearest, ARROW_PRIORITY.ROOM_OBJECTIVE);
   }
 
   /**
@@ -4884,13 +4883,12 @@ export class DungeonScene extends GameplayScene {
    */
   private objectiveArrowCandidate(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     target: TrackerTarget,
     priority: number,
     aim: { readonly x: number; readonly y: number } | null = null,
   ): ArrowCandidate | null {
-    if (this.isObjectiveArrowSuppressed(target, camX, camY)) return null;
+    if (this.isObjectiveArrowSuppressed(target, camera)) return null;
     const player = this.active();
     const facing = aim ?? this.objectiveTargetCentre(target);
 
@@ -4903,8 +4901,8 @@ export class DungeonScene extends GameplayScene {
           player.y,
           facing.x,
           facing.y,
-          camX,
-          camY,
+          camera.x,
+          camera.y,
           PINNED_ARROW_COLOR,
           {
             avoidRect: this.worldViewFramesRect(),
@@ -5172,7 +5170,7 @@ export class DungeonScene extends GameplayScene {
     if (landing !== null) focus.push({ ...tileFocus(landing), landing: true });
     const respawn = this.gameOver ? this.checkpointRespawnFocus() : null;
     if (respawn !== null) focus.push({ ...respawn, landing: true });
-    return { focus, covered: respawn !== null };
+    return { focus, covered: respawn !== null, view: this.camera() };
   }
 
   /** Where a checkpoint restore would put the party, or null when the death screen leads elsewhere. */
@@ -5209,7 +5207,8 @@ export class DungeonScene extends GameplayScene {
     residency.settleNow(this.residencyOutlook());
     const active = this.active();
     const landing: ResidencyFocus = { x: active.x, y: active.y };
-    if (residency.isWarmAround(landing)) return;
+    const view = this.camera();
+    if (residency.isWarmAround(landing, view)) return;
     // Its own task, ahead of the arrival's: a row the queue gave up on while
     // a fight held the room is not in the queue the arrival's task drains.
     // Forgiven for the first few frames only, then done when the rows are
@@ -5221,9 +5220,9 @@ export class DungeonScene extends GameplayScene {
       label: 'Waking the world',
       work: steppedWork((budgetMs, mustProgress) => {
         steps++;
-        if (steps <= WARP_COVER_FORGIVING_STEPS) residency.forgiveAndWarmAround(landing);
+        if (steps <= WARP_COVER_FORGIVING_STEPS) residency.forgiveAndWarmAround(landing, view);
         residency.bakeFor(budgetMs, mustProgress);
-        const warmth = residency.warmthAround(landing);
+        const warmth = residency.warmthAround(landing, view);
         const settled = warmth.share === 1 || !warmth.anyQueued;
         return settled || steps >= WARP_COVER_MAX_STEPS ? 1 : warmth.share;
       }),
@@ -6280,7 +6279,6 @@ export class DungeonScene extends GameplayScene {
     this.destruction.resetForCheckpoint();
     this.explosionShake.reset();
     this.cameraZoom.reset();
-    setWorldZoom(this.cameraZoom.zoom);
     this.scriptedDeaths.reset();
     this.cutscenes.resetForCheckpoint();
     this.missingCats.resetForCheckpoint();
@@ -7712,7 +7710,7 @@ export class DungeonScene extends GameplayScene {
       // The purse a shop or a fee draws on is the whole party's, wherever its crawlers are.
       companion: this.partnerAnywhere(),
     });
-    const camera = (): { readonly x: number; readonly y: number } => this.camera();
+    const camera = (): Camera => this.camera();
     const tutorial = this.tutorial;
     return [
       ...this.arrivalLoading.surfaces(),
@@ -9115,14 +9113,20 @@ export class DungeonScene extends GameplayScene {
         return;
       case 'up':
         if (gesture.source === 'mouse') {
-          if (gesture.tap) this.collectWorldPickupAt(x / getWorldZoom(), y / getWorldZoom());
+          if (gesture.tap) {
+            const tapped = screenToWorldView(this.camera(), x, y);
+            this.collectWorldPickupAt(tapped.x, tapped.y);
+          }
           return;
         }
         if (gesture.pointerId === this.touch.moveTouchId) {
           this.endWorldTouch(x, y, gesture.timeStamp);
         } else {
           const pressedAt = this.touch.endExtraFinger(gesture.pointerId, x, y);
-          if (pressedAt !== null) this.tapWorld(x / getWorldZoom(), y / getWorldZoom(), pressedAt);
+          if (pressedAt !== null) {
+            const tapped = screenToWorldView(this.camera(), x, y);
+            this.tapWorld(tapped.x, tapped.y, pressedAt);
+          }
         }
         return;
       case 'cancel':
@@ -9150,7 +9154,8 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.touch.startMove(pointerId, x, y, pressedAt);
-    const onStructure = this.fingerOnWorkableStructure(x / getWorldZoom(), y / getWorldZoom());
+    const pressed = screenToWorldView(this.camera(), x, y);
+    const onStructure = this.fingerOnWorkableStructure(pressed.x, pressed.y);
     this.structureHold.begin(onStructure, x, y);
     const starter = this.active();
     this.holdStartActivePos = { x: starter.x, y: starter.y };
@@ -9158,20 +9163,25 @@ export class DungeonScene extends GameplayScene {
 
   private endWorldTouch(x: number, y: number, timeStamp: number | undefined): void {
     if (this.touch.tapStart !== null) {
-      const zoom = getWorldZoom();
+      const cam = this.camera();
+      const released = screenToWorldView(cam, x, y);
       if (this.touch.isTap(x, y)) {
         const pressedAt = this.touch.tapStartEventMs ?? timeStamp ?? performance.now();
-        this.tapWorld(x / zoom, y / zoom, pressedAt);
+        this.tapWorld(released.x, released.y, pressedAt);
       } else if (this.touch.heldInPlace(x, y) && !this.crawlerWalkedDuringHold()) {
         // Held roughly in place past tap duration, rather than dragged — and
         // without the hold having walked the crawler, which is just the end of
         // a walk with the finger resting somewhere: the Structure menu's
         // gesture. A village structure under the finger wins; otherwise a
         // boarded grate in reach, for a crawler who can spike it.
-        const cam = this.camera();
         const villageTook =
-          this.briarHollowKit?.handleLongPress(x / zoom, y / zoom, cam.x, cam.y, this.active()) ===
-          true;
+          this.briarHollowKit?.handleLongPress(
+            released.x,
+            released.y,
+            cam.x,
+            cam.y,
+            this.active(),
+          ) === true;
         if (!villageTook) this.grateSpikes.tryOpen();
       }
     }
@@ -9520,8 +9530,8 @@ export class DungeonScene extends GameplayScene {
     lifeFrame.others = this.world.roster.mobs;
     lifeFrame.camX = camera.x;
     lifeFrame.camY = camera.y;
-    lifeFrame.viewW = worldViewWidth();
-    lifeFrame.viewH = worldViewHeight();
+    lifeFrame.viewW = camera.viewWidth;
+    lifeFrame.viewH = camera.viewHeight;
     life.update(lifeFrame);
     const ambienceFrame = this._ambienceFrame;
     ambienceFrame.listenerX = active.x + TILE_SIZE * TILE_CENTRE_FRACTION;
@@ -9539,8 +9549,8 @@ export class DungeonScene extends GameplayScene {
     others: [],
     camX: 0,
     camY: 0,
-    viewW: 0,
-    viewH: 0,
+    viewW: worldPx(0),
+    viewH: worldPx(0),
   };
   private readonly _ambienceFrame: Mutable<AmbienceFrame> = {
     listenerX: 0,
@@ -9594,7 +9604,7 @@ export class DungeonScene extends GameplayScene {
       const rc = this.overDarknessPainter.rc;
       if (rc === null) return;
       if (this.overDarknessPainter.beacons) {
-        this.renderObjectiveBeacons(target, rc.camX, rc.camY, 'withFrontBeams');
+        this.renderObjectiveBeacons(target, rc.camera, 'withFrontBeams');
       }
       if (this.overDarknessPainter.warnings) this.renderPipeline.renderGroundWarnings(target, rc);
     },
@@ -9614,21 +9624,19 @@ export class DungeonScene extends GameplayScene {
   private renderDungeonDarkness(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const lighting = this.dungeonLighting;
     if (lighting === null) return;
-    const { camX, camY } = rc;
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const { camera } = rc;
     this.renderPipeline.renderFlyingGore(ctx, rc);
-    lighting.render(ctx, camX, camY, viewW, viewH);
+    lighting.render(ctx, camera);
     const warnings = this.renderPipeline.hasGroundWarnings(rc);
-    const beacons = this.hasObjectiveBeacons(camX, camY);
+    const beacons = this.hasObjectiveBeacons(camera);
     if (warnings || beacons) {
       const painter = this.overDarknessPainter;
       painter.rc = rc;
       painter.beacons = beacons;
       painter.warnings = warnings;
-      lighting.renderOverDarkness(ctx, this.sceneManager.renderScale * getWorldZoom(), painter);
+      lighting.renderOverDarkness(ctx, this.sceneManager.renderScale * camera.zoom, painter);
     }
-    lighting.renderEyeShine(ctx, camX, camY, viewW, viewH, this.world.roster.mobs);
+    lighting.renderEyeShine(ctx, camera, this.world.roster.mobs);
     flushAboveDarkness(ctx);
   }
 
@@ -9652,11 +9660,12 @@ export class DungeonScene extends GameplayScene {
     // lets the player keep walking, and a "SPACE — Talk" cap still hovering over
     // the citizen they are already talking to is the loudest of these.
     setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver);
-    const { x: camX, y: camY } = this.camera();
+    const camera = this.camera();
+    const { x: camX, y: camY } = camera;
     // The world, and every world-anchored marker and prompt over it, is drawn
     // in the world view's units under the camera's zoom; only the menus and
     // the HUD above them keep the screen's own.
-    const zoom = getWorldZoom();
+    const zoom = camera.zoom;
     ctx.save();
     ctx.scale(zoom, zoom);
     this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks, this.isCrawlerHidden);
@@ -9664,15 +9673,14 @@ export class DungeonScene extends GameplayScene {
     const frontBeams = this.frontObjectiveBeams();
 
     const rc: RenderContext = {
-      camX,
-      camY,
+      camera,
       gameMap: this.gameMap,
       pm: this.pm,
       active: this.active(),
       inactive: this.presentPartner(),
       mobs: this.world.roster.mobs,
       mobGrid: this.world.roster.grid,
-      townsfolk: this.townLife?.renderablePeople(camX, camY),
+      townsfolk: this.townLife?.renderablePeople(camera),
       townProps:
         this.briarHollowKit !== null ||
         this.gathering !== null ||
@@ -9740,34 +9748,34 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
-    this.dungeonLife?.renderGround(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+    this.dungeonLife?.renderGround(ctx, camera);
     // Straight after the floor, ahead of every quest system's own props, so a
     // clue scene or a grate stands in front of the light marking it.
-    this.renderObjectiveBeacons(ctx, camX, camY);
-    this.renderQuestRouteTrail(ctx, camX, camY);
+    this.renderObjectiveBeacons(ctx, camera);
+    this.renderQuestRouteTrail(ctx, camera);
     this.missingCats.renderGround(ctx, camX, camY);
     this.missingCats.renderCats(ctx, camX, camY);
     if (!this.senses.isEmpty) {
       const senseView = {
         camX,
         camY,
-        width: worldViewWidth(),
-        height: worldViewHeight(),
+        width: camera.viewWidth,
+        height: camera.viewHeight,
         nowMs: performance.now(),
       };
       this.senses.paint(ctx, senseView);
       this.catSenseCue.paint(ctx, this.cat, senseView);
     }
-    this.briarHollowKit?.renderGround(ctx, camX, camY);
+    this.briarHollowKit?.renderGround(ctx, camera);
     this.gathering?.renderGround(ctx, camX, camY);
     const activeCrawler = this.active();
     const owners = this.promptOwners;
     const promptFor = rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined;
     raisePromptsFor(owners.defendQuest, () =>
-      this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler),
+      this.defendQuest.renderObjects(ctx, camera, activeCrawler, activeCrawler),
     );
     raisePromptsFor(owners.cloggedBathroom, () =>
-      this.cloggedBathroom.renderGround(ctx, camX, camY, promptFor),
+      this.cloggedBathroom.renderGround(ctx, camera, promptFor),
     );
     raisePromptsFor(owners.stealthKeySnatch, () =>
       this.stealthKeySnatch.renderPrompt(ctx, camX, camY, promptFor),
@@ -9790,15 +9798,15 @@ export class DungeonScene extends GameplayScene {
       spider.renderAboveEntities(ctx, camX, camY, this.pm.presentCrawlers());
     }
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
-    this.dungeonLife?.renderAir(ctx, camX, camY, worldViewWidth(), worldViewHeight());
-    this.labHallway?.render(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+    this.dungeonLife?.renderAir(ctx, camera);
+    this.labHallway?.render(ctx, camera);
     // Over every body and under every warning, health bar and label.
     this.renderDungeonDarkness(ctx, rc);
-    this.missingCats.renderDusk(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+    this.missingCats.renderDusk(ctx, camera);
     this.missingCats.renderAir(ctx, camX, camY);
     // Over every body in the lab and under every warning: the dark her roars
     // bring down, with her telegraphs, puddles and eggs drawn back over it.
-    this.spiderQuest.renderLabDarkness(ctx, camX, camY, this.active());
+    this.spiderQuest.renderLabDarkness(ctx, camera, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
     this.treasureChests.renderLootArrows(ctx, camX, camY);
     // Projectile renders after entities so it flies visually over mobs/players
@@ -9806,9 +9814,9 @@ export class DungeonScene extends GameplayScene {
       spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
-    this.defendQuest.renderAbove(ctx, camX, camY, this.active());
+    this.defendQuest.renderAbove(ctx, camera, this.active());
     this.cloggedBathroom.renderAbove(ctx, camX, camY);
-    this.briarHollowKit?.renderAbove(ctx, camX, camY);
+    this.briarHollowKit?.renderAbove(ctx, camera);
     this.gathering?.renderAbove(ctx, camX, camY);
     this.circusAmbience?.renderAbove(ctx, camX, camY);
     this.highStriker?.renderAbove(ctx, camX, camY);
@@ -9840,8 +9848,7 @@ export class DungeonScene extends GameplayScene {
       drawUnzoomed(ctx, zoom, () =>
         this.deinonychusSystem.renderOffscreenMarker(
           ctx,
-          camX,
-          camY,
+          camera,
           this.active(),
           VISIBILITY_RADIUS_PX,
         ),
@@ -9866,6 +9873,7 @@ export class DungeonScene extends GameplayScene {
       this.briarHollowKit?.renderHud(ctx, {
         keepouts: this.hudKeepoutsCss(),
         buildButton: this.hud.cssDockRect('build'),
+        camera,
       }),
     );
 
@@ -9880,23 +9888,16 @@ export class DungeonScene extends GameplayScene {
           null,
         this.mercenarySystem.downedArrowCandidate(
           ctx,
-          camX,
-          camY,
+          camera,
           this.active(),
           VISIBILITY_RADIUS_PX,
           framesRect,
         ),
-        this.attackCowSystem.downedArrowCandidate(
-          ctx,
-          camX,
-          camY,
-          this.active(),
-          VISIBILITY_RADIUS_PX,
-        ),
+        this.attackCowSystem.downedArrowCandidate(ctx, camera, this.active(), VISIBILITY_RADIUS_PX),
         this.stairwellRevealArrowCandidate(ctx, camX, camY),
         this.spiderLabArrowCandidate(ctx, camX, camY),
-        this.pinnedObjectiveArrowCandidate(ctx, camX, camY),
-        this.roomObjectiveArrowCandidate(ctx, camX, camY),
+        this.pinnedObjectiveArrowCandidate(ctx, camera),
+        this.roomObjectiveArrowCandidate(ctx, camera),
         this.shouldShowBountyArrow()
           ? (this.bounty?.arrowCandidate(ctx, this.active(), camX, camY, framesRect) ?? null)
           : null,
@@ -9904,6 +9905,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.bossRoom.renderSealedBorders(ctx, camX, camY);
+    this.spiderQuest.renderLockedRoomBorder(ctx, camX, camY);
     this.destruction.loot.render(ctx, camX, camY, this.active());
 
     if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
@@ -9975,7 +9977,7 @@ export class DungeonScene extends GameplayScene {
     this.rewardFly.render(ctx, this.hudFlyTargets());
 
     // While its modals or the song are up, they draw with their own surface.
-    this.spiderQuest.renderUI(ctx, camX, camY);
+    this.spiderQuest.renderUI(ctx);
 
     if (this.bossIntro.isActive) {
       this.bossIntro.render(ctx, this.cat.appearance);
@@ -9992,8 +9994,7 @@ export class DungeonScene extends GameplayScene {
     ) {
       renderEntityTooltip(
         ctx,
-        camX,
-        camY,
+        camera,
         mouse.x,
         mouse.y,
         this.world.roster.grid,
@@ -10002,7 +10003,6 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.tutorial !== null) {
-      const { x: tutCamX, y: tutCamY } = this.camera();
       const activePlayer = this.active();
       const pauseButton = this.hud.cssDockRect('pause');
       const hotbarFrame = this.hud.frame;
@@ -10088,14 +10088,7 @@ export class DungeonScene extends GameplayScene {
         statSpendButtonRect,
         menuCloseRect,
       };
-      this.tutorial.renderOverlay(
-        ctx,
-        tutCamX,
-        tutCamY,
-        activePlayer.x,
-        activePlayer.y,
-        tutRenderCtx,
-      );
+      this.tutorial.renderOverlay(ctx, camera, activePlayer.x, activePlayer.y, tutRenderCtx);
     }
 
     // Over everything, HUD included: the loading screen fades out over the
@@ -10230,6 +10223,7 @@ export class DungeonScene extends GameplayScene {
     ctx.activeIsMoving = active.isMoving;
     ctx.roster = this.world.roster;
     ctx.gameMap = this.gameMap;
+    ctx.camera = this.camera();
     ctx.bossRoom = this.bossRoom;
     ctx.extraTargets = targets.length > 0 ? targets : undefined;
     return ctx;
@@ -10446,11 +10440,16 @@ export class DungeonScene extends GameplayScene {
     this.ambientSound?.update(ctx);
     if (this.combat.worldStepTaken) this.bossRoomDressings.update(ctx);
     for (const takes of this.gymRoom.drainSoundCues()) this.audio?.playRandom(takes);
+    for (const takes of this.bossRoomDressings.parts.powerLab?.drainSoundCues() ?? []) {
+      this.audio?.playRandom(takes);
+    }
     this.drainFloodedRoomCues();
     this.followFloodedRoomTrail();
     const floodedRoom = this.bossRoomDressings.parts.floodedPumpRoom;
     if (floodedRoom !== null) this.krakenFightMusic?.update(floodedRoom);
     this.updateCameraZoom(floodedRoom);
+    // Everything ticked after the framing changes measures the view it settled on.
+    ctx.camera = this.camera();
     for (const burst of this.bossRoomDressings.parts.trashGremlin?.drainRoachBursts() ?? []) {
       this.audio?.playRandomAt(TRASH_PILE_ROACH_BURST, burst.x, burst.y);
     }
@@ -10473,16 +10472,13 @@ export class DungeonScene extends GameplayScene {
       if (this.tutorial.needsCameraPanStart) {
         this.tutorial.needsCameraPanStart = false;
         const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
-        const halfW = worldViewWidth() / 2;
-        const halfH = worldViewHeight() / 2;
-        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - worldViewWidth());
-        const humanCamY = clamp(
-          this.human.y + TILE_SIZE / 2 - halfH,
-          0,
-          mapPxH - worldViewHeight(),
-        );
-        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - worldViewWidth());
-        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - worldViewHeight());
+        const { viewWidth, viewHeight } = this.camera();
+        const halfW = viewWidth / 2;
+        const halfH = viewHeight / 2;
+        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - viewWidth);
+        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPxH - viewHeight);
+        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - viewWidth);
+        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - viewHeight);
         this.tutorial.startCameraPan(humanCamX, humanCamY, catCamX, catCamY);
       }
 
@@ -11306,21 +11302,23 @@ export class DungeonScene extends GameplayScene {
   /**
    * Keeps the flooded pump room's shark loop on screen while the room is
    * flooded, zooming out only as far as the screen, less the HUD, needs.
-   * Published at once, so this tick's camera and everything measured against
-   * the world view agree.
    */
   private updateCameraZoom(floodedRoom: FloodedPumpRoomSystem | null): void {
     this.cameraZoom.request('floodedPumpRoom', floodedRoom?.cameraWatchRect(this.active()) ?? null);
     this.cameraZoom.tick(viewportWidth(), viewportHeight(), this.hudFramingKeepoutsCss());
-    setWorldZoom(this.cameraZoom.zoom);
   }
 
   /** The unit frames in the world view's units, for world chrome drawn under the camera's zoom. */
   private worldViewFramesRect(): Rect {
-    return toWorldViewRect(this.hudFramesRect(), getWorldZoom());
+    return toWorldViewRect(this.hudFramesRect(), this.camera());
   }
 
-  private camera(): { x: number; y: number } {
+  /** The camera this frame is drawn with, its view sized by the camera's zoom. */
+  private camera(): Camera {
+    return cameraAt(this.cameraTopLeft(), this.cameraZoom.zoom);
+  }
+
+  private cameraTopLeft(): { x: number; y: number } {
     const tutorialCam = this.tutorial?.cameraOverride;
     if (tutorialCam !== null && tutorialCam !== undefined) return tutorialCam;
 
@@ -11334,8 +11332,7 @@ export class DungeonScene extends GameplayScene {
     const targetX = targetOverride !== null ? targetOverride.x : player.x;
     const targetY = targetOverride !== null ? targetOverride.y : player.y;
 
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const { width: viewW, height: viewH } = worldViewSize(this.cameraZoom.zoom);
     const focusX = targetX + TILE_SIZE / 2;
     const focusY = targetY + TILE_SIZE / 2;
     const framed = this.cameraZoom.keepInView(
@@ -11438,15 +11435,15 @@ export class DungeonScene extends GameplayScene {
   /** Flies a quest's coin reward from the active crawler's own position. */
   private flyQuestCoins(coins: number): void {
     const active = this.active();
-    const cam = this.camera();
-    this.rewardFly.enqueueCoins(coins, active.x - cam.x, active.y - cam.y);
+    const from = worldToScreen(this.camera(), active.x, active.y);
+    this.rewardFly.enqueueCoins(coins, from.x, from.y);
   }
 
   /** Flies a quest's item reward from the active crawler's own position. */
   private flyQuestItem(id: ItemId): void {
     const active = this.active();
-    const cam = this.camera();
-    this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, active.x - cam.x, active.y - cam.y);
+    const from = worldToScreen(this.camera(), active.x, active.y);
+    this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, from.x, from.y);
   }
 
   /**
@@ -11466,9 +11463,7 @@ export class DungeonScene extends GameplayScene {
 
   /** From a ground pile's world position, to wherever the HUD's coin/bag targets sit this frame. */
   private flyLootReward(loot: PendingLoot): void {
-    const cam = this.camera();
-    const screenX = loot.x - cam.x;
-    const screenY = loot.y - cam.y;
+    const { x: screenX, y: screenY } = worldToScreen(this.camera(), loot.x, loot.y);
     this.rewardFly.enqueueCoins(loot.loot.coins, screenX, screenY);
     for (const item of loot.loot.items) {
       this.rewardFly.enqueueItem(item.id, ITEM_DEF[item.id].name, screenX, screenY);

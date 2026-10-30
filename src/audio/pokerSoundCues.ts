@@ -9,7 +9,7 @@
  * exists. A cue with several takes is rotated through, one take per play.
  */
 
-import type { SoundId } from '../../../audio/sounds';
+import type { SoundId } from './sounds';
 
 export const POKER_CUES = {
   /** Waiting for `casino/poker_check_knock_1.mp3` … `_2.mp3`. */

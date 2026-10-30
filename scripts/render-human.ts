@@ -598,7 +598,7 @@ function drawGroundPlanePanel(
   state: HumanRowName,
   frameCount: number,
 ): void {
-  const travelPerFrame = floorDriftPerFrameCellPx(state);
+  const travelPerFrame = floorDriftPerFrameCellPx(HUMAN_ROW_TABLE[state]);
   const direction = TRAVEL_DIRECTION[HUMAN_ROW_TABLE[state].view];
   const along = (p: Pt): number => p.x * direction.x + p.y * direction.y;
   const legs: ReadonlyArray<{

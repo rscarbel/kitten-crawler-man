@@ -44,6 +44,8 @@ import { level3 } from '../src/levels/level3';
 import type { GameMap } from '../src/map/GameMap';
 import type { TilePoint } from '../src/map/town/townPlan';
 import { type Player } from '../src/Player';
+import type { HumanPlayer } from '../src/creatures/HumanPlayer';
+import type { CatPlayer } from '../src/creatures/CatPlayer';
 import { ALL_STATS } from '../src/core/party/stats';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { updateKnockoutState } from '../src/systems/KnockoutRevive';
@@ -77,6 +79,7 @@ import { garrisonGreen } from '../src/systems/briarHollow/blueprints/garrisonGre
 import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/blueprintsSoundCues';
 import { BLUEPRINTS_MIDGE_WAITING_HINT } from '../src/systems/briarHollow/BlueprintsQuestSystem';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { harnessHit } from './crawlerHitHarness';
 
 useDevPlayerIdentity();
 
@@ -500,7 +503,7 @@ function walkField(map: GameMap, field: Int32Array, body: Player): boolean {
 // ── The defence ──────────────────────────────────────────────────────────
 
 interface Striker {
-  readonly body: Player;
+  readonly body: HumanPlayer | CatPlayer;
   readonly damage: number;
   readonly damageType: 'melee' | 'missile';
   readonly frames: number;
@@ -645,7 +648,7 @@ function defend(rig: SiegeRig, striker: Striker, threat: Mob): void {
   striker.closestTiles = Infinity;
   striker.route = null;
   if (striker.cooldown > 0) return;
-  threat.takeDamageFrom(striker.damage, body, striker.damageType);
+  threat.takeHit(harnessHit(body, striker.damage, striker.damageType));
   striker.cooldown = striker.frames;
 }
 

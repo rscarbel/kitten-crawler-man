@@ -1,4 +1,13 @@
 import type { AbilityDef } from '../core/skills/AbilityManager';
+import {
+  hitTrainingOn,
+  resolveCrawlerHit,
+  type CrawlerDealer,
+  type ResolvedHit,
+} from '../core/combat/outgoingHit';
+import { MAGIC_HIT } from '../core/combat/damageTags';
+import { energyShieldMagicScale } from '../core/party/crawlerFormulas';
+import type { Player } from '../Player';
 import type { Rect } from '../ui/core/geom';
 import { iconSquare } from '../ui/icons/iconSquare';
 
@@ -214,3 +223,45 @@ export const ENERGY_SHIELD_DEF: AbilityDef = {
   ],
   renderIcon: renderEnergyShieldIcon,
 };
+
+/** What a shield's hit is landing on, as far as sizing the hit is concerned. */
+type ShieldHitTarget = Pick<Player, 'blowsEarnNothing'>;
+
+/**
+ * One of the shield's fixed-strength pulses landing on `target` in `caster`'s
+ * name — its edge, its parting shockwave, a chain-lightning arc. Magic, so
+ * Magic Eye boosts it, but no stat grows it: the shield's magic goes into its
+ * duration and its expanding blast.
+ */
+export function energyShieldPulse(
+  caster: CrawlerDealer,
+  target: ShieldHitTarget,
+  damage: number,
+): ResolvedHit {
+  return resolveCrawlerHit({
+    dealer: caster,
+    delivery: 'unscaled',
+    blow: damage,
+    tags: MAGIC_HIT,
+    training: hitTrainingOn(target),
+    damageType: 'energy_shield',
+    struckBy: 'dealer',
+  });
+}
+
+/** The shield's expanding blast landing on `target`, `expandDamage` grown by the caster's magic. */
+export function energyShieldBlast(
+  caster: CrawlerDealer,
+  target: ShieldHitTarget,
+  expandDamage: number,
+): ResolvedHit {
+  return resolveCrawlerHit({
+    dealer: caster,
+    delivery: 'spell',
+    blowAt: (magic) => Math.round(expandDamage * energyShieldMagicScale(magic)),
+    tags: MAGIC_HIT,
+    training: hitTrainingOn(target),
+    damageType: 'energy_shield',
+    struckBy: 'dealer',
+  });
+}

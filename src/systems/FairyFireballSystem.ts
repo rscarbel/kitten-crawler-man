@@ -22,7 +22,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { makeBurn, type StatusEffect } from '../core/combat/StatusEffect';
+import { makeBurn } from '../core/combat/StatusEffect';
 import { FireFairy } from '../creatures/fairies/FireFairy';
 import {
   DEATH_EXPLOSION_DAMAGE,
@@ -162,13 +162,6 @@ interface Explosion {
   readonly radiusPx: number;
   readonly seed: number;
   age: number;
-}
-
-/** A fire fairy's burn on `target`, shortened by whatever magic resistance she wears. */
-function magicResistedBurn(target: Player): StatusEffect {
-  const burn = makeBurn();
-  const ticks = target.magicResistedFrames(burn.totalTicks);
-  return { ...burn, ticksRemaining: ticks, totalTicks: ticks };
 }
 
 export class FairyFireballSystem implements GameSystem, GroundHazardSource {
@@ -378,7 +371,8 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
         const connected = target.takeDamage(charge.burstDamage, source);
         if (!connected) continue;
         this.noteBlood(charge.owner, target);
-        if (Math.random() < FIREBALL_BURN_CHANCE) target.applyStatus(magicResistedBurn(target));
+        if (Math.random() < FIREBALL_BURN_CHANCE)
+          target.applyStatus(makeBurn(target.survivingShare('magic')));
       }
       this.explosions.push({ x: charge.x, y: charge.y, radiusPx, seed: charge.seed, age: 0 });
       this.cues.add('chargeExplode');

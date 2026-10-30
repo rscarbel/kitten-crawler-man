@@ -22,7 +22,7 @@
 import { spawnSync } from 'node:child_process';
 import { gameContext } from './nodeGameContext.js';
 import type { SoundId } from '../src/audio/sounds.js';
-import type { PokerCue } from '../src/systems/casino/poker/pokerSoundCues.js';
+import type { PokerCue } from '../src/audio/pokerSoundCues.js';
 import {
   UiRoot,
   UI_ERROR_SOUND,
@@ -2368,8 +2368,7 @@ section('the poker table: each sound cue once per event, none while skipping or 
   const { ClubPokerSystem } = await import('../src/systems/ClubPokerSystem.js');
   const { POKER_DEV_SEED } = await import('../src/systems/casino/poker/npc/personality.js');
   const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
-  const { POKER_CUES, shuffleSound } =
-    await import('../src/systems/casino/poker/pokerSoundCues.js');
+  const { POKER_CUES, shuffleSound } = await import('../src/audio/pokerSoundCues.js');
   const { HOLE_CARD_COUNT, POKER_SEAT_COUNT } =
     await import('../src/systems/casino/poker/PokerTable.js');
   const { mulberry32 } = await import('../src/sprites/person/rng.js');

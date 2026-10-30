@@ -69,6 +69,7 @@ const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
 const { EnvironmentSheetResidentSet, environmentSheetPlacements, FACADE_LIFE_RING, FACADE_RING } =
   await import('../src/systems/EnvironmentSheetResidentSet.js');
 const { WorldResidency, tileFocus } = await import('../src/systems/WorldResidency.js');
+const { UNZOOMED, cameraAt, worldPx } = await import('../src/core/rendering/camera.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
@@ -95,6 +96,7 @@ const MAP_SIZE = level3.mapSize;
 const WORLD_SEED = 1;
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 720;
+const RESIDENCY_VIEW = { viewWidth: worldPx(VIEWPORT_W), viewHeight: worldPx(VIEWPORT_H) };
 /** Frames of play measured after the loading screen closes. */
 const PLAY_FRAMES = 120;
 /** Frames the loader may take before the gate calls it hung. */
@@ -151,7 +153,7 @@ const townDecor = new TownDecorSystem(
   new Set([...market.reservedTiles, ...townProps.reservedTiles]),
 );
 const props = [...market.props, ...townProps.props, ...townDecor.props];
-const arrivalOutlook = { focus: [tileFocus(plazaCentre)], covered: false };
+const arrivalOutlook = { focus: [tileFocus(plazaCentre)], view: RESIDENCY_VIEW, covered: false };
 interface SettledTown {
   readonly townLife: InstanceType<typeof TownLifeSystem>;
   readonly residency: InstanceType<typeof WorldResidency>;
@@ -208,7 +210,7 @@ const runner = new LoadRunner(
   floorArrivalLoadTasks({
     gameMap,
     camera: () => ({ x: camX, y: camY }),
-    viewport: () => ({ width: VIEWPORT_W, height: VIEWPORT_H }),
+    viewport: () => ({ width: worldPx(VIEWPORT_W), height: worldPx(VIEWPORT_H) }),
     spriteGroupsReady: Promise.resolve(),
   }),
   { minDisplayMs: 0 },
@@ -272,13 +274,26 @@ function playFrame(): PlayFrame {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   });
   const chunksBefore = tileChunkBakeCount();
   const stepsBefore = environmentPaintedStepCount();
   beginFigureFrame();
   beginEnvironmentArtFrame();
-  gameMap.renderCanvas(ctx, camX, camY, VIEWPORT_W, VIEWPORT_H);
-  gameMap.renderDecorationsOverlay(ctx, camX, camY, VIEWPORT_W, VIEWPORT_H);
+  gameMap.renderCanvas(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(VIEWPORT_W),
+    viewHeight: worldPx(VIEWPORT_H),
+    zoom: UNZOOMED,
+  });
+  gameMap.renderDecorationsOverlay(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(VIEWPORT_W),
+    viewHeight: worldPx(VIEWPORT_H),
+    zoom: UNZOOMED,
+  });
   const inView = town.townLife.people.filter(
     (person) =>
       person.x >= camX - CULL_MARGIN &&

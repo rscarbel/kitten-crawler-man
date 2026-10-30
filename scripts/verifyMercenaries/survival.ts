@@ -73,6 +73,7 @@ import {
   NO_ROUTE_FORGET_FRAMES,
 } from '../../src/creatures/targetHoldOffs';
 import type { SoundId } from '../../src/audio/sounds';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** How a gate reports; the caller owns the failure count. */
 export interface SurvivalGateReporter {
@@ -177,6 +178,7 @@ function buildScene(hire: HiredMercenary | null): Scene {
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: extras,
   };
   const bus = new EventBus();

@@ -60,6 +60,7 @@ import {
 import { registerBossRoomMoodLights } from '../src/systems/bossRooms/BossRoomDressings.js';
 import { Rat } from '../src/creatures/Rat.js';
 import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 /** Generated floors checked per level, from fixed seeds so a failure replays. */
 const SEED_COUNT = 3;
@@ -379,7 +380,13 @@ function renderOnWhite(
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, viewW, viewH);
-  lighting.render(asGameContext(ctx), camX, camY, viewW, viewH);
+  lighting.render(asGameContext(ctx), {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   const data = ctx.getImageData(0, 0, viewW, viewH).data;
   return {
     camX,
@@ -796,7 +803,13 @@ function renderFlat(
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = `rgb(${background},${background},${background})`;
   ctx.fillRect(0, 0, width, height);
-  lighting.render(asGameContext(ctx), camX, camY, width, height);
+  lighting.render(asGameContext(ctx), {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(width),
+    viewHeight: worldPx(height),
+    zoom: UNZOOMED,
+  });
   const rgba = ctx.getImageData(0, 0, width, height).data;
   const data = new Uint8ClampedArray(width * height);
   for (let index = 0; index < data.length; index++) {

@@ -1,3 +1,4 @@
+import type { Camera } from '../../core/rendering/camera';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameSystem, SystemContext } from '../GameSystem';
@@ -89,8 +90,7 @@ export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFi
    */
   renderGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void;
   /**
@@ -98,14 +98,14 @@ export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFi
    * shadows, charged puddles), over every floor decal, prop and scorch and
    * under every entity, so nothing painted on the floor ever hides one.
    */
-  renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderGroundWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /**
    * Live objects to merge into the Y-sorted pass this frame. Return a list the
    * dressing owns and reuses; the pipeline reads it and never keeps it.
    */
   renderEntities(): ReadonlyArray<DressingRenderable>;
   /** Anything that must cross in front of every body: falling debris, sparks, spray. */
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void;
   /**
    * Drops transient fight state after a death, before the checkpoint restore
    * runs. Together with that restore, the whole of a death's rewind.

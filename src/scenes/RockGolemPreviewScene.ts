@@ -18,6 +18,7 @@ import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { GameMap } from '../map/GameMap';
+import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { drawGolemRock, drawGolemRockBurst } from '../sprites/golemRockSprite';
 import {
@@ -122,7 +123,7 @@ const ROCK_DEMO_BURST_FRAMES = 22;
 const ROCK_DEMO_LANE_TILES = 6;
 
 export class RockGolemPreviewScene extends PreviewScene {
-  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly map = new GameMap({ prebuiltStructure: openFloorGrid(PREVIEW_MAP_SIZE) });
   private readonly gore = new BodyPartGoreSystem(this.map);
 
   private zoomIndex = DEFAULT_ZOOM_INDEX;

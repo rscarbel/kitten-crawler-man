@@ -29,6 +29,7 @@
 import { createCanvas } from 'canvas';
 
 import { TILE_SIZE } from '../../src/core/constants.js';
+import { UNZOOMED, worldPx } from '../../src/core/rendering/camera.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { Cockroach } from '../../src/creatures/Cockroach.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
@@ -83,6 +84,7 @@ import {
   type GateReport,
   type RoomGateContext,
 } from './harness.js';
+import { cameraAt } from '../../src/core/rendering/camera.js';
 
 const HALF = 0.5;
 const DECIMALS = 2;
@@ -179,6 +181,7 @@ function frameFor(gameMap: GameMap, human: HumanPlayer, cat: CatPlayer): SystemC
     activeIsMoving: false,
     roster: new MobRoster(gameMap, new SpellSystem()),
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 
@@ -413,7 +416,13 @@ export function measureFloorCalm(): { stdDev: number; meanGradient: number } {
   const size = FLOOR_SAMPLE_TILES * TILE_SIZE;
   const canvas = createCanvas(size, size);
   const nodeCtx = canvas.getContext('2d');
-  map.renderCanvas(asGameContext(nodeCtx), 0, 0, size, size);
+  map.renderCanvas(asGameContext(nodeCtx), {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(size),
+    viewHeight: worldPx(size),
+    zoom: UNZOOMED,
+  });
   const inset = FLOOR_SAMPLE_MARGIN_TILES * TILE_SIZE;
   const span = size - inset * 2;
   const { data } = nodeCtx.getImageData(inset, inset, span, span);
@@ -832,7 +841,14 @@ function capGates(report: GateReport): void {
   const nodeCtx = canvas.getContext('2d');
   const counter = new DrawCallCounter(nodeCtx);
   counter.counting = true;
-  room.renderAbove(asGameContext(nodeCtx), 0, 0);
+  const wholeMap = {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(canvas.width),
+    viewHeight: worldPx(canvas.height),
+    zoom: UNZOOMED,
+  };
+  room.renderAbove(asGameContext(nodeCtx), wholeMap);
   const specks = counter.counts.fillRect;
   // Each fly is a speck and, on alternate beats, a wing.
   if (specks > MAX_FLIES * 2)
@@ -893,9 +909,7 @@ function fightGates(report: GateReport): void {
   }
 }
 
-let sweepGatesRun = false;
-
-/** The lair's gates for one generated floor, and the once-per-sweep sims on the first. */
+/** The lair's gates for one generated floor. */
 export function trashGremlinRoomGates(context: RoomGateContext): void {
   const { seed, report } = context;
   const fresh = freshRoom(seed);
@@ -906,14 +920,15 @@ export function trashGremlinRoomGates(context: RoomGateContext): void {
   layoutGates(fresh.room, fresh.gameMap, report);
   toppleGates(fresh.room, fresh.gameMap, seed, report);
   checkpointGates(seed, report);
-  if (sweepGatesRun) return;
-  sweepGatesRun = true;
-  floorCalmGates(report);
-  standoffGates(report);
-  standoffFarGates(report);
-  // The long sims can be skipped while iterating on the per-floor gates.
-  if (process.env.TRASH_GREMLIN_SKIP_SIMS === '1') return;
-  bileGates(report);
-  capGates(report);
-  fightGates(report);
 }
+
+/** The long sims, which can be skipped while iterating on the per-floor gates. */
+const SIM_GATES = { bile: bileGates, cap: capGates, fight: fightGates } as const;
+
+/** The lair's once-per-sweep gates, longest first: each stages the fights it measures. */
+export const TRASH_GREMLIN_SWEEP_GATES: Readonly<Record<string, (report: GateReport) => void>> = {
+  ...(process.env.TRASH_GREMLIN_SKIP_SIMS === '1' ? {} : SIM_GATES),
+  floorCalm: floorCalmGates,
+  standoff: standoffGates,
+  standoffFar: standoffFarGates,
+};

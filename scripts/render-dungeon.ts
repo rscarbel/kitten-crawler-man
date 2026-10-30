@@ -119,6 +119,7 @@ import { UINT32_SPAN } from '../src/core/world/WorldRandom.js';
 import { StairwellSystem } from '../src/systems/StairwellSystem.js';
 import { LabHallwayAtmosphere } from '../src/systems/spiderQuest/LabHallwayAtmosphere.js';
 import { parseLevelId } from '../src/levels/levelIds.js';
+import { worldPx, UNZOOMED, cameraAt } from '../src/core/rendering/camera.js';
 
 const DEFAULT_LEVEL = 1;
 const DEFAULT_VIEW_TILES_W = 56;
@@ -546,10 +547,18 @@ interface SortedDraw {
 
 /** The map's decoration tiles, anchored on their sprite's foot as the game sorts them. */
 function decorationDraws(): SortedDraw[] {
-  return gameMap.getVisibleDecorationTiles(camX, camY, viewW, viewH).map((deco) => ({
-    sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx,
-    draw: (ctx) => gameMap.drawDecorationAt(ctx, deco.tx, deco.ty, camX, camY),
-  }));
+  return gameMap
+    .getVisibleDecorationTiles({
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(viewW),
+      viewHeight: worldPx(viewH),
+      zoom: UNZOOMED,
+    })
+    .map((deco) => ({
+      sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx,
+      draw: (ctx) => gameMap.drawDecorationAt(ctx, deco.tx, deco.ty, camX, camY),
+    }));
 }
 
 /**
@@ -561,22 +570,24 @@ function wallFixtureDraws(): SortedDraw[] {
   const floor = dungeonFloorTheme().id;
   const watchX = camX + viewW / 2;
   const watchY = camY + viewH / 2;
-  return collectVisibleWallFixtures(gameMap.wallFixtures, camX, camY, viewW, viewH, []).map(
-    (fixture) => {
-      const faceX = fixture.tileX * TILE_SIZE;
-      const faceY = fixture.tileY * TILE_SIZE;
-      return {
-        sortY: wallFixtureSortY(fixture),
-        draw: (ctx) =>
-          drawWallFixture(ctx, fixture, faceX - camX, faceY - camY, TILE_SIZE, {
-            nowMs: LIGHTING_CLOCK_MS,
-            floor,
-            lit: isFixtureLit(fixture, gameMap.wallFixtures),
-            watch: { dx: watchX - faceX, dy: watchY - faceY },
-          }),
-      };
-    },
-  );
+  return collectVisibleWallFixtures(
+    gameMap.wallFixtures,
+    { x: camX, y: camY, viewWidth: worldPx(viewW), viewHeight: worldPx(viewH), zoom: UNZOOMED },
+    [],
+  ).map((fixture) => {
+    const faceX = fixture.tileX * TILE_SIZE;
+    const faceY = fixture.tileY * TILE_SIZE;
+    return {
+      sortY: wallFixtureSortY(fixture),
+      draw: (ctx) =>
+        drawWallFixture(ctx, fixture, faceX - camX, faceY - camY, TILE_SIZE, {
+          nowMs: LIGHTING_CLOCK_MS,
+          floor,
+          lit: isFixtureLit(fixture, gameMap.wallFixtures),
+          watch: { dx: watchX - faceX, dy: watchY - faceY },
+        }),
+    };
+  });
 }
 
 /**
@@ -613,7 +624,13 @@ function applyLighting(ctx: CanvasRenderingContext2D, clockMs: number): boolean 
       sink.add(camX + viewW / 2, camY + viewH / 2, 'crawler', 1, CRAWLER_LIGHT_REACH_TILES),
   });
   if (smashed !== null) lighting.addDynamicLightSource(smashed);
-  lighting.render(ctx, camX, camY, viewW, viewH);
+  lighting.render(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   // Burning oil is a floor warning, drawn back over the dark as the game draws it.
   if (smashed?.hasGroundArt === true) {
     lighting.renderOverDarkness(ctx, scale, {
@@ -679,7 +696,14 @@ function buildLife(): DungeonLifeSystem | null {
     if (puddle !== undefined && shotIn === LIFE_DRIP_FRAMES_BEFORE_SHOT) {
       life.spawnDrip(puddle.x, puddle.y);
     }
-    life.update({ party: [], others: [wader], camX, camY, viewW, viewH });
+    life.update({
+      party: [],
+      others: [wader],
+      camX,
+      camY,
+      viewW: worldPx(viewW),
+      viewH: worldPx(viewH),
+    });
   }
   return life;
 }
@@ -749,9 +773,15 @@ const smashed = smashRequested ? smashView() : null;
 const labHallway = propsRequested
   ? LabHallwayAtmosphere.forMap({ gameMap, audio: null, audioScope: null, lights: null })
   : null;
-smashed?.renderWreckage(ctx, camX, camY);
+smashed?.renderWreckage(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED));
 const life = buildLife();
-life?.renderGround(ctx, camX, camY, viewW, viewH);
+life?.renderGround(ctx, {
+  x: camX,
+  y: camY,
+  viewWidth: worldPx(viewW),
+  viewHeight: worldPx(viewH),
+  zoom: UNZOOMED,
+});
 
 if (propsRequested || smashRequested) {
   // Fixtures go in ahead of props so the stable sort keeps a fixture behind a
@@ -773,11 +803,23 @@ if (stairwellRequested) {
     levelDef,
     () => undefined,
     () => 1,
-  ).renderStairwells(ctx, camX, camY);
+  ).renderStairwells(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED));
 }
-life?.renderAir(ctx, camX, camY, viewW, viewH);
+life?.renderAir(ctx, {
+  x: camX,
+  y: camY,
+  viewWidth: worldPx(viewW),
+  viewHeight: worldPx(viewH),
+  zoom: UNZOOMED,
+});
 // The lab's approach strings its webs over the bodies.
-labHallway?.render(ctx, camX, camY, viewW, viewH);
+labHallway?.render(ctx, {
+  x: camX,
+  y: camY,
+  viewWidth: worldPx(viewW),
+  viewHeight: worldPx(viewH),
+  zoom: UNZOOMED,
+});
 
 if (lightingRequested && !applyLighting(ctx, LIGHTING_CLOCK_MS)) {
   console.warn('--lighting: this map has no room characters to light it by; rendered unlit');

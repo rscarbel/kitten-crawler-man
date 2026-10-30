@@ -227,6 +227,23 @@ dev_plain_sword: {
   (`src/core/party/stats.ts`): melee and claws with Melee, the sling with
   Ranged (`slingDamage` / `slingRangeTiles` in `crawlerFormulas.ts`).
   Never tune existing numbers; the user balances by playtest.
+- **Dealing damage.** Every hit a crawler or its gear lands on a creature is a
+  `CrawlerHit` record (`src/core/combat/outgoingHit.ts`): dealer, `delivery`
+  with `blowAt(stat)` (or `'unscaled'` with a fixed `blow`), `DamageTags`,
+  training (`hitTrainingOn(mob)`), `damageType` and `struckBy`
+  (`'unguardable'` for anything that left its body: a relic's bolt, a slash
+  wave, a gear spark). `resolveCrawlerHit` reads the delivery's stat off the
+  dealer and adds every proficiency skill; only its `ResolvedHit` reaches
+  `Mob.takeHit`. `Mob.takeDamageFrom` refuses a crawler attacker,
+  `takeCreditedDamage` requires a hireling striker, and harm it owns without
+  striking (reflect gear, something it built) goes through `takeOwnedHarm`
+  with a named `OwnedHarmSource`. A crawler's blow cannot land by accident
+  without the resolver: every other door asks for a mob striker or a named
+  source, so skipping it is a deliberate, labelled choice; a new kind of owned
+  harm adds its source there. Give the record honest tags: a
+  fire relic's bolt is `FIRE_HIT`, a claw's slash wave carries the claws'
+  family, and a share of a blow already resolved (`gearStrike`) is untagged
+  and `'unscaled'` so neither the stat nor a skill counts twice.
 - **Awakened looks.** A weapon with an `awakening` trait may name
   `awakenedHeldVisual` beside `heldVisual` (The Last Word): the same
   archetype and weight in a woken finish. `heldVisualIdOf(weapon, awakened)`
@@ -451,7 +468,12 @@ the outfit left off for a bare cat.
   E7 mirroring keeps the hand; the cat's held gates run in the same command.
   Each check is listed in `bipedal-figure` `references/gates.md`. With no
   `--item` it runs everything (the human's garment envelope pass alone takes about
-  half a minute).
+  half a minute). A crawler's weapon is checked on the crawler's rows of its
+  motion set, on every crawler look; a hireling's item
+  (`HIRELING_HELD_VISUAL_IDS`) once, in the hands of the figure that holds it,
+  on every row that figure plays, through `HIRELING_HOLDERS` in
+  `gates-equipment.ts`, a `Record` a new hireling item cannot ship without
+  (`bipedal-figure` `references/human.md`, "Rows only another figure plays").
 - `npm run verify:held-visuals` — registry, ranges, tool items, weapon
   wearers. `npm run verify:item-icons` — the icon.
 - One held item's contact sheet across its archetype's rows, every view and

@@ -222,7 +222,7 @@ const CHOKE_ROOM_OFFSET_MAX = 30;
 /** Chebyshev clearance any tile must keep from tiles owned by another segment. */
 const FOREIGN_SEGMENT_CLEARANCE = 2;
 
-/** Gap kept between room rectangles, matching the free-roam placement rule. */
+/** Gap kept between room rectangles. */
 const ROOM_GAP = 3;
 
 const MAX_BRANCH_ATTEMPTS = 8;

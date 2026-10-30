@@ -34,6 +34,7 @@ import {
 } from '../../map/goblinPrisonPlan';
 import { setDungeonFloorTheme } from '../../map/dungeon/floorTheme';
 import { requestGroundSheets } from '../../map/ground/runtimeGroundSheets';
+import type { Camera } from '../../core/rendering/camera';
 import { renderCanvas, TileChunkCache } from '../../map/TileRenderer';
 import { FloorTypeValue, type TileContent } from '../../map/tileTypes';
 import {
@@ -46,6 +47,7 @@ import {
   type CellDoorRun,
   type CoverKind,
 } from '../../sprites/art/prisonPropArt';
+import type { WorldPx } from '../../core/rendering/camera';
 
 /** The floor sheets the prison's walls and slab are painted from: floor 2's. */
 const PRISON_GROUND_SHEETS: ReadonlyArray<SpriteKey> = ['ground_floor2'];
@@ -379,7 +381,7 @@ export class PrisonGround {
   }
 
   /** Bakes what a view at this camera would show now rather than on its first frame. */
-  prewarm(camX: number, camY: number, viewW: number, viewH: number): void {
+  prewarm(camX: number, camY: number, viewW: WorldPx, viewH: WorldPx): void {
     this.syncCanvasGeneration();
     this.grimeSurface();
     for (const figure of this.figures) {
@@ -434,13 +436,8 @@ export class PrisonGround {
     return canvas;
   }
 
-  private renderStraw(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  private renderStraw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const { grid } = this.parsed;
     const x0 = Math.max(0, Math.floor(camX / TILE_SIZE));
     const y0 = Math.max(0, Math.floor(camY / TILE_SIZE));
@@ -459,8 +456,8 @@ export class PrisonGround {
   bakeTileArtForView(
     camX: number,
     camY: number,
-    viewW: number,
-    viewH: number,
+    viewW: WorldPx,
+    viewH: WorldPx,
     budgetMs: number,
     mustProgress: boolean,
   ): number {
@@ -468,19 +465,14 @@ export class PrisonGround {
   }
 
   /** The arrival screen's bake of the props a view will show: bars and cover, all at once. */
-  bakeDecorationArtForView(camX: number, camY: number, viewW: number, viewH: number): number {
+  bakeDecorationArtForView(camX: number, camY: number, viewW: WorldPx, viewH: WorldPx): number {
     this.prewarm(camX, camY, viewW, viewH);
     return ARRIVAL_BAKE_COMPLETE;
   }
 
   /** The walls, the slab, the grime, the straw, the lamps and the towers: everything under the bodies. */
-  renderGround(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     this.syncCanvasGeneration();
     renderCanvas(ctx, this.paintGrid, TILE_SIZE, camX, camY, viewW, viewH, this.chunks);
     const { grid } = this.parsed;
@@ -512,7 +504,7 @@ export class PrisonGround {
       );
     }
     ctx.restore();
-    this.renderStraw(ctx, camX, camY, viewW, viewH);
+    this.renderStraw(ctx, camera);
     const margin = TILE_SIZE;
     for (const tile of this.lampTiles) {
       const sx = tile.x * TILE_SIZE - camX;
@@ -529,7 +521,8 @@ export class PrisonGround {
   }
 
   /** Bars and cover near the view, for the scene's sorted pass. */
-  sortedFigures(camX: number, camY: number, viewW: number, viewH: number): InteriorFigure[] {
+  sortedFigures(camera: Camera): InteriorFigure[] {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const margin = PROP_VIEW_MARGIN_TILES * TILE_SIZE;
     return this.figures.filter((figure) =>
       figure.overlaps(camX - margin, camY - margin, camX + viewW + margin, camY + viewH + margin),

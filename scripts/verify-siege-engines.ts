@@ -23,7 +23,7 @@ import { EventBus } from '../src/core/EventBus';
 import { createBriarHollowState, type BriarHollowState } from '../src/core/quests/briarHollowState';
 import type { CrawlerKind } from '../src/core/skills/SkillManager';
 import { computeDodgeChance } from '../src/core/combat/dodge';
-import { makeBurn, makePoison } from '../src/core/combat/StatusEffect';
+import { FULL_SHARE, makeBurn, makePoison } from '../src/core/combat/StatusEffect';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling';
 import { Mercenary } from '../src/creatures/Mercenary';
 import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
@@ -72,6 +72,7 @@ import {
 } from '../src/systems/briarHollow/ConvertedAllyController';
 import { Villager } from '../src/systems/briarHollow/Villager';
 import { trebuchetFootprint } from '../src/systems/briarHollow/DefenseStructures';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 let failures = 0;
 let checks = 0;
@@ -1131,6 +1132,7 @@ section('Converted allies');
     activeIsMoving: false,
     roster: companionRig.roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   });
   for (const activeKind of ['human', 'cat'] as const) {
     const human = companionRig.human;
@@ -1225,6 +1227,7 @@ section('Converted allies');
     activeIsMoving: false,
     roster: boltRig.roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   for (let f = 0; f < 60; f++) bolts.update(boltCtx);
   check(
@@ -1284,6 +1287,7 @@ section('Converted allies');
       activeIsMoving: false,
       roster: arena.roster,
       gameMap,
+      camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     };
     for (let f = 0; f < 1200 && foe.isAlive && fighter.isAlive; f++) {
       arena.allies.update();
@@ -1328,7 +1332,7 @@ section('Converted allies');
 
   // Turning an enemy lifts the party's own damage-over-time from it, not an enemy's.
   const burnt = spawn(expiring, ghoul(), at.x + 3 * TILE_SIZE, at.y, 5);
-  burnt.applyStatus(makeBurn(expiring.human));
+  burnt.applyStatus(makeBurn(FULL_SHARE, expiring.human));
   burnt.applyStatus(makePoison(null));
   expiring.allies.convert(burnt, expiring.human);
   check(

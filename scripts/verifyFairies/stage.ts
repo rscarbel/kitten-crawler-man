@@ -28,6 +28,8 @@ import {
   type WorldSight,
 } from '../../src/core/rendering/visibleWorldView';
 import { clamp } from '../../src/utils';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** Side of the square test arena, border walls included, in tiles. */
 export const ARENA_TILES = 30;
@@ -160,6 +162,7 @@ export function buildStage(innerWalls: readonly TileSpec[] = []) {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [],
   });
   const add = (type: StandaloneMobKind, tileX: number, tileY: number): Mob => {
@@ -169,7 +172,7 @@ export function buildStage(innerWalls: readonly TileSpec[] = []) {
   };
   /** Kills through the real damage path and the scene's kill resolution, so `mobKilled` fires. */
   const kill = (mob: Mob): void => {
-    mob.takeDamageFrom(LETHAL_BLOW, pm.human);
+    mob.takeHit(harnessHit(pm.human, LETHAL_BLOW));
     combat.resolveKills();
   };
   const party = (): Player[] => [pm.human, pm.cat];

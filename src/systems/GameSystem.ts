@@ -14,6 +14,7 @@ import type { GameMap } from '../map/GameMap';
 import type { BossRoomSystem } from './BossRoomSystem';
 import type { CrawlerBarkSystem } from './CrawlerBarkSystem';
 import type { MobRoster } from './kits/SceneWorld';
+import type { Camera } from '../core/rendering/camera';
 
 /** Per-frame shared state passed to every system's update(). */
 export interface SystemContext {
@@ -34,6 +35,8 @@ export interface SystemContext {
    */
   roster: MobRoster;
   gameMap: GameMap;
+  /** The camera this frame is drawn with: what any rule about the view on screen measures. */
+  camera: Camera;
   /** Boss room system reference — used by MobUpdateLoop for clamping. Absent in scenes without boss rooms (e.g. building interiors). */
   bossRoom?: BossRoomSystem;
   /** Additional player-like targets (e.g. Deinonychus). Used by MobUpdateLoop. */

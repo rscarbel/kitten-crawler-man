@@ -28,6 +28,9 @@
  *    and the heaviest state must fit the per-frame draw budget. Then the room's
  *    own gates run.
  *
+ * Each room's floors are swept in a child process of its own, a few at a time;
+ * the checks that span every room run in the parent.
+ *
  * Fault flags break one guarded thing on purpose, so each gate can be seen to
  * fail: `--fault=block-approach`, `--fault=placeholder`, `--fault=removed-key`, `--fault=draw-budget`,
  * `--fault=sheet-budget`.
@@ -35,6 +38,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createCanvas } from 'canvas';
 
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -66,6 +70,7 @@ import { isWalkableTileType } from '../src/map/walkability.js';
 import { bossRoomSheetPlans } from '../src/sprites/sheets/bossRoomSheets.js';
 import { propSheetPlanMismatches, propSheetSize } from '../src/sprites/sheets/propSheetPlan.js';
 import type { TilePoint } from '../src/systems/bossRooms/bossRoomLayout.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 import {
   buildEnvironment,
   defaultInvariantTiles,
@@ -84,6 +89,7 @@ import {
 import { BOSS_ROOM_HARNESSES } from './bossRooms/rooms.js';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
+import { printUnitResult, runUnitsInChildren, unitArgument, unitArguments } from './childUnits.js';
 import { bakePropSheet, clippedFrames } from './propSheetBake.js';
 
 // ── Flags ────────────────────────────────────────────────────────────────────
@@ -123,6 +129,18 @@ if (faultArg !== '' && fault === undefined) {
 
 const roomArg = stringArg('room', 'all');
 if (roomArg !== 'all' && !isBossRoomId(roomArg)) throw new Error(`unknown --room ${roomArg}`);
+/**
+ * The unit a child process runs: a room's floor sweep (`<room>`), or one of
+ * its once-per-sweep gates (`<room>:<gate>`). The parent runs the checks that
+ * span every room and hands each unit to a child of its own: the rooms share
+ * nothing, and one room's sims alone take minutes.
+ */
+const unitArg = unitArgument();
+const SWEEP_GATE_SEPARATOR = ':';
+const [unitRoom, unitSweepGate] =
+  unitArg === null ? [null, undefined] : unitArg.split(SWEEP_GATE_SEPARATOR);
+if (unitRoom !== null && !isBossRoomId(unitRoom)) throw new Error(`unknown --unit ${unitArg}`);
+const roomsWanted = unitRoom ?? roomArg;
 const seedsPerFloor = intArg('seeds', DEFAULT_SEEDS_PER_FLOOR);
 const firstSeed = intArg('seed', DEFAULT_FIRST_SEED);
 
@@ -251,8 +269,22 @@ function renderTestTile(
   const canvas = createCanvas(TEST_MAP_PX, TEST_MAP_PX);
   const nodeCtx = canvas.getContext('2d');
   const ctx = asGameContext(nodeCtx);
-  if (passes.base) gameMap.renderCanvas(ctx, 0, 0, TEST_MAP_PX, TEST_MAP_PX);
-  if (passes.overlay) gameMap.renderDecorationsOverlay(ctx, 0, 0, TEST_MAP_PX, TEST_MAP_PX);
+  if (passes.base)
+    gameMap.renderCanvas(ctx, {
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(TEST_MAP_PX),
+      viewHeight: worldPx(TEST_MAP_PX),
+      zoom: UNZOOMED,
+    });
+  if (passes.overlay)
+    gameMap.renderDecorationsOverlay(ctx, {
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(TEST_MAP_PX),
+      viewHeight: worldPx(TEST_MAP_PX),
+      zoom: UNZOOMED,
+    });
   const tileOrigin = TEST_TILE * TILE_SIZE;
   const tilePixels = nodeCtx.getImageData(tileOrigin, tileOrigin, TILE_SIZE, TILE_SIZE).data;
 
@@ -277,95 +309,103 @@ function samePixels(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
   return true;
 }
 
-const plainFloorBase = renderTestTile(testMap(undefined), { base: true, overlay: false });
-const everyBossRoomTileType = [...BOSS_ROOM_PROP_TILE_TYPES, ...BOSS_ROOM_FLAT_TILE_TYPES];
-check(
-  everyBossRoomTileType.length === TILE_CONTRACTS.size &&
-    everyBossRoomTileType.every((type) => TILE_CONTRACTS.has(type)),
-  'tile contract',
-  'the tile types in BOSS_ROOM_PROP_TILE_TYPES / BOSS_ROOM_FLAT_TILE_TYPES and the contract ' +
-    'table here disagree — every boss-room tile needs a row',
-);
-
-for (const [type, contract] of TILE_CONTRACTS) {
-  const scope = `tile ${contract.name}`;
+if (unitRoom === null) {
+  const plainFloorBase = renderTestTile(testMap(undefined), { base: true, overlay: false });
+  const everyBossRoomTileType = [...BOSS_ROOM_PROP_TILE_TYPES, ...BOSS_ROOM_FLAT_TILE_TYPES];
   check(
-    BOSS_ROOM_PROP_TILE_TYPES.has(type) === contract.ySorted &&
-      BOSS_ROOM_FLAT_TILE_TYPES.has(type) === !contract.ySorted,
-    scope,
-    `listed in the wrong boss-room tile set for a ${contract.ySorted ? 'prop' : 'decal'}`,
-  );
-  const gameMap = testMap(type);
-  const tile = gameMap.structure[TEST_TILE][TEST_TILE];
-  check(
-    isWalkableTileType(tile, 'walker') === contract.walkable,
-    scope,
-    `walkable is ${!contract.walkable}, should be ${contract.walkable}`,
-  );
-  // Sight is judged across the tile, from the floor on one side to the other.
-  const sightY = (TEST_TILE + 1 / 2) * TILE_SIZE;
-  const sightClear = gameMap.hasLineOfSight(
-    TILE_SIZE / 2,
-    sightY,
-    TEST_MAP_PX - TILE_SIZE / 2,
-    sightY,
-  );
-  check(
-    sightClear === !contract.blocksSight,
-    scope,
-    contract.blocksSight
-      ? 'does not block sight, but it is tall enough to hide behind'
-      : 'blocks sight, but it is low enough to see over — it would be free cover',
+    everyBossRoomTileType.length === TILE_CONTRACTS.size &&
+      everyBossRoomTileType.every((type) => TILE_CONTRACTS.has(type)),
+    'tile contract',
+    'the tile types in BOSS_ROOM_PROP_TILE_TYPES / BOSS_ROOM_FLAT_TILE_TYPES and the contract ' +
+      'table here disagree — every boss-room tile needs a row',
   );
 
-  const base = renderTestTile(gameMap, { base: true, overlay: false });
-  const full = renderTestTile(gameMap, { base: true, overlay: true });
-  const overlayOnly = renderTestTile(gameMap, { base: false, overlay: true });
-  const inDecorationIndex = gameMap
-    .getVisibleDecorationTiles(0, 0, TEST_MAP_PX, TEST_MAP_PX)
-    .some((entry) => entry.tx === TEST_TILE && entry.ty === TEST_TILE);
-  if (contract.ySorted) {
+  for (const [type, contract] of TILE_CONTRACTS) {
+    const scope = `tile ${contract.name}`;
     check(
-      samePixels(base.tilePixels, plainFloorBase.tilePixels),
+      BOSS_ROOM_PROP_TILE_TYPES.has(type) === contract.ySorted &&
+        BOSS_ROOM_FLAT_TILE_TYPES.has(type) === !contract.ySorted,
       scope,
-      'the chunk bake draws something other than the plain floor under it — missing from ' +
-        'DECORATION_TYPES (TileRenderer) or from the baseOnly cases (decorationTiles)',
+      `listed in the wrong boss-room tile set for a ${contract.ySorted ? 'prop' : 'decal'}`,
+    );
+    const gameMap = testMap(type);
+    const tile = gameMap.structure[TEST_TILE][TEST_TILE];
+    check(
+      isWalkableTileType(tile, 'walker') === contract.walkable,
+      scope,
+      `walkable is ${!contract.walkable}, should be ${contract.walkable}`,
+    );
+    // Sight is judged across the tile, from the floor on one side to the other.
+    const sightY = (TEST_TILE + 1 / 2) * TILE_SIZE;
+    const sightClear = gameMap.hasLineOfSight(
+      TILE_SIZE / 2,
+      sightY,
+      TEST_MAP_PX - TILE_SIZE / 2,
+      sightY,
     );
     check(
-      !samePixels(full.tilePixels, base.tilePixels),
+      sightClear === !contract.blocksSight,
       scope,
-      'the overlay pass draws nothing — it would render as bare floor',
+      contract.blocksSight
+        ? 'does not block sight, but it is tall enough to hide behind'
+        : 'blocks sight, but it is low enough to see over — it would be free cover',
     );
-    check(
-      inDecorationIndex,
-      scope,
-      'missing from DECORATION_OVERLAY_TYPES (GameMap), so the Y-sorted pass never draws it',
-    );
-    check(
-      overlayOnly.sideOverhangPx === 0,
-      scope,
-      `${overlayOnly.sideOverhangPx} px of its art hang past the sides of the tile it blocks`,
-    );
-  } else {
-    check(
-      !samePixels(base.tilePixels, plainFloorBase.tilePixels),
-      scope,
-      'the chunk bake draws it as bare floor — it has no painter',
-    );
-    check(
-      samePixels(full.tilePixels, base.tilePixels) && !inDecorationIndex,
-      scope,
-      'a flat decal is also drawn by the Y-sorted overlay pass',
-    );
+
+    const base = renderTestTile(gameMap, { base: true, overlay: false });
+    const full = renderTestTile(gameMap, { base: true, overlay: true });
+    const overlayOnly = renderTestTile(gameMap, { base: false, overlay: true });
+    const inDecorationIndex = gameMap
+      .getVisibleDecorationTiles({
+        x: 0,
+        y: 0,
+        viewWidth: worldPx(TEST_MAP_PX),
+        viewHeight: worldPx(TEST_MAP_PX),
+        zoom: UNZOOMED,
+      })
+      .some((entry) => entry.tx === TEST_TILE && entry.ty === TEST_TILE);
+    if (contract.ySorted) {
+      check(
+        samePixels(base.tilePixels, plainFloorBase.tilePixels),
+        scope,
+        'the chunk bake draws something other than the plain floor under it — missing from ' +
+          'DECORATION_TYPES (TileRenderer) or from the baseOnly cases (decorationTiles)',
+      );
+      check(
+        !samePixels(full.tilePixels, base.tilePixels),
+        scope,
+        'the overlay pass draws nothing — it would render as bare floor',
+      );
+      check(
+        inDecorationIndex,
+        scope,
+        'missing from DECORATION_OVERLAY_TYPES (GameMap), so the Y-sorted pass never draws it',
+      );
+      check(
+        overlayOnly.sideOverhangPx === 0,
+        scope,
+        `${overlayOnly.sideOverhangPx} px of its art hang past the sides of the tile it blocks`,
+      );
+    } else {
+      check(
+        !samePixels(base.tilePixels, plainFloorBase.tilePixels),
+        scope,
+        'the chunk bake draws it as bare floor — it has no painter',
+      );
+      check(
+        samePixels(full.tilePixels, base.tilePixels) && !inDecorationIndex,
+        scope,
+        'a flat decal is also drawn by the Y-sorted overlay pass',
+      );
+    }
   }
 }
 
 // ── 2. Sheets ────────────────────────────────────────────────────────────────
 
-const harnesses = BOSS_ROOM_HARNESSES.filter((h) => roomArg === 'all' || h.id === roomArg);
+const harnesses = BOSS_ROOM_HARNESSES.filter((h) => roomsWanted === 'all' || h.id === roomsWanted);
 const maxSheetBytes = fault === 'sheet-budget' ? -1 : MAX_ROOM_SHEET_MEGABYTES * BYTES_PER_MEGABYTE;
 
-for (const harness of harnesses) {
+for (const harness of unitRoom === null ? harnesses : []) {
   const scope = `${harness.id} sheets`;
   const plans = bossRoomSheetPlans(harness.assetGroup, 0);
   let bytes = 0;
@@ -421,7 +461,7 @@ function imageCallPattern(key: string): RegExp {
   return new RegExp(`\\w*(?:[Ss]prite|[Ii]mage)\\w*\\s*\\(\\s*(?:[\\w.]+\\s*,\\s*)*${literal}`);
 }
 
-if (removedKeys.length > 0) {
+if (unitRoom === null && removedKeys.length > 0) {
   const manifestKeys = new Set<string>(getManifestKeys());
   const codeFiles = filesUnder('src', '.ts').map((path) => ({
     path,
@@ -573,68 +613,127 @@ function gateRoomOnFloor(harness: BossRoomHarness, found: FoundRoom): void {
   harness.gates?.({ env, roomUnderTest, seed: found.seed, report });
 }
 
-const FLOORS: readonly BossFloor[] = [1, 2];
-for (const floor of FLOORS) {
-  const onFloor = harnesses.filter((h) => h.floor === floor);
-  if (onFloor.length === 0) continue;
-  const sidesSeen = new Map(onFloor.map((h) => [h.id, new Set<string>()]));
-  for (let seed = firstSeed; seed < firstSeed + seedsPerFloor; seed++) {
+/** What a child's sweep of one room hands back. */
+interface RoomSweep {
+  readonly failures: readonly string[];
+  readonly notes: readonly string[];
+  readonly checksRun: number;
+}
+
+function isStringList(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isRoomSweep(value: unknown): value is RoomSweep {
+  if (typeof value !== 'object' || value === null) return false;
+  const swept: unknown = Reflect.get(value, 'checksRun');
+  return (
+    isStringList(Reflect.get(value, 'failures')) &&
+    isStringList(Reflect.get(value, 'notes')) &&
+    typeof swept === 'number'
+  );
+}
+
+if (unitRoom === null) {
+  const passedOn = process.argv
+    .slice(2)
+    .filter((arg) => !arg.startsWith('--room=') && unitArgument([arg]) === null);
+  const sweepGateUnits = harnesses.flatMap((harness) =>
+    Object.keys(harness.sweepGates ?? {}).map(
+      (gate) => `${harness.id}${SWEEP_GATE_SEPARATOR}${gate}`,
+    ),
+  );
+  const sweeps = await runUnitsInChildren(
+    fileURLToPath(import.meta.url),
+    [...sweepGateUnits, ...harnesses.map((harness) => harness.id)],
+    unitArguments(passedOn),
+  );
+  for (const [id, sweep] of sweeps) {
+    if (sweep.exitCode !== 0 || !isRoomSweep(sweep.result)) {
+      failures.push(`${id}: its floor sweep exited with code ${sweep.exitCode} and no result`);
+      continue;
+    }
+    failures.push(...sweep.result.failures);
+    notes.push(...sweep.result.notes);
+    checksRun += sweep.result.checksRun;
+  }
+} else if (unitSweepGate !== undefined) {
+  for (const harness of harnesses) {
+    const gate = harness.sweepGates?.[unitSweepGate];
+    if (gate === undefined) throw new Error(`${harness.id} has no sweep gate ${unitSweepGate}`);
+    checksRun++;
+    gate(reportFor(`${harness.id} ${unitSweepGate}`));
+  }
+  const sweep: RoomSweep = { failures, notes, checksRun };
+  printUnitResult(sweep);
+} else {
+  const FLOORS: readonly BossFloor[] = [1, 2];
+  for (const floor of FLOORS) {
+    const onFloor = harnesses.filter((h) => h.floor === floor);
+    if (onFloor.length === 0) continue;
+    const sidesSeen = new Map(onFloor.map((h) => [h.id, new Set<string>()]));
+    for (let seed = firstSeed; seed < firstSeed + seedsPerFloor; seed++) {
+      for (const harness of onFloor) {
+        // Each room gets its own copy of the floor, so one room's stamped props
+        // cannot change what another room's gates see.
+        const { gameMap, levelDef } = generateFloor(floor, seed);
+        const room = harness.locate(gameMap, levelDef);
+        check(room !== null, `${harness.id} seed ${seed}`, 'the room is missing from the floor');
+        if (room === null) continue;
+        sidesSeen.get(harness.id)?.add(room.doorSide);
+        gateRoomOnFloor(harness, { seed, gameMap, levelDef, room });
+      }
+    }
     for (const harness of onFloor) {
-      // Each room gets its own copy of the floor, so one room's stamped props
-      // cannot change what another room's gates see.
-      const { gameMap, levelDef } = generateFloor(floor, seed);
-      const room = harness.locate(gameMap, levelDef);
-      check(room !== null, `${harness.id} seed ${seed}`, 'the room is missing from the floor');
-      if (room === null) continue;
-      sidesSeen.get(harness.id)?.add(room.doorSide);
-      gateRoomOnFloor(harness, { seed, gameMap, levelDef, room });
+      const seen = sidesSeen.get(harness.id) ?? new Set<string>();
+      for (const side of harness.doorSides) {
+        if (seen.has(side)) continue;
+        const found = findFloorWithRoom(harness, firstSeed + seedsPerFloor, side);
+        check(
+          found !== null,
+          `${harness.id} door ${side}`,
+          'no generated floor gives the room this doorway side, but the room lists it',
+        );
+        if (found !== null) gateRoomOnFloor(harness, found);
+        seen.add(side);
+      }
+      notes.push(`${harness.id}: doorway sides covered ${[...seen].sort().join(', ')}`);
     }
   }
-  for (const harness of onFloor) {
-    const seen = sidesSeen.get(harness.id) ?? new Set<string>();
-    for (const side of harness.doorSides) {
-      if (seen.has(side)) continue;
-      const found = findFloorWithRoom(harness, firstSeed + seedsPerFloor, side);
-      check(
-        found !== null,
-        `${harness.id} door ${side}`,
-        'no generated floor gives the room this doorway side, but the room lists it',
-      );
-      if (found !== null) gateRoomOnFloor(harness, found);
-      seen.add(side);
-    }
-    notes.push(`${harness.id}: doorway sides covered ${[...seen].sort().join(', ')}`);
+
+  for (const harness of harnesses) {
+    const pending = harness.layoutInvariantsPending;
+    if (pending === undefined) continue;
+    const excused = pendingViolations.get(harness.id) ?? 0;
+    check(
+      excused > 0,
+      `${harness.id} layout`,
+      'breaks no layout invariant any more — remove its layoutInvariantsPending exemption',
+    );
+    notes.push(`${harness.id}: PENDING layout — ${excused} violation(s) excused: ${pending}`);
   }
+  for (const [id, drawImages] of worstDrawImages) {
+    notes.push(
+      `${id}: heaviest-state dressing drawImage calls ${drawImages} (budget ${maxDrawImages})`,
+    );
+  }
+  const sweep: RoomSweep = { failures, notes, checksRun };
+  printUnitResult(sweep);
 }
 
 // ── Verdict ──────────────────────────────────────────────────────────────────
 
-for (const harness of harnesses) {
-  const pending = harness.layoutInvariantsPending;
-  if (pending === undefined) continue;
-  const excused = pendingViolations.get(harness.id) ?? 0;
-  check(
-    excused > 0,
-    `${harness.id} layout`,
-    'breaks no layout invariant any more — remove its layoutInvariantsPending exemption',
-  );
-  notes.push(`${harness.id}: PENDING layout — ${excused} violation(s) excused: ${pending}`);
+if (unitRoom === null) {
+  for (const note of notes) console.log(`  ${note}`);
+  check(checksRun > 0, 'gates', 'no checks ran — the gate cannot find what it guards');
+  if (failures.length > 0) {
+    console.log(`\nFAIL: ${failures.length} problem(s) in ${checksRun} checks`);
+    for (const failure of failures) console.log(`  ${failure}`);
+    process.exit(1);
+  }
+  if (fault !== undefined) {
+    console.log(`\nFAIL: --fault=${fault} broke what it guards and the gates still passed`);
+    process.exit(1);
+  }
+  console.log(`\nPASS: ${checksRun} checks`);
 }
-for (const [id, drawImages] of worstDrawImages) {
-  notes.push(
-    `${id}: heaviest-state dressing drawImage calls ${drawImages} (budget ${maxDrawImages})`,
-  );
-}
-
-for (const note of notes) console.log(`  ${note}`);
-check(checksRun > 0, 'gates', 'no checks ran — the gate cannot find what it guards');
-if (failures.length > 0) {
-  console.log(`\nFAIL: ${failures.length} problem(s) in ${checksRun} checks`);
-  for (const failure of failures) console.log(`  ${failure}`);
-  process.exit(1);
-}
-if (fault !== undefined) {
-  console.log(`\nFAIL: --fault=${fault} broke what it guards and the gates still passed`);
-  process.exit(1);
-}
-console.log(`\nPASS: ${checksRun} checks`);

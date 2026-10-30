@@ -31,6 +31,8 @@ import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { SystemContext } from '../../src/systems/GameSystem';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** The pass/fail reporting `verify-tactics.ts` owns, so its failure count covers these too. */
 export interface TacticsHarness {
@@ -134,6 +136,7 @@ function makeArena(map: GameMap, playerTile: { x: number; y: number }): Arena {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { map, roster, loop: new MobUpdateLoop(), ctx, human };
 }
@@ -181,7 +184,7 @@ function addMob(
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, rng);
   arena.roster.add(mob);
-  mob.takeDamageFrom(BLOOD_DAMAGE, arena.human, 'explosion');
+  mob.takeHit(harnessHit(arena.human, BLOOD_DAMAGE, 'explosion'));
   mob.hp = Math.max(1, Math.round(mob.maxHp * (1 - woundShare)));
   return mob;
 }

@@ -23,7 +23,7 @@ import type { RoomMechanisms } from '../roomMechanisms/RoomMechanisms';
 import type { SenseLayer } from '../senses/SenseLayer';
 import type { WorkChannelBuilder } from '../WorkChannel';
 import type { TowerMoment } from './towerMoments';
-import { TOWER_CUES, type TowerCue } from './towerSoundCues';
+import { TOWER_CUES, type TowerCue } from '../../audio/towerSoundCues';
 
 /** Everything a storey's works are handed: its own map and room works, and the party's shared records. */
 export interface StoreyWorksDeps {

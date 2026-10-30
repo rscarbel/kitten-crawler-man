@@ -54,6 +54,7 @@ import type { BlueprintsQuestContext } from './blueprintsContext';
 import { garrisonGreen, isInGarrisonGreen, type GarrisonGreen } from './garrisonGreen';
 import { merritGateTile } from './escortRoute';
 import { WendellsMidge } from './wendellsMidge';
+import type { Camera } from '../../../core/rendering/camera';
 
 const UPDATES_PER_SECOND = 60;
 const TILE_CENTRE = 0.5;
@@ -644,9 +645,9 @@ export class MidgeEscort {
   }
 
   /** Screen space, over the fog: where the road's ambushers still out of sight are coming from. */
-  renderHud(ctx: CanvasRenderingContext2D): void {
+  renderHud(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (this.phase !== 'escort_midge') return;
-    this.ambush.renderIncoming(ctx, performance.now());
+    this.ambush.renderIncoming(ctx, camera, performance.now());
   }
 
   // ── Rewind and teardown ──────────────────────────────────────────────────

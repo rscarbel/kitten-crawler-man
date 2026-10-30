@@ -593,8 +593,7 @@ export class Necromancer extends Mob {
   /**
    * A companion sidesteps him while he is casting, or while someone stands
    * inside his bolt's reach — never merely because a target is alive somewhere
-   * on the map, which would keep him ticking map-wide and every companion
-   * dodging him from anywhere.
+   * on the map, which would set every companion dodging him from anywhere.
    */
   override get requiresEvasion(): boolean {
     if (!this.isAlive || this.isFadingAway) return false;
@@ -792,13 +791,13 @@ export class Necromancer extends Mob {
 
   // ── Damage ─────────────────────────────────────────────────────────────────
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const before = this.hp;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     this.noteHurt(before - this.hp);
   }
 

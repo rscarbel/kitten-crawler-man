@@ -26,7 +26,7 @@ import type { ContractWorld } from './contractEligibility';
 import { dropContract, isContractReady } from './contractGenerator';
 import { issueNextContract, remainingSpotLabels } from './contractIssue';
 import { CONSTRUCTION_CONTRACT_QUEST_ID, contractsUnlocked } from './contractQuest';
-import { playContractCue } from './contractSoundCues';
+import { playContractCue } from '../../audio/contractSoundCues';
 import type { BuildingId } from '../../map/buildingIds';
 
 export interface WendellContractsHookDeps {

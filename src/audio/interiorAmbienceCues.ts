@@ -12,7 +12,7 @@
  * interior loads.
  */
 
-import type { SoundId } from '../audio/sounds';
+import type { SoundId } from './sounds';
 
 export const INTERIOR_AMBIENCE_CUES = {
   /** A wood fire in a hearth, a stove or a brazier. */

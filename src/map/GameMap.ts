@@ -1,6 +1,7 @@
 import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
 import type { DungeonFloorThemeId } from './dungeon/floorTheme';
 import { CELLAR_OVERLAY_TILE_TYPES } from './cellarProps';
+import type { Camera } from '../core/rendering/camera';
 import {
   MAZE_CAT_SPAWN_CHAR,
   MAZE_EXIT_TILES,
@@ -222,6 +223,7 @@ import {
   OverlayTileCache,
   bakeDecorationsForView,
 } from './TileRenderer';
+import type { WorldPx } from '../core/rendering/camera';
 
 // ── Default map construction options ──────────────────────────────────────────
 const DEFAULT_MAP_SIZE = 100;
@@ -772,25 +774,9 @@ function pixelRectContains(rect: PixelRect, worldX: number, worldY: number): boo
   return worldX >= rect.left && worldX < rect.right && worldY >= rect.top && worldY < rect.bottom;
 }
 
-/** Options for GameMap construction. */
-export interface GameMapOptions {
+interface GameMapCommonOptions {
   mapSize?: number;
   tileHeight?: number;
-  mapType?: 'dungeon' | 'overworld';
-  /** Dungeon generator settings. Ignored for overworld maps. */
-  dungeon?: DungeonLevelOptions;
-  /**
-   * Supply a fully-built tile grid to skip procedural generation entirely.
-   * When provided, the caller is responsible for manually setting startTile,
-   * safeRooms, stairwellTiles, etc. after construction.
-   */
-  prebuiltStructure?: TileContent[][];
-  /**
-   * The rooms, characters and wall fixtures a `prebuiltStructure` was dressed
-   * with, so its lighting, floor surfaces and wall art read it exactly as they
-   * read a generated floor. Ignored without `prebuiltStructure`.
-   */
-  prebuiltDressing?: PrebuiltDressing;
   /**
    * The seed every runtime-painted piece of this map's environment art derives
    * from. Omitted for a map generating its own layout, which draws its own; a
@@ -805,6 +791,36 @@ export interface GameMapOptions {
    */
   worldSeed?: number;
 }
+
+/** A generated overworld. */
+interface OverworldMapSource {
+  mapType: 'overworld';
+}
+
+/** A generated dungeon floor. */
+interface DungeonMapSource {
+  mapType?: 'dungeon';
+  dungeon: DungeonLevelOptions;
+}
+
+/**
+ * A fully-built tile grid, skipping procedural generation entirely. The caller
+ * is responsible for setting startTile, safeRooms, stairwellTiles, etc. after
+ * construction.
+ */
+interface PrebuiltMapSource {
+  prebuiltStructure: TileContent[][];
+  /**
+   * The rooms, characters and wall fixtures the structure was dressed with, so
+   * its lighting, floor surfaces and wall art read it exactly as they read a
+   * generated floor.
+   */
+  prebuiltDressing?: PrebuiltDressing;
+}
+
+/** Options for GameMap construction: shared settings plus where the tiles come from. */
+export type GameMapOptions = GameMapCommonOptions &
+  (OverworldMapSource | DungeonMapSource | PrebuiltMapSource);
 
 export type { SpiderLabRoomData };
 
@@ -1017,8 +1033,7 @@ export class GameMap {
   /**
    * Every room this map's dungeon generator placed, in placement order — the
    * same list the generator used to seat encounters — or the tutorial's
-   * hand-built rooms. Empty on every other map (overworld, building interiors,
-   * and a free-roam dungeon floor, which doesn't record one).
+   * hand-built rooms. Empty on every other map (overworld, building interiors).
    * Room membership checks (`roomIndexAt`, `roomBoundsContaining`,
    * `hostilesInRoom`) all read the region map these bounds come from, so they
    * degrade to "no room found" wherever it is empty.
@@ -1220,28 +1235,26 @@ export class GameMap {
   /** Whether decorations draw their animated layer; read live, so a quality change applies next frame. */
   private tileArtFullDetail: () => boolean = () => true;
 
-  constructor(opts: GameMapOptions = {}) {
+  constructor(opts: GameMapOptions) {
     const {
       mapSize = DEFAULT_MAP_SIZE,
       tileHeight = DEFAULT_TILE_HEIGHT,
-      mapType,
-      dungeon = { bossTypes: [] },
-      prebuiltStructure,
-      prebuiltDressing,
       artSeed = drawFloorArtSeed(),
       worldSeed = drawWorldSeed(),
     } = opts;
     this.tileHeight = tileHeight;
     this.artSeed = artSeed;
     this.worldSeed = worldSeed;
-    if (prebuiltStructure) {
+    if ('prebuiltStructure' in opts) {
+      const { prebuiltStructure, prebuiltDressing } = opts;
       this.structure = prebuiltStructure;
       if (prebuiltDressing !== undefined) {
         this.installDressing(prebuiltStructure, prebuiltDressing, []);
       }
-    } else if (mapType === 'overworld') {
+    } else if (opts.mapType === 'overworld') {
       this.structure = withWorldSeed(worldSeed, () => this.generateOverworldMap(mapSize));
     } else {
+      const { dungeon } = opts;
       this.structure = withWorldSeed(worldSeed, () =>
         this.generateDungeonMap({ ...dungeon, size: mapSize }),
       );
@@ -3176,8 +3189,8 @@ export class GameMap {
   bakeTileArtForView(
     cameraX: number,
     cameraY: number,
-    viewW: number,
-    viewH: number,
+    viewW: WorldPx,
+    viewH: WorldPx,
     budgetMs: number,
     mustProgress: boolean,
   ): number {
@@ -3196,8 +3209,8 @@ export class GameMap {
   bakeDecorationArtForView(
     cameraX: number,
     cameraY: number,
-    viewW: number,
-    viewH: number,
+    viewW: WorldPx,
+    viewH: WorldPx,
     budgetMs: number,
     mustProgress: boolean,
   ): number {
@@ -3216,13 +3229,7 @@ export class GameMap {
     );
   }
 
-  renderCanvas(
-    ctx: CanvasRenderingContext2D,
-    cameraX: number,
-    cameraY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  renderCanvas(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const chunkCache = this.beginTileArtFrame();
     const firstFrame = !this.tileArtRenderedOnce;
     this.tileArtRenderedOnce = true;
@@ -3230,10 +3237,10 @@ export class GameMap {
       ctx,
       this.structure,
       this.tileHeight,
-      cameraX,
-      cameraY,
-      viewW,
-      viewH,
+      camera.x,
+      camera.y,
+      camera.viewWidth,
+      camera.viewHeight,
       chunkCache,
       firstFrame,
     );
@@ -3272,11 +3279,10 @@ export class GameMap {
 
   renderDecorationsOverlay(
     ctx: CanvasRenderingContext2D,
-    cameraX: number,
-    cameraY: number,
-    viewW: number,
-    viewH: number,
+
+    camera: Camera,
   ): void {
+    const { x: cameraX, y: cameraY, viewWidth: viewW, viewHeight: viewH } = camera;
     this._overlayCache ??= new OverlayTileCache(this.structure, this.tileHeight);
     renderDecorationsOverlay(
       ctx,
@@ -3292,12 +3298,8 @@ export class GameMap {
   }
 
   /** Returns tile coords of all visible decoration tiles (TORCH, WELL, TREE, FOUNTAIN). */
-  getVisibleDecorationTiles(
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): ReadonlyArray<DecorationTile> {
+  getVisibleDecorationTiles(camera: Camera): ReadonlyArray<DecorationTile> {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     this.ensureDecorationIndex();
     const ts = this.tileHeight;
     const rows = this.structure.length;

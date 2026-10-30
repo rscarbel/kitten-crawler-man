@@ -43,6 +43,7 @@ const { UiRoot } = await import('../src/ui/core/UiRoot');
 const { NO_INSETS } = await import('../src/ui/core/viewport');
 const { renderTopBand } = await import('../src/ui/hud/topBand');
 const { ResourceHud } = await import('../src/systems/briarHollow/ResourceHud');
+const { UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 
 const SEED = 7919;
 const OUT_DIR = 'preview';
@@ -110,7 +111,13 @@ states.forEach((state, index) => {
   ambience.bell.cracked = state === 'cracked';
   ambience.noticeBoard.callToArms = state !== 'rest';
   const draws: Array<{ sortY: number; draw: () => void }> = [];
-  for (const { tx, ty, sortYAnchorPx } of map.getVisibleDecorationTiles(camX, camY, viewW, viewH)) {
+  for (const { tx, ty, sortYAnchorPx } of map.getVisibleDecorationTiles({
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  })) {
     draws.push({
       sortY: ty * TILE_SIZE + sortYAnchorPx,
       draw: () => map.drawDecorationAt(squareCtx, tx, ty, camX, camY),
@@ -124,7 +131,13 @@ states.forEach((state, index) => {
   }
   draws.sort((a, b) => a.sortY - b.sortY);
   for (const item of draws) item.draw();
-  ambience.renderAbove(squareCtx, camX, camY, viewW, viewH);
+  ambience.renderAbove(squareCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   worldText(squareCtx, state, {
     x: 4,
     y: 4,

@@ -7,7 +7,7 @@
  */
 
 import { GameMap } from '../src/map/GameMap.js';
-import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
+import { mapSourceForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level2 } from '../src/levels/level2.js';
 import { level3 } from '../src/levels/level3.js';
@@ -19,8 +19,7 @@ const OTHER_SEED = 987654321;
 function fingerprint(levelDef: LevelDef, worldSeed: number): string {
   const map = new GameMap({
     mapSize: levelDef.mapSize,
-    mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
-    dungeon: dungeonOptionsForLevel(levelDef),
+    ...mapSourceForLevel(levelDef),
     worldSeed,
   });
   return JSON.stringify([map.structure, map.startTile, map.safeRooms]);

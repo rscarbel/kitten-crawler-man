@@ -13,7 +13,7 @@ import {
 } from '../../sprites/timeLimitDetonationSprite';
 import type { DeathCause } from '../../ui/DeathExplanations';
 import type { CutsceneSoundCue } from '../cutscene/cutsceneSteps';
-import { SCRIPTED_DEATH_CUES } from './scriptedDeathCues';
+import { SCRIPTED_DEATH_CUES } from '../../audio/scriptedDeathCues';
 import type { ScriptedDeathKind } from './scriptedDeathKinds';
 
 /**

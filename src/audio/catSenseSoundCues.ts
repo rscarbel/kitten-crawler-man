@@ -6,7 +6,7 @@
  * preloaded through the `universal` group.
  */
 
-import type { CueSlot } from '../../audio/cueSlot';
+import type { CueSlot } from './cueSlot';
 
 /**
  * Waits on `cat_senses_perk`, a soft curious chirp as her ears prick up.

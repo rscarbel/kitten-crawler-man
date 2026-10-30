@@ -32,6 +32,7 @@ import {
   type KettlebellRainRoom,
 } from '../../src/systems/bossRooms/gymKettlebellRain.js';
 import type { RoomGateContext } from './harness.js';
+import { harnessHit } from '../crawlerHitHarness';
 
 const HALF = 0.5;
 /** Frames run for one whole rain: its length plus the last bell's fall, with room to spare. */
@@ -175,7 +176,7 @@ function gateFuryImmunity(context: RoomGateContext, gym: GymRoomSystem): void {
     if (bigRooster.roosterPhase === 'fury') {
       sawFury = true;
       const before = bigRooster.hp;
-      bigRooster.takeDamageFrom(PROBE_BLOW, crawler, 'melee');
+      bigRooster.takeHit(harnessHit(crawler, PROBE_BLOW, 'melee'));
       if (bigRooster.hp !== before) {
         report.fail('a blow landed on him during his fury');
         break;
@@ -194,7 +195,7 @@ function gateFuryImmunity(context: RoomGateContext, gym: GymRoomSystem): void {
   const resting = gym.exerciseBalls.filter((ball) => ball.phase === 'resting').length;
   if (ended && resting > 0) report.fail(`his fury ended with ${resting} balls still resting`);
   const before = bigRooster.hp;
-  bigRooster.takeDamageFrom(PROBE_BLOW, crawler, 'melee');
+  bigRooster.takeHit(harnessHit(crawler, PROBE_BLOW, 'melee'));
   if (ended && bigRooster.hp === before) report.fail('blows still bounce off him after his fury');
   gym.onFightAborted();
 }
@@ -212,7 +213,7 @@ function gateHarmlessAfterDeath(context: RoomGateContext, gym: GymRoomSystem): v
   bigRooster.ballKickRequest = { index: 0, dx: 1, dy: 1 };
   for (let tick = 0; tick < BALL_ROLL_FRAMES; tick++) gym.update(frame);
   if (gym.exerciseBalls[0]?.phase !== 'rolling') report.fail('a kicked ball did not roll');
-  bigRooster.takeDamageFrom(bigRooster.hp, crawler, 'melee');
+  bigRooster.takeHit(harnessHit(crawler, bigRooster.hp, 'melee'));
   gym.onBossDefeated();
   let bellsUnderfoot = 0;
   for (let tick = 0; tick < AFTER_DEATH_FRAMES; tick++) {

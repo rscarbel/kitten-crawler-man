@@ -1,6 +1,6 @@
 /**
  * The moments a rooster of Big Rooster's flock makes a sound, by what happened
- * rather than by file; `src/systems/bossSoundCues.ts` says which takes each
+ * rather than by file; `src/audio/bossSoundCues.ts` says which takes each
  * build plays for each.
  */
 export type RoosterSoundCue =

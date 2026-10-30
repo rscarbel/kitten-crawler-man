@@ -340,10 +340,10 @@ function paintBracerEdges(ctx: Ctx, cuff: CuffFrame): void {
 }
 
 /**
- * Boiled leather holds a hard lip down each long edge: lit where it turns to
- * the key, dark where it turns away. At the tile those two lines are what
- * make the plate read as a tube against the arm, whatever the skin under it,
- * because tan leather and deep brown skin share a value.
+ * Two hard lips run down the plate, along its rivet line: lit on the side
+ * that turns to the key, dark on the side that turns away. At the tile those
+ * two lines are what make the plate read as a tube against the arm, whatever
+ * the skin under it, because tan leather and deep brown skin share a value.
  */
 function paintBracerLips(ctx: Ctx, cuff: CuffFrame): void {
   const light = rotate(LIGHT, -cuff.angle);
@@ -361,8 +361,13 @@ function paintBracerLips(ctx: Ctx, cuff: CuffFrame): void {
     ctx.stroke();
   }
 }
-/** Each lip runs just inside the plate's long edge, as wide as its rolled ends. */
-const BRACER_LIP_ACROSS = 0.72;
+/**
+ * The lips run along the rivet line, a little over halfway out from the bone
+ * to the plate's long edge. Nearer the edge they fall outside the middle
+ * pixels of a heavy forearm at the tile (Dave's, at the low-end bake), and
+ * the plate between them reads as one flat tone there.
+ */
+const BRACER_LIP_ACROSS = BRACER_RIVET_ACROSS;
 const BRACER_LIP_WIDTH = 0.04;
 
 function paintBracerRivets(ctx: Ctx, cuff: CuffFrame): void {

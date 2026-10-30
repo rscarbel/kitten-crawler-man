@@ -36,7 +36,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import type { MissingCatsProgress } from '../../core/quests/missingCatsProgress';
-import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import type { Camera } from '../../core/rendering/camera';
 import type { SpatialGrid } from '../../core/world/SpatialGrid';
 import type { Mob } from '../../creatures/Mob';
 import { TowerGuard, type TowerGuardActivity } from '../../creatures/TowerGuard';
@@ -61,7 +61,7 @@ import { drawSuspicionMarker } from '../../ui/world/suspicionMarker';
 import type { SystemContext } from '../GameSystem';
 import { MashInteraction, type MashInteractionDef, type MashPress } from '../MashInteraction';
 import { SewerLighting, type SewerLightSource } from '../sewer/sewerLighting';
-import { SEWER_CUES, type SewerCue } from '../sewer/sewerSoundCues';
+import { SEWER_CUES, type SewerCue } from '../../audio/sewerSoundCues';
 import { renderQuality } from '../../core/perf/RenderQuality';
 import { WaterAnimationSystem } from '../WaterAnimationSystem';
 import {
@@ -409,11 +409,12 @@ export class TowerStoreysSystem {
   }
 
   /** The guards' looks, washed over the floor under the figures. */
-  renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderWorld(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (this.onCattery) this.deps.ritual.renderWorld(ctx, camX, camY);
     this.worksHere?.renderWorld?.(ctx, camX, camY);
     if (this.deps.currentStorey() === CISTERN_STOREY) {
-      this.cisternWater.renderGround(ctx, camX, camY);
+      this.cisternWater.renderGround(ctx, camera);
       return;
     }
     if (this.deps.currentStorey() !== GATEHOUSE_STOREY) return;
@@ -428,7 +429,8 @@ export class TowerStoreysSystem {
   }
 
   /** Each guard's `?` while it half sees someone, and its `!` once it has seen enough. */
-  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderEffects(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (this.onCattery) this.deps.ritual.renderEffects(ctx, camX, camY);
     this.worksHere?.renderEffects?.(ctx, camX, camY);
     if (this.deps.currentStorey() === CISTERN_STOREY) {
@@ -449,13 +451,13 @@ export class TowerStoreysSystem {
     }
   }
 
-  renderDarkness(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderDarkness(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (this.deps.currentStorey() !== CISTERN_STOREY) return;
     const lit: SewerLightSource[] = this.deps.presentCrawlers().map((crawler) => ({
       x: crawler.x + TILE_SIZE * HALF,
       y: crawler.y + TILE_SIZE * HALF,
     }));
-    this.cisternLighting.renderDarkness(ctx, camX, camY, viewportWidth(), viewportHeight(), lit);
+    this.cisternLighting.renderDarkness(ctx, camera, lit);
   }
 
   leaveFloor(ctx: SystemContext): void {

@@ -23,6 +23,7 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
+import { UNZOOMED, worldPx, type Camera } from '../src/core/rendering/camera.js';
 import { EventBus } from '../src/core/EventBus.js';
 import { ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs.js';
 import { PlayerManager } from '../src/core/party/PlayerManager.js';
@@ -295,7 +296,6 @@ const CELLS: readonly Cell[] = [
         dirX: 1,
         dirY: 0,
         rangePx: TILE_SIZE * 3,
-        damage: 0,
       });
     },
     (s) => wear(s, 'cat', 'sunsteel_talons'),
@@ -385,7 +385,14 @@ function renderCell(cell: Cell, floor: (typeof FLOORS)[number], scale: number): 
   const { human, cat } = stage.pm;
   const byDepth = [human, cat].sort((a, b) => a.y - b.y);
   for (const crawler of byDepth) crawler.render(ctx, 0, 0, TILE_SIZE);
-  stage.gear.render(ctx, 0, 0);
+  const cellCamera: Camera = {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(CELL_W),
+    viewHeight: worldPx(CELL_H),
+    zoom: UNZOOMED,
+  };
+  stage.gear.render(ctx, cellCamera);
   stage.gear.dispose();
   return canvas;
 }

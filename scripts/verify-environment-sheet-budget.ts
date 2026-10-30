@@ -47,10 +47,11 @@ const { getManifestEntry, sheetSizePx } = await import('../src/core/spriteAssets
 const { BYTES_PER_MEGABYTE } = await import('../src/core/rendering/canvasSurface.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { worldPx } = await import('../src/core/rendering/camera.js');
 const { requiredSpriteKeysForLevel } =
   await import('../src/core/spriteAssets/systemAssetRequirements.js');
 const { allLevelDefs, getLevelDef } = await import('../src/levels/index.js');
-const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js');
+const { mapSourceForLevel } = await import('../src/levels/dungeonOptions.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { ENVIRONMENT_SHEET_BUDGET_MEGABYTES, RELEASED_GRACE_FRAMES } =
   await import('../src/map/environmentArtCache.js');
@@ -78,6 +79,7 @@ const MEGABYTE_PLACES = 1;
 /** A 1080p screen: the widest view the game is commonly played at, so the most in view at once. */
 const VIEW_WIDTH_PX = 1920;
 const VIEW_HEIGHT_PX = 1080;
+const RESIDENCY_VIEW = { viewWidth: worldPx(VIEW_WIDTH_PX), viewHeight: worldPx(VIEW_HEIGHT_PX) };
 /** Tiles between the camera positions sampled; finer than any building, so none is stepped over. */
 const SAMPLE_STRIDE_TILES = 2;
 /** The world seed the measured maps are generated from, so a run measures the same floor. */
@@ -164,8 +166,7 @@ function floorSheets(def: LevelDef): FloorSheets {
   const gameMap = new GameMap({
     mapSize: def.mapSize,
     tileHeight: TILE_SIZE,
-    mapType: def.isOverworld ? 'overworld' : 'dungeon',
-    dungeon: dungeonOptionsForLevel(def),
+    ...mapSourceForLevel(def),
     worldSeed: MEASURED_WORLD_SEED,
   });
   const rows = gameMap.structure.length;
@@ -213,7 +214,10 @@ function largestWorkingSet(sheets: FloorSheets): WorkingSet {
       const near = new Map<string, number>();
       let bytes = floorWideBytes;
       for (const sheet of sheets.placed) {
-        if (near.has(sheet.id) || tilesUntilInView(focus, sheet.area) > sheet.releaseTiles) {
+        if (
+          near.has(sheet.id) ||
+          tilesUntilInView(focus, sheet.area, RESIDENCY_VIEW) > sheet.releaseTiles
+        ) {
           continue;
         }
         near.set(sheet.id, sheet.bytes);

@@ -5,7 +5,12 @@
  */
 
 import { ALL_STATS, zeroStats, type StatId } from '../party/stats';
-import { STATUS_DEFS, isStatusId, type StatusEffect } from '../combat/StatusEffect';
+import {
+  STATUS_DEFS,
+  isStatusId,
+  isSurvivingShare,
+  type StatusEffect,
+} from '../combat/StatusEffect';
 import { isGroundHazard } from '../combat/groundHazard';
 import { isSkillId, type CrawlerKind, type SkillId, type SkillState } from '../skills/SkillManager';
 import { isStatTattooId, type StatTattooId } from '../skills/tattoos';
@@ -145,15 +150,24 @@ function parseBaseStats(value: unknown): Record<StatId, number> | undefined {
 
 /**
  * A saved status, or undefined for one this build does not define, one it
- * never saves, or one with a damaged clock or ward pool.
+ * never saves, or one with a damaged clock, share or ward pool.
  */
 function parseStatusEffect(value: unknown): StatusEffect | undefined {
   if (!isRecord(value)) return undefined;
-  const { type, ticksRemaining, totalTicks, absorbRemaining, absorbTotal, groundHazard } = value;
+  const {
+    type,
+    ticksRemaining,
+    totalTicks,
+    survivingShare,
+    absorbRemaining,
+    absorbTotal,
+    groundHazard,
+  } = value;
   if (typeof type !== 'string' || !isStatusId(type)) return undefined;
   if (STATUS_DEFS[type].persistence === 'transient') return undefined;
   if (!isNonNegativeFinite(ticksRemaining) || !isNonNegativeFinite(totalTicks)) return undefined;
-  const effect: StatusEffect = { type, ticksRemaining, totalTicks, applier: null };
+  if (!isSurvivingShare(survivingShare)) return undefined;
+  const effect: StatusEffect = { type, ticksRemaining, totalTicks, survivingShare, applier: null };
   if (absorbRemaining !== undefined) {
     if (!isNonNegativeFinite(absorbRemaining)) return undefined;
     effect.absorbRemaining = absorbRemaining;

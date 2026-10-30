@@ -30,7 +30,7 @@ import {
 } from '../src/core/party/MercenaryRoster';
 import { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } from '../src/core/party/mercenaryTemplates';
 import { parseMercenaryRosterCheckpoint } from '../src/core/save/PersistedWorldState';
-import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
+import { mapSourceForLevel } from '../src/levels/dungeonOptions';
 import { level2 } from '../src/levels/level2';
 import { level3 } from '../src/levels/level3';
 import type { LevelDef } from '../src/levels/types';
@@ -82,8 +82,7 @@ function buildMap(levelDef: LevelDef, worldSeed: number): GameMap {
       new GameMap({
         mapSize: levelDef.mapSize,
         tileHeight: TILE_SIZE,
-        mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
-        dungeon: dungeonOptionsForLevel(levelDef),
+        ...mapSourceForLevel(levelDef),
         worldSeed,
       }),
   );

@@ -48,6 +48,8 @@ import {
   silhouetteSelfTestFailures,
 } from './facadeSeedGates.js';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
+import { printUnitResult, runUnitsInChildren, unitArgument, unitArguments } from './childUnits.js';
+import { fileURLToPath } from 'node:url';
 
 const SEED_ARGUMENT_PREFIX = '--seeds=';
 const ONLY_ARGUMENT_PREFIX = '--only=';
@@ -132,120 +134,252 @@ function parseSeedLimit(): number {
 
 const domains = parseDomains();
 
+/**
+ * How many shares the alphabet's seeds are swept in, each in a child process
+ * of its own: a seed is several seconds of painting and there are over a
+ * hundred, while a share's own setup (the sprites and the reviewed baselines)
+ * is a few.
+ */
+const SEED_SHARES = 8;
+
+/** What one share of the seeds measured: its failures, and the extremes the summary reports. */
+interface SeedTally {
+  readonly failures: readonly string[];
+  readonly worstWrapRatio: number;
+  readonly worstWrapSeed: number;
+  readonly worstDrift: number;
+  readonly worstDriftSeed: number;
+  readonly worstContrast: number;
+  readonly worstContrastSeed: number;
+  /** Null when no ground was judged, since JSON cannot carry an infinite gap. */
+  readonly tightestSeparation: number | null;
+  readonly tightestSeparationSeed: number;
+  readonly propSheetsChecked: number;
+  readonly facadesChecked: number;
+}
+
+const EMPTY_TALLY: SeedTally = {
+  failures: [],
+  worstWrapRatio: 0,
+  worstWrapSeed: 0,
+  worstDrift: 0,
+  worstDriftSeed: 0,
+  worstContrast: 1,
+  worstContrastSeed: 0,
+  tightestSeparation: null,
+  tightestSeparationSeed: 0,
+  propSheetsChecked: 0,
+  facadesChecked: 0,
+};
+
+function mergeTallies(a: SeedTally, b: SeedTally): SeedTally {
+  const wrap = b.worstWrapRatio > a.worstWrapRatio ? b : a;
+  const drift = b.worstDrift > a.worstDrift ? b : a;
+  const contrast = b.worstContrast > a.worstContrast ? b : a;
+  const separation =
+    b.tightestSeparation !== null &&
+    (a.tightestSeparation === null || b.tightestSeparation < a.tightestSeparation)
+      ? b
+      : a;
+  return {
+    failures: [...a.failures, ...b.failures],
+    worstWrapRatio: wrap.worstWrapRatio,
+    worstWrapSeed: wrap.worstWrapSeed,
+    worstDrift: drift.worstDrift,
+    worstDriftSeed: drift.worstDriftSeed,
+    worstContrast: contrast.worstContrast,
+    worstContrastSeed: contrast.worstContrastSeed,
+    tightestSeparation: separation.tightestSeparation,
+    tightestSeparationSeed: separation.tightestSeparationSeed,
+    propSheetsChecked: a.propSheetsChecked + b.propSheetsChecked,
+    facadesChecked: a.facadesChecked + b.facadesChecked,
+  };
+}
+
+function isNumberField(value: object, field: keyof SeedTally): boolean {
+  return typeof Reflect.get(value, field) === 'number';
+}
+
+function isSeedTally(value: unknown): value is SeedTally {
+  if (typeof value !== 'object' || value === null) return false;
+  const failures: unknown = Reflect.get(value, 'failures');
+  const separation: unknown = Reflect.get(value, 'tightestSeparation');
+  const numeric: readonly (keyof SeedTally)[] = [
+    'worstWrapRatio',
+    'worstWrapSeed',
+    'worstDrift',
+    'worstDriftSeed',
+    'worstContrast',
+    'worstContrastSeed',
+    'tightestSeparationSeed',
+    'propSheetsChecked',
+    'facadesChecked',
+  ];
+  return (
+    Array.isArray(failures) &&
+    failures.every((failure) => typeof failure === 'string') &&
+    (separation === null || typeof separation === 'number') &&
+    numeric.every((field) => isNumberField(value, field))
+  );
+}
+
+function sweepSeeds(
+  artSeeds: readonly number[],
+  baseline: ReturnType<typeof reviewedProfile>,
+  facadeBaseline: ReturnType<typeof reviewedFacades> | null,
+): SeedTally {
+  let tally = EMPTY_TALLY;
+  for (const artSeed of artSeeds) {
+    let seedTally: SeedTally = { ...EMPTY_TALLY, failures: [] };
+    const seedFailures: string[] = [];
+    if (domains.has('ground')) {
+      const verdict = judgeArtSeed(artSeed, baseline);
+      seedTally = {
+        ...seedTally,
+        worstWrapRatio: verdict.worstWrapRatio,
+        worstWrapSeed: artSeed,
+        worstDrift: verdict.worstLuminanceDrift,
+        worstDriftSeed: artSeed,
+        worstContrast: verdict.worstContrastRatio,
+        worstContrastSeed: artSeed,
+        tightestSeparation: verdict.tightestSeparation,
+        tightestSeparationSeed: artSeed,
+      };
+      seedFailures.push(...verdict.failures);
+    }
+    if (domains.has('props')) {
+      const verdict = judgePropArtSeed(artSeed);
+      seedTally = { ...seedTally, propSheetsChecked: verdict.sheetsChecked };
+      seedFailures.push(...verdict.failures);
+    }
+    if (facadeBaseline !== null) {
+      const verdict = judgeFacadeArtSeed(artSeed, facadeBaseline);
+      seedTally = { ...seedTally, facadesChecked: verdict.facadesChecked };
+      seedFailures.push(...verdict.failures);
+    }
+    const failuresOfSeed = seedFailures.map((failure) => `art seed ${artSeed}: ${failure}`);
+    tally = mergeTallies(tally, { ...seedTally, failures: failuresOfSeed });
+  }
+  return tally;
+}
+
 // The prop and facade judges paint sheets that stack the game's own crate and
 // barrel art, so those have to be loaded before anything is measured.
 if (domains.has('props') || domains.has('facades')) await loadGameSpritesInNode();
 
-runSelfTest();
-
-// The corner masks carry no art seed, so their audit is one check that the set
-// has not drifted rather than one per seed.
-const maskSeams = auditMaskSeams(buildMaskSet(GROUND_SEED_BASE + MASK_SEED_OFFSET));
-if (!(maskSeams.ratio <= MASK_SEAM_RATIO_LIMIT)) {
-  failures.push(
-    `corner masks tear: joint-to-interior ${maskSeams.ratio.toFixed(2)} exceeds ${MASK_SEAM_RATIO_LIMIT}`,
-  );
-}
-
 const seeds = FLOOR_ART_SEEDS.slice(0, parseSeedLimit());
-if (seeds.length === 0) {
-  failures.push('the art seed alphabet is empty, so this sweep measured nothing');
-}
+const shareLength = Math.ceil(seeds.length / SEED_SHARES);
+const shareOf = (share: number): readonly number[] =>
+  seeds.slice(share * shareLength, (share + 1) * shareLength);
 
-const baseline = reviewedProfile();
-if (baseline.size === 0) failures.push('no reviewed baseline was measured at all');
-failures.push(...auditFallbackColors(baseline));
+const unit = unitArgument();
+if (unit !== null) {
+  const share = Number(unit);
+  if (!Number.isInteger(share))
+    throw new Error(`--unit must name a share of the seeds, got ${unit}`);
+  const shareBaseline = reviewedProfile();
+  const shareFacades = domains.has('facades') ? reviewedFacades() : null;
+  printUnitResult(sweepSeeds(shareOf(share), shareBaseline, shareFacades));
+} else {
+  runSelfTest();
 
-const facadeBaseline = domains.has('facades') ? reviewedFacades() : null;
-for (const note of facadeBaseline?.notes ?? []) console.log(`  known  ${note}`);
-if (facadeBaseline !== null) failures.push(...silhouetteSelfTestFailures(facadeBaseline));
+  // The corner masks carry no art seed, so their audit is one check that the set
+  // has not drifted rather than one per seed.
+  const maskSeams = auditMaskSeams(buildMaskSet(GROUND_SEED_BASE + MASK_SEED_OFFSET));
+  if (!(maskSeams.ratio <= MASK_SEAM_RATIO_LIMIT)) {
+    failures.push(
+      `corner masks tear: joint-to-interior ${maskSeams.ratio.toFixed(2)} exceeds ${MASK_SEAM_RATIO_LIMIT}`,
+    );
+  }
 
-let worstWrapRatio = 0;
-let worstWrapSeed = 0;
-let worstDrift = 0;
-let worstDriftSeed = 0;
-let worstContrast = 1;
-let worstContrastSeed = 0;
-let tightestSeparation = Infinity;
-let tightestSeparationSeed = 0;
-let propSheetsChecked = 0;
-let facadesChecked = 0;
+  if (seeds.length === 0) {
+    failures.push('the art seed alphabet is empty, so this sweep measured nothing');
+  }
 
-for (const artSeed of seeds) {
+  const baseline = reviewedProfile();
+  if (baseline.size === 0) failures.push('no reviewed baseline was measured at all');
+  failures.push(...auditFallbackColors(baseline));
+
+  const facadeBaseline = domains.has('facades') ? reviewedFacades() : null;
+  for (const note of facadeBaseline?.notes ?? []) console.log(`  known  ${note}`);
+  if (facadeBaseline !== null) failures.push(...silhouetteSelfTestFailures(facadeBaseline));
+
+  // The shares start once the parent's own painting is done, so it never
+  // competes with them for the cores they are given.
+  const passedOn = process.argv.slice(2).filter((arg) => unitArgument([arg]) === null);
+  const shareRuns = runUnitsInChildren(
+    fileURLToPath(import.meta.url),
+    Array.from({ length: SEED_SHARES }, (_unused, share) => String(share)),
+    unitArguments(passedOn),
+  );
+
+  let swept = EMPTY_TALLY;
+  for (const [share, run] of await shareRuns) {
+    if (run.exitCode !== 0 || !isSeedTally(run.result)) {
+      failures.push(`seed share ${share} exited with code ${run.exitCode} and no tally`);
+      continue;
+    }
+    swept = mergeTallies(swept, run.result);
+  }
+  failures.push(...swept.failures);
+  const {
+    propSheetsChecked,
+    facadesChecked,
+    worstWrapRatio,
+    worstWrapSeed,
+    worstDrift,
+    worstDriftSeed,
+    worstContrast,
+    worstContrastSeed,
+    tightestSeparationSeed,
+  } = swept;
+  const tightestSeparation = swept.tightestSeparation ?? Number.POSITIVE_INFINITY;
+
+  // A sweep that measured nothing passes vacuously, and each domain can fall
+  // silent on its own — an empty spec list, a family that stopped being listed, a
+  // baseline that failed to load.
+  if (domains.has('props') && propSheetsChecked === 0) {
+    failures.push('the prop families were swept but no sheet was painted');
+  }
+  if (domains.has('facades') && facadesChecked === 0) {
+    failures.push('the facades were swept but none was painted');
+  }
+
+  console.log(
+    `[floor-sweep] ${seeds.length} shippable art seeds — ` +
+      `${[...domains].join(', ')}; ${baseline.size} materials, ` +
+      `${propSheetsChecked} prop sheets, ${facadesChecked} facades`,
+  );
+  if (facadeBaseline !== null && facadeBaseline.knownFailures.size > 0) {
+    // Said in the summary, not only in a line above the run: a gate the reviewed
+    // art already fails is exempt at *every* seed, and an exemption nobody can see
+    // is one nobody will ever take back.
+    console.log(
+      `  exempt                    ${facadeBaseline.knownFailures.size} facade gate(s) the ` +
+        `reviewed art already fails: ${[...facadeBaseline.knownFailures].join(', ')}`,
+    );
+  }
   if (domains.has('ground')) {
-    const verdict = judgeArtSeed(artSeed, baseline);
-    for (const failure of verdict.failures) failures.push(`art seed ${artSeed}: ${failure}`);
-    if (verdict.worstWrapRatio > worstWrapRatio) {
-      worstWrapRatio = verdict.worstWrapRatio;
-      worstWrapSeed = artSeed;
-    }
-    if (verdict.worstLuminanceDrift > worstDrift) {
-      worstDrift = verdict.worstLuminanceDrift;
-      worstDriftSeed = artSeed;
-    }
-    if (verdict.worstContrastRatio > worstContrast) {
-      worstContrast = verdict.worstContrastRatio;
-      worstContrastSeed = artSeed;
-    }
-    if (verdict.tightestSeparation < tightestSeparation) {
-      tightestSeparation = verdict.tightestSeparation;
-      tightestSeparationSeed = artSeed;
-    }
+    console.log(
+      `  worst joint-to-interior   ${worstWrapRatio.toFixed(2)}  (seed ${worstWrapSeed})`,
+    );
+    console.log(`  worst luminance drift     ${worstDrift.toFixed(1)}  (seed ${worstDriftSeed})`);
+    console.log(
+      `  worst texture-energy gap  ${worstContrast.toFixed(2)}x  (seed ${worstContrastSeed})`,
+    );
+    console.log(
+      `  tightest wall/floor gap   ${tightestSeparation.toFixed(1)}  (seed ${tightestSeparationSeed})`,
+    );
+    console.log(`  corner mask joint ratio   ${maskSeams.ratio.toFixed(2)}`);
   }
-  if (domains.has('props')) {
-    const verdict = judgePropArtSeed(artSeed);
-    propSheetsChecked += verdict.sheetsChecked;
-    for (const failure of verdict.failures) failures.push(`art seed ${artSeed}: ${failure}`);
-  }
-  if (facadeBaseline !== null) {
-    const verdict = judgeFacadeArtSeed(artSeed, facadeBaseline);
-    facadesChecked += verdict.facadesChecked;
-    for (const failure of verdict.failures) failures.push(`art seed ${artSeed}: ${failure}`);
-  }
-}
 
-// A sweep that measured nothing passes vacuously, and each domain can fall
-// silent on its own — an empty spec list, a family that stopped being listed, a
-// baseline that failed to load.
-if (domains.has('props') && propSheetsChecked === 0) {
-  failures.push('the prop families were swept but no sheet was painted');
-}
-if (domains.has('facades') && facadesChecked === 0) {
-  failures.push('the facades were swept but none was painted');
-}
-
-console.log(
-  `[floor-sweep] ${seeds.length} shippable art seeds — ` +
-    `${[...domains].join(', ')}; ${baseline.size} materials, ` +
-    `${propSheetsChecked} prop sheets, ${facadesChecked} facades`,
-);
-if (facadeBaseline !== null && facadeBaseline.knownFailures.size > 0) {
-  // Said in the summary, not only in a line above the run: a gate the reviewed
-  // art already fails is exempt at *every* seed, and an exemption nobody can see
-  // is one nobody will ever take back.
-  console.log(
-    `  exempt                    ${facadeBaseline.knownFailures.size} facade gate(s) the ` +
-      `reviewed art already fails: ${[...facadeBaseline.knownFailures].join(', ')}`,
-  );
-}
-if (domains.has('ground')) {
-  console.log(`  worst joint-to-interior   ${worstWrapRatio.toFixed(2)}  (seed ${worstWrapSeed})`);
-  console.log(`  worst luminance drift     ${worstDrift.toFixed(1)}  (seed ${worstDriftSeed})`);
-  console.log(
-    `  worst texture-energy gap  ${worstContrast.toFixed(2)}x  (seed ${worstContrastSeed})`,
-  );
-  console.log(
-    `  tightest wall/floor gap   ${tightestSeparation.toFixed(1)}  (seed ${tightestSeparationSeed})`,
-  );
-  console.log(`  corner mask joint ratio   ${maskSeams.ratio.toFixed(2)}`);
-}
-
-if (failures.length > 0) {
-  console.error(`\n[floor-sweep] FAIL — ${failures.length} problems`);
-  for (const failure of failures.slice(0, FAILURES_SHOWN)) console.error(`  ${failure}`);
-  if (failures.length > FAILURES_SHOWN) {
-    console.error(`  ...and ${failures.length - FAILURES_SHOWN} more`);
+  if (failures.length > 0) {
+    console.error(`\n[floor-sweep] FAIL — ${failures.length} problems`);
+    for (const failure of failures.slice(0, FAILURES_SHOWN)) console.error(`  ${failure}`);
+    if (failures.length > FAILURES_SHOWN) {
+      console.error(`  ...and ${failures.length - FAILURES_SHOWN} more`);
+    }
+    process.exit(1);
   }
-  process.exit(1);
+  console.log('[floor-sweep] OK');
 }
-console.log('[floor-sweep] OK');

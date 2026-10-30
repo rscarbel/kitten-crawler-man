@@ -26,7 +26,7 @@ import type { MobRoster } from './kits/SceneWorld';
 import { hasAiAttention } from './MobUpdateLoop';
 import { companionLeader, type CarriedCompanion } from './companionCarry';
 import { hirelingShouldCatchUp } from '../creatures/mercenaries/hirelingCatchUp';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import {
   WHOLE_PARTY_PRESENT,
   type CompanionRef,
@@ -221,7 +221,7 @@ export class MercenarySystem implements GameSystem {
       if (extra !== merc) this.allies.push(extra);
     }
     merc.allies = this.allies;
-    this.catchUpIfLeftBehind(merc, gameMap, ctx.roster.grid);
+    this.catchUpIfLeftBehind(merc, gameMap, ctx.roster.grid, ctx.camera);
     this.trailMap = gameMap;
     merc.walksTrail = this.trail !== null;
     this.trail?.tick(partner ?? owner, merc);
@@ -356,15 +356,20 @@ export class MercenarySystem implements GameSystem {
    * in the grid so blows aimed at it land. Never mid-fight — its own or a
    * hostile's with it — which would be pulling it out of a fight it is in.
    */
-  private catchUpIfLeftBehind(merc: Mercenary, gameMap: GameMap, mobGrid: SpatialGrid<Mob>): void {
+  private catchUpIfLeftBehind(
+    merc: Mercenary,
+    gameMap: GameMap,
+    mobGrid: SpatialGrid<Mob>,
+    camera: Pick<Camera, 'viewWidth' | 'viewHeight'>,
+  ): void {
     if (merc.isFighting) return;
     const owner = merc.owner;
     const offsetX = merc.x - owner.x;
     const offsetY = merc.y - owner.y;
     // The camera follows the active crawler, whom the hire follows, so the
-    // screen is judged as the viewport centred on its owner.
+    // screen is judged as the camera's view centred on its owner.
     const onScreen =
-      Math.abs(offsetX) <= worldViewWidth() / 2 && Math.abs(offsetY) <= worldViewHeight() / 2;
+      Math.abs(offsetX) <= camera.viewWidth / 2 && Math.abs(offsetY) <= camera.viewHeight / 2;
     const leftBehind = hirelingShouldCatchUp({
       distancePx: Math.hypot(offsetX, offsetY),
       onScreen,
@@ -530,15 +535,14 @@ export class MercenarySystem implements GameSystem {
   /** A candidate for the shared arrow arbiter, pointing at a downed hire it cannot see. */
   downedArrowCandidate(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     active: Player,
     visibleRadiusPx: number,
     avoidRect?: Rect,
   ): ArrowCandidate | null {
     const merc = this.downedMerc;
     if (merc === null) return null;
-    return hirelingDownedArrowCandidate(ctx, merc, active, camX, camY, visibleRadiusPx, avoidRect);
+    return hirelingDownedArrowCandidate(ctx, merc, active, camera, visibleRadiusPx, avoidRect);
   }
 
   captureCheckpoint(): MercenaryCheckpoint {

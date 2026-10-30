@@ -31,6 +31,7 @@ import {
   FROZEN_STATUS,
   makeChilled,
   makeFrozen,
+  FULL_SHARE,
 } from '../../src/core/combat/StatusEffect';
 import { applyChillOnly, applyIceHit } from '../../src/core/combat/frostStatus';
 import {
@@ -324,8 +325,8 @@ class ProbeBolts {
     };
     const connected = target.takeDamage(target.resistedDamage(bolt.damage, 'ice'), source);
     if (!connected || !target.isAlive) return;
-    if (target instanceof Mob && !this.rules.freezesEveryBody) applyChillOnly(target);
-    else applyIceHit(target);
+    if (target instanceof Mob && !this.rules.freezesEveryBody) applyChillOnly(target, FULL_SHARE);
+    else applyIceHit(target, FULL_SHARE);
   }
 }
 
@@ -833,7 +834,7 @@ const chillsOnly = (hit: Hit | undefined): boolean =>
 function rechillOnThaw(target: Player, hitsSoFar: number): void {
   if (hitsSoFar < FREEZING_HIT) return;
   if (target.hasStatus(FROZEN_STATUS) || target.hasStatus(CHILLED_STATUS)) return;
-  target.applyStatus(makeChilled(CHILLED_FRAMES));
+  target.applyStatus(makeChilled(FULL_SHARE, CHILLED_FRAMES));
 }
 
 function checkChillFreezeGrace(report: FairyGateReport): void {
@@ -843,7 +844,7 @@ function checkChillFreezeGrace(report: FairyGateReport): void {
   const third = itemAt(hits, SEQUENCE_HITS - 1);
   report.check(chillsOnly(first), 'bolt 1 damages and chills, and does not freeze');
   const alreadyChilled = hitSequence({}, 1, (target) =>
-    target.applyStatus(makeChilled(CHILLED_FRAMES)),
+    target.applyStatus(makeChilled(FULL_SHARE, CHILLED_FRAMES)),
   );
   report.checkCatches(
     chillsOnly(itemAt(alreadyChilled, 0)),
@@ -1039,7 +1040,7 @@ function checkDeathBlast(report: FairyGateReport): void {
   s.roster.add(fairy);
   const human = s.pm.human;
   placeOnTile(human, FAIRY_TILE + ADJACENT_TILES, FAIRY_TILE);
-  human.applyStatus(makeChilled(NEARLY_THAWED_FRAMES));
+  human.applyStatus(makeChilled(FULL_SHARE, NEARLY_THAWED_FRAMES));
   s.kill(fairy);
   s.fairies.update(s.ctx());
   const chill = human.statusEffects.find((effect) => effect.type === CHILLED_STATUS);
@@ -1053,7 +1054,7 @@ function checkDeathBlast(report: FairyGateReport): void {
     'the death blast never freezes a chilled crawler and deals no damage',
   );
   report.check(!s.pm.cat.hasStatus(CHILLED_STATUS), 'a crawler outside the blast is not chilled');
-  applyIceHit(human);
+  applyIceHit(human, FULL_SHARE);
   report.checkCatches(
     !human.hasStatus(FROZEN_STATUS),
     'a freezing hit in the blast’s place is caught freezing the chilled crawler',
@@ -1066,7 +1067,7 @@ function companionMoved(frozen: boolean): number {
   const companion = new CompanionSystem(s.map, FAIRY_TILE, FAIRY_TILE);
   placeOnTile(s.pm.human, FAIRY_TILE, FAIRY_TILE);
   placeOnTile(s.pm.cat, FAIRY_TILE + COMPANION_GAP_TILES, FAIRY_TILE);
-  if (frozen) s.pm.cat.applyStatus(makeFrozen(FROZEN_FRAMES));
+  if (frozen) s.pm.cat.applyStatus(makeFrozen(FULL_SHARE, FROZEN_FRAMES));
   const start = { x: s.pm.cat.x, y: s.pm.cat.y };
   for (let n = 0; n < COMPANION_WATCH_FRAMES; n++) {
     companion.update(s.ctx());
@@ -1093,8 +1094,8 @@ function checkFrozenCompanion(report: FairyGateReport): void {
 /** Swings the human lands in {@link CADENCE_FRAMES}, attacking the moment each swing allows. */
 function swingsLanded(human: HumanPlayer, frost: 'none' | 'chilled' | 'frozen'): number {
   const frostFrames = CADENCE_FRAMES * FROST_OUTLASTS_CADENCE;
-  if (frost === 'chilled') human.applyStatus(makeChilled(frostFrames));
-  if (frost === 'frozen') human.applyStatus(makeFrozen(frostFrames));
+  if (frost === 'chilled') human.applyStatus(makeChilled(FULL_SHARE, frostFrames));
+  if (frost === 'frozen') human.applyStatus(makeFrozen(FULL_SHARE, frostFrames));
   let peaks = 0;
   for (let n = 0; n < CADENCE_FRAMES; n++) {
     human.triggerAttack();
@@ -1197,7 +1198,7 @@ function peaksAfterFreeze(subject: SwingSubject): number | null {
   body.tickTimers();
   body.updateAttack();
   if (subject.peak()) return null;
-  body.applyStatus(makeFrozen(SWING_FREEZE_FRAMES));
+  body.applyStatus(makeFrozen(FULL_SHARE, SWING_FREEZE_FRAMES));
   let peaks = 0;
   for (let frame = 0; frame < SWING_WATCH_FRAMES; frame++) {
     body.tickTimers();
@@ -1253,7 +1254,7 @@ function attackKeyBesideGoblin(active: 'human' | 'cat', frozen: boolean) {
   s.add('goblin', FAIRY_TILE + ADJACENT_TILES, FAIRY_TILE + ADJACENT_TILES);
   crawler.facingX = 1;
   crawler.facingY = 0;
-  if (frozen) crawler.applyStatus(makeFrozen(FROZEN_FRAMES));
+  if (frozen) crawler.applyStatus(makeFrozen(FULL_SHARE, FROZEN_FRAMES));
   triggerPlayerAttack(human, cat, s.roster.grid, s.map, null);
   return { facingX: crawler.facingX, facingY: crawler.facingY, swinging: crawler.isSwinging };
 }

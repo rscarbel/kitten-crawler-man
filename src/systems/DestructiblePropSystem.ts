@@ -74,7 +74,7 @@ import { tileCoordKey } from '../map/tileIndex';
 import type { WallFixture, WallFixtureKind } from '../map/dungeon/wallFixtures';
 import type { Mob } from '../creatures/Mob';
 import type { DamageSource, Player } from '../Player';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import {
   MATERIAL_REACTIONS,
   dentsBeforeBreaking,
@@ -1441,8 +1441,9 @@ export class DestructiblePropSystem implements GameSystem, GroundHazardSource, D
   }
 
   /** Settled debris and its spills, drawn on the floor beneath everything else in the world. */
-  renderWreckage(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.field.noteView(camX, camY, worldViewWidth(), worldViewHeight());
+  renderWreckage(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    this.field.noteView(camera);
     this.field.renderSpills(ctx, camX, camY);
     for (const w of this.field.all) {
       if (w.kind === null) continue;

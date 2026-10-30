@@ -80,6 +80,7 @@ import {
   HUMAN_ARM_REACH_TILES,
   type HandWeaponStats,
   type MeleeWeaponStats,
+  type WeaponDelivery,
   SLING_COOLDOWN_FRAMES,
   SLING_STONE_SPEED,
 } from '../core/items/equipment/weapons';
@@ -233,7 +234,7 @@ export class HumanPlayer extends Player {
     return 'walker';
   }
 
-  override get isCrawler(): boolean {
+  override get isCrawler(): true {
     return true;
   }
 
@@ -566,12 +567,11 @@ export class HumanPlayer extends Player {
     return true;
   }
 
-  getMeleeDamage(): number {
+  /** What a punch is worth with `melee` behind it, his own melee unless a hit's resolver names one. */
+  getMeleeDamage(melee = this.melee): number {
     const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.effectiveSkillLevel('pugilism');
     const meleeOnlyBonus = this.inventory.equipment.getMeleeOnlyStatBonus('melee');
-    return (
-      bareFistDamage(this.melee + meleeOnlyBonus) + this.statusMeleeDamageBonus + pugilismBonus
-    );
+    return bareFistDamage(melee + meleeOnlyBonus) + this.statusMeleeDamageBonus + pugilismBonus;
   }
 
   /**
@@ -579,9 +579,12 @@ export class HumanPlayer extends Player {
    * multiplier: the unarmed formula without what only a fist earns — Pugilism
    * and the gauntlet's fist-mode melee — since neither is in a weapon.
    */
-  getBladeDamage(): number {
-    return bareFistDamage(this.melee) + this.statusMeleeDamageBonus;
+  getBladeDamage(melee = this.melee): number {
+    return bareFistDamage(melee) + this.statusMeleeDamageBonus;
   }
+
+  /** How his punch or swing leaves him, which names the stat it grows with. */
+  readonly meleeDelivery = 'melee' as const satisfies WeaponDelivery;
 
   /**
    * What kind of blow his melee strike is: the drawn weapon's family, or for a
@@ -595,8 +598,8 @@ export class HumanPlayer extends Player {
   }
 
   /** What the blow in his hand is worth: the weapon's while one is drawn to swing, his fists' otherwise. */
-  getStrikeDamage(): number {
-    return this.drawnMeleeWeapon !== null ? this.getBladeDamage() : this.getMeleeDamage();
+  getStrikeDamage(melee = this.melee): number {
+    return this.drawnMeleeWeapon !== null ? this.getBladeDamage(melee) : this.getMeleeDamage(melee);
   }
 
   /**
@@ -745,9 +748,9 @@ export class HumanPlayer extends Player {
     }
   }
 
-  /** What a single stone does on impact. */
-  getSlingshotDamage(): number {
-    return slingDamage(this.ranged);
+  /** What a single stone does on impact with `ranged` behind it, his own unless a hit's resolver names one. */
+  getSlingshotDamage(ranged = this.ranged): number {
+    return slingDamage(ranged);
   }
 
   /** Stones still in the air, for the combat resolver to land. */

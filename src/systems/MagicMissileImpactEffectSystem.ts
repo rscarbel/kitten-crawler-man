@@ -1,5 +1,5 @@
 import type { GameSystem } from './GameSystem';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import {
   impactDebrisConfigOf,
   type ArcanePalette,
@@ -242,10 +242,11 @@ export class MagicMissileImpactEffectSystem implements GameSystem {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  render(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (this.sparks.length === 0 && this.dust.length === 0) return;
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
 
     ctx.save();
 

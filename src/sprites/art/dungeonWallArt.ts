@@ -226,7 +226,14 @@ const SERVICE_MASONRY_SEED = 0x2e7b19;
 
 // ── the sewer: wet engineering brick, a slime tide line ────────────────────
 
-const SEWER_FACE_RAMP: Ramp = liftedForFace(SEWER_BRICK_RAMP);
+/**
+ * The drain's brick is held a step under the shared face lift: its channel bed
+ * is the darkest floor beside any dungeon wall, and the bed's mean moves by
+ * about a luminance point from one art seed to the next, so the face keeps a
+ * margin under the bed's darkest seed rather than under its reviewed mean.
+ */
+const SEWER_BRICK_TONE = 0.95;
+const SEWER_FACE_RAMP: Ramp = shadeRamp(liftedForFace(SEWER_BRICK_RAMP), SEWER_BRICK_TONE);
 /**
  * Pale lime mortar, well above the brick in value: the ground's mortar sits at
  * the brick's own value and differs only in hue, so on a face the courses

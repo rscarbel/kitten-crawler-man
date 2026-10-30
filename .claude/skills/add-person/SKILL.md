@@ -115,7 +115,7 @@ and why the crowd is rolled from the world seed.
     Cartwright, who holds fire while any crawler, companion or hireling crosses the line
     to the target; the bolt is cosmetic). A routine owns its timers, the pose the figure
     paints (`Townsperson.routinePose`) and its positional sounds
-    (`occupantRoutineCues.ts`). A new routine is a union member plus a case in
+    (`src/audio/occupantRoutineCues.ts`). A new routine is a union member plus a case in
     `startOccupantRoutine`, whose switch fails to compile until it is handled.
   - `presentWhen` (optional): whether the story has put them in the room, read over the
     `TownDialogContext` each time the room is built. `InteriorOccupantSystem.forBuilding`

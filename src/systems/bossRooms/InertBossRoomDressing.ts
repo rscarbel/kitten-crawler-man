@@ -1,3 +1,4 @@
+import type { Camera } from '../../core/rendering/camera';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { SystemContext } from '../GameSystem';
@@ -24,14 +25,13 @@ export abstract class InertBossRoomDressing implements BossRoomDressing {
 
   renderGround(
     _ctx: CanvasRenderingContext2D,
-    _camX: number,
-    _camY: number,
+    _camera: Camera,
     _promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     // Its floor is entirely in the chunk bake.
   }
 
-  renderGroundWarnings(_ctx: CanvasRenderingContext2D, _camX: number, _camY: number): void {
+  renderGroundWarnings(_ctx: CanvasRenderingContext2D, _camera: Camera): void {
     // Nothing in it warns of a blow to come.
   }
 
@@ -39,7 +39,7 @@ export abstract class InertBossRoomDressing implements BossRoomDressing {
     return NO_RENDERABLES;
   }
 
-  renderAbove(_ctx: CanvasRenderingContext2D, _camX: number, _camY: number): void {
+  renderAbove(_ctx: CanvasRenderingContext2D, _camera: Camera): void {
     // Nothing of it crosses in front of a body.
   }
 

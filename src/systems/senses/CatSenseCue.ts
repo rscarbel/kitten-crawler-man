@@ -27,7 +27,7 @@ import {
 import { feetPointPx } from '../../map/collisionAnchors';
 import { paintSenseCueRing, type SensePaintView } from '../../ui/world/worldSenses';
 import type { CrawlerBarkSystem } from '../CrawlerBarkSystem';
-import { CAT_SENSE_CUE } from './catSenseSoundCues';
+import { CAT_SENSE_CUE } from '../../audio/catSenseSoundCues';
 import type { SenseLayer } from './SenseLayer';
 
 /** How near a sense must come to her feet for the cue to turn on. */

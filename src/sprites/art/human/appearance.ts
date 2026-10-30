@@ -12,15 +12,21 @@
 
 import type { HumanGarmentRow } from '../biped/bipedParts';
 import { type BipedPose } from '../biped/rig';
-import { type FigureDef } from '../../figure/figureDef';
+import { type FigureDef, figureStates } from '../../figure/figureDef';
 import { defaultOutfitOf } from '../../garments/human/humanDressing';
 import type { Outfit } from '../../garments/outfit';
 import {
+  HUMAN_ROW_BOOK,
   humanFigureId,
   type HumanFigurePainting,
   humanHeldLayers,
+  type HumanPoseDresser,
+  type HumanRowBook,
+  type HumanRowName,
+  humanStateFrames,
   paintDressedHumanFrame,
   type RowSpec,
+  undressedDresser,
   undressedHumanFigure,
   undressedHumanPainting,
 } from '../humanFigure';
@@ -31,7 +37,7 @@ import { type HumanLook, withLookBuild } from '../../looks/humanLook';
 // ── What a row tells the garments that move with it ──────────────────────────
 
 /** What `row` tells a garment that moves with it. */
-function garmentRowOf(row: RowSpec): HumanGarmentRow {
+function garmentRowOf(row: RowSpec<string>): HumanGarmentRow {
   return { name: row.name };
 }
 
@@ -44,7 +50,7 @@ function garmentRowOf(row: RowSpec): HumanGarmentRow {
 export function dressedPose(
   outfit: Outfit<'human'>,
   pose: BipedPose,
-  row: RowSpec,
+  row: RowSpec<string>,
   frame: number,
 ): BipedPose {
   return {
@@ -54,9 +60,9 @@ export function dressedPose(
 }
 
 /** One of the human figures: the cells it paints, and how it paints them. */
-export interface HumanFigure {
+export interface HumanFigure<R extends string = HumanRowName> {
   readonly def: FigureDef;
-  readonly painting: HumanFigurePainting;
+  readonly painting: HumanFigurePainting<R>;
 }
 
 /**
@@ -101,7 +107,7 @@ export function humanFigureFor(
   const key = figureKey(look, outfit, held, offHand);
   const known = figuresByKey.get(key);
   if (known !== undefined) return known;
-  if (key === figureKey(look, defaultOutfitOf(look), null, null)) {
+  if (isUndressed(look, outfit, held, offHand)) {
     const undressed: HumanFigure = {
       def: undressedHumanFigure(look),
       painting: undressedHumanPainting(look),
@@ -109,28 +115,78 @@ export function humanFigureFor(
     figuresByKey.set(key, undressed);
     return undressed;
   }
-  const dress = (pose: BipedPose, row: RowSpec, frame: number): BipedPose => {
+  const figure = figurePaintedFrom(HUMAN_ROW_BOOK, key, look, outfit, held, offHand);
+  figuresByKey.set(key, figure);
+  return figure;
+}
+
+/**
+ * {@link humanFigureFor} painted from `rows` in place of the crawler's own:
+ * the figure of one who plays rows on the rig the crawler never does. Its id
+ * names the book, so its cells are never taken for the crawler's. Built anew
+ * on each call: such a figure is made once, by the art that draws it.
+ */
+export function humanFigureWithRows<R extends string>(
+  rows: HumanRowBook<R>,
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  held: CarriedGrip | null,
+  offHand: OffHandGrip | null = null,
+): HumanFigure<R> {
+  const key = `${figureKey(look, outfit, held, offHand)}:rows-${rows.id}`;
+  return figurePaintedFrom(rows, key, look, outfit, held, offHand);
+}
+
+function isUndressed(
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  held: CarriedGrip | null,
+  offHand: OffHandGrip | null,
+): boolean {
+  return (
+    figureKey(look, outfit, held, offHand) === figureKey(look, defaultOutfitOf(look), null, null)
+  );
+}
+
+function dresserFor(
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  held: CarriedGrip | null,
+  offHand: OffHandGrip | null,
+): HumanPoseDresser {
+  if (isUndressed(look, outfit, held, offHand)) return undressedDresser(look);
+  return (pose, row, frame) => {
     const dressed = withLookBuild(dressedPose(outfit, pose, row, frame), look);
     // The main hand first: it reads a closed left fist as his hands being busy.
-    const inMainHand = held === null ? dressed : carryInMainHand(dressed, row, held);
+    const inMainHand = held === null ? dressed : carryInMainHand(dressed, row, frame, held);
     return offHand === null ? inMainHand : carryInOffHand(inMainHand, row, offHand);
   };
-  const painting: HumanFigurePainting = {
+}
+
+function figurePaintedFrom<R extends string>(
+  rows: HumanRowBook<R>,
+  id: string,
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  held: CarriedGrip | null,
+  offHand: OffHandGrip | null,
+): HumanFigure<R> {
+  const painting: HumanFigurePainting<R> = {
     look,
-    dress,
+    rows,
+    dress: dresserFor(look, outfit, held, offHand),
     itemHandle: undressedHumanPainting(look).itemHandle,
   };
-  const figure: HumanFigure = {
+  return {
     def: {
       ...undressedHumanFigure(look),
-      id: key,
+      id,
+      states: figureStates(humanStateFrames(rows)),
       paintFrame: (ctx, state, frame) => paintDressedHumanFrame(ctx, state, frame, painting),
       heldLayers: humanHeldLayers(painting),
     },
     painting,
   };
-  figuresByKey.set(key, figure);
-  return figure;
 }
 
 /** The figure `look` is painted as in `outfit`, holding nothing of equipment's choosing. */

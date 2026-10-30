@@ -169,7 +169,7 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
   /**
    * The one switch that shuts every door but the swing.
    *
-   * `takeDamageFrom` is the only entry point these classes override, and the
+   * `receiveDamage` is the only damage door these classes override, and the
    * base class has two more that never ask `takesPlayerDamage` at all:
    * `takeDamage`, which every status tick and pool of acid arrives through, and
    * `applyStatus`. Left open, one poison proc — a flat chance on every landed
@@ -179,7 +179,7 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
    * sealed shut with the party inside it.
    *
    * Immunity is safe here precisely because the subclasses' own
-   * `takeDamageFrom` does not consult it — a real blow is answered by their own
+   * `receiveDamage` does not consult it — a real blow is answered by their own
    * state, and the mob's `hp` is never written by anything.
    */
   protected override get isDamageImmune(): boolean {
@@ -207,10 +207,10 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
   /** What a landed blow means. Called only for blows this prop accepts. */
   protected abstract onStruck(): void;
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     _amount: number,
     _attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (!this.takesPlayerDamage(damageType)) {
       const wrongWeapon =

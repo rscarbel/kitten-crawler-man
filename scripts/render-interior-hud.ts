@@ -49,6 +49,7 @@ import { NO_INSETS, resolveViewport } from '../src/ui/core/viewport';
 import { inset, overlaps, type Rect } from '../src/ui/core/geom';
 import { text } from '../src/ui/widgets/text';
 import type { Density } from '../src/ui/theme/tokens';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera';
 
 const OUT_DIR = `${PREVIEW_DIR}/playtest-r3`;
 const DEFAULT_ROOMS = ['taloncrest_temple', 'taloncrest_old_lady_cottage'];
@@ -129,9 +130,21 @@ function drawRoom(
 ): void {
   ctx.fillStyle = '#05060a';
   ctx.fillRect(0, 0, w, h);
-  map.renderCanvas(ctx, camera.x, camera.y, w, h);
+  map.renderCanvas(ctx, {
+    x: camera.x,
+    y: camera.y,
+    viewWidth: worldPx(w),
+    viewHeight: worldPx(h),
+    zoom: UNZOOMED,
+  });
   drawTownInteriorGroundProps(ctx, map, camera.x, camera.y, TILE_SIZE);
-  map.renderDecorationsOverlay(ctx, camera.x, camera.y, w, h);
+  map.renderDecorationsOverlay(ctx, {
+    x: camera.x,
+    y: camera.y,
+    viewWidth: worldPx(w),
+    viewHeight: worldPx(h),
+    zoom: UNZOOMED,
+  });
   const figures = [...townInteriorPropFigures(map)].sort((a, b) => a.y - b.y);
   for (const figure of figures) figure.render(ctx, camera.x, camera.y, TILE_SIZE);
 }

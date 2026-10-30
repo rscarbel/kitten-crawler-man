@@ -129,7 +129,7 @@ export function humanRowView(view: FacingView): HumanRowView {
 }
 
 /** The row a view-keyed table names for a facing view. */
-export function viewRow(rows: ViewRows, view: FacingView): HumanRowName {
+export function viewRow<R extends string>(rows: ViewRows<R>, view: FacingView): R {
   return rows[humanRowView(view)];
 }
 
@@ -422,9 +422,9 @@ interface HumanSpriteState {
   facingY?: number;
 }
 
-/** The row, frame and mirroring one draw of the human crawler paints. */
-export interface HumanRowSelection {
-  readonly row: HumanRowName;
+/** The row, frame and mirroring one draw of a human figure paints. */
+export interface HumanRowSelection<R extends string = HumanRowName> {
+  readonly row: R;
   readonly frame: number;
   readonly flipX: boolean;
 }
@@ -523,23 +523,24 @@ export function emptyHandedHumanFigure(): FigureDef {
 }
 
 /**
- * Draws one chosen cell of one of the human crawler's figures, with `held` composited at
+ * Draws one chosen cell of a figure on the human rig, with `held` composited at
  * its socket between the cell's two layers — for a picture of him that is
- * not the man being played, such as an explainer's illustration.
+ * not the man being played, such as an explainer's illustration, or for a
+ * figure painted from rows of its own. The row is one of the figure's.
  */
-export function drawHumanFigureSelection(
+export function drawHumanFigureSelection<R extends string>(
   ctx: CanvasRenderingContext2D,
-  figure: HumanFigure,
+  figure: HumanFigure<R>,
   sx: number,
   sy: number,
   s: number,
-  selection: HumanRowSelection,
+  selection: HumanRowSelection<R>,
   held: BipedHeldDraw | null,
   stowed: BipedStowedDraw | null = null,
   offHand: BipedOffHandDraw | null = null,
 ): void {
   const opts = selection.flipX ? { flipX: true } : {};
-  const source = { id: figure.def.id, painting: figure.painting };
+  const source: SocketSource<R> = { id: figure.def.id, painting: figure.painting };
   const mainInHand = held === null ? null : heldBetween(source, held, selection);
   const shieldInHand =
     offHand === null
@@ -609,7 +610,7 @@ export interface BipedStowedDraw {
  * stature, not his breadth, so a slighter build swings the same sword at the
  * same length against his height.
  */
-export function heldPxPerUnit(source: SocketSource): number {
+export function heldPxPerUnit<R extends string>(source: SocketSource<R>): number {
   return HUMAN_CELL_PX_PER_UNIT * playerStatureScale(source.painting.look);
 }
 
@@ -618,10 +619,10 @@ export function heldPxPerUnit(source: SocketSource): number {
  * figure where its place is on his far side, over it where his body does
  * not cover it.
  */
-function stowedAt(
-  source: SocketSource,
+function stowedAt<R extends string>(
+  source: SocketSource<R>,
   stowed: BipedStowedDraw,
-  selection: HumanRowSelection,
+  selection: HumanRowSelection<R>,
 ): { readonly draw: FigureBetween; readonly behind: boolean } {
   const socket = humanSocketsAt(source, selection.row, selection.frame).sockets[stowed.placement];
   return {
@@ -687,10 +688,10 @@ interface InHandDraw {
 }
 
 /** Composites `held` at its socket on the cell being drawn, between the cell's two layers. */
-function heldBetween(
-  source: SocketSource,
+function heldBetween<R extends string>(
+  source: SocketSource<R>,
   held: BipedHeldDraw,
-  selection: HumanRowSelection,
+  selection: HumanRowSelection<R>,
 ): InHandDraw | null {
   const frames = humanSocketsAt(source, selection.row, selection.frame);
   const socket = heldSocketOf(held.look, frames);

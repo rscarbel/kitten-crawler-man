@@ -22,6 +22,9 @@
  */
 
 import { installBrowserShim } from './browserShim.js';
+import type { PreviewControl } from '../src/scenes/PreviewScene.js';
+import type { WorldGesture } from '../src/ui/core/UiRoot.js';
+import type { GestureKind } from '../src/ui/core/pointer.js';
 
 const PHONE_VIEWPORT = { width: 375, height: 667, devicePixelRatio: 1 } as const;
 installBrowserShim(PHONE_VIEWPORT);
@@ -40,12 +43,19 @@ const { FACING_VIEWS } = await import('../src/sprites/facingView.js');
 const { catLookOf, ITEM_DEF, isItemId, wearerAllows } =
   await import('../src/core/items/defs/ItemDefs.js');
 const { TOOL_TIERS } = await import('../src/core/items/gathering/toolTiers.js');
+const { setFigureBakeClock } = await import('../src/sprites/figure/figureFrameCache.js');
 
 setViewportSize(PHONE_VIEWPORT.width, PHONE_VIEWPORT.height);
 
-type PreviewControl = import('../src/scenes/PreviewScene.js').PreviewControl;
-type WorldGesture = import('../src/ui/core/UiRoot.js').WorldGesture;
-type GestureKind = import('../src/ui/core/pointer.js').GestureKind;
+/**
+ * The figure cache's bake allowance is wall-clock, and node paints a cell many
+ * times slower than a browser, so against real time almost every draw here is
+ * refused a bake and painted live, every tick. A clock that never advances
+ * lets each cell bake once and be blitted after, as it is in play, and makes
+ * which path draws a frame a property of the code rather than of the machine.
+ */
+const FROZEN_BAKE_CLOCK_MS = 0;
+setFigureBakeClock(() => FROZEN_BAKE_CLOCK_MS);
 
 const SECONDARY_BUTTON = 2;
 const MIDDLE_BUTTON = 1;
@@ -55,6 +65,8 @@ const LONG_CAPTION =
 /** Four short buttons fit two rows on a 375px phone; one per row means the caption squeezed them. */
 const MOST_CONTROL_ROWS = 2;
 const FRAMES_TO_SETTLE = 2;
+/** A press lands this fraction of the screen up from its bottom: on the art, below the controls. */
+const PRESS_HEIGHT_DIVISOR = 4;
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = ''): void {
@@ -88,7 +100,9 @@ class ProbeScene extends PreviewScene {
     this.worldKinds.push(gesture.kind);
   }
 
-  update(): void {}
+  update(): void {
+    // The probe has no world to advance: only its frame is under test.
+  }
 
   render(): void {
     this.renderChrome(this.ctx);
@@ -105,7 +119,7 @@ class ProbeScene extends PreviewScene {
 
 function press(scene: Pick<ProbeScene, 'ui' | 'settle'>, button: number): void {
   const x = PHONE_VIEWPORT.width / 2;
-  const y = PHONE_VIEWPORT.height - PHONE_VIEWPORT.height / 4;
+  const y = PHONE_VIEWPORT.height - PHONE_VIEWPORT.height / PRESS_HEIGHT_DIVISOR;
   for (const kind of ['down', 'up'] as const) {
     scene.ui.pointer({
       kind,
@@ -268,10 +282,10 @@ for (const look of CAT_LOOKS) {
     clashing.map((outfit) => outfit.label).join(','),
   );
 
-  const firstGarment = drawnAsGarment.at(0);
-  if (firstGarment === undefined) {
+  if (drawnAsGarment.length === 0) {
     console.log('  --   no item is drawn as a garment on her; outfit pick not replayed');
   } else {
+    const firstGarment = drawnAsGarment[0];
     const bareFigure = scene.rowAppearance.figure.id;
     const garmentIndex = scene.outfitChoices.findIndex(
       (outfit) => outfit.items.length === 1 && outfit.items[0] === firstGarment,
@@ -311,7 +325,7 @@ for (const look of CAT_LOOKS) {
 
   const holdRowsSeen = new Set<string>();
   const holdRowsWrong: string[] = [];
-  for (let i = 0; i < CAT_ROWS.length; i++) {
+  for (const _row of CAT_ROWS) {
     const row = scene.previewRow;
     if (row.hold !== null) {
       holdRowsSeen.add(row.state);
@@ -344,8 +358,7 @@ for (const look of CAT_LOOKS) {
   check('every compass action renders', rendered, [...actionsSeen].join(','));
 }
 
-const { HumanPreviewScene, LIVE_SCRIPT_LAP_TICKS } =
-  await import('../src/scenes/HumanPreviewScene.js');
+const { HumanPreviewScene } = await import('../src/scenes/HumanPreviewScene.js');
 const { weaponStatsOf } = await import('../src/core/items/defs/ItemDefs.js');
 const { HELD_VISUALS } = await import('../src/sprites/held/heldVisuals.js');
 const { motionSetOf } = await import('../src/sprites/art/human/motionSets.js');
@@ -357,7 +370,9 @@ const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js')
 useDevPlayerIdentity();
 
 /** Long enough for the live script to stow, draw and strike with the weapon picked. */
-const HUMAN_SCRIPT_WATCH_TICKS = 6 * 60;
+const HUMAN_SCRIPT_WATCH_SECONDS = 6;
+const TICKS_PER_SECOND = 60;
+const HUMAN_SCRIPT_WATCH_TICKS = HUMAN_SCRIPT_WATCH_SECONDS * TICKS_PER_SECOND;
 
 class HumanProbe extends HumanPreviewScene {
   private readonly ctx = asGameContext(

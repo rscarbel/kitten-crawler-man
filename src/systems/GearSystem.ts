@@ -1,10 +1,13 @@
 import { TILE_SIZE } from '../core/constants';
+import type { Camera } from '../core/rendering/camera';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { Rarity } from '../core/items/defs/rarity';
 import type { ClawTrail } from '../core/items/equipment/weapons';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';
+import { hitTrainingOn, resolveCrawlerHit, type ResolvedHit } from '../core/combat/outgoingHit';
+import { FIRE_HIT, UNTAGGED_HIT, type DamageTags } from '../core/combat/damageTags';
 import { runTickHooks, wornClaws, wornTraits } from '../gear/gearHooks';
 import type { GearFxRequest } from '../gear/gearLive';
 import { setCompletionPieces, setRarity, wornSets } from '../gear/setProgress';
@@ -172,6 +175,30 @@ const RARITY_SHIMMER: Readonly<Record<Rarity, string>> = {
 
 type Crawler = HumanPlayer | CatPlayer;
 
+/**
+ * What a relic's bolt is, for the proficiency skills: the burn it lands says
+ * it is flame, and a bolt that only wounds is no kind of hit in particular.
+ */
+function relicBoltTags(status: OnHitStatusKind | undefined): DamageTags {
+  return status === 'burn' ? FIRE_HIT : UNTAGGED_HIT;
+}
+
+/**
+ * A slash wave thrown off `owner`'s swipe landing on `mob`: a blow of her own
+ * melee, of her claws' kind, that left her body and so cannot be guarded.
+ */
+function slashWaveHit(owner: Crawler, mob: Mob): ResolvedHit {
+  return resolveCrawlerHit({
+    dealer: owner,
+    delivery: owner.meleeDelivery,
+    blowAt: (melee) => Math.max(MIN_GEAR_STRIKE_DAMAGE, Math.round(owner.getMeleeDamage(melee))),
+    tags: owner.meleeHitTags(),
+    training: hitTrainingOn(mob),
+    damageType: 'melee',
+    struckBy: 'unguardable',
+  });
+}
+
 interface RelicBolt {
   readonly owner: Crawler;
   readonly target: Mob;
@@ -193,7 +220,6 @@ interface SlashWave {
   readonly dirX: number;
   readonly dirY: number;
   readonly rangePx: number;
-  readonly damage: number;
   readonly trail: ClawTrail | null;
   readonly struck: Set<Mob>;
   x: number;
@@ -499,7 +525,6 @@ export class GearSystem implements GameSystem, GearWorld {
           dirX: request.dirX,
           dirY: request.dirY,
           rangePx: request.rangePx,
-          damage: request.damage,
           trail: wornClaws(crawler)?.trail ?? null,
           struck: new Set(),
           x: request.x,
@@ -539,14 +564,23 @@ export class GearSystem implements GameSystem, GearWorld {
   private landBolt(bolt: RelicBolt): void {
     const { owner, target } = bolt;
     if (owner.zeroDamage) return;
-    const damage = Math.max(
-      MIN_GEAR_STRIKE_DAMAGE,
-      Math.round(owner.getMeleeDamage() * RELIC_BOLT_DAMAGE_SHARE),
-    );
     const hpBefore = target.hp;
     // Struck by nothing that can be guarded, and no weapon type: a relic's
-    // kill trains no skill and feeds no ability.
-    target.takeCreditedDamage(damage, owner, null, null);
+    // kill trains no weapon skill and feeds no ability.
+    const struck = resolveCrawlerHit({
+      dealer: owner,
+      delivery: owner.meleeDelivery,
+      blowAt: (melee) =>
+        Math.max(
+          MIN_GEAR_STRIKE_DAMAGE,
+          Math.round(owner.getMeleeDamage(melee) * RELIC_BOLT_DAMAGE_SHARE),
+        ),
+      tags: relicBoltTags(bolt.status),
+      training: hitTrainingOn(target),
+      damageType: null,
+      struckBy: 'unguardable',
+    });
+    target.takeHit(struck);
     const killed = hpBefore > 0 && target.hp <= 0;
     if (bolt.status !== undefined && !killed) landGearStatus(owner, target, bolt.status);
     if (killed && target.paysRewards) {
@@ -581,8 +615,7 @@ export class GearSystem implements GameSystem, GearWorld {
         for (const mob of this.enemiesNear(wave.x, wave.y, SLASH_WAVE_HALF_WIDTH_PX)) {
           if (wave.struck.has(mob)) continue;
           wave.struck.add(mob);
-          const damage = Math.max(MIN_GEAR_STRIKE_DAMAGE, Math.round(wave.damage));
-          mob.takeCreditedDamage(damage, wave.owner, 'melee', null);
+          mob.takeHit(slashWaveHit(wave.owner, mob));
         }
       }
       moving.push(wave);
@@ -687,13 +720,11 @@ export class GearSystem implements GameSystem, GearWorld {
     return frames > 0 ? 1 : 0;
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  render(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const slowed =
       this.human.gear.live.lastStandFrames > 0 || this.cat.gear.live.lastStandFrames > 0;
-    if (slowed) {
-      const view = ctx.getTransform();
-      drawLastStandEdges(ctx, 0, 0, ctx.canvas.width / view.a, ctx.canvas.height / view.d);
-    }
+    if (slowed) drawLastStandEdges(ctx, 0, 0, camera.viewWidth, camera.viewHeight);
     ctx.save();
     ctx.translate(-camX, -camY);
     for (const bramble of this.brambles) {

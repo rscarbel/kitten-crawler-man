@@ -14,8 +14,8 @@
  * (`starlightTentCueSoundIds`), so every id named here is preloaded with the tent.
  */
 
-import type { MusicTrackId, SoundId } from '../../audio/sounds';
-import type { MazeBlockKind } from '../../map/starlightTentMazeLayout';
+import type { MusicTrackId, SoundId } from './sounds';
+import type { MazeBlockKind } from '../map/starlightTentMazeLayout';
 
 export const STARLIGHT_TENT_CUES = {
   /** A fire grate breathing its column of flame. */

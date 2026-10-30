@@ -367,7 +367,7 @@ export class Lizardman extends Mob {
               t.applyStatus(makePoison(this.isConverted ? this : null));
             }
             if (LIZARDMAN_VENOM_SLOWS[settings.difficulty]) {
-              t.applyStatus(makeNumbed());
+              t.applyStatus(makeNumbed(t.survivingShare('poison')));
               this.specialSoundPending = true;
             }
           }

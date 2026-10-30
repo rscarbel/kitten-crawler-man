@@ -99,7 +99,7 @@ function stairwellRecords(data: DungeonData, gauntletCount: number): StairwellRe
   const exitSafeRooms = data.safeRooms.filter((room) => room.followsBossType !== undefined);
   if (exitSafeRooms.length < gauntletCount) return [];
   const lastExitSafeRoom = exitSafeRooms[gauntletCount - 1];
-  const banded = data.progressionLayout?.bandedStairwellTiles ?? [];
+  const banded = data.progressionLayout.bandedStairwellTiles;
   return data.stairwellTiles.map((tile) => ({
     distanceFromExit: distanceToRect(tile, lastExitSafeRoom.bounds),
     fromBand: banded.some((bandedTile) => bandedTile.x === tile.x && bandedTile.y === tile.y),
@@ -120,8 +120,8 @@ function runFloor(levelDef: LevelDef): RunResult[] {
         roomCount: roomCountOf(data),
         stairwellCount: data.stairwellTiles.length,
         stairwells: stairwellRecords(data, expectations.gauntletCount),
-        spacingWaived: data.progressionLayout?.stairwellSpacingWaived ?? false,
-        attempts: data.progressionLayout?.attempts ?? 1,
+        spacingWaived: data.progressionLayout.stairwellSpacingWaived,
+        attempts: data.progressionLayout.attempts,
         durationMs: Date.now() - startedAt,
         error: null,
       });

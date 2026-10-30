@@ -304,14 +304,14 @@ export class AttackCow extends Cow {
     return super.takeDamage(amount, source, options);
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (!this.isStanding) return;
     this.quietFrames = 0;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
   }
 
   // ── Commands from the system ───────────────────────────────────────────────

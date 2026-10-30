@@ -37,9 +37,6 @@ const DEFAULT_SEEDS_PER_FLOOR = 8;
 const SEED_STRIDE_PER_FLOOR = 100_000;
 /** Offsets past each grid edge that must read as "no region". */
 const OFF_GRID_PROBES: ReadonlyArray<number> = [-1, 0, 1];
-/** Seeds for the free-roam maps, which must carry an empty region map. */
-const FREE_ROAM_SEEDS: ReadonlyArray<number> = [3, 5];
-const FREE_ROAM_MAP_SIZE = 100;
 
 function seedsPerFloor(): number {
   const arg = process.argv.find((value) => value.startsWith('--seeds='));
@@ -253,22 +250,6 @@ function checkFloorMap(map: GameMap, totals: SweepTotals): void {
   totals.hallways += regions.hallways.length;
 }
 
-function checkEmptyRegionMap(map: GameMap): void {
-  check(map.roomBounds.length === 0, 'a non-progression map lists rooms');
-  check(map.regionMap.rooms.length === 0, 'a non-progression map has room regions');
-  check(map.regionMap.hallways.length === 0, 'a non-progression map has hallway regions');
-  const height = map.structure.length;
-  const width = map.structure[0]?.length ?? 0;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (map.regionAt(x, y) !== NO_REGION || map.roomIndexAt(x, y) !== NO_REGION) {
-        check(false, `non-progression tile (${x}, ${y}) has a region`);
-        return;
-      }
-    }
-  }
-}
-
 /**
  * The tutorial is hand-built but dressed by the generator's passes, so it
  * carries a region map of its own rooms, in the order its dressing lists them.
@@ -344,17 +325,6 @@ const seeds = seedsPerFloor();
 sweepFloor('floor 1', level1, 1, seeds);
 sweepFloor('floor 2', level2, 2, seeds);
 
-for (const worldSeed of FREE_ROAM_SEEDS) {
-  currentLabel = `free-roam seed ${worldSeed}`;
-  checkEmptyRegionMap(
-    new GameMap({
-      mapSize: FREE_ROAM_MAP_SIZE,
-      tileHeight: TILE_SIZE,
-      mapType: 'dungeon',
-      worldSeed,
-    }),
-  );
-}
 currentLabel = 'tutorial';
 checkTutorialRegionMap(new TutorialMap());
 

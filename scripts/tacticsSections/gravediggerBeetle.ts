@@ -24,6 +24,8 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import type { TacticsHarness } from './special';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** A source that says yes to every roll, so "no trait" can only mean "not eligible". */
 const ALWAYS_YES: Rng = () => 0;
@@ -101,6 +103,7 @@ function checkAdultActsOnNothing(map: GameMap, harness: TacticsHarness): void {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const loop = new MobUpdateLoop();
   const pack: GravediggerBeetle[] = [];
@@ -136,7 +139,7 @@ function checkAdultActsOnNothing(map: GameMap, harness: TacticsHarness): void {
   let unhurtBlows = 0;
   for (let blow = 0; blow < ADULT_GUARD_PROBE_BLOWS; blow++) {
     const before = target.hp;
-    target.takeDamageFrom(PROBE_BLOW_DAMAGE, striker, 'melee');
+    target.takeHit(harnessHit(striker, PROBE_BLOW_DAMAGE, 'melee'));
     if (target.hp >= before) unhurtBlows++;
     for (let frame = 0; frame < GUARD_COOLDOWN_FRAMES; frame++) target.tickTimers();
   }

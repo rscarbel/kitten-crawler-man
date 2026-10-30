@@ -1855,7 +1855,10 @@ export const REACTION_ROW_TABLE = {
     'none',
     reviveSide,
   ),
-  death_side: viewRow('side', DEATH_FRAMES, 'oneShot', DEATH_TICKS_PER_FRAME, 'none', deathSide),
+  death_side: {
+    ...viewRow('side', DEATH_FRAMES, 'oneShot', DEATH_TICKS_PER_FRAME, 'none', deathSide),
+    letsGoOfCarriedFrom: DEATH_HANDS_DOWN_FRAME,
+  },
 } satisfies Record<ReactionRowName, HumanRowDef>;
 
 // ── Views ────────────────────────────────────────────────────────────────────

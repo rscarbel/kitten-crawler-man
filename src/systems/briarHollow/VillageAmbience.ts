@@ -55,6 +55,7 @@ import {
 import { worldText } from '../../ui/world/worldText';
 import { drawGlowSprite } from './glowSprites';
 import type { TownPropRenderable } from '../townPropRenderable';
+import type { Camera } from '../../core/rendering/camera';
 
 /** A point in world pixels. */
 interface WorldPoint {
@@ -470,13 +471,8 @@ export class VillageAmbience {
   }
 
   /** Smoke, lamp glow, laundry and the bell's rings: drawn over every body. */
-  renderAbove(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     const anchors = this.anchors;
     if (anchors === null) return;
     const margin = CULL_MARGIN_TILES * TILE_SIZE;

@@ -434,13 +434,13 @@ export class TrashGremlin extends Mob {
     return this.soundCues.take();
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const previousHp = this.hp;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (this.hp < previousHp && this.hp > 0) this.soundCues.raise('hurt');
   }
 

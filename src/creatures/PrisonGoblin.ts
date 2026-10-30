@@ -300,10 +300,10 @@ export class PrisonGoblin extends Mob {
    */
   lastStrike: PrisonGoblinStrike | null = null;
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (attacker !== null) {
       this.lastStrike = {
@@ -312,7 +312,7 @@ export class PrisonGoblin extends Mob {
         damageType: damageType ?? 'melee',
       };
     }
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
   }
 
   protected override onDamageBlocked(): void {

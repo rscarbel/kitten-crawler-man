@@ -62,26 +62,11 @@ import {
   RUN_FRAMES,
   RUN_START_FRAMES,
   RUN_STOP_FRAMES,
-  STAFF_BRACE_FRAMES,
-  STAFF_BRACE_TICKS_PER_FRAME,
-  STAFF_CHANNEL_FRAMES,
-  STAFF_CHANNEL_RELEASE_FRAME,
-  STAFF_CHANNEL_TICKS_PER_FRAME,
-  STAFF_FLINCH_FRAMES,
-  STAFF_FLINCH_TICKS_PER_FRAME,
   WALK_FRAMES,
   WALK_START_FRAMES,
   WALK_STOP_FRAMES,
 } from './timing';
 import { travellingEntryPhase } from './travelling';
-import {
-  staffAmble,
-  staffBrace,
-  staffChannel,
-  staffFlinch,
-  staffHurry,
-  staffRest,
-} from './staffRows';
 
 const NO_IMPACT: readonly number[] = [];
 const STRIKE_IMPACT: readonly number[] = [ATTACK_IMPACT_FRAME];
@@ -313,116 +298,6 @@ function holsterRow(set: ArmedMotionSet, motion: HolsterMotion, view: CardinalVi
   };
 }
 
-/**
- * Standing with the haft planted upright, breathing as the idle breathes.
- * No role: the crawler stands in his set's own idle; a figure that rests on
- * a staff names it.
- */
-function restRow(view: CardinalView): HumanRowDef {
-  return {
-    frameCount: IDLE_FRAMES,
-    kind: 'loop',
-    view,
-    impactFrames: NO_IMPACT,
-    mirrorable: view === 'side',
-    locomotion: 'planted',
-    frameTicks: IDLE_FRAME_TICKS,
-    motionSet: 'twoHand',
-    pose: (f) => staffRest(view, idleBreathPhase(f), idleBlinkLid(f)),
-  };
-}
-
-/**
- * The walk hunched forward in a hurry, on the walk's own legs and paced by
- * the walk's ground. The crawler's animator strides in the first walk cycle
- * of his set (`cycleRow`), which is `twohand_walk`, declared ahead of it; a
- * figure that flees names this one.
- */
-function hurryRow(view: CardinalView): HumanRowDef {
-  return {
-    frameCount: WALK_FRAMES,
-    kind: 'loop',
-    view,
-    impactFrames: NO_IMPACT,
-    mirrorable: view === 'side',
-    locomotion: 'travelling',
-    gait: 'walk',
-    motionSet: 'twoHand',
-    pose: (f) => staffHurry(view, cyclePhase(f, WALK_FRAMES)),
-  };
-}
-
-/**
- * Walking with the staff as a walking stick, on the walk's own legs and
- * paced by the walk's ground. Declared after `twohand_walk`, which the
- * crawler's animator strides in (`cycleRow`); a figure that walks with a
- * staff names this one.
- */
-function ambleRow(view: CardinalView): HumanRowDef {
-  return {
-    frameCount: WALK_FRAMES,
-    kind: 'loop',
-    view,
-    impactFrames: NO_IMPACT,
-    mirrorable: view === 'side',
-    locomotion: 'travelling',
-    gait: 'walk',
-    motionSet: 'twoHand',
-    pose: (f) => staffAmble(view, cyclePhase(f, WALK_FRAMES)),
-  };
-}
-
-/** Struck while holding a haft: thrown back behind it and recovering. No role; named by the figure that flinches. */
-function flinchRow(view: CardinalView): HumanRowDef {
-  return {
-    frameCount: STAFF_FLINCH_FRAMES,
-    kind: 'oneShot',
-    view,
-    impactFrames: NO_IMPACT,
-    mirrorable: view === 'side',
-    locomotion: 'planted',
-    ticksPerFrame: STAFF_FLINCH_TICKS_PER_FRAME,
-    motionSet: 'twoHand',
-    pose: (f) => staffFlinch(view, f),
-  };
-}
-
-const CHANNEL_EVENTS = { release: [STAFF_CHANNEL_RELEASE_FRAME] } as const;
-
-/**
- * The healing channel with the haft planted. No role: nothing the crawler
- * does plays it, and a figure that channels names it.
- */
-function channelRow(view: CardinalView): HumanRowDef {
-  return {
-    frameCount: STAFF_CHANNEL_FRAMES,
-    kind: 'oneShot',
-    view,
-    impactFrames: NO_IMPACT,
-    mirrorable: view === 'side',
-    locomotion: 'planted',
-    ticksPerFrame: STAFF_CHANNEL_TICKS_PER_FRAME,
-    eventFrames: CHANNEL_EVENTS,
-    motionSet: 'twoHand',
-    pose: (f) => staffChannel(view, f),
-  };
-}
-
-/** Braced behind the haft, held as long as the threat is: a loop with no role, named by the figure that cowers. */
-function braceRow(view: CardinalView): HumanRowDef {
-  return {
-    frameCount: STAFF_BRACE_FRAMES,
-    kind: 'loop',
-    view,
-    impactFrames: NO_IMPACT,
-    mirrorable: view === 'side',
-    locomotion: 'planted',
-    ticksPerFrame: STAFF_BRACE_TICKS_PER_FRAME,
-    motionSet: 'twoHand',
-    pose: (f) => staffBrace(view, f),
-  };
-}
-
 export const ARMED_ROW_NAMES = [
   'light_idle',
   'light_idle_side',
@@ -617,24 +492,6 @@ export const ARMED_ROW_NAMES = [
   'twohand_stow',
   'twohand_stow_side',
   'twohand_stow_away',
-  'twohand_channel',
-  'twohand_channel_side',
-  'twohand_channel_away',
-  'twohand_brace',
-  'twohand_brace_side',
-  'twohand_brace_away',
-  'twohand_rest',
-  'twohand_rest_side',
-  'twohand_rest_away',
-  'twohand_hurry',
-  'twohand_hurry_side',
-  'twohand_hurry_away',
-  'twohand_amble',
-  'twohand_amble_side',
-  'twohand_amble_away',
-  'twohand_flinch',
-  'twohand_flinch_side',
-  'twohand_flinch_away',
 ] as const;
 
 export type ArmedRowName = (typeof ARMED_ROW_NAMES)[number];
@@ -1128,22 +985,4 @@ export const ARMED_ROW_TABLE = {
   twohand_stow: holsterRow('twoHand', 'stow', 'front'),
   twohand_stow_side: holsterRow('twoHand', 'stow', 'side'),
   twohand_stow_away: holsterRow('twoHand', 'stow', 'back'),
-  twohand_channel: channelRow('front'),
-  twohand_channel_side: channelRow('side'),
-  twohand_channel_away: channelRow('back'),
-  twohand_brace: braceRow('front'),
-  twohand_brace_side: braceRow('side'),
-  twohand_brace_away: braceRow('back'),
-  twohand_rest: restRow('front'),
-  twohand_rest_side: restRow('side'),
-  twohand_rest_away: restRow('back'),
-  twohand_hurry: hurryRow('front'),
-  twohand_hurry_side: hurryRow('side'),
-  twohand_hurry_away: hurryRow('back'),
-  twohand_amble: ambleRow('front'),
-  twohand_amble_side: ambleRow('side'),
-  twohand_amble_away: ambleRow('back'),
-  twohand_flinch: flinchRow('front'),
-  twohand_flinch_side: flinchRow('side'),
-  twohand_flinch_away: flinchRow('back'),
 } satisfies Record<ArmedRowName, HumanRowDef>;

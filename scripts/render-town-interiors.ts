@@ -35,6 +35,7 @@ import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlo
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
 import type { BuildingId } from '../src/map/buildingIds.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -157,9 +158,21 @@ for (const { building, floor, floorCount } of storeys) {
   ctx.scale(scale, scale);
   const gameCtx = asGameContext(ctx);
 
-  map.renderCanvas(gameCtx, 0, 0, viewW, viewH);
+  map.renderCanvas(gameCtx, {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   drawTownInteriorGroundProps(gameCtx, map, 0, 0, TILE_SIZE);
-  map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
+  map.renderDecorationsOverlay(gameCtx, {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
 
   function drawHumanProbe(tileX: number, tileY: number): void {
     drawFigureCached(

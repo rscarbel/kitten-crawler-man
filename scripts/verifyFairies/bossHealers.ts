@@ -59,6 +59,8 @@ import type { FairyGateReport } from './report';
 import { ARENA_TILES, makeArena } from './stage';
 import { Conversation } from '../../src/dialog/Conversation';
 import type { GauntletBossType } from '../../src/map/bossRoomSizes';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
 const HEALER_DIFFICULTY: Difficulty = 'hard';
@@ -171,6 +173,7 @@ function contextFor(
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [],
     bossRoom,
   };
@@ -595,14 +598,14 @@ function bossRoomSeals(
       bossRoom.update(ctx);
       const lockedOnEntry = state.locked;
       readyForTheKill(boss);
-      boss.takeDamageFrom(OVERKILL_DAMAGE, party.human);
+      boss.takeHit(harnessHit(party.human, OVERKILL_DAMAGE));
       let heldWhileHealerLived = true;
       for (let frame = 0; frame < SEAL_SETTLE_FRAMES; frame++) {
         bossRoom.update(ctx);
         if (!state.locked || state.defeated) heldWhileHealerLived = false;
       }
       const staged = lockedOnEntry && !boss.isAlive && bound.every((healer) => healer.isAlive);
-      for (const healer of bound) healer.takeDamageFrom(OVERKILL_DAMAGE, party.human);
+      for (const healer of bound) healer.takeHit(harnessHit(party.human, OVERKILL_DAMAGE));
       for (let frame = 0; frame < SEAL_SETTLE_FRAMES; frame++) bossRoom.update(ctx);
       return {
         name: rule.type,
@@ -883,7 +886,7 @@ function bossRoomChases(
       const ctx = contextFor(party, roster, floor.map, bossRoom);
       bossRoom.update(ctx);
       readyForTheKill(boss);
-      boss.takeDamageFrom(OVERKILL_DAMAGE, party.human);
+      boss.takeHit(harnessHit(party.human, OVERKILL_DAMAGE));
       const chase = chaseHealer({
         name: rule.type,
         healer,
@@ -897,7 +900,7 @@ function bossRoomChases(
       });
       // A room left sealed on its living healer would hold on to this party's
       // crawlers as insiders and pull the next room's party back into it.
-      healer.takeDamageFrom(OVERKILL_DAMAGE, party.human);
+      healer.takeHit(harnessHit(party.human, OVERKILL_DAMAGE));
       for (let frame = 0; frame < SEAL_SETTLE_FRAMES; frame++) bossRoom.update(ctx);
       return chase;
     });

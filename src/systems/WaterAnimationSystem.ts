@@ -27,7 +27,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { snapUserX, snapUserY } from '../map/tiles/deviceSnap';
 import type { GameMap } from '../map/GameMap';
 import {
@@ -548,8 +548,9 @@ export class WaterAnimationSystem implements GameSystem {
    * Called from the `renderGround` slot in `RenderPipeline`, not from `update` —
    * there is no per-frame state to advance, only the shared `frameTime` to read.
    */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.collectVisible(camX, camY);
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    this.collectVisible(camera);
     // Nothing this method draws can appear outside the river, so with no river
     // on screen there is nothing to do — including for ripples, which are always
     // shed in water and would be clipped away regardless.
@@ -578,17 +579,18 @@ export class WaterAnimationSystem implements GameSystem {
   }
 
   /** Fills `visible` and `rocks` with the water tiles inside the culled rect. */
-  private collectVisible(camX: number, camY: number): void {
+  private collectVisible(camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const structure = this.gameMap.structure;
     const firstTileX = Math.max(0, Math.floor(camX / TILE_SIZE) - CULL_MARGIN_TILES);
     const firstTileY = Math.max(0, Math.floor(camY / TILE_SIZE) - CULL_MARGIN_TILES);
     const lastTileX = Math.min(
       structure[0].length - 1,
-      Math.ceil((camX + worldViewWidth()) / TILE_SIZE) + CULL_MARGIN_TILES,
+      Math.ceil((camX + camera.viewWidth) / TILE_SIZE) + CULL_MARGIN_TILES,
     );
     const lastTileY = Math.min(
       structure.length - 1,
-      Math.ceil((camY + worldViewHeight()) / TILE_SIZE) + CULL_MARGIN_TILES,
+      Math.ceil((camY + camera.viewHeight) / TILE_SIZE) + CULL_MARGIN_TILES,
     );
 
     this.visibleCount = 0;

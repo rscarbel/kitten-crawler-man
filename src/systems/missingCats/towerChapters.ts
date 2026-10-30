@@ -44,13 +44,13 @@ import {
   SPLIT_STAIR_REFUSALS,
 } from '../../dialog/scripts/scenes/missingCats';
 import { towerStoreyIndex, type TowerStoreyId } from '../../map/town/interiors/townCenterTower';
-import { PRISON_MUSIC } from '../stealthKeySnatch/prisonSoundCues';
+import { PRISON_MUSIC } from '../../audio/prisonSoundCues';
 import type { CutsceneScript } from '../cutscene/cutsceneSteps';
 import type { ArrivalCard, PartyTransferRequest } from '../partySplit/partyTransfer';
 import type { SplitDirector } from '../partySplit/SplitDirector';
 import type { StairDirection } from '../TowerStairSystem';
 import type { TowerMoment } from '../tower/towerMoments';
-import { REUNION_CUE } from './missingCatsSoundCues';
+import { REUNION_CUE } from '../../audio/missingCatsSoundCues';
 import { closeMissingCatsChapter } from './missingCatsSplit';
 import { REUNION_LOCATION } from './towerResume';
 import { enterMissingCatsPhase } from './missingCatsPhase';

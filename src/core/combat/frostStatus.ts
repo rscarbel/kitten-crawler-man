@@ -5,7 +5,13 @@
  */
 
 import type { Player } from '../../Player';
-import { CHILLED_STATUS, FROZEN_STATUS, makeChilled, makeFrozen } from './StatusEffect';
+import {
+  CHILLED_STATUS,
+  FROZEN_STATUS,
+  makeChilled,
+  makeFrozen,
+  type SurvivingShare,
+} from './StatusEffect';
 import { CHILLED_FRAMES, FROZEN_FRAMES } from './statusTuning';
 
 /** Ice-resistant gear halves the time spent encased, rounded up. */
@@ -24,8 +30,6 @@ export interface IceHitOptions {
   readonly chillFrames?: number;
   /** Overrides {@link FROZEN_FRAMES}, before any resistance halves it. */
   readonly frozenFrames?: number;
-  /** Whether the ice is a spell, so magic-resistant gear shortens what it leaves. */
-  readonly magic?: boolean;
 }
 
 /** How long `target` stays encased by a freeze of `frames`, after its gear. */
@@ -55,35 +59,44 @@ export function wouldIceHitFreeze(target: Player): boolean {
  *   slowed on top of it.
  * - Already frozen, or inside the grace window: it only re-chills.
  *
+ * `share` is what survived `target`'s resistance to the ice's source (its
+ * magic resistance for a spell, `FULL_SHARE` for anything else): the
+ * chill or freeze is stamped with it.
+ *
  * Returns `'refused'` when the target would not take the status at all — a mob
  * that is currently immune to everything, or a body already dead. A corpse is
  * refused because a freeze landing on it after the killing blow would make the
  * death read as `frozenSolid` instead of as the blow that caused it.
  */
-export function applyIceHit(target: Player, options: IceHitOptions = {}): IceHitOutcome {
+export function applyIceHit(
+  target: Player,
+  share: SurvivingShare,
+  options: IceHitOptions = {},
+): IceHitOutcome {
   if (!target.isAlive) return 'refused';
   const freezeAllowed = options.freezeAllowed ?? true;
-  const resistedByMagic = (frames: number): number =>
-    options.magic === true ? target.magicResistedFrames(frames) : frames;
-  const chillFrames = resistedByMagic(options.chillFrames ?? CHILLED_FRAMES);
+  const chillFrames = options.chillFrames ?? CHILLED_FRAMES;
   const hardensToFreeze = freezeAllowed && wouldIceHitFreeze(target);
 
   if (hardensToFreeze) {
-    const frozenFrames = resistedByMagic(frozenFramesFor(target, options.frozenFrames));
-    target.applyStatus(makeFrozen(frozenFrames));
+    target.applyStatus(makeFrozen(share, frozenFramesFor(target, options.frozenFrames)));
     if (!target.hasStatus(FROZEN_STATUS)) return 'refused';
     target.cureStatuses([CHILLED_STATUS]);
     return 'frozen';
   }
 
-  target.applyStatus(makeChilled(chillFrames));
+  target.applyStatus(makeChilled(share, chillFrames));
   return target.hasStatus(CHILLED_STATUS) ? 'chilled' : 'refused';
 }
 
-/** Chills or re-chills `target` and never freezes it, whatever state it is in. */
+/**
+ * Chills or re-chills `target`, stamped with `share`, and never freezes it,
+ * whatever state it is in.
+ */
 export function applyChillOnly(
   target: Player,
+  share: SurvivingShare,
   chillFrames: number = CHILLED_FRAMES,
 ): IceHitOutcome {
-  return applyIceHit(target, { freezeAllowed: false, chillFrames });
+  return applyIceHit(target, share, { freezeAllowed: false, chillFrames });
 }

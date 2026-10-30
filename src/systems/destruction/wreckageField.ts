@@ -24,6 +24,7 @@ import {
 } from './spillDecals';
 import { drawFireballFlame } from '../../sprites/fireballSprite';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../../creatures/mobLevelScaling';
+import type { Camera } from '../../core/rendering/camera';
 
 export interface Wreckage {
   readonly tileX: number;
@@ -180,12 +181,12 @@ export class WreckageField {
   }
 
   /** Remembers the view so eviction can tell what the player is looking at. */
-  noteView(camX: number, camY: number, viewW: number, viewH: number): void {
+  noteView(camera: Camera): void {
     const view = this.view;
-    view.x = camX;
-    view.y = camY;
-    view.w = viewW;
-    view.h = viewH;
+    view.x = camera.x;
+    view.y = camera.y;
+    view.w = camera.viewWidth;
+    view.h = camera.viewHeight;
     this.hasView = true;
   }
 

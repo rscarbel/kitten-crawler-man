@@ -44,6 +44,8 @@ import {
   formatPlayTime,
   parseGameStatsSnapshot,
 } from '../src/core/progression/GameStats';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const ROOM_WIDTH_TILES = 30;
 const ROOM_HEIGHT_TILES = 12;
@@ -174,6 +176,7 @@ function makeStage(): Stage {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { map, pm, roster, world, ctx };
 }
@@ -390,7 +393,7 @@ section('Bosses slain counts the real bosses, once each, and nothing else');
   for (const mob of [...bosses, minion]) stage.roster.add(mob);
   for (let frame = 0; frame < KILL_FRAMES; frame++) {
     for (const mob of [...bosses, minion]) {
-      if (mob.isAlive && mob.hp > 0) mob.takeDamageFrom(mob.hp, human, 'melee');
+      if (mob.isAlive && mob.hp > 0) mob.takeHit(harnessHit(human, mob.hp, 'melee'));
     }
     kit.resolveKills();
   }

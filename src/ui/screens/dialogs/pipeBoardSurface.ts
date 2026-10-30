@@ -35,7 +35,7 @@ import { drawFocusRing } from '../../widgets/paint';
 import { button, buttonHeight } from '../../widgets/button';
 import { panel, panelBodyMaxHeight, panelBodyWidth, type FooterButton } from '../../widgets/panel';
 import { lineHeightOf, text } from '../../widgets/text';
-import type { BathroomCue } from '../../../systems/cloggedBathroom/bathroomSoundCues';
+import type { BathroomCue } from '../../../audio/bathroomSoundCues';
 import type {
   PipeBoard,
   PipeFlowCounts,

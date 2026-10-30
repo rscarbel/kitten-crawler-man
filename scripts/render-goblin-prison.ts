@@ -24,6 +24,7 @@ const { asGameContext } = await import('./nodeGameContext.js');
 const { PREVIEW_DIR, writePreviewPng } = await import('./previewOut.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { cameraAt, UNZOOMED } = await import('../src/core/rendering/camera.js');
 const { PRISON_LAYOUTS } = await import('../src/map/goblinPrisonLayouts.js');
 const { isPrisonCrawlerWalkable, rectContainsTile } =
   await import('../src/map/goblinPrisonPlan.js');
@@ -84,19 +85,20 @@ for (const layout of PRISON_LAYOUTS) {
     const target = Math.floor(prison.compiled.cycleFrames * share);
     while (prison.loopFrame < target) harness.step(1);
     setViewportSize(worldW, worldH);
+    const wholeWorld = cameraAt({ x: 0, y: 0 }, UNZOOMED);
     worldCtx.fillStyle = '#000';
     worldCtx.fillRect(0, 0, worldW, worldH);
-    prison.renderGround(worldCtx, 0, 0);
+    prison.ground.renderGround(worldCtx, wholeWorld);
     const figures = [
-      ...prison.sortedFigures(0, 0),
+      ...prison.roomFigures(wholeWorld),
       ...roster.mobs.filter((mob) => mob.belongsInMobGrid),
       ...(keyFigure === null ? [] : [keyFigure]),
       harness.human,
       harness.cat,
     ].sort((a, b) => a.y - b.y);
     for (const figure of figures) figure.render(worldCtx, 0, 0, TILE_SIZE);
-    prison.renderDarkness(worldCtx, 0, 0);
-    prison.renderEffects(worldCtx, 0, 0);
+    prison.renderDarkness(worldCtx, wholeWorld);
+    prison.renderEffects(worldCtx, wholeWorld);
     setViewportSize(SCREEN.width, SCREEN.height);
     const column = index % OVERVIEW_COLUMNS;
     const row = Math.floor(index / OVERVIEW_COLUMNS);

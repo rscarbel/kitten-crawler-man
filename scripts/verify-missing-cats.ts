@@ -200,6 +200,7 @@ import { MercenarySystem } from '../src/systems/MercenarySystem';
 import { splitWholePartyIfOwed } from '../src/systems/missingCats/missingCatsSplit';
 import { resumeLocationFor, savedIndoorsInFor } from '../src/systems/partySplit/splitResume';
 import { installBrowserShim } from './browserShim';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 installCanvasGlobals();
 useDevPlayerIdentity();
@@ -846,6 +847,7 @@ function roomContext(pm: PlayerManager, roster: MobRoster, map: GameMap): System
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 

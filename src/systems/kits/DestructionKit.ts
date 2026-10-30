@@ -19,13 +19,14 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { ALL_BREAKABLE_PROPS, DestructiblePropSystem } from '../DestructiblePropSystem';
 import type { DestructiblePropCheckpoint, DestructiblePropKind } from '../DestructiblePropSystem';
 import { DynamiteSystem } from '../DynamiteSystem';
-import { BOMBER_GOBLIN_CUES, blastCue } from '../bomberGoblinSoundCues';
+import { BOMBER_GOBLIN_CUES, blastCue } from '../../audio/bomberGoblinSoundCues';
 import type { SystemContext } from '../GameSystem';
 import { LootSystem } from '../LootSystem';
 import { GroundPickupSystem, type GroundPickupCheckpoint } from '../GroundPickupSystem';
 import type { LootCheckpoint } from '../LootSystem';
 import type { TreeSystem } from '../TreeSystem';
 import type { SceneWorld } from './SceneWorld';
+import type { Camera } from '../../core/rendering/camera';
 import {
   playDungeonCue,
   propEventCues,
@@ -156,8 +157,8 @@ export class DestructionKit {
   }
 
   /** Wreckage lies on the floor, so it draws under everything that walks on it. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.destructibles.renderWreckage(ctx, camX, camY);
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.destructibles.renderWreckage(ctx, camera);
   }
 
   /** Splinters, live sticks and their arc — all of it over the entities. */

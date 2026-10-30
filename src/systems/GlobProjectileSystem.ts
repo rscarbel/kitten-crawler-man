@@ -24,7 +24,13 @@ import type { DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { projectileSpeedScaleForLevel } from '../creatures/mobLevelScaling';
-import { BURN_TICKS, makeBurn, makePoison, type StatusEffect } from '../core/combat/StatusEffect';
+import {
+  FULL_SHARE,
+  BURN_TICKS,
+  makeBurn,
+  makePoison,
+  type StatusEffect,
+} from '../core/combat/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawFireballBolt, drawFireballBurst, drawFireballFlame } from '../sprites/fireballSprite';
@@ -76,9 +82,9 @@ const ACID_PUDDLE_LIGHT_STRENGTH = 0.45;
 
 const GLOB_KINDS = {
   fireball: {
-    directHitStatus: () => makeBurn(),
+    directHitStatus: () => makeBurn(FULL_SHARE),
     directHitStatusChance: DIRECT_HIT_STATUS_CHANCE,
-    puddleStatus: () => makeBurn(),
+    puddleStatus: () => makeBurn(FULL_SHARE),
     puddleHazard: 'fireballFlames',
     drawBolt: drawFireballBolt,
     drawBurst: drawFireballBurst,

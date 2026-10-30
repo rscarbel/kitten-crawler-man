@@ -360,7 +360,8 @@ export abstract class GoblinBomber extends Mob implements BombThrower, SiegeLobb
 
   /**
    * Its throws are long, telegraphed and dodgeable, so the companion dodges —
-   * but only once it is fighting, since this flag wakes a mob at any distance.
+   * but only once it is fighting: a bomber with nobody to throw at has nothing
+   * to dodge.
    */
   override get requiresEvasion(): boolean {
     return this.currentTarget !== null || this.phase !== 'ready';

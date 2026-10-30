@@ -2,11 +2,11 @@
  * Brother Anselm, the Barracks Mercenaries' healer, drawn on the human rig:
  * his look (`looks/humans/brotherAnselm.ts`) in his habit, sandals and the
  * hirelings' armband, his quarterstaff closed in his fists between each
- * cell's two layers. Every row he plays is one of the rig's own, so his
- * movement is the crawler's: the two-handed set's sweep, its rows for a
- * staff (resting on it, walking with it, the channel, the brace, the
- * flinch and the hurried walk), and the bare-handed fall with the staff
- * still in his fist.
+ * cell's two layers. He is painted from the crawler's rows extended by his
+ * own: the two-handed set's sweep and the bare-handed fall, the staff let go
+ * as his palms meet the floor, are the crawler's, and the rows for a staff (resting on
+ * it, walking with it, the channel, the brace, the flinch and the hurried
+ * walk) are his alone, declared here beside his look.
  */
 
 import { isKitRow, type MedicRow } from '../creatures/mercenaries/MercenaryKit';
@@ -16,11 +16,21 @@ import { prewarmFigureState } from './figure/figureFrameCache';
 import { carriedGripOf } from './art/human/carry';
 import { TILE_SCALE } from './art/human/figureScale';
 import { TICKS_PER_SECOND } from './art/human/timing';
-import { humanFigureFor } from './art/human/appearance';
+import { humanFigureWithRows } from './art/human/appearance';
 import {
+  staffAmbleRow,
+  staffBraceRow,
+  staffChannelRow,
+  staffFlinchRow,
+  staffHurryRow,
+  staffRestRow,
+} from './art/human/staffRows';
+import {
+  extendedHumanRowBook,
   FRAME_H,
   FRAME_W,
-  HUMAN_ROW_TABLE,
+  type HumanRowBook,
+  type HumanRowDef,
   type HumanRowName,
   TILE_X,
   TILE_Y,
@@ -46,6 +56,61 @@ import {
   ANSELM_WALK_FRAMES,
 } from './brotherAnselmTiming';
 
+/** The rows he plays that the crawler never does, in sheet order after the crawler's. */
+const ANSELM_OWN_ROW_NAMES = [
+  'twohand_channel',
+  'twohand_channel_side',
+  'twohand_channel_away',
+  'twohand_brace',
+  'twohand_brace_side',
+  'twohand_brace_away',
+  'twohand_rest',
+  'twohand_rest_side',
+  'twohand_rest_away',
+  'twohand_hurry',
+  'twohand_hurry_side',
+  'twohand_hurry_away',
+  'twohand_amble',
+  'twohand_amble_side',
+  'twohand_amble_away',
+  'twohand_flinch',
+  'twohand_flinch_side',
+  'twohand_flinch_away',
+] as const;
+
+type AnselmOwnRowName = (typeof ANSELM_OWN_ROW_NAMES)[number];
+
+/** Every row his figure is painted in: the crawler's and his own. */
+export type AnselmRowName = HumanRowName | AnselmOwnRowName;
+
+const ANSELM_OWN_ROW_TABLE = {
+  twohand_channel: staffChannelRow('front'),
+  twohand_channel_side: staffChannelRow('side'),
+  twohand_channel_away: staffChannelRow('back'),
+  twohand_brace: staffBraceRow('front'),
+  twohand_brace_side: staffBraceRow('side'),
+  twohand_brace_away: staffBraceRow('back'),
+  twohand_rest: staffRestRow('front'),
+  twohand_rest_side: staffRestRow('side'),
+  twohand_rest_away: staffRestRow('back'),
+  twohand_hurry: staffHurryRow('front'),
+  twohand_hurry_side: staffHurryRow('side'),
+  twohand_hurry_away: staffHurryRow('back'),
+  twohand_amble: staffAmbleRow('front'),
+  twohand_amble_side: staffAmbleRow('side'),
+  twohand_amble_away: staffAmbleRow('back'),
+  twohand_flinch: staffFlinchRow('front'),
+  twohand_flinch_side: staffFlinchRow('side'),
+  twohand_flinch_away: staffFlinchRow('back'),
+} satisfies Record<AnselmOwnRowName, HumanRowDef>;
+
+/** The rows his figure is painted from. */
+export const ANSELM_ROW_BOOK: HumanRowBook<AnselmRowName> = extendedHumanRowBook(
+  'staff',
+  ANSELM_OWN_ROW_NAMES,
+  ANSELM_OWN_ROW_TABLE,
+);
+
 /** Every row he paints, under the name his kit asks for it by. */
 export type AnselmRow =
   'idle' | 'walk' | 'flee' | 'staff_strike' | 'mend' | 'cower' | 'hurt' | 'death';
@@ -58,7 +123,7 @@ export type AnselmRow =
  * staff: the rig's bare-handed flinch would carry the staff in one fist and
  * whip it round over his head.
  */
-export const ANSELM_ROWS: Readonly<Record<AnselmRow, ViewRows>> = {
+export const ANSELM_ROWS: Readonly<Record<AnselmRow, ViewRows<AnselmRowName>>> = {
   idle: { front: 'twohand_rest', side: 'twohand_rest_side', back: 'twohand_rest_away' },
   walk: { front: 'twohand_amble', side: 'twohand_amble_side', back: 'twohand_amble_away' },
   flee: { front: 'twohand_hurry', side: 'twohand_hurry_side', back: 'twohand_hurry_away' },
@@ -85,11 +150,25 @@ const KIT_ROWS: Readonly<Record<MedicRow, AnselmRow>> = {
   death: 'death',
 };
 
+const DRAWN_VIEWS: readonly CardinalView[] = ['front', 'side', 'back'];
+
+/** Every row he is drawn in, in any view. */
+export const ANSELM_PLAYED_ROWS: readonly AnselmRowName[] = [
+  ...new Set(
+    Object.values(KIT_ROWS).flatMap((row) => DRAWN_VIEWS.map((view) => ANSELM_ROWS[row][view])),
+  ),
+];
+
 /** His habit, sandals and armband over a body that wears nothing of its own. */
-const ANSELM_OUTFIT = outfitOf(BROTHER_ANSELM_LOOK, [MONK_HABIT, MONK_SANDALS, HIRELING_ARMBAND]);
+export const ANSELM_OUTFIT = outfitOf(BROTHER_ANSELM_LOOK, [
+  MONK_HABIT,
+  MONK_SANDALS,
+  HIRELING_ARMBAND,
+]);
 
 /** His figure: the rig in his look and outfit, his fists closed round the staff's haft. */
-export const BROTHER_ANSELM_FIGURE = humanFigureFor(
+export const BROTHER_ANSELM_FIGURE = humanFigureWithRows(
+  ANSELM_ROW_BOOK,
   BROTHER_ANSELM_LOOK,
   ANSELM_OUTFIT,
   carriedGripOf(ANSELM_QUARTERSTAFF),
@@ -103,12 +182,12 @@ const FULL_TURN = Math.PI * 2;
 /** The cell drawn for a row on a frame of the kit's clock, or of its own. */
 function frameOf(
   painted: AnselmRow,
-  row: HumanRowName,
+  row: AnselmRowName,
   progress: number,
   walkFrame: number,
   clock: number,
 ): number {
-  const meta = HUMAN_ROW_TABLE[row];
+  const meta = ANSELM_ROW_BOOK.table[row];
   const frames = meta.frameCount;
   switch (painted) {
     case 'idle':
@@ -170,7 +249,6 @@ const ANSELM_DEATH_TICKS = Math.round(
 const PREWARMED: readonly AnselmRow[] = ['idle', 'walk'];
 /** The rows a fight needs, in the order it asks for them: the sweep, the channel, the flinch, the brace, the fall. */
 const FIGHT_ROWS: readonly AnselmRow[] = ['staff_strike', 'mend', 'hurt', 'cower', 'death'];
-const DRAWN_VIEWS: readonly CardinalView[] = ['front', 'side', 'back'];
 
 function prewarmRows(rows: readonly AnselmRow[]): void {
   const names = new Set(rows.flatMap((row) => DRAWN_VIEWS.map((view) => ANSELM_ROWS[row][view])));
@@ -199,7 +277,7 @@ export const BROTHER_ANSELM_ART: MercenaryArt = {
       {
         row: name,
         frame: frameOf(painted, name, progress, frame.walkFrame, frame.clock),
-        flipX: HUMAN_ROW_TABLE[name].mirrorable && frame.facing.flipX,
+        flipX: ANSELM_ROW_BOOK.table[name].mirrorable && frame.facing.flipX,
       },
       STAFF_DRAW,
     );

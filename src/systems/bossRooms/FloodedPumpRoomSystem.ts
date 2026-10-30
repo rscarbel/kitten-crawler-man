@@ -1,3 +1,4 @@
+import type { Camera } from '../../core/rendering/camera';
 import { TILE_SIZE } from '../../core/constants';
 import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
 import { settings } from '../../core/input/Settings';
@@ -56,7 +57,7 @@ import {
 import {
   FLOODED_PUMP_ROOM_CUES,
   type FloodedPumpRoomLoop,
-} from './floodedPumpRoom/floodedPumpRoomSoundCues';
+} from '../../audio/floodedPumpRoomSoundCues';
 import {
   type BarrelPlace,
   type BeachedShark,
@@ -1303,10 +1304,10 @@ export class FloodedPumpRoomSystem
 
   override renderGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
+    const { x: camX, y: camY } = camera;
     const T = TILE_SIZE;
     const { state } = this;
     const draining = state.kind === 'draining';
@@ -1344,7 +1345,8 @@ export class FloodedPumpRoomSystem
     }
   }
 
-  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderGroundWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const tentacle of this.liveTentacles.values()) {
       const mark = tentacle.slamMark;
       if (mark === null) continue;
@@ -1542,7 +1544,8 @@ export class FloodedPumpRoomSystem
     return { kind: 'remains', variant };
   }
 
-  override renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  override renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (this.state.kind !== 'flooded') return;
     for (const wall of PUMP_WALLS) this.pumps[wall].mash.renderProgress(ctx, camX, camY);
   }

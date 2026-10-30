@@ -487,12 +487,15 @@ function checkMirror(
  * everything. Each look's measurements are counted on their own: pooled, one
  * look's frames could pass another's nothing-measured checks.
  */
-export function catHeldFailures(only: string | null = null): string[] {
+export function catHeldFailures(
+  only: string | null = null,
+  looks: readonly CatLook[] = CAT_LOOKS,
+): string[] {
   const failures: string[] = [];
   const chosen = subjects(only);
   if (chosen.length === 0) return failures;
   const hasTool = chosen.some((subject) => catGripOf(subject.look) === 'pawTool');
-  for (const look of CAT_LOOKS) {
+  for (const look of looks) {
     const counts: Counts = { e1: 0, e2: 0, e3: 0, e4: 0, e7: 0 };
     for (const subject of chosen) {
       for (const row of subject.rows) {

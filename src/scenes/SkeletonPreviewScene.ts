@@ -22,6 +22,7 @@ import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { GameMap } from '../map/GameMap';
+import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import {
   SKELETON_ARCHER_BODY_PART_KEY,
@@ -196,7 +197,7 @@ const KILL_IMPACT_X = 1;
 const KILL_IMPACT_Y = -0.4;
 
 export class SkeletonPreviewScene extends PreviewScene {
-  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly map = new GameMap({ prebuiltStructure: openFloorGrid(PREVIEW_MAP_SIZE) });
   private readonly gore = new BodyPartGoreSystem(this.map);
 
   private variantIndex: number;

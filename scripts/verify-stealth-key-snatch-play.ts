@@ -26,6 +26,7 @@
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { harnessHit } from './crawlerHitHarness';
 
 useDevPlayerIdentity();
 
@@ -117,6 +118,8 @@ const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
 const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
 const { getMercenaryTemplate } = await import('../src/core/party/mercenaryTemplates.js');
 const { PrisonKeySystem } = await import('../src/systems/stealthKeySnatch/PrisonKeySystem.js');
+const { GoblinPrisonSystem } =
+  await import('../src/systems/stealthKeySnatch/GoblinPrisonSystem.js');
 const { settings } = await import('../src/core/input/Settings.js');
 const { DIFFICULTY_ORDER } = await import('../src/core/difficulty/difficultyProfiles.js');
 const { PetNameBook, parsePetName } = await import('../src/core/party/petNames.js');
@@ -504,8 +507,8 @@ function verifyGuardImmovable(scene: Scene, label: string): void {
   guard.applyKnockback(1, 0, SHOVE_PX, KNOCKBACK_FRAMES);
   for (let frame = 0; frame < KNOCKBACK_FRAMES; frame++) guard.advanceKnockback();
   guard.applyHitSlow();
-  guard.takeDamageFrom(BLOW_DAMAGE, human, 'melee');
-  guard.takeDamageFrom(BLOW_DAMAGE, human, 'explosion');
+  guard.takeHit(harnessHit(human, BLOW_DAMAGE, 'melee'));
+  guard.takeHit(harnessHit(human, BLOW_DAMAGE, 'explosion'));
   check(
     guard.x === at.x && guard.y === at.y,
     `${label}: the guard stays put under a shove, a knockback and blows`,
@@ -703,7 +706,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   );
   const visit = inside['floor'].stealthKeySnatch;
   const prisonKey = inside['prisonKey'];
-  const prison = inside['prison'];
+  const encounter = inside['encounter'];
+  const prison = encounter instanceof GoblinPrisonSystem ? encounter : null;
   check(visit !== undefined, `${label}: the prison sees the quest through its floor context`);
   check(prisonKey !== null && prison !== null, `${label}: the prison runs its key and guards`);
   if (visit === undefined || prisonKey === null || prison === null) return;

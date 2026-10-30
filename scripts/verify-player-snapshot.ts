@@ -97,9 +97,14 @@ function wearingSnapshot(drawn: ItemId | null): PlayerSnapshot {
   return snapPlayer(human);
 }
 
+/** `value` as storage hands it back: plain JSON, unvalidated. */
+function storedJson(value: object): unknown {
+  return JSON.parse(JSON.stringify(value));
+}
+
 /** `snap` as storage hands it back: plain JSON, unvalidated. */
 function stored(snap: Partial<PlayerSnapshot>): unknown {
-  return JSON.parse(JSON.stringify(snap));
+  return storedJson(snap);
 }
 
 function restoredCat(snap: PlayerSnapshot): CatPlayer {
@@ -245,7 +250,10 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   );
   check(
     parsePlayerSnapshot(
-      stored({ ...fresh, inventorySlots: [{ id: 'an_item_this_build_never_had', quantity: 1 }] }),
+      storedJson({
+        ...fresh,
+        inventorySlots: [{ id: 'an_item_this_build_never_had', quantity: 1 }],
+      }),
       'human',
     ) === undefined,
     'a stored snapshot holding an item this build does not have fails validation',

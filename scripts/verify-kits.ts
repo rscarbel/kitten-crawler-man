@@ -83,6 +83,8 @@ import {
   runCutsceneStepChecks,
   type CutsceneStepFault,
 } from './kitsCutsceneChecks';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 const FAULT_FLAG = '--fault=';
 
@@ -247,6 +249,7 @@ function makeContext(stage: Stage): SystemContext {
     activeIsMoving: false,
     roster: stage.roster,
     gameMap: stage.map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 
@@ -370,7 +373,7 @@ console.log('\nrebuildGrid keeps exactly the mobs that still claim a cell');
   stage.roster.add(survivor);
   stage.roster.add(casualty);
 
-  casualty.takeDamageFrom(casualty.maxHp, stage.pm.human, 'melee');
+  casualty.takeHit(harnessHit(stage.pm.human, casualty.maxHp, 'melee'));
   // A probe mob does not draw when dead, so it should leave the grid on the very
   // frame it falls — no corpse animation to wait out.
   check(!casualty.belongsInMobGrid, 'and it stops claiming a cell the moment it falls');
@@ -634,7 +637,7 @@ console.log('\nCombatKit re-reads the world it was handed');
   const casualty = new ProbeMob(PARKED_TILE + 2, PARKED_TILE);
   stage.roster.add(casualty);
   stage.roster.rebuildGrid();
-  casualty.takeDamageFrom(casualty.maxHp, stage.pm.human, 'melee');
+  casualty.takeHit(harnessHit(stage.pm.human, casualty.maxHp, 'melee'));
   combat.resolveKills();
   check(
     !stage.roster.grid.queryCircle(casualty.x, casualty.y, PINPOINT_QUERY_RADIUS).has(casualty),
@@ -756,7 +759,7 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
   check(!kit.handleTap(0, 0, 0, 0, stage.pm.active()), 'a world tap is not consumed');
   check(!kit.handleLongPress(0, 0, 0, 0, stage.pm.active()), 'a long-press is not consumed');
   check(!kit.handleDoubleTap(0, 0, 0, 0, stage.pm.active()), 'a double-tap is not consumed');
-  const kitSurfaces = kit.surfaces(() => ({ x: 0, y: 0 }));
+  const kitSurfaces = kit.surfaces(() => cameraAt({ x: 0, y: 0 }, UNZOOMED));
   check(!kitSurfaces.some((surface) => surface.isOpen()), 'it raises no overlay');
   check(
     !kitSurfaces.some((surface) => surface.isOpen() && surface.haltsWorld),

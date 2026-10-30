@@ -22,6 +22,7 @@ import { clamp } from '../utils';
 import { townInteriorPropArtRiseTiles } from '../sprites/art/townInterior/townInteriorProps';
 import { intersect, type Rect } from '../ui/core/geom';
 import type { WorldRect } from '../core/rendering/worldRect';
+import { UNZOOMED, worldPx } from '../core/rendering/camera';
 
 /**
  * Empty dark space shown past every edge of a room once the camera has panned
@@ -364,7 +365,14 @@ function measureInteriorVisualBounds(map: GameMap): WorldRect {
     top = Math.min(top, (placed.tile.y - riseTiles) * ts);
   }
   // Read in full before anything else can ask: the map hands back one reused list.
-  for (const deco of map.getVisibleDecorationTiles(0, 0, right, bottom)) {
+  const wholeRoom = {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(right),
+    viewHeight: worldPx(bottom),
+    zoom: UNZOOMED,
+  };
+  for (const deco of map.getVisibleDecorationTiles(wholeRoom)) {
     left = Math.min(left, deco.tx * ts - deco.extents.left);
     top = Math.min(top, deco.ty * ts - deco.extents.up);
     right = Math.max(right, (deco.tx + 1) * ts + deco.extents.right);

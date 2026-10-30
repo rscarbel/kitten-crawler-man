@@ -12,8 +12,8 @@
  *
  *  - **Hazards stay readable.** Every forced hazard state, lit, keeps at least
  *    the contrast and colour salience it has in the same tent drawn
- *    full-bright in the same run, less a small named tolerance where the flame
- *    painters' random flicker demands one; and the pixels each hazard paints
+ *    full-bright in the same run at every stripe position, less a small named
+ *    tolerance for its single worst tile; and the pixels each hazard paints
  *    keep their own full-bright colour, which is what a dark laid over a
  *    warning and its floor alike changes.
  *  - **The floor stays readable.** The sawdust of the act on stage never falls
@@ -90,7 +90,10 @@ import {
   tileLuminance,
   tileTexture,
   type FramePixels,
+  type HazardContrastReport,
+  type HazardFidelityReport,
 } from './starlightTentLightingFairness.js';
+import { DANGER_STRIPE_CYCLE_MS, setDangerTelegraphClock } from '../src/sprites/dangerTelegraph.js';
 import { asGameContext, asNodeCanvas } from './nodeGameContext.js';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { watchCanvas } from './strictCanvas.js';
@@ -113,7 +116,7 @@ import { mirrorPuzzlePropCatalogue } from '../src/sprites/art/starlightTent/mirr
 import { finalePropCatalogue } from '../src/sprites/art/starlightTent/finaleProps.js';
 import { curtainPropCatalogue } from '../src/sprites/art/starlightTent/curtainProps.js';
 import { MAX_REFLECTING_PANES } from '../src/systems/StarlightTentMazeSystem.js';
-import { STARLIGHT_TENT_CUES } from '../src/systems/starlightTent/starlightTentSoundCues.js';
+import { STARLIGHT_TENT_CUES } from '../src/audio/starlightTentSoundCues.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
 
 useDevPlayerIdentity();
@@ -140,18 +143,6 @@ const TEXTURE_DIGITS = 4;
 
 // ── Limits ───────────────────────────────────────────────────────────────────
 
-/**
- * The flame painters draw a little random flicker, so a vent state drawn
- * twice — full-bright, then lit — wanders in the third decimal of contrast and
- * by about a unit of salience. Only the vent states get this slack; every
- * other state is held to its full-bright reading exactly.
- */
-const FLICKER_CONTRAST_TOLERANCE = 0.01;
-const FLICKER_SALIENCE_TOLERANCE = 1.5;
-const FLICKERING_STATES: ReadonlySet<HazardState> = new Set<HazardState>([
-  'vent-telegraph',
-  'vent-flame',
-]);
 /**
  * Slack for the single worst tile of a state, lit against full-bright. The
  * ring of floor round a tile can straddle the edge of a lamp's pool, and then
@@ -233,6 +224,36 @@ function check(ok: boolean, message: string): void {
 
 await loadGameSpritesInNode(ART_SEED);
 
+/**
+ * Evenly spaced points through one crawl of the ground warnings' stripes. A
+ * hazard is scored at each, with both frames drawn at the same point, and its
+ * worst is what it is held to: where the stripes happen to sit is never what
+ * makes a warning pass.
+ */
+const STRIPE_PHASES = 6;
+
+function atStripePhase(phase: number): void {
+  const clockMs = (phase * DANGER_STRIPE_CYCLE_MS) / STRIPE_PHASES;
+  setDangerTelegraphClock(() => clockMs);
+}
+
+interface StripePhaseReading {
+  readonly phase: number;
+  readonly report: HazardContrastReport;
+  readonly reference: HazardContrastReport;
+  readonly fidelity: HazardFidelityReport;
+}
+
+/** The reading `score` puts lowest. */
+function worstOf(
+  readings: ReadonlyArray<StripePhaseReading>,
+  score: (reading: StripePhaseReading) => number,
+): StripePhaseReading {
+  const [first, ...rest] = readings;
+  if (first === undefined) throw new Error('no stripe phase was drawn');
+  return rest.reduce((worst, reading) => (score(reading) < score(worst) ? reading : worst), first);
+}
+
 function renderWhole(tent: TentHarness, lighting: TentLighting, bareStage = false): FramePixels {
   const view = wholeTentView(tent.map);
   const canvas = renderTentFrame(tent, view, {
@@ -257,61 +278,75 @@ console.log(
     const tent = buildTent(ART_SEED);
     enterAct(tent, HAZARD_ACT[state]);
     const forced = forceHazard(tent, state);
-    const fullBright = renderWhole(tent, 'fullBright');
-    const fullBrightBare = renderWhole(tent, 'fullBright', true);
-    const shown = renderWhole(tent, hazardLighting);
-    const report = measureHazardContrast(shown, tent.map, forced);
-    const reference = measureHazardContrast(fullBright, tent.map, forced);
-    const flickers = FLICKERING_STATES.has(state);
-    const contrastSlack = flickers ? FLICKER_CONTRAST_TOLERANCE : 0;
-    const salienceSlack = flickers ? FLICKER_SALIENCE_TOLERANCE : 0;
-    const measured =
-      report.samples.length > 0 &&
-      report.unmeasured.length === 0 &&
-      reference.samples.length === report.samples.length;
+    const readings: StripePhaseReading[] = [];
+    for (let phase = 0; phase < STRIPE_PHASES; phase++) {
+      atStripePhase(phase);
+      const fullBright = renderWhole(tent, 'fullBright');
+      const fullBrightBare = renderWhole(tent, 'fullBright', true);
+      const shown = renderWhole(tent, hazardLighting);
+      readings.push({
+        phase,
+        report: measureHazardContrast(shown, tent.map, forced),
+        reference: measureHazardContrast(fullBright, tent.map, forced),
+        fidelity: measureHazardFidelity(shown, fullBright, fullBrightBare, forced),
+      });
+    }
+    atStripePhase(0);
+    const unscored = readings.find(
+      ({ report, reference }) =>
+        report.samples.length === 0 ||
+        report.unmeasured.length > 0 ||
+        reference.samples.length !== report.samples.length,
+    );
+    const shownReading = unscored ?? readings[0];
+    if (shownReading === undefined) throw new Error(`${state}: no stripe phase was drawn`);
+    const measured = unscored === undefined;
     if (measured) statesMeasured++;
     check(
       measured,
-      `${state}: every tile scored (${report.samples.length} scored, ${report.unmeasured.length} not; ` +
-        `${reference.samples.length} full-bright)`,
+      `${state}: every tile scored at every stripe phase (${shownReading.report.samples.length} ` +
+        `scored, ${shownReading.report.unmeasured.length} not; ` +
+        `${shownReading.reference.samples.length} full-bright; stripe phase ` +
+        `${shownReading.phase}/${STRIPE_PHASES})`,
     );
     // A state the fault turns red must be red for readability, not for a tile
     // it could not score.
     const failuresBefore = failures;
-    const pairs = [
-      [
-        'min contrast',
-        report.minContrast,
-        reference.minContrast,
-        contrastSlack + WORST_TILE_CONTRAST_TOLERANCE,
-      ],
-      ['median contrast', report.medianContrast, reference.medianContrast, contrastSlack],
-      [
-        'min salience',
-        report.minSalience,
-        reference.minSalience,
-        salienceSlack + WORST_TILE_SALIENCE_TOLERANCE,
-      ],
-      ['median salience', report.medianSalience, reference.medianSalience, salienceSlack],
-    ] as const;
-    for (const [name, value, floor, slack] of pairs) {
+    const pairs: ReadonlyArray<
+      readonly [string, (summary: HazardContrastReport) => number, number]
+    > = [
+      ['min contrast', (summary) => summary.minContrast, WORST_TILE_CONTRAST_TOLERANCE],
+      ['median contrast', (summary) => summary.medianContrast, 0],
+      ['min salience', (summary) => summary.minSalience, WORST_TILE_SALIENCE_TOLERANCE],
+      ['median salience', (summary) => summary.medianSalience, 0],
+    ];
+    for (const [name, pick, slack] of pairs) {
+      const margin = (reading: StripePhaseReading): number =>
+        pick(reading.report) - pick(reading.reference);
+      const worst = worstOf(readings, margin);
+      const value = pick(worst.report);
+      const floor = pick(worst.reference);
       check(
         value >= floor - slack,
         `${state}: ${name} ${value.toFixed(DIGITS)} ≥ full-bright ${floor.toFixed(DIGITS)}` +
-          (slack > 0 ? ` − ${Number(slack.toFixed(DIGITS))}` : ''),
+          (slack > 0 ? ` − ${Number(slack.toFixed(DIGITS))}` : '') +
+          ` (worst stripe phase ${worst.phase}/${STRIPE_PHASES})`,
       );
     }
-    const fidelity = measureHazardFidelity(shown, fullBright, fullBrightBare, forced);
     const fidelityMin = HAZARDS_OVER_THEIR_OWN_POOL.has(state)
       ? POOLED_HAZARD_FIDELITY_MIN
       : RED_RING_HAZARDS.has(state)
         ? RED_RING_FIDELITY_MIN
         : HAZARD_FIDELITY_MIN;
+    const worstFidelity = worstOf(readings, (reading) =>
+      reading.fidelity.pixels > 0 ? reading.fidelity.fidelity : Number.NEGATIVE_INFINITY,
+    );
+    const { fidelity } = worstFidelity;
     check(
       fidelity.pixels > 0 && fidelity.fidelity >= fidelityMin,
       `${state}: its own pixels keep ${fidelity.fidelity.toFixed(DIGITS)} of their full-bright ` +
         `colour ≥ ${fidelityMin} (${fidelity.pixels} px, signal ${fidelity.meanSignal.toFixed(1)}, ` +
-        `drift ${fidelity.meanDrift.toFixed(1)})`,
+        `drift ${fidelity.meanDrift.toFixed(1)}; worst stripe phase ${worstFidelity.phase}/${STRIPE_PHASES})`,
     );
     if (failures > failuresBefore) statesRed.push(state);
   }
@@ -430,11 +465,13 @@ console.log('\nChecking the lights follow the show…');
   const tent = buildTent(ART_SEED);
   const curtain = MAZE_CURTAINS[0];
   const lighting = tent.maze.lighting;
-  tent.maze.drainSounds();
+  tent.maze.drainRequests();
   placeAt(tent.human, { x: curtain.humanRoom.x0, y: curtain.humanRoom.y0 });
   placeAt(tent.cat, { x: curtain.catRoom.x0, y: curtain.catRoom.y0 });
   tick(tent);
-  const cues = tent.maze.drainSounds().map((cue) => cue.id);
+  const cues = tent.maze
+    .drainRequests()
+    .flatMap((request) => (request.kind === 'sound' ? [request.id] : []));
   check(
     STARLIGHT_TENT_CUES.curtainRise.some((soundId) => cues.includes(soundId)),
     `the curtain's rise is heard (${cues.join(', ')})`,

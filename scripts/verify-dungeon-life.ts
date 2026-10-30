@@ -82,6 +82,7 @@ import {
   type Walker,
 } from '../src/systems/dungeon/DungeonLifeSystem.js';
 import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 /** Generated floors checked per level, from fixed seeds so a failure replays. */
 const SEED_COUNT = 3;
@@ -424,7 +425,7 @@ function tick(
   party: ReadonlyArray<Walker> = [],
   others: ReadonlyArray<Walker> = [],
 ): void {
-  life.update({ party, others, camX, camY, viewW: VIEW_W, viewH: VIEW_H });
+  life.update({ party, others, camX, camY, viewW: worldPx(VIEW_W), viewH: worldPx(VIEW_H) });
 }
 
 function offFloor(gameMap: GameMap, positions: ReadonlyArray<WorldPoint>): number {
@@ -880,8 +881,20 @@ function presetDraws(gameMap: GameMap, level: DungeonFloorNumber, fullDetail: bo
     drew =
       drew ||
       drewAnything((ctx) => {
-        life.renderGround(ctx, camX, camY, VIEW_W, VIEW_H);
-        life.renderAir(ctx, camX, camY, VIEW_W, VIEW_H);
+        life.renderGround(ctx, {
+          x: camX,
+          y: camY,
+          viewWidth: worldPx(VIEW_W),
+          viewHeight: worldPx(VIEW_H),
+          zoom: UNZOOMED,
+        });
+        life.renderAir(ctx, {
+          x: camX,
+          y: camY,
+          viewWidth: worldPx(VIEW_W),
+          viewHeight: worldPx(VIEW_H),
+          zoom: UNZOOMED,
+        });
       });
   }
   return drew;
@@ -905,7 +918,15 @@ function checkPresetKeepsDripsAndSplashes(
   tick(life, 0, 0);
   const camX = puddle.x * TILE_SIZE - VIEW_W / 2;
   const camY = puddle.y * TILE_SIZE - VIEW_H / 2;
-  const drewDrop = drewAnything((ctx) => life.renderAir(ctx, camX, camY, VIEW_W, VIEW_H));
+  const drewDrop = drewAnything((ctx) =>
+    life.renderAir(ctx, {
+      x: camX,
+      y: camY,
+      viewWidth: worldPx(VIEW_W),
+      viewHeight: worldPx(VIEW_H),
+      zoom: UNZOOMED,
+    }),
+  );
   check(drewDrop, `${label}: the performance preset dropped the drip`);
 }
 

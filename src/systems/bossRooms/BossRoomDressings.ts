@@ -1,3 +1,4 @@
+import type { Camera } from '../../core/rendering/camera';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GauntletBossType } from '../../map/bossRoomSizes';
@@ -195,15 +196,14 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
 
   renderGround(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
-    for (const dressing of this.all) dressing.renderGround(ctx, camX, camY, promptFor);
+    for (const dressing of this.all) dressing.renderGround(ctx, camera, promptFor);
   }
 
-  renderGroundWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const dressing of this.all) dressing.renderGroundWarnings(ctx, camX, camY);
+  renderGroundWarnings(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    for (const dressing of this.all) dressing.renderGroundWarnings(ctx, camera);
   }
 
   /** Every room's Y-sorted objects this frame, in one reused list. */
@@ -215,8 +215,8 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
     return this.entityScratch;
   }
 
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const dressing of this.all) dressing.renderAbove(ctx, camX, camY);
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    for (const dressing of this.all) dressing.renderAbove(ctx, camera);
   }
 
   tryInteract(player: HumanPlayer | CatPlayer): boolean {

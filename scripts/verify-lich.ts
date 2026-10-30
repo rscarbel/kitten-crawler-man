@@ -103,6 +103,8 @@ import {
 } from '../src/systems/lichBattleRules';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
 
@@ -1182,6 +1184,7 @@ function ritualRig(
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   ritual.update(context, CATTERY_STOREY);
   return {
@@ -1671,7 +1674,7 @@ function playWholeFight(stream: number): void {
 
   const swingAtLich = (): boolean => {
     if (lich === null || !lichFoundInGrid()) return false;
-    lich.takeDamageFrom(HARNESS_HIT_DAMAGE, human, 'melee');
+    lich.takeHit(harnessHit(human, HARNESS_HIT_DAMAGE, 'melee'));
     return true;
   };
 
@@ -1763,7 +1766,7 @@ function playWholeFight(stream: number): void {
       human.x = lich.x + TILE_SIZE;
       human.y = lich.y;
       const hpBeforeBlow = lich.hp;
-      lich.takeDamageFrom(HARNESS_HIT_DAMAGE, human, 'melee');
+      lich.takeHit(harnessHit(human, HARNESS_HIT_DAMAGE, 'melee'));
       if (lich.hp < hpBeforeBlow) hitsLandedUnderLock++;
     }
     const battle = ritual.lichBattle;

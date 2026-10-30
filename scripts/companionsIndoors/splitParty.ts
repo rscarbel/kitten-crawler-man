@@ -54,6 +54,7 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { SplitDirector } from '../../src/systems/partySplit/SplitDirector';
 import type { ArrivalCard, PartyTransferRequest } from '../../src/systems/partySplit/partyTransfer';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 export const SPLIT_PARTY_FAULTS = [
   'away-crawler-placed',
@@ -288,6 +289,7 @@ function hireContext(pm: PlayerManager, map: GameMap, roster: MobRoster): System
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 

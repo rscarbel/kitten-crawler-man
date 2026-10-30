@@ -19,6 +19,8 @@ import { createCanvas } from 'canvas';
 
 import { TILE_SIZE, COMPANION_LEASH_PX } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
+import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
+import { level1 } from '../src/levels/level1';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -27,7 +29,7 @@ import { Deinonychus } from '../src/creatures/Deinonychus';
 import { TRASH_GREMLIN_BOSS_TYPE } from '../src/core/mobs/bossTypes';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
-import { makeBurn, makePoison } from '../src/core/combat/StatusEffect';
+import { FULL_SHARE, makeBurn, makePoison } from '../src/core/combat/StatusEffect';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { MELEE_POINT_BLANK_RANGE } from '../src/systems/CombatSystem';
 import { MIN_STAT_VALUE } from '../src/core/party/crawlerFormulas';
@@ -44,6 +46,8 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
 import type { GroundHazardSource } from '../src/systems/GroundHazardSource';
+import { harnessHit } from './crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 /** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
 const LASTING_POISON_TICKS = 999999;
@@ -64,16 +68,18 @@ globals.document = {
   },
 };
 
-const MAP_SIZE = 80;
 /** Redraws allowed when an unseeded layout comes up without the feature a check needs. */
 const MAP_GENERATION_ATTEMPTS = 20;
+/** The floor every map here is generated as. */
+const MAP_LEVEL = level1;
+const MAP_LEVEL_BOSS_TYPES = MAP_LEVEL.bossRooms?.map((room) => room.type) ?? [];
 /**
- * The boss every boss-room check stages, and the one room the maps here carve
- * for it. It has no immune phase, so damage, regen and kills read straight off
- * its HP with no room state to arrange first.
+ * The boss every boss-room check stages, in its own room on {@link MAP_LEVEL}.
+ * It has no immune phase, so damage, regen and kills read straight off its HP
+ * with no room state to arrange first.
  */
 const ROOM_BOSS_TYPE = TRASH_GREMLIN_BOSS_TYPE;
-const ROOM_BOSS_TYPES = [ROOM_BOSS_TYPE] as const;
+const ROOM_BOSS_INDEX = MAP_LEVEL_BOSS_TYPES.indexOf(ROOM_BOSS_TYPE);
 /**
  * Every map here is built at the game's own tile size. A `GameMap` left on its
  * default tile height measures world pixels against a ten-pixel grid, and every
@@ -81,10 +87,10 @@ const ROOM_BOSS_TYPES = [ROOM_BOSS_TYPE] as const;
  * checks below pass for entirely the wrong reason.
  */
 const MAP_OPTIONS = {
-  mapSize: MAP_SIZE,
+  mapSize: MAP_LEVEL.mapSize,
   tileHeight: TILE_SIZE,
-  dungeon: { bossTypes: ROOM_BOSS_TYPES },
-} as const;
+  dungeon: dungeonOptionsForLevel(MAP_LEVEL),
+};
 /**
  * Long enough for a one-damage-per-two-seconds poison tick to finish any
  * ordinary floor-1 mob, with room to spare. The loops below stop on death, so
@@ -222,22 +228,13 @@ const WEDGE_ESCAPE_FRAMES = 60;
 const WEDGE_ESCAPE_TILES = 0.5;
 
 /**
- * A dungeon that actually generated a boss room, and one with clear floor to
- * stage a fight on.
+ * A dungeon with clear floor to stage a fight on.
  *
- * The generator runs on unseeded randomness, so a layout missing either turns
- * up every so often. Retrying is not papering over anything — the checks below
- * are about companion behaviour, not about map generation — and a gate that
- * fails on the weather is a gate somebody eventually mutes.
+ * The generator runs on unseeded randomness, so a layout missing it turns up
+ * every so often. Retrying is not papering over anything — the checks below are
+ * about companion behaviour, not about map generation — and a gate that fails
+ * on the weather is a gate somebody eventually mutes.
  */
-function makeBossRoomMap(): GameMap | null {
-  for (let attempt = 0; attempt < MAP_GENERATION_ATTEMPTS; attempt++) {
-    const map = new GameMap(MAP_OPTIONS);
-    if (map.bossRooms.length > 0) return map;
-  }
-  return null;
-}
-
 function makeOpenGroundMap(): { map: GameMap; ground: { x: number; y: number } } | null {
   for (let attempt = 0; attempt < MAP_GENERATION_ATTEMPTS; attempt++) {
     const map = new GameMap(MAP_OPTIONS);
@@ -301,6 +298,7 @@ function makeContext(party: Party, bossRoom?: BossRoomSystem): SystemContext {
     activeIsMoving: false,
     roster: party.roster,
     gameMap: party.map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     ...(bossRoom ? { bossRoom } : {}),
   };
 }
@@ -483,7 +481,7 @@ console.log('\nAn ownerless damage-over-time still kills, just anonymously');
 {
   const party = makeParty(new GameMap(MAP_OPTIONS));
   const victim = addMob(party, 'goblin', party.map.startTile.x + 3, party.map.startTile.y);
-  victim.applyStatus(makeBurn());
+  victim.applyStatus(makeBurn(FULL_SHARE));
   tickUntilDead(victim);
 
   check(victim.hp === 0 && victim.justDied, 'an unowned burn still resolves the death');
@@ -534,7 +532,7 @@ console.log('\nA damage-over-time tick cannot walk through a boss shield');
     effectType: 'poison',
     applier: party.human,
   });
-  shielded.takeDamageFrom(SHIELDED_DUMMY_HP, party.human, 'melee');
+  shielded.takeHit(harnessHit(party.human, SHIELDED_DUMMY_HP, 'melee'));
   for (let frame = 0; frame < SHIELDED_TICK_FRAMES; frame++) shielded.tickTimers();
 
   check(shielded.hp === shielded.maxHp, 'and holds against a tick aimed straight at it');
@@ -547,10 +545,8 @@ console.log('\nCalling a fight off puts the boss back the way the party found it
   const bigRooster = addMob(party, 'big_rooster', party.map.startTile.x + 3, party.map.startTile.y);
   const restingSpeed = bigRooster.moveSpeed;
 
-  bigRooster.takeDamageFrom(
-    Math.ceil(bigRooster.maxHp * ENRAGE_CHIP_FRACTION),
-    party.human,
-    'melee',
+  bigRooster.takeHit(
+    harnessHit(party.human, Math.ceil(bigRooster.maxHp * ENRAGE_CHIP_FRACTION), 'melee'),
   );
   bigRooster.updateAI([party.human, party.cat]);
   check(bigRooster.isEnraged === true, 'chipping Big Rooster enrages him');
@@ -567,10 +563,8 @@ console.log('\nCalling a fight off puts the boss back the way the party found it
   // The checkpoint route to the same place. Both rewinds share one hook, and a
   // boss that un-enrages down one of them and not the other is the harder bug
   // to notice, because only one of them happens on a good run.
-  bigRooster.takeDamageFrom(
-    Math.ceil(bigRooster.maxHp * ENRAGE_CHIP_FRACTION),
-    party.human,
-    'melee',
+  bigRooster.takeHit(
+    harnessHit(party.human, Math.ceil(bigRooster.maxHp * ENRAGE_CHIP_FRACTION), 'melee'),
   );
   bigRooster.updateAI([party.human, party.cat]);
   bigRooster.resetToSpawn();
@@ -602,7 +596,7 @@ console.log('\nA mob that has only looked at the party has not engaged it');
   check(!watcher.hasStruckPlayer, 'noticing a crawler is not striking one');
   check(!watcher.wasDamagedByParty, 'and nobody has hit it back');
 
-  watcher.takeDamageFrom(1, party.cat, 'missile');
+  watcher.takeHit(harnessHit(party.cat, 1, 'missile'));
   check(watcher.wasDamagedByParty, 'one real blow from the cat is engagement');
 
   watcher.resetToSpawn();
@@ -614,9 +608,9 @@ console.log('\nA mob that has only looked at the party has not engaged it');
 
 console.log('\nThe companion holds fire on a boss nobody has touched or walked in on');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -624,7 +618,7 @@ console.log('\nThe companion holds fire on a boss nobody has touched or walked i
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
 
@@ -644,7 +638,7 @@ console.log('\nThe companion holds fire on a boss nobody has touched or walked i
 
     // The active player opening fire from the doorway is engagement by action,
     // and legitimately commissions the companion.
-    boss.takeDamageFrom(1, party.human, 'melee');
+    boss.takeHit(harnessHit(party.human, 1, 'melee'));
     runCompanion(companion, party, SETTLE_FRAMES, bossRoom);
     check(party.cat.autoTarget === boss, 'once the player draws blood the companion joins in');
   }
@@ -652,9 +646,9 @@ console.log('\nThe companion holds fire on a boss nobody has touched or walked i
 
 console.log('\nA boss the party pokes from the corridor and abandons goes back to full');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -662,7 +656,7 @@ console.log('\nA boss the party pokes from the corridor and abandons goes back t
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
@@ -670,7 +664,7 @@ console.log('\nA boss the party pokes from the corridor and abandons goes back t
     party.cat.x = party.human.x;
     party.cat.y = party.human.y;
 
-    boss.takeDamageFrom(DOORWAY_SNIPE_DAMAGE, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, DOORWAY_SNIPE_DAMAGE, 'missile'));
     bossRoom.update(makeContext(party, bossRoom));
     check(boss.hp < boss.maxHp, 'a shot through the doorway lands');
     check(
@@ -697,7 +691,7 @@ console.log('\nA boss the party pokes from the corridor and abandons goes back t
     let sniped = 0;
     for (let frame = 0; frame < EXPECTED_UNENTERED_REGEN_FRAMES * SNIPE_ROUNDS; frame++) {
       if (frame % SNIPE_INTERVAL_FRAMES === 0) {
-        boss.takeDamageFrom(barrageShotDamage, party.human, 'missile');
+        boss.takeHit(harnessHit(party.human, barrageShotDamage, 'missile'));
         sniped += barrageShotDamage;
       }
       boss.tickTimers();
@@ -717,9 +711,9 @@ console.log('\nA boss the party pokes from the corridor and abandons goes back t
 
 console.log('\nAn opener thrown from the threshold still counts for the player who walks in');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -727,7 +721,7 @@ console.log('\nAn opener thrown from the threshold still counts for the player w
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
@@ -738,7 +732,7 @@ console.log('\nAn opener thrown from the threshold still counts for the player w
     // The forgiving half of the same rule, and the one a retune is most likely
     // to break: the punitive half is only fair if walking in promptly keeps
     // what you opened with.
-    boss.takeDamageFrom(DOORWAY_SNIPE_DAMAGE, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, DOORWAY_SNIPE_DAMAGE, 'missile'));
     const wounded = boss.hp;
     for (let frame = 0; frame < THRESHOLD_ENTRY_FRAMES; frame++) {
       bossRoom.update(makeContext(party, bossRoom));
@@ -754,9 +748,9 @@ console.log('\nAn opener thrown from the threshold still counts for the player w
 
 console.log('\nA boss killed without its room ever locking still counts as defeated');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -764,7 +758,7 @@ console.log('\nA boss killed without its room ever locking still counts as defea
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
@@ -772,7 +766,7 @@ console.log('\nA boss killed without its room ever locking still counts as defea
     party.cat.x = party.human.x;
     party.cat.y = party.human.y;
 
-    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, boss.maxHp, 'missile'));
     bossRoom.update(makeContext(party, bossRoom));
 
     check(bossRoom.getBossRoomStates()[0].defeated, 'the room records the defeat');
@@ -789,9 +783,9 @@ console.log('\nA boss killed without its room ever locking still counts as defea
 
 console.log('\nA boss room tells the music every seal and every abort, not only the first entry');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -799,7 +793,7 @@ console.log('\nA boss room tells the music every seal and every abort, not only 
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     addRoomBoss(party, room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x + 1) * TILE_SIZE;
@@ -832,9 +826,9 @@ console.log('\nA boss room tells the music every seal and every abort, not only 
 
 console.log('\nThe leash does not cut the companion loose inside a locked boss room');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -842,7 +836,7 @@ console.log('\nThe leash does not cut the companion loose inside a locked boss r
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
@@ -870,9 +864,9 @@ console.log('\nThe leash does not cut the companion loose inside a locked boss r
 
 console.log('\nA boss room stops being a no-go zone once its fight is over');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -880,7 +874,7 @@ console.log('\nA boss room stops being a no-go zone once its fight is over');
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
     const boss = addRoomBoss(party, room.bounds.x + 1, room.centre.y);
@@ -898,7 +892,7 @@ console.log('\nA boss room stops being a no-go zone once its fight is over');
     runCompanion(companion, party, SETTLE_FRAMES, bossRoom);
     check(party.cat.autoTarget === null, 'while the boss lives, the room is left alone');
 
-    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, boss.maxHp, 'missile'));
     bossRoom.update(makeContext(party, bossRoom));
     check(bossRoom.getBossRoomStates()[0].defeated, 'the boss dies and the room is cleared');
 
@@ -909,9 +903,9 @@ console.log('\nA boss room stops being a no-go zone once its fight is over');
 
 console.log('\nThe leash is off inside a boss room, not across the whole floor');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -919,7 +913,7 @@ console.log('\nThe leash is off inside a boss room, not across the whole floor')
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
     );
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
     addRoomBoss(party, room.centre.x, room.centre.y);
@@ -1875,9 +1869,9 @@ console.log('\nA boss chest that cannot be filled says so');
 
 console.log('\nA won boss room holds the party until its chest is opened');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -1887,7 +1881,7 @@ console.log('\nA won boss room holds the party until its chest is opened');
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
       (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
     );
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
@@ -1901,7 +1895,7 @@ console.log('\nA won boss room holds the party until its chest is opened');
     party.cat.x = insideX;
     party.cat.y = party.human.y;
     bossRoom.update(makeContext(party, bossRoom));
-    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, boss.maxHp, 'missile'));
     bossRoom.update(makeContext(party, bossRoom));
     check(bossRoom.getBossRoomStates()[0].defeated, 'the boss is down and the room is won');
 
@@ -1935,13 +1929,10 @@ console.log('\nA won boss room holds the party until its chest is opened');
 
 console.log('\nWalking up to a way out of an unlooted room warns once per approach');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  const mouth =
-    map === null || room === undefined
-      ? undefined
-      : roomDoorways(map.structure, room.bounds)[0]?.tile;
-  if (map === null || room === undefined || mouth === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  const mouth = room === undefined ? undefined : roomDoorways(map.structure, room.bounds)[0]?.tile;
+  if (room === undefined || mouth === undefined) {
     check(false, 'a generated dungeon offered a boss room with a doorway to test with');
   } else {
     const party = makeParty(map);
@@ -1951,7 +1942,7 @@ console.log('\nWalking up to a way out of an unlooted room warns once per approa
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
       (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
     );
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
@@ -1988,7 +1979,7 @@ console.log('\nWalking up to a way out of an unlooted room warns once per approa
     stepFrame();
     check(warnings() === 0, 'no warning at the doorway while the boss still lives');
 
-    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, boss.maxHp, 'missile'));
     standAt(interior ?? room.centre);
     clearNotices();
     stepFrame();
@@ -2075,7 +2066,7 @@ console.log(
   chests.update(party.roster.mobs);
   check(chest.state === 'locked', 'stays locked while the last guard is still alive');
 
-  guard.takeDamageFrom(guard.maxHp, party.human, 'melee');
+  guard.takeHit(harnessHit(party.human, guard.maxHp, 'melee'));
   chests.update(party.roster.mobs);
   check(
     chest.state !== 'locked',
@@ -2085,9 +2076,9 @@ console.log(
 
 console.log('\nA companion that wanders into an unlooted room is not stranded there');
 {
-  const map = makeBossRoomMap();
-  const room = map?.bossRooms[0];
-  if (map === null || room === undefined) {
+  const map = new GameMap(MAP_OPTIONS);
+  const room = map.bossRooms[ROOM_BOSS_INDEX];
+  if (room === undefined) {
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
@@ -2097,7 +2088,7 @@ console.log('\nA companion that wanders into an unlooted room is not stranded th
       map,
       new MiniMapSystem(map),
       new EventBus(),
-      ROOM_BOSS_TYPES,
+      MAP_LEVEL_BOSS_TYPES,
       (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
     );
     const boss = addRoomBoss(party, room.centre.x, room.centre.y);
@@ -2106,7 +2097,7 @@ console.log('\nA companion that wanders into an unlooted room is not stranded th
     party.cat.x = party.human.x;
     party.cat.y = party.human.y;
 
-    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    boss.takeHit(harnessHit(party.human, boss.maxHp, 'missile'));
     bossRoom.update(makeContext(party, bossRoom));
     check(bossRoom.getBossRoomStates()[0].defeated, 'a boss sniped from the corridor still dies');
 

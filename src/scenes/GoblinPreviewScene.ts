@@ -22,6 +22,7 @@ import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { GameMap } from '../map/GameMap';
+import { openFloorGrid } from '../map/openFloorGrid';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import {
   ATTACK_MOVE_NAMES,
@@ -158,7 +159,7 @@ const FRAMES_PER_SECOND = 60;
 const PREVIEW_MAP_SIZE = 24;
 
 export class GoblinPreviewScene extends PreviewScene {
-  private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
+  private readonly map = new GameMap({ prebuiltStructure: openFloorGrid(PREVIEW_MAP_SIZE) });
   private readonly gore = new BodyPartGoreSystem(this.map);
 
   // Two, not four: at 4× five of the six rows start below the bottom of the screen.

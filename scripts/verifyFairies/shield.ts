@@ -42,6 +42,7 @@ import {
   makeFairyWard,
   makeShield,
   type StatusEffect,
+  FULL_SHARE,
 } from '../../src/core/combat/StatusEffect';
 import { Goblin } from '../../src/creatures/Goblin';
 import type { Mob, PlayerDamageType } from '../../src/creatures/Mob';
@@ -89,6 +90,7 @@ import {
   type TileSpec,
 } from './stage';
 import { DIFFICULTIES } from './spawnTables';
+import { harnessHit } from '../crawlerHitHarness';
 
 const FAIRY_TILE = 10;
 /**
@@ -540,13 +542,13 @@ function protectionRun(make?: ShieldFactory): ProtectionRun {
   let raisedLabel = false;
   for (const damageType of DIRECT_SOURCES) {
     const hp = goblin.hp;
-    goblin.takeDamageFrom(blow, s.pm.human, damageType);
+    goblin.takeHit(harnessHit(s.pm.human, blow, damageType));
     losses.set(damageType, hp - goblin.hp);
     raisedLabel ||= goblin.pendingFloatingText.some((label) => label.text === INVULNERABLE_LABEL);
     goblin.hp = goblin.maxHp;
   }
   const hp = goblin.hp;
-  goblin.applyStatus(makeBurn(s.pm.human));
+  goblin.applyStatus(makeBurn(FULL_SHARE, s.pm.human));
   for (let frame = 0; frame < BURN_WATCH_FRAMES; frame++) goblin.tickTimers();
   losses.set(BURN_SOURCE, hp - goblin.hp);
   return { laid, losses, raisedLabel };
@@ -606,7 +608,7 @@ function flurryLabels(makeGoblin?: (tileX: number, tileY: number) => Goblin): {
   const labels = new CountingFloatingText();
   for (let frame = 0; frame < FLURRY_FRAMES; frame++) {
     for (let blow = 0; blow < BLOWS_PER_FLURRY_FRAME; blow++) {
-      goblin.takeDamageFrom(FLURRY_BLOW, s.pm.human);
+      goblin.takeHit(harnessHit(s.pm.human, FLURRY_BLOW));
     }
     labels.updateFor(s.pm.human, s.pm.cat, s.roster.mobs);
   }
@@ -1399,7 +1401,7 @@ function killWarder(s: Stage, fairy: ShieldFairy, wardedMobs: readonly Mob[]): v
 /** HP a crawler's blow of `amount` takes off `mob`, restored afterwards. */
 function blowCost(s: Stage, mob: Mob, amount: number): number {
   const hp = mob.hp;
-  mob.takeDamageFrom(amount, s.pm.human);
+  mob.takeHit(harnessHit(s.pm.human, amount));
   const taken = hp - mob.hp;
   mob.hp = hp;
   return taken;
@@ -1420,7 +1422,7 @@ function blowAfterUnreportedDeath(makeGoblin?: (tileX: number, tileY: number) =>
       ? s.add('goblin', tileX, FAIRY_TILE)
       : s.addMade(makeGoblin(tileX, FAIRY_TILE));
   applyFairyWardFrom(s.fairy, warded);
-  s.fairy.takeDamageFrom(Number.MAX_SAFE_INTEGER, s.pm.human);
+  s.fairy.takeHit(harnessHit(s.pm.human, Number.MAX_SAFE_INTEGER));
   return { wardLeftUp: fairyWardOn(warded) !== null, taken: blowCost(s, warded, AEGIS_TEST_BLOW) };
 }
 

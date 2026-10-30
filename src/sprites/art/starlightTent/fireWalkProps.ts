@@ -493,6 +493,13 @@ const FLAME_RAMP_FRACTION = 0.2;
  * The warning: the shared danger tile, with the grate's eyes kindling and its
  * grin glowing through it. The danger tile is the fairness contract and stays
  * underneath; the face only adds to it.
+ *
+ * The tile is drawn locked: a vent never moves and fires on its own fixed
+ * beat, so nothing about where it hits is still open. The locked outline's
+ * pale core also keeps the tile brighter than the boards round it however
+ * dark the act is; the crawling outline's red wash alone sits within a few
+ * percent of the boards' luminance, so on a dim stage the vent's own warmth
+ * lifts it to the same brightness as the floor and only its hue is left.
  */
 export function drawFireBreatherTelegraph(
   ctx: Ctx,
@@ -501,7 +508,9 @@ export function drawFireBreatherTelegraph(
   size: number,
   progress: number,
 ): void {
-  drawDangerTile(ctx, x, y, size, Math.min(1, progress + FLAME_RAMP_FRACTION));
+  drawDangerTile(ctx, x, y, size, Math.min(1, progress + FLAME_RAMP_FRACTION), {
+    locked: true,
+  });
   const level = Math.max(1, Math.min(KINDLE_STEPS, Math.ceil(progress * KINDLE_STEPS)));
   drawStarlightTentProp(
     ctx,

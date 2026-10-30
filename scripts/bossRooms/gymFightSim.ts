@@ -35,6 +35,8 @@ import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop.js';
 import { SpellSystem } from '../../src/systems/SpellSystem.js';
 import { findFloorWithRoom, type FoundRoom } from './harness.js';
 import { gymRoom } from './gym.js';
+import { harnessHit } from '../crawlerHitHarness';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
@@ -222,6 +224,7 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     bossRoom,
   };
 
@@ -357,7 +360,7 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
     if (swingCooldown > 0) swingCooldown--;
     const reach = Math.hypot(boss.x - crawler.x, boss.y - crawler.y);
     if (sealed && swingCooldown <= 0 && reach <= human.getMeleeRange() && bigRooster.isAlive) {
-      bigRooster.takeDamageFrom(swing.damage, human, swing.damageType);
+      bigRooster.takeHit(harnessHit(human, swing.damage, swing.damageType));
       swingCooldown = swing.frames;
     }
 

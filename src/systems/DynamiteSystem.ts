@@ -1,6 +1,12 @@
 import type { GameMap } from '../map/GameMap';
-import { friendlyBlastDamage, outgoingHitDamageOn } from '../core/combat/outgoingHit';
-import { EXPLOSION_HIT } from '../core/combat/damageTags';
+import {
+  captureDeliveryStat,
+  friendlyBlastDamage,
+  hitTrainingOn,
+  resolveCrawlerHit,
+  type CapturedStat,
+} from '../core/combat/outgoingHit';
+import { EXPLOSION_HIT, UNTAGGED_HIT } from '../core/combat/damageTags';
 import { resolveLobLanding } from './goblinBombConstants';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
@@ -11,7 +17,10 @@ import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { gearModifiers } from '../gear/gearHooks';
 import { MAX_MOB_HP_MULTIPLIER } from '../creatures/mobLevelScaling';
-import { DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL } from '../core/party/crawlerFormulas';
+import {
+  DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL,
+  MIN_STAT_VALUE,
+} from '../core/party/crawlerFormulas';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -327,10 +336,8 @@ interface LiveDynamite {
   vy: number;
   fuseFrames: number;
   state: 'flying' | 'sliding' | 'stopped';
-  /** Taken at throw time, so a level-up while the fuse burns cannot change the stick. */
-  mobDamage: number;
-  /** Taken at throw time, for the same reason as {@link mobDamage}. */
-  crawlerDamage: number;
+  /** What the stick brings to a blast, taken at throw time. */
+  power: ChargePower;
   /** What the thrower's gear adds to the blast's reach, taken at throw time. */
   radiusBonusPx: number;
   /** Who lit it, credited with whatever it kills. */
@@ -347,10 +354,45 @@ interface LiveDynamite {
 }
 
 /** What one stick brings to a blast, whether lying on the floor or still with its thrower. */
-type BlastCharge = Pick<
-  LiveDynamite,
-  'x' | 'y' | 'mobDamage' | 'crawlerDamage' | 'radiusBonusPx' | 'thrower'
->;
+type BlastCharge = Pick<LiveDynamite, 'x' | 'y' | 'power' | 'radiusBonusPx' | 'thrower'>;
+
+/**
+ * What one charge brings to a blast. A stick or a bomb keeps its thrower's
+ * level and Explosives Handling from the moment it was thrown, so neither a
+ * level-up nor a gear swap while the fuse burns can change it, and in a chain
+ * each stick is sized by its own thrower. A gas bottle grows with nobody's
+ * handling.
+ */
+type ChargePower =
+  | { readonly kind: 'thrown'; readonly throwerLevel: number; readonly handling: CapturedStat }
+  | { readonly kind: 'gas'; readonly mobDamage: number; readonly crawlerDamage: number };
+
+/** Reads the handling a thrown charge captured. */
+type HandlingReader = (captured: CapturedStat) => number;
+
+/** A charge thrown by `thrower` now: their level and handling as they stand. */
+function thrownPower(thrower: Crawler): ChargePower {
+  return {
+    kind: 'thrown',
+    throwerLevel: thrower.level,
+    handling: captureDeliveryStat(thrower, 'thrownExplosive'),
+  };
+}
+
+/** What `power` does to an enemy, before any chain bonus. */
+function chargeMobDamage(power: ChargePower, handlingOf: HandlingReader): number {
+  if (power.kind === 'gas') return power.mobDamage;
+  return dynamiteMobDamage(power.throwerLevel, handlingOf(power.handling));
+}
+
+/** What `power` does to a crawler or an ally. */
+function chargeCrawlerDamage(power: ChargePower, handlingOf: HandlingReader): number {
+  if (power.kind === 'gas') return power.crawlerDamage;
+  return dynamiteCrawlerDamage(handlingOf(power.handling));
+}
+
+/** Reads a captured handling outside a crawler hit, for the party's own share of a blast. */
+const capturedHandling: HandlingReader = (captured) => captured.value;
 
 /**
  * Something lobbed — a bomb or a smoke bomb. Unlike a stick it has no physics
@@ -375,28 +417,40 @@ interface LobFlight {
 /** A black powder bomb on its lob, carrying the blast it lands with. */
 interface LiveBomb extends LobFlight {
   readonly id: LiveBombId;
-  readonly mobDamage: number;
-  readonly crawlerDamage: number;
+  readonly power: ChargePower;
   readonly radiusBonusPx: number;
   readonly thrower: Crawler;
 }
 
-/**
- * One detonation — a single stick, or every stick a chain reaction swept up.
- *
- * The per-stick figures are kept beside the chained totals because a
- * blast-resistant mob takes only one stick's share, chain or no chain: a boss's
- * health bar must be a question of how the fight was played, not of how many
- * sticks were piled up before it.
- */
+/** One detonation — a single stick, or every stick a chain reaction swept up. */
 interface Blast {
   readonly x: number;
   readonly y: number;
   readonly radius: number;
-  readonly mobDamage: number;
-  readonly crawlerDamage: number;
-  readonly stickMobDamage: number;
-  readonly stickCrawlerDamage: number;
+  readonly charges: readonly ChargePower[];
+}
+
+/**
+ * What a blast does, each charge sized by the handling it captured.
+ *
+ * The per-stick figures are kept beside the chained totals because a
+ * blast-resistant mob takes only one stick's share, chain or no chain: a boss's
+ * health bar must be a question of how the fight was played, not of how many
+ * sticks were piled up before it. Enemies take every stick's damage with
+ * {@link CHAIN_DAMAGE_BONUS} on top; the crawlers, and allies, take every
+ * stick's share with no bonus.
+ */
+function blastDamage(blast: Blast, handlingOf: HandlingReader) {
+  const mobShares = blast.charges.map((power) => chargeMobDamage(power, handlingOf));
+  const crawlerShares = blast.charges.map((power) => chargeCrawlerDamage(power, handlingOf));
+  const totalMobDamage = mobShares.reduce((sum, share) => sum + share, 0);
+  const isChain = blast.charges.length > 1;
+  return {
+    mobDamage: Math.round(isChain ? totalMobDamage * CHAIN_DAMAGE_BONUS : totalMobDamage),
+    crawlerDamage: crawlerShares.reduce((sum, share) => sum + share, 0),
+    stickMobDamage: Math.max(0, ...mobShares),
+    stickCrawlerDamage: Math.max(0, ...crawlerShares),
+  };
 }
 
 /** A blast's picture, aged every tick until its smoke has cleared. */
@@ -760,11 +814,10 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
 
   /**
    * A lit stick leaving `thrower`'s centre the way they face at `speed`
-   * px/frame, at rest on the floor when `speed` is 0. Its damage is taken from
-   * the thrower's own Explosives Handling and level as it is lit.
+   * px/frame, at rest on the floor when `speed` is 0. It keeps the thrower's
+   * level and Explosives Handling from the moment it is lit.
    */
   private stickFrom(thrower: Crawler, speed: number): LiveDynamite {
-    const handling = thrower.explosivesHandling;
     const thrown = speed > 0;
     this.sticksLit++;
     return {
@@ -775,8 +828,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       vy: thrown ? thrower.facingY * speed : 0,
       fuseFrames: DYN_FUSE,
       state: thrown ? 'flying' : 'stopped',
-      mobDamage: dynamiteMobDamage(thrower.level, handling),
-      crawlerDamage: dynamiteCrawlerDamage(handling),
+      power: thrownPower(thrower),
       radiusBonusPx: gearBlastBonusPx(thrower),
       thrower,
       lobFrom: null,
@@ -855,15 +907,12 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       });
       return;
     }
-    const handling = thrower.explosivesHandling;
-    const mobDamage = dynamiteMobDamage(thrower.level, handling);
-    const crawlerDamage = dynamiteCrawlerDamage(handling);
+    const power = thrownPower(thrower);
     this.throwFromHand(thrower, { at: landing, burst }, (_ticksPending, hand) => {
       this.liveBombs.push({
         ...flightFrom(hand),
         id: `bomb_${thrownIndex}`,
-        mobDamage,
-        crawlerDamage,
+        power,
         radiusBonusPx: gearBlastBonusPx(thrower),
         thrower,
       });
@@ -1006,8 +1055,13 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       const charge: BlastCharge = {
         x: gas.x,
         y: gas.y,
-        mobDamage: Math.round(dynamiteMobDamage(human.level, 0) * GAS_CYLINDER_MOB_DAMAGE_FRACTION),
-        crawlerDamage: GAS_CYLINDER_CRAWLER_DAMAGE,
+        power: {
+          kind: 'gas',
+          mobDamage: Math.round(
+            dynamiteMobDamage(human.level, MIN_STAT_VALUE) * GAS_CYLINDER_MOB_DAMAGE_FRACTION,
+          ),
+          crawlerDamage: GAS_CYLINDER_CRAWLER_DAMAGE,
+        },
         radiusBonusPx: 0,
         thrower: human,
       };
@@ -1079,8 +1133,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
     const inHand: BlastCharge = {
       x: thrower.x + HALF_TILE,
       y: thrower.y + HALF_TILE,
-      mobDamage: dynamiteMobDamage(thrower.level, thrower.explosivesHandling),
-      crawlerDamage: dynamiteCrawlerDamage(thrower.explosivesHandling),
+      power: thrownPower(thrower),
       radiusBonusPx: gearBlastBonusPx(thrower),
       thrower,
     };
@@ -1175,20 +1228,30 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
         if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= radius) {
           if (this.isBlastCoolingDown(mob)) continue;
           const isBlastResistant = mob.blastDamageScale < 1;
-          const damage = isBlastResistant
-            ? dynamiteDamageToMob(mob, blast.stickMobDamage, blast.stickCrawlerDamage)
-            : dynamiteDamageToMob(mob, blast.mobDamage, blast.crawlerDamage);
-          // Death resolves synchronously inside `takeDamageFrom`, so the health
-          // either side of the call is what says whether this blast did it. The
+          // Death resolves synchronously inside `takeHit`, so the health either
+          // side of the call is what says whether this blast did it. The
           // `justDied` flag cannot answer: it stays latched for a whole frame.
           const wasAlive = mob.hp > 0;
-          // An immune creature still takes the raw blow so it shows 'Immune';
-          // only a blast that can land is credited to Demolitionist.
+          // An immune creature still takes the blow so it shows 'Immune'; only
+          // a blast that can land is credited to Demolitionist.
           const blastTrainsSkills = mob.isHostile && !mob.isImmuneTo('explosion');
-          const blow = blastTrainsSkills
-            ? outgoingHitDamageOn(thrower, mob, damage, EXPLOSION_HIT)
-            : damage;
-          mob.takeDamageFrom(blow, thrower, 'explosion');
+          const blow = resolveCrawlerHit({
+            dealer: thrower,
+            delivery: 'captured',
+            blowAt: (handlingOf) => {
+              const figures = blastDamage(blast, handlingOf);
+              return isBlastResistant
+                ? dynamiteDamageToMob(mob, figures.stickMobDamage, figures.stickCrawlerDamage)
+                : dynamiteDamageToMob(mob, figures.mobDamage, figures.crawlerDamage);
+            },
+            // An ally takes the party's share of a blast, which Demolitionist
+            // softens for a crawler and never grows.
+            tags: mob.isHostile ? EXPLOSION_HIT : UNTAGGED_HIT,
+            training: blastTrainsSkills ? hitTrainingOn(mob) : 'trainsNothing',
+            damageType: 'explosion',
+            struckBy: 'dealer',
+          });
+          mob.takeHit(blow);
           // Only an enemy is a kill: an ally or a village cow caught in the
           // blast is a casualty, and a multi-kill of livestock is no feat.
           if (wasAlive && mob.hp <= 0 && mob.isHostile) {
@@ -1204,7 +1267,8 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
         this.bus?.emit('dynamiteKills', { killer: thrower, kills: enemyKills, bossKilled });
       }
     }
-    const friendlyFire = friendlyBlastDamage(thrower, blast.crawlerDamage);
+    const partyShare = blastDamage(blast, capturedHandling).crawlerDamage;
+    const friendlyFire = friendlyBlastDamage(thrower, partyShare);
     if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= radius) {
       human.takeDamage(friendlyFire, { kind: 'dynamite' });
     }
@@ -1305,8 +1369,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       const charge: BlastCharge = {
         x: bomb.landX,
         y: bomb.landY,
-        mobDamage: bomb.mobDamage,
-        crawlerDamage: bomb.crawlerDamage,
+        power: bomb.power,
         radiusBonusPx: bomb.radiusBonusPx,
         thrower: bomb.thrower,
       };
@@ -1610,9 +1673,8 @@ function spendExplosive(thrower: Crawler, item: ThrownItemId): boolean {
  *
  * Centred on the chain's middle, and big enough to cover every stick's own
  * blast — the reach grows with the cube root of the charge, as a real blast
- * front's does, plus however far the chain is strung out. Enemies take every
- * stick's damage with {@link CHAIN_DAMAGE_BONUS} on top; the crawlers, and
- * allies, take every stick's share with no bonus.
+ * front's does, plus however far the chain is strung out. What it does is
+ * {@link blastDamage}.
  */
 function chainedBlast(chain: ReadonlyArray<BlastCharge>): Blast {
   const stickCount = Math.max(1, chain.length);
@@ -1627,16 +1689,11 @@ function chainedBlast(chain: ReadonlyArray<BlastCharge>): Blast {
     CHAIN_MAX_RADIUS_TILES * TILE_SIZE + radiusBonus,
     (DYN_RADIUS + radiusBonus) * Math.cbrt(stickCount) + furthestStick,
   );
-  const totalMobDamage = chain.reduce((sum, stick) => sum + stick.mobDamage, 0);
-  const isChain = stickCount > 1;
   return {
     x: centreX,
     y: centreY,
     radius,
-    mobDamage: Math.round(isChain ? totalMobDamage * CHAIN_DAMAGE_BONUS : totalMobDamage),
-    crawlerDamage: chain.reduce((sum, stick) => sum + stick.crawlerDamage, 0),
-    stickMobDamage: chain.reduce((most, stick) => Math.max(most, stick.mobDamage), 0),
-    stickCrawlerDamage: chain.reduce((most, stick) => Math.max(most, stick.crawlerDamage), 0),
+    charges: chain.map((stick) => stick.power),
   };
 }
 

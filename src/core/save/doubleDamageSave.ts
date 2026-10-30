@@ -1,6 +1,6 @@
 import { isRecord } from '../util/guards';
 import type { PlayerSnapshot } from './playerSnapshotFormat';
-import { DOUBLE_DAMAGE_STATUS } from '../combat/StatusEffect';
+import { DOUBLE_DAMAGE_STATUS, FULL_SHARE } from '../combat/StatusEffect';
 import { DOUBLE_DAMAGE_FRAMES } from '../combat/statusTuning';
 
 /**
@@ -42,6 +42,7 @@ export function withDoubleDamageFrames(snap: PlayerSnapshot, frames: number): Pl
         type: DOUBLE_DAMAGE_STATUS,
         ticksRemaining: remaining,
         totalTicks: DOUBLE_DAMAGE_FRAMES,
+        survivingShare: FULL_SHARE,
         applier: null,
       },
     ],

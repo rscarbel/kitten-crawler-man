@@ -21,7 +21,7 @@ import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorPropId,
 } from '../sprites/art/townInterior/townInteriorProps';
-import type { OccupantRoutineCue } from './occupantRoutineCues';
+import type { OccupantRoutineCue } from '../audio/occupantRoutineCues';
 
 export type OccupantRoutine =
   | { readonly kind: 'mop' }

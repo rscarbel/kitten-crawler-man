@@ -3,7 +3,7 @@ import type { AttackCowState } from '../core/state/AttackCowState';
 import { petWords, type PetNames, type PetWords } from '../core/party/petNames';
 import { REVIVE_RANGE_PX } from '../core/party/reviveRules';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { SoundId } from '../audio/sounds';
 import { AttackCow, attackCowMaxHpForFloor } from '../creatures/AttackCow';
 import type { Mob } from '../creatures/Mob';
@@ -154,7 +154,7 @@ export class AttackCowSystem implements GameSystem {
     cow.setLeader(owner);
     cow.allMobs = ctx.roster.mobs;
     if (cow.isStanding) {
-      this.catchUpIfLeftBehind(cow, ctx.gameMap, ctx.roster.grid);
+      this.catchUpIfLeftBehind(cow, ctx.gameMap, ctx.roster.grid, ctx.camera);
       this.taunt(cow, ctx.gameMap, ctx.roster.grid);
     } else {
       this.releaseTaunts();
@@ -294,12 +294,17 @@ export class AttackCowSystem implements GameSystem {
    * the way, as a hireling is, never out of a fight of her own or one a hostile
    * is holding her in.
    */
-  private catchUpIfLeftBehind(cow: AttackCow, gameMap: GameMap, grid: SpatialGrid<Mob>): void {
+  private catchUpIfLeftBehind(
+    cow: AttackCow,
+    gameMap: GameMap,
+    grid: SpatialGrid<Mob>,
+    camera: Pick<Camera, 'viewWidth' | 'viewHeight'>,
+  ): void {
     if (cow.isFighting) return;
     const offsetX = cow.x - cow.owner.x;
     const offsetY = cow.y - cow.owner.y;
     const onScreen =
-      Math.abs(offsetX) <= worldViewWidth() / 2 && Math.abs(offsetY) <= worldViewHeight() / 2;
+      Math.abs(offsetX) <= camera.viewWidth / 2 && Math.abs(offsetY) <= camera.viewHeight / 2;
     const leftBehind = hirelingShouldCatchUp({
       distancePx: Math.hypot(offsetX, offsetY),
       onScreen,
@@ -385,13 +390,12 @@ export class AttackCowSystem implements GameSystem {
   /** A candidate for the shared arrow arbiter, pointing at her while she is down out of sight. */
   downedArrowCandidate(
     ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
+    camera: Camera,
     active: Player,
     visibleRadiusPx: number,
   ): ArrowCandidate | null {
     const cow = this.downedCow;
     if (cow === null) return null;
-    return hirelingDownedArrowCandidate(ctx, cow, active, camX, camY, visibleRadiusPx);
+    return hirelingDownedArrowCandidate(ctx, cow, active, camera, visibleRadiusPx);
   }
 }

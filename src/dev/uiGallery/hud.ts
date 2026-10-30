@@ -67,6 +67,7 @@ import {
 import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
 import { buildFixture as inventoryFixture } from './inventory';
 import { PET_NAME_SUGGESTIONS } from '../../core/party/petNames';
+import { cameraAt, UNZOOMED } from '../../core/rendering/camera';
 
 const FIXTURE_TOAST_TICKS = 20;
 /** Long enough for Caroline's notice to unfold and decode in full, short of its fold. */
@@ -112,7 +113,7 @@ const SIEGE_ALERT_FRAMES_LEFT = 180;
 const SIEGE_ALERT_BELL_FRACTION = 0.62;
 const SIEGE_THRESHOLD_SHARE = 0.5;
 /** The camera's corner, and the bell up and to the left of everything it shows. */
-const SIEGE_FIXTURE_CAMERA = { x: 2400, y: 2000 } as const;
+const SIEGE_FIXTURE_CAMERA_TOP_LEFT = { x: 2400, y: 2000 } as const;
 const SIEGE_BELL_WORLD = { x: 1700, y: 1500 } as const;
 const VICTORY_SLAMMING_SECONDS = 0.3;
 const VICTORY_FIREWORKS_SECONDS = 3;
@@ -609,7 +610,7 @@ function siegeAlertFixture(
         ...hudSurfaces,
         siegeBellAlertSurface(`siege-alert-${name}`, () => ({
           view: shown() ? view : null,
-          camera: SIEGE_FIXTURE_CAMERA,
+          camera: cameraAt(SIEGE_FIXTURE_CAMERA_TOP_LEFT, UNZOOMED),
           hud: keepouts,
         })),
       ];

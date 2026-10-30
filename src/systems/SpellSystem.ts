@@ -1,12 +1,15 @@
 import { TILE_SIZE } from '../core/constants';
-import { outgoingHitDamageOn } from '../core/combat/outgoingHit';
-import { MAGIC_HIT } from '../core/combat/damageTags';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { DAMAGE_IMMUNE_LABEL, type Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { getEnergyShieldStats, type EnergyShieldStats } from '../abilities/energyShield';
+import {
+  energyShieldBlast,
+  energyShieldPulse,
+  getEnergyShieldStats,
+  type EnergyShieldStats,
+} from '../abilities/energyShield';
 import { normalize } from '../utils';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
@@ -30,7 +33,7 @@ import {
   SHOCKWAVE_STATE,
   shieldTileSizeFor,
 } from '../sprites/art/energyShieldFigure';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { standByForShieldCast } from '../creatures/humanGestures';
 import { energyShieldMagicScale } from '../core/party/crawlerFormulas';
 import type { DynamicLightSink } from './lighting/dynamicLights';
@@ -47,8 +50,6 @@ interface ActiveEnergyShield {
   totalFrames: number;
   didInitialDamage: boolean;
   abilityLevel: number;
-  /** What the caster's magic multiplied this cast's duration and expanding blast by. */
-  magicScale: number;
   catWasInside: boolean;
   continuousDamageThrottle: number;
   /** Mobs pushed at least once this cast (for touch-XP tracking). */
@@ -355,7 +356,6 @@ export class SpellSystem implements GameSystem {
       totalFrames: durationFrames,
       didInitialDamage: false,
       abilityLevel,
-      magicScale,
       catWasInside: false,
       continuousDamageThrottle: 0,
       touchedMobIds: new Set<Mob>(),
@@ -522,11 +522,8 @@ export class SpellSystem implements GameSystem {
             // "On the boundary" = within 1 tile outside the shield edge
             if (dist >= shield.radiusPx && dist < shield.radiusPx + TILE_SIZE) {
               const owner = this.shieldOwner;
-              const edge =
-                owner === null
-                  ? SHIELD_EDGE_DAMAGE
-                  : outgoingHitDamageOn(owner, mob, SHIELD_EDGE_DAMAGE, MAGIC_HIT);
-              mob.takeDamageFrom(edge, owner, 'energy_shield');
+              if (owner === null) mob.takeDamageFrom(SHIELD_EDGE_DAMAGE, null, 'energy_shield');
+              else mob.takeHit(energyShieldPulse(owner, mob, SHIELD_EDGE_DAMAGE));
             }
           }
         }
@@ -633,13 +630,9 @@ export class SpellSystem implements GameSystem {
           stats.expandDamageEnabled &&
           mob.takesPlayerDamage('energy_shield')
         ) {
-          const expandDamage = Math.round(stats.expandDamage * shield.magicScale);
           const owner = this.shieldOwner;
-          const blast =
-            owner === null
-              ? expandDamage
-              : outgoingHitDamageOn(owner, mob, expandDamage, MAGIC_HIT);
-          mob.takeDamageFrom(blast, owner, 'energy_shield');
+          if (owner === null) mob.takeDamageFrom(stats.expandDamage, null, 'energy_shield');
+          else mob.takeHit(energyShieldBlast(owner, mob, stats.expandDamage));
         }
 
         if (!shield.touchedMobIds.has(mob) && !mob.blowsEarnNothing) {
@@ -662,7 +655,8 @@ export class SpellSystem implements GameSystem {
     shield.didInitialDamage = true;
   }
 
-  renderEnergyShield(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderEnergyShield(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (!this.activeEnergyShield) return;
     const { x, y, radiusPx, framesRemaining, totalFrames, abilityLevel } = this.activeEnergyShield;
     const sx = x - camX;
@@ -674,8 +668,8 @@ export class SpellSystem implements GameSystem {
     if (
       sx + extent < 0 ||
       sy + extent < 0 ||
-      sx - extent > worldViewWidth() ||
-      sy - extent > worldViewHeight()
+      sx - extent > camera.viewWidth ||
+      sy - extent > camera.viewHeight
     )
       return;
 

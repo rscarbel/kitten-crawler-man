@@ -35,7 +35,12 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
-import { CHILLED_STATUS, FROZEN_STATUS, makeBurn } from '../../src/core/combat/StatusEffect';
+import {
+  FULL_SHARE,
+  CHILLED_STATUS,
+  FROZEN_STATUS,
+  makeBurn,
+} from '../../src/core/combat/StatusEffect';
 import type { ItemId } from '../../src/core/items/defs/ItemDefs';
 import { applyIceHit } from '../../src/core/combat/frostStatus';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
@@ -1115,7 +1120,7 @@ function checkFuseAndDeathFlame(report: FairyGateReport): void {
       'under the same rolls, a crawler wearing a fire-fairy ring takes no fireball damage and no burn',
       `hp ${wardedStartHp} -> ${warded.pm.human.hp}, burned ${wardedBurned}`,
     );
-    warded.pm.human.applyStatus(makeBurn());
+    warded.pm.human.applyStatus(makeBurn(FULL_SHARE));
     report.check(
       warded.pm.human.hasStatus('burn'),
       'the fire-fairy ring still lets a burn from any other source land',
@@ -1153,8 +1158,8 @@ function frozenOnCharge(
     let landed = false;
     let froze = false;
     const freeze = (): void => {
-      applyIceHit(human);
-      applyIceHit(human, { frozenFrames });
+      applyIceHit(human, FULL_SHARE);
+      applyIceHit(human, FULL_SHARE, { frozenFrames });
       froze = human.hasStatus(FROZEN_STATUS);
     };
     let landFrameSeen = -1;
@@ -1170,7 +1175,7 @@ function frozenOnCharge(
       const frozenNow = human.hasStatus(FROZEN_STATUS);
       if (wasFrozen && !frozenNow) {
         chilledAtThaw = human.hasStatus(CHILLED_STATUS);
-        if (rechill) applyIceHit(human);
+        if (rechill) applyIceHit(human, FULL_SHARE);
       }
       wasFrozen = frozenNow;
       if (!landed && before === 0 && s.fireballs.liveCharges.length === 1) {

@@ -39,16 +39,6 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-21, spawn funnel work.
 
-### The companion's dodge flag also lifts a mob out of the AI activation radius
-
-- **Where:** `isExemptFromAiRadius` in `src/systems/MobUpdateLoop.ts`, which ORs in `Mob.requiresEvasion`; every override of `requiresEvasion` in `src/creatures/` (`GoblinArcher`, `GoblinBomber`, `EvilClown`, `Mantid`, `Lizardman`, `DarkKnight`, …).
-- **Problem:** `requiresEvasion` says "the companion should sidestep this mob's attacks", but the mob loop reads it as "this mob roams the whole map", so every archer, bomber and clown on a floor ticks every frame wherever it stands. A generated floor 1 holds about 110 goblin archers, all of them active with the party at the far end of the map.
-- **Cost:** about half of the active mobs the perf overlay counts on floor 1 are archers nowhere near the party, paid in update time every frame; and a mob cannot ask for the companion to dodge without also opting out of the radius.
-- **Better shape:** a separate opt-in for a mob that really roams the map (the Grotesque Spider), and `isExemptFromAiRadius` reading that instead of the dodge flag.
-- **Until then:** don't add `requiresEvasion` to a common mob kind.
-- **Size:** S
-- **Found:** 2026-10-28, flooded pump room frame-rate investigation.
-
 ### Big Rooster and his gym talk through public mailbox fields
 
 - **Where:** `BigRooster` (`src/creatures/BigRooster.ts`) fields the gym writes every frame (`nearestDumbbellPos`, `loadedSquatRacks`, `confinedTo`, `musicPlaying`, `kettlebellRackStands`, `restingExerciseBalls`, `flockLosses`, `flockView`) and the requests he leaves for it to clear (`requestDumbbellAt`, `plateTakenFrom`, `heaveRequest`, `ballKickRequest`); `RoosterMinion.flockView`; `GymRoomSystem.update` and `publishFlock` (`src/systems/GymRoomSystem.ts`).
@@ -58,26 +48,6 @@ Entry shape:
 - **Until then:** don't add another one-off field for a new mechanic; if one is unavoidable, document who writes and who clears it beside the field.
 - **Size:** M
 - **Found:** 2026-10-28, Big Rooster's kettlebell rain and fury.
-
-### A status effect does not remember whether a spell laid it
-
-- **Where:** `CHILL_WEAKENED_BY` and the `moveSlow` entries in `STATUS_DEFS` (`src/core/combat/StatusEffect.ts`), `Player.resistedSlow` and `Player.magicResistedFrames` (`src/Player.ts`), `applyIceHit`'s `magic` option (`src/core/combat/frostStatus.ts`), `magicResistedBurn` (`src/systems/FairyFireballSystem.ts`), the grasping hands' `makeStuck` in `SkeletonLord` and `TheLich`.
-- **Problem:** magic resistance shortens a magic status where it is applied, but the slow a chill exerts is read live off the status type, so `CHILL_WEAKENED_BY` lets magic resistance weaken every chill on a body on the grounds that only ice fairies chill one today. The numbing venom has the same shape with poison resistance. A `StatusEffect` carries no record of having come from a spell.
-- **Cost:** a non-magic chill added later (a frost trap, an ice-mob bite) would be wrongly weakened by magic resistance, and each new magic status site must remember to shorten its own duration.
-- **Better shape:** stamp the share that survived resistance on the `StatusEffect` when it is applied (saved with it), and have every status reader scale its grip by that share.
-- **Until then:** a new chill source on a crawler that is not a spell must not ship without that stamp; a new magic status applier goes through `magicResistedFrames`.
-- **Size:** M
-- **Found:** 2026-10-27, stat sheet and magic resistance work.
-
-### The Electric Goblin's slam fan assumes an open straight walk to its gap
-
-- **Where:** `ElectricGoblin.fanLanes` (`src/creatures/ElectricGoblin.ts`), the `stepToGapPx <= PLAYER_SPEED * tellFrames` test.
-- **Problem:** whether the target can reach the gap between lanes is judged as a straight-line walk at base `PLAYER_SPEED`, ignoring walls, puddles and props in the way and any slow (chill, stuck, sprint) on the target.
-- **Cost:** a slowed or boxed-in crawler can be dealt a gapped fan whose gap it cannot reach before the tell ends, which reads as an unfair hit.
-- **Better shape:** ask the target's own current move speed and a short path search over the room's walkable tiles, the way other reachability checks in the game measure a trip.
-- **Until then:** don't reuse this straight-line test for another boss's dodge window.
-- **Size:** S
-- **Found:** 2026-10-28, floor-two boss review.
 
 ## Creature art
 
@@ -134,16 +104,6 @@ Entry shape:
 - **Size:** S
 - **Found:** 2026-10-26, interior fire props.
 
-### An interior holds each scripted encounter by its own type beside `encounter`
-
-- **Where:** `BuildingInteriorScene`'s `starlightTentMaze` and `prison` fields, each also stored in `encounter`; the reads of them in `scriptOwnsParty`, the `update` dialog return and the maze's `partyResetPending` / `partyReleasePending` flags, the Space chain, the hazard escape vector, the follow refusal, the prison's ground and its fade surface in `mountSurfaces`, and the sorted render pass.
-- **Problem:** `InteriorEncounter` already answers update, drawing, teardown, `playerLocked`, `tryInteract`, `surfaces`, `roomFigures`, `allyTargets`, `carriedCompanions` and `stairRefusal` (the tower's `TowerStoreysSystem` goes through nothing else), but the maze and the prison are still asked by name whether they own a conversation, take a press, replace the room's ground, steer the companion or reset the party, so the scene keeps a branch per encounter for those.
-- **Cost:** a new scripted room that needs one of those questions means editing the scene at each site; missing one compiles.
-- **Better shape:** the remaining questions as optional members on `InteriorEncounter` (`isDialogOpen`, `ground`, `hazardEscapeVector`, `followDisabled`, a party reset request), asked through `activeEncounter`, so the two typed handles go away.
-- **Until then:** give a new encounter what it needs through `InteriorEncounter` and the fixtures `startEncounter` hands it (the storey's chest placer and exit fixtures), adding an optional member when it needs a question the interface does not ask yet, rather than another typed field on the scene. A new scripted walk or talk is a `CutsceneStep` list played on the scene's `CutsceneKit`, never another `playerLocked` flag beside the tower's and the prison's.
-- **Size:** M
-- **Found:** 2026-10-26, interior chests and exit fixtures; extended 2026-10-27, cutscene director.
-
 ### Readables keep their own copy of the occupant furniture scan
 
 - **Where:** `scanFurniture` and `pickTile` in `src/systems/InteriorReadableSystem.ts`, beside `scanInteriorFurniture` in `src/systems/InteriorOccupantSystem.ts`; the `occupiedFurniture` set the occupant system hands the readables.
@@ -174,18 +134,6 @@ Entry shape:
 - **Size:** S
 - **Found:** 2026-10-27, Starlight Tent finale.
 
-## Level generation
-
-### The free-roam dungeon builder has no floor that uses it
-
-- **Where:** `buildDungeon` in `src/map/DungeonGenerator.ts`: the `else` branch of `if (progression !== undefined)` (fixed safe/boss/quest room slots, Prim's MST hallways, dead-end rescue and loop corridors, `FREE_ROAM_SAFE_ROOM_COUNT`), and the free-roam stairwell pass under "7. Stairwells".
-- **Problem:** every dungeon floor (`level1`, `level2`) declares `progression`, the tutorial builds its own map and floor 3 is the overworld, so the free-roam path runs only for a hand-built options object no caller makes. It still has to be kept compiling and consistent with every change to rooms, boss sizes and floors.
-- **Cost:** a second room-placement and corridor algorithm inside the 3,000-line generator that no gate exercises, so it can rot silently while looking supported.
-- **Better shape:** delete the free-roam path and make `progression` required in `DungeonLevelOptions`, or move it to its own module with a gate if a free-roam floor is ever wanted.
-- **Until then:** don't add features only to the free-roam path; a new floor should be a progression floor.
-- **Size:** S
-- **Found:** 2026-10-28, per-boss room sizes and floor-2 layout work.
-
 ## Rendering and memory
 
 ### The game's memory tally misses about 40% of what Chrome counts
@@ -196,16 +144,6 @@ Entry shape:
 - **Better shape:** keep the tally, but tune budgets against measured browser totals: Chrome's Task Manager, and `performance.measureUserAgentSpecificMemory` where it is available.
 - **Size:** S
 - **Found:** 2026-10-21, siege blackout.
-
-### World code reads the world view's size from a global, and some of it from the canvas
-
-- **Where:** `worldViewWidth` / `worldViewHeight` and `getWorldZoom` (`src/core/rendering/Viewport.ts`), read by every world culler (`RenderPipeline`, `GoreSystem`, `WaterAnimationSystem` and the rest), by `readMovement` (`src/systems/GameLoopPhases.ts`) and `renderEntityTooltip` (`src/systems/worldEffects.ts`); `TrashGremlinRoomSystem` culls against `ctx.canvas.width` / `ctx.canvas.height`; `BuildingInteriorScene`, the club's casino and poker systems, the prison and the Starlight Tent's lighting still measure the world with `viewportWidth()`.
-- **Problem:** the camera's zoom reaches world code as published module state rather than through the render or system context, and the code that never ran under a zoom still measures the world with the screen's size (or, for the trash room, the backing store's).
-- **Cost:** a camera zoom anywhere but the flooded pump room would leave those cullers drawing a screen-sized patch of a larger view, with the edges of the world missing; a reader cannot tell from a signature whether a function works in screen or world-view units.
-- **Better shape:** carry the camera (top-left, view size, zoom) in `RenderContext` and `SystemContext`, and have every culler and screen-to-world conversion take it from there.
-- **Until then:** world-space code measures against `worldViewWidth()` / `worldViewHeight()`, never `viewportWidth()` or the canvas; screen chrome keeps `viewportWidth()`. Asking for a camera zoom outside floor 1's flooded room needs the listed readers converted first.
-- **Size:** M
-- **Found:** 2026-10-28, the flooded pump room's camera zoom.
 
 ## Testing and gates
 
@@ -238,24 +176,25 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-21, siege blackout.
 
-### The slowest gates make full verification a 16-minute wait
+### The slowest gates still take minutes each
 
-- **Where:** `verify:town-residency` (about 10 minutes per run), `verify:plaza-perf`, `verify:town-soak`, `verify:floor-sweep`, and `verify:affected` over a large change (146 gates, about 16 minutes).
-- **Problem:** a handful of gates dominate the wall clock, and running them in parallel loads the machine heavily.
-- **Cost:** a fix-and-confirm loop takes most of an hour. A heavy run competes with a browser playtest and can change its results: it contributed to the 2026-10-21 canvas losses.
-- **Better shape:** profile the slow gates. Most of their time is probably repeated scene setup or soak length that a smaller sample would cover just as well.
+- **Where:** `gates:equipment` (about 8 minutes across four child processes, about 33 CPU-minutes, most of it E5 in `scripts/gates-equipment-garments.ts`), `gates:boss-rooms` (about 5.5 minutes, bounded by the Trash Gremlin's per-floor gates and its fight sims in `scripts/bossRooms/trashGremlinGates.ts`), and the `--slow` gates `verify:town-residency` (about 18 minutes), `verify:residency` (about 13) and `verify:town-soak` (about 6.5).
+- **Problem:** E5 repaints the whole human figure, body and all, for every cell of every row once per outfit pass (about twenty passes per look, five looks), only to read the garment ink and envelopes its dressing callbacks route to surfaces of their own. Every boss-room floor and every staged sim fight generates a dungeon from scratch, about a second each, most of it `planCrawlerSigns`. `verify:town-residency` and `verify:town-soak` render the whole `DungeonScene` at a Retina ratio for thousands of frames, HUD glass panels included, and their waves and trips are sized to idle windows (a stand-in wave evicts the crowd only after about 600 frames), so they cannot simply be shortened. `verify:residency` runs its two routes one after the other because figure bakes are paced by the wall clock. `equipmentGateFailures`, the in-process path `render:equipment` uses, grows to tens of gigabytes of native canvas memory over a full run, where the gate itself runs each unit in a process that exits.
+- **Cost:** a `verify:affected` over a large change still waits on `gates:equipment`, and a `--slow` sign-off takes most of an hour. A heavy run competes with a browser playtest and can change its results: it contributed to the 2026-10-21 canvas losses.
+- **Better shape:** let E5 measure garment ink without compositing the body under it; let the sims stage a fresh copy of a generated floor rather than regenerating it; drive the residency gates' bake pacing from a simulated clock, as `verify:town-residency` already does, so their routes can run side by side.
+- **Until then:** split a new heavy gate into units that share nothing and run them with `runUnitsInChildren` (`scripts/childUnits.ts`); never shorten a soak, a wave or a sweep without a seeded regression showing the shorter run still fails.
 - **Size:** M
 - **Found:** 2026-10-21, perf and memory batch.
 
-### Many scripts are never typechecked
+### Harnesses reach node-canvas through a double cast
 
-- **Where:** `tsconfig.scripts.json`, whose `include` lists harnesses one by one (its own comment says "The older scripts/ harnesses predate this and are not covered"); `typecheck:scripts` in `scripts/check.ts`. Typechecking all of `scripts/**/*.ts` against that config gives 18 errors, in `verify-town-residency.ts`, `verify-preview-scene.ts`, `render-equipment.ts`, `verify-held-visuals.ts`, `verify-arrival-load.ts`, `verify-residency.ts` and `verify-player-snapshot.ts`: an `unknown` read without narrowing, an implicit `any`, a `Canvas` passed where `CanvasImageSource` is expected, members that no longer exist (`arrivalLoading`, `LIVE_SCRIPT_LAP_TICKS`), and `Array.prototype.at` against the configured lib.
-- **Problem:** a script outside the list runs through `tsx`, which strips types without checking them, so neither `npm run check` nor `check:full` ever sees its type errors. Several of the failing files are live gates.
-- **Cost:** a rename or a type change in `src/` silently breaks an unlisted harness, and the breakage surfaces only as a confusing runtime failure, or not at all when the bad branch never runs. The game's strict type rules don't hold for a large part of the tooling.
-- **Better shape:** include `scripts/**/*.ts` in `tsconfig.scripts.json`, fix the existing errors, and delete the per-file list, so a new script is covered by default.
-- **Until then:** add every new script to the `include` list, and when changing a type that scripts use, typecheck all of `scripts/` once with a temporary config that includes `scripts/**/*.ts`.
-- **Size:** S
-- **Found:** 2026-10-27, building ids replacing display names.
+- **Where:** `asGameContext` and `asNodeCanvas` in `scripts/nodeGameContext.ts`, each an `as unknown as` cast behind an `eslint-disable-next-line @typescript-eslint/consistent-type-assertions`; every harness that paints with a game painter offline goes through them.
+- **Problem:** the game's painters take the DOM's `CanvasRenderingContext2D` and `CanvasImageSource`, which node-canvas's context and `Canvas` do not satisfy structurally, so the bridge tells the compiler they are the same thing.
+- **Cost:** it breaks the codebase's no-cast rule, and a painter that starts using a context member node-canvas lacks (such as `filter` or `createConicGradient`) compiles cleanly and fails only when a harness runs it.
+- **Better shape:** have painters take a narrower drawing-surface type (the members they actually call, picked from `CanvasRenderingContext2D`) that both the DOM context and node-canvas's context satisfy, so neither side needs a cast.
+- **Until then:** never write a new cast to bridge node-canvas; call `asGameContext` / `asNodeCanvas`, and when drawing a node `Canvas` into another, use the node context's own `drawImage`.
+- **Size:** M
+- **Found:** 2026-10-30, bringing every script under typechecking.
 
 ### Figures freeze ink measurements the runtime already measures
 
@@ -329,15 +268,15 @@ Entry shape:
 - **Size:** S.
 - **Found:** 2026-10-28, reviewing the female crawler looks.
 
-### Rows only a hireling plays live in the crawler's row table
+### The human gates never paint a garment another garment covers
 
-- **Where:** `twohand_channel*` and `twohand_brace*` in `ARMED_ROW_NAMES` / `ARMED_ROW_TABLE` (`src/sprites/art/human/armedRows.ts`), posed by `src/sprites/art/human/staffRows.ts`; played only by `BROTHER_ANSELM_ART` (`src/sprites/brotherAnselmSprite.ts`), which draws the human figure through `humanFigureFor` and `drawHumanFigureSelection`.
-- **Problem:** a figure built on the human rig that holds an equipment item has no row table of its own: the held-layer and socket plumbing (`humanHeldLayers`, `humanSocketsAt`, `heldSocketOf`) only knows `HUMAN_ROW_TABLE`. So a hireling's own actions become rows of the player's figure, with no role so his animator never plays them.
-- **Cost:** every hireling action on the rig grows the crawler's table, and the crawler's gates (G1–G27, E1–E7 for every two-hander) pay for rows he never plays; the row table stops describing what the crawler does.
-- **Better shape:** let `HumanFigurePainting` carry its own row table (the crawler's, or one extended per figure) and key sockets and held layers on it, so a figure built on the rig declares its extra rows beside its look.
-- **Until then:** give such rows no `role`, keep them generic to their motion set rather than named after one character, and add them to the motion set they hold an item in so the equipment gates cover them. A stride row of this kind (`twohand_amble`, `twohand_hurry`) declares `gait: 'walk'` so G10 paces it, and is kept out of the crawler's stride only by being declared after his set's own walk, which `cycleRow` finds first; never declare one ahead of it.
-- **Size:** M.
-- **Found:** 2026-10-27, painting Brother Anselm on the human rig.
+- **Where:** `gatedOutfits` in `scripts/render-human.ts` (the default outfit, bare, and `outfitOf(look, WEARABLE)`); `outfitOf` in `src/sprites/garments/outfit.ts`, which leaves off every garment `coversOver` hides; `HEARTHGUARD_QUILTED_VEST` (`src/sprites/garments/human/hearthguardQuiltedVest.ts`).
+- **Problem:** the only outfit that wears item garments is all of them at once, and `outfitOf` drops whatever another garment covers, so seven garments are never painted under any gate: `human_hearthguard_quilted_vest` and the six rings (`human_lucky_penny_ring`, `human_fang_ring`, `human_frostward_ring`, `human_emberward_ring`, `human_fae_iron_ring`, `human_hourglass_ring`). Worn alone, the quilted vest fails G17 on Dave, `male_dark` and both female looks (worst 20.9 levels against 30, the female left forearm at `walk_side[0]`, full bake).
+- **Cost:** a player who wears the vest without a coat over it sees a forearm that reads flat at the tile, and nothing catches a defect in a covered garment, including one added later.
+- **Better shape:** gate each item garment in at least one outfit where it shows, for example each one alone, or the fewest outfits that between them leave every garment showing.
+- **Until then:** gate a new garment that something can cover by wearing it alone (`npm run render:human -- --gear=<id>`), and don't treat a green all-garments run as covering it.
+- **Size:** M
+- **Found:** 2026-10-30, tracing a G17 failure on Dave in all item garments.
 
 ## UI
 
@@ -353,16 +292,6 @@ Entry shape:
 
 ## Combat
 
-### A crawler's hit is scaled in two places, and each hit site wires the second by hand
-
-- **Where:** the per-delivery blow formulas (`bareFistDamage`, `bareClawDamage`, `slingDamage` in `src/core/party/crawlerFormulas.ts`, the missile and dynamite damage functions), and every call of `outgoingHitDamageOn` (`src/core/combat/outgoingHit.ts`) in `CombatSystem`, `StormcallerStrikeSystem`, `CombatKit`, `SpellSystem` and `DynamiteSystem`. Gear-thrown strikes (`gearStrike` in `src/gear/traits.ts`, `GearSystem`'s relic bolts and slash waves) and Seismic Stomp do not pass through it.
-- **Problem:** the stat a delivery grows with is folded into the blow by its own formula, then the hit site separately hands the result and its `DamageTags` to the outgoing-hit door for the proficiency skills. Nothing makes a new hit site do the second step.
-- **Cost:** a crawler hit added without the door silently ignores every proficiency skill and trains none; the stat scaling and the skill scaling can drift apart because no one value describes a hit.
-- **Better shape:** a hit record (dealer, delivery, base blow, tags) built once per hit and resolved by the door, which applies `DELIVERY_STAT` and the skills together, so a hit site cannot reach `takeDamageFrom` without it.
-- **Until then:** route every new crawler hit through `outgoingHitDamageOn` with its tags; don't add a skill bonus anywhere else.
-- **Size:** M
-- **Found:** 2026-10-27, proficiency skills.
-
 ## Audio
 
 ### Loops cannot be placed in the world
@@ -374,16 +303,6 @@ Entry shape:
 - **Until then:** keep any hand-rolled falloff inside the system that owns the source, as the pump room does, rather than adding another scene-level volume helper.
 - **Size:** M
 - **Found:** 2026-10-28, the Kraken's flooded pump room.
-
-### The audio layer imports cue tables from the systems layer
-
-- **Where:** `src/audio/AudioManager.ts` and `src/audio/sfxGroups.ts` import `ELECTRIC_GOBLIN_CUES` from `src/systems/bossSoundCues.ts`; `AudioManager.wireEvents` plays the Current Goblin's death and lab power-down takes on `bossDefeated`.
-- **Problem:** the audio layer, which every system depends on, reaches back up into a gameplay module for a boss's take lists, and holds a boss-specific branch in its event wiring.
-- **Cost:** the dependency runs both ways between `src/audio/` and `src/systems/`, so a change to a system's cue table touches the audio core's import graph, and each new boss tempts another branch in `wireEvents`.
-- **Better shape:** cue tables that are pure sound data live under `src/audio/` (beside `weaponSoundCues.ts`), and a boss's death cues are played by the system or scene that owns the boss, not by `AudioManager`.
-- **Until then:** don't add another import from `src/systems/` to anything in `src/audio/`, and don't add more boss-specific branches to `wireEvents`.
-- **Size:** S
-- **Found:** 2026-10-28, review of the floor-two bosses work.
 
 ### Music stems are filed as jingles
 

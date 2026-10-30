@@ -62,6 +62,7 @@ const { TallClown } = await import('../src/creatures/TallClown');
 const { buildCircusSite, approachHeading } = await import('./verifyCircusGrounds/site.js');
 const { CircusGroundsAmbience } = await import('../src/systems/circus/CircusGroundsAmbience');
 const { HighStrikerSystem } = await import('../src/systems/circus/HighStrikerSystem');
+const { UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 
 type CircusSite = Exclude<ReturnType<typeof buildCircusSite>, string>;
 
@@ -193,12 +194,13 @@ function renderSite(site: CircusSite): Canvas {
   ambience.renderGround(ctx, camX, camY);
 
   const draws: SortedDraw[] = [];
-  for (const { tx, ty, sortYAnchorPx } of site.map.getVisibleDecorationTiles(
-    camX,
-    camY,
-    viewPx,
-    viewPx,
-  )) {
+  for (const { tx, ty, sortYAnchorPx } of site.map.getVisibleDecorationTiles({
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewPx),
+    viewHeight: worldPx(viewPx),
+    zoom: UNZOOMED,
+  })) {
     draws.push({
       sortY: ty * TILE_SIZE + sortYAnchorPx,
       draw: () => site.map.drawDecorationAt(ctx, tx, ty, camX, camY),

@@ -5,7 +5,7 @@ description: Add a new gameplay mechanic to Kitten Crawler World as a GameSystem
 
 # Add a Game System
 
-Mechanics live as plain classes in `src/systems/` implementing `GameSystem` (`src/systems/GameSystem.ts`): optional `update(ctx: SystemContext)` and `dispose()`. `SystemContext` carries per-frame shared state: `human, cat, active, inactive, activeIsMoving, roster, gameMap, bossRoom?, extraTargets?`.
+Mechanics live as plain classes in `src/systems/` implementing `GameSystem` (`src/systems/GameSystem.ts`): optional `update(ctx: SystemContext)` and `dispose()`. `SystemContext` carries per-frame shared state: `human, cat, active, partner, activeIsMoving, roster, gameMap, camera, bossRoom?, extraTargets?, crawlerBarks?`. `camera` is the frame's `Camera` (`src/core/rendering/camera.ts`); anything that asks how much of the world is on screen reads its `viewWidth`/`viewHeight`, and a render method that culls takes the `Camera` (from `RenderContext.camera`) rather than `camX, camY` plus the screen's size.
 
 `ctx.roster` is a `MobRoster` (`src/systems/kits/SceneWorld.ts`): `roster.mobs` is the list, `roster.grid` the spatial index, and `roster.add(mob)` is the **only** way a mob joins a scene — it inserts into both and hands the mob the scene's map and spell context. Never push into one without the other; a mob that misses `setSpells` walks straight through an energy shield.
 
@@ -26,7 +26,7 @@ A boss room's props, slow ground, hazards and interactables are not a new top-le
 3. **Update**: call `this.foo.update(ctx)` in `DungeonScene.updateGameplay()`. Order matters — `src/systems/GameLoopPhases.ts` documents the 9 phases; place the call next to systems in the same phase.
 4. **Render**: add render calls where appropriate. World-space entities that should Y-sort go through `RenderPipeline`'s entity pass (sorted by `.y`); world text and bars use `src/ui/world/`. Menus, dialogs and HUD pieces are never drawn from a system's render call: they are surfaces, top-band entries or toasts drawn in `ui.frame` (see `add-ui`).
 5. **Input**: anything on screen that takes a press is a surface mounted on the scene's `UiRoot` (see below); world taps arrive only through the scene's `handleWorldPointer`. Keyboard — a surface's `onKey` gets keys first; gameplay keys go in `GameplayInputHandler`'s action bindings and respect `isSuppressed()`.
-6. **Audio**: don't hold an audio reference — set pending flags the scene drains, or emit an EventBus event `AudioManager.wireEvents` maps to a sound (see `add-sound`).
+6. **Audio**: don't hold an audio reference — set pending flags the scene drains, or emit an EventBus event `AudioManager.wireEvents` maps to a sound when every scene shares it (see `add-sound`). The system's cue table is pure sound data in `src/audio/`; `src/audio/` never imports from `src/systems/`.
 7. **Events**: communicate with other systems via `bus.emit` / `bus.on` (`src/core/EventBus.ts`); add new event names to the `GameEvents` interface with a typed payload. `bus.on` returns an unsubscribe fn; the bus is cleared on scene exit.
 8. **Cleanup**: implement `dispose()` if the system holds DOM listeners or timers.
 9. **Overlay**: if it can raise a panel that owns the screen, give it a `surface()` and mount it on the scene's `UiRoot` (see below) rather than a new boolean on the scene.
@@ -303,6 +303,22 @@ make)`, whose `make` gets the floor's `addMob` and its `InteriorEncounterFixture
   `place({ id, at })` stands one in the room, and using it asks the door mat's leave
   question and runs the scene's own exit, so the party comes out at the building's door.
   A new kind is a data entry, not scene code.
+
+The scene holds the encounter only as an `InteriorEncounter` (declared in
+`BuildingInteriorScene.ts`) and asks it everything through `activeEncounter`. The
+encounter's own type appears only where it is built: its `raise…` method, and for the
+Starlight Tent the restart that rebuilds it from the old maze. A
+scripted room answers through optional members: `dialog` (a box on the shared
+conversation that halts the room and that Escape closes), `ground` (its own ground
+painter in place of the map's tiles), `followDisabled`, `restingSpotFor`,
+`getHazardEscapeVector` (reaches the companion and the mob tactics through one proxy the
+scene registers when the encounter starts and again on every storey change), `playerLocked`, `tryInteract`, `renderPrompts`, `roomFigures`,
+`surfaces`, `stairRefusal`. Anything it needs the scene to do — re-park both crawlers
+after it moved them, release them to follow, play a cue, drop coins — is an
+`InteriorEncounterRequest` (`src/systems/InteriorEncounterRequest.ts`) returned from
+`drainRequests()`; the scene carries them out in an exhaustive switch, so a new kind
+does not compile until the scene handles it. A question the interface does not ask yet
+is a new optional member, never a typed field on the scene beside `encounter`.
 
 `StarlightTentFinale` (`src/systems/starlightTent/`) is the worked example: a clown band
 called out on first entry to the centre ring, the chest they hold, and the `rope_ladder`

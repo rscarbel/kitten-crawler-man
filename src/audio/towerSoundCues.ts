@@ -6,8 +6,8 @@
  * entry's JSDoc names what stands in.
  */
 
-import type { SoundId } from '../../audio/sounds';
-import { ARCHIVE_LANDING_CUES } from '../../map/town/interiors/townCenterTower';
+import type { SoundId } from './sounds';
+import { ARCHIVE_LANDING_CUES } from '../map/town/interiors/townCenterTower';
 
 export const TOWER_CUES = {
   /** A paw working at a cage latch. `stall_door_latch` stands in. */

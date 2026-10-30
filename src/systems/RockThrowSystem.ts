@@ -268,10 +268,10 @@ export class RockThrowSystem implements GameSystem {
   /**
    * Lands damage on one victim.
    *
-   * A `Mob` goes through `takeDamageFrom`, not `takeDamage`. The plain call does
+   * A `Mob` goes through `takeCreditedDamage`, not `takeDamage`. The plain call does
    * register the death now, but it credits nobody: it is the route for a burn or
    * a poison tick, which have no owner by the time they land. A thrown rock has
-   * one, and `takeDamageFrom` is what puts the thrower in the ledger the XP split
+   * one, and `takeCreditedDamage` is what puts the thrower in the ledger the XP split
    * reads. That is the *normal* case for a hired golem, whose whole job is
    * throwing rocks at mobs.
    */

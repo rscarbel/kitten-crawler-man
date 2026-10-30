@@ -91,6 +91,7 @@ import type { SpillKind } from '../src/systems/destruction/spillDecals.js';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling.js';
 import type { DynamicLightSource } from '../src/systems/lighting/dynamicLights.js';
 import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
+import { UNZOOMED, cameraAt } from '../src/core/rendering/camera.js';
 
 installCanvasGlobals();
 
@@ -570,7 +571,7 @@ function checkWreckagePersistsAndEvicts(): void {
   const ctx = asGameContext(
     createCanvas(VIEW_TILES * TILE_SIZE, VIEW_TILES * TILE_SIZE).getContext('2d'),
   );
-  fresh.props.renderWreckage(ctx, 0, 0);
+  fresh.props.renderWreckage(ctx, cameraAt({ x: 0, y: 0 }, UNZOOMED));
   for (const at of laid) {
     fresh.gameMap.structure[at.y][at.x].type = CRATE;
     blast(fresh, at.x, at.y);

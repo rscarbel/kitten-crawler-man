@@ -189,10 +189,6 @@ export class RockGolemBoss extends RockGolem {
    * Stunned, the companion should pile in — that is the whole point of the
    * window. Every other state it should keep its distance and circle, because
    * both melee attacks and the roll are telegraphed things to be out of.
-   *
-   * This also keeps the boss's AI ticking outside the normal activation radius,
-   * so a player who outruns it mid-roll cannot leave it frozen in the rolled
-   * state — which is the one state that caps incoming damage to a scratch.
    */
   override get requiresEvasion(): boolean {
     return this.state !== 'stunned';
@@ -214,13 +210,13 @@ export class RockGolemBoss extends RockGolem {
    * it is closed. The stun that a barrier
    * causes is therefore a real damage window, not a cosmetic one.
    */
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const capped = this.isRolled ? Math.min(amount, ROLLED_DAMAGE_CAP) : amount;
-    super.takeDamageFrom(capped, attacker, damageType);
+    super.receiveDamage(capped, attacker, damageType);
   }
 
   /** True while the stone shell is shut, which is what the damage cap keys off. */

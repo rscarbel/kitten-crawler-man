@@ -764,8 +764,8 @@ function sweepFloor(name: string, levelDef: LevelDef, floorIndex: number, seeds:
     // built without props must be accepted on the same attempt with the same
     // floor under the props.
     const undressed = generate(levelDef, worldSeed, false);
-    const dressedAttempts = dressed.progressionLayout?.attempts;
-    const undressedAttempts = undressed.progressionLayout?.attempts;
+    const dressedAttempts = dressed.progressionLayout.attempts;
+    const undressedAttempts = undressed.progressionLayout.attempts;
     if (dressedAttempts !== undressedAttempts) {
       violations.push({
         rule: 'rejection',
@@ -777,7 +777,7 @@ function sweepFloor(name: string, levelDef: LevelDef, floorIndex: number, seeds:
         message: 'the floor under the props differs from the bare build',
       });
     }
-    if (dressedAttempts !== undefined) totals.attempts += dressedAttempts;
+    totals.attempts += dressedAttempts;
     for (const violation of violations) {
       failures++;
       if (failures <= MAX_PRINTED_FAILURES) {

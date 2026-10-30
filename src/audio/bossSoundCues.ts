@@ -6,14 +6,14 @@
  * and the Current Goblin's in `level2`.
  */
 
-import type { SoundId } from '../audio/sounds';
+import type { SoundId } from './sounds';
 import type {
   ElectricGoblinSoundCue,
   RoosterSoundCue,
   TrashGremlinSoundCue,
 } from '../creatures/creatureSoundCues';
 import type { RoosterBuild } from '../sprites/roosterSprite';
-import { GYM_CUES } from './bossRooms/gymSoundCues';
+import { GYM_CUES } from './gymSoundCues';
 
 const ROOSTER_PECKS = [
   'rooster_peck_1',
@@ -115,8 +115,9 @@ export const TRASH_GREMLIN_CUES = {
 } as const satisfies Record<TrashGremlinSoundCue, readonly SoundId[]>;
 
 /**
- * What the Current Goblin plays for each of his cues, plus the two that play
- * on `bossDefeated`: his dying cry and the lab's power going down with him.
+ * What the Current Goblin plays for each of his cues, plus the two his lab
+ * (`PowerLabRoomSystem`) raises as he falls: his dying cry and the lab's power
+ * going down with him.
  */
 export const ELECTRIC_GOBLIN_CUES = {
   grenadeBurst: ['shock_grenade_burst_1', 'shock_grenade_burst_2', 'shock_grenade_burst_3'],

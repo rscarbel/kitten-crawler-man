@@ -9,6 +9,7 @@
  * rebuild hides, and which ones a swing must leave standing.
  */
 
+import type { Camera } from '../../core/rendering/camera';
 import { TILE_SIZE } from '../../core/constants';
 import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import type { BriarHollowState } from '../../core/quests/briarHollowState';
@@ -128,13 +129,8 @@ export class ContractInteriorSite {
     this.work.cancelWork();
   }
 
-  renderGround(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: WorkChannelBuilder,
-  ): void {
-    this.work.renderGround(ctx, camX, camY, active);
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera, active: WorkChannelBuilder): void {
+    this.work.renderGround(ctx, camera, active);
   }
 
   /** Damage on the room's standing props, for its Y-sorted pass; list them after the props. */
@@ -142,8 +138,8 @@ export class ContractInteriorSite {
     return this.work.sortedOverlays();
   }
 
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.work.renderAbove(ctx, camX, camY);
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.work.renderAbove(ctx, camera);
   }
 
   renderPrompt(

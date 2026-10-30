@@ -15,6 +15,7 @@
 
 import { trailPointAt, type TrailShape } from '../../systems/questRoute/trailShape';
 import { worldPalette } from '../theme/worldInk';
+import type { WorldPx } from '../../core/rendering/camera';
 
 /** Distance between chevrons along the trail, in pixels. */
 const CHEVRON_SPACING_PX = 26;
@@ -62,7 +63,7 @@ const XY = 2;
 
 export interface WorldTrailOptions {
   /** The visible area in the caller's pixels; chevrons outside it are skipped. Omitted, none are. */
-  readonly view?: { readonly width: number; readonly height: number };
+  readonly view?: { readonly width: WorldPx; readonly height: WorldPx };
   /**
    * The sprite box of the body the trail leads, in world pixels. A trail
    * heading north runs up under the body's own sprite, so chevrons fade out

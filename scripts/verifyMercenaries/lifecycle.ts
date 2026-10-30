@@ -73,6 +73,7 @@ import {
   figurePrewarmDepth,
   flushFigureFrameCache,
 } from '../../src/sprites/figure/figureFrameCache';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 /** How a gate reports; the caller owns the failure count. */
 export interface LifecycleGateReporter {
@@ -189,6 +190,7 @@ function buildScene(hire: MercenaryTemplateId | null, layout: SceneLayout): Scen
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: extras,
   };
   const combat: CombatContext = {

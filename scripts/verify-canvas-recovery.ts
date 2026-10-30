@@ -110,6 +110,7 @@ import { GROUND_SHEET_KEYS, requestGroundSheets } from '../src/map/ground/runtim
 import { GameMap } from '../src/map/GameMap.js';
 import { CHUNK_TILES } from '../src/map/tiles/chunkTiles.js';
 import { CLIFF, FloorTypeValue, type TileContent } from '../src/map/tileTypes.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 
@@ -297,7 +298,13 @@ function decorationPassAfterFailingBlit(gameMap: GameMap): {
   });
   let threw = false;
   try {
-    gameMap.renderDecorationsOverlay(asGameContext(nodeCtx), 0, 0, MAP_PX, MAP_PX);
+    gameMap.renderDecorationsOverlay(asGameContext(nodeCtx), {
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(MAP_PX),
+      viewHeight: worldPx(MAP_PX),
+      zoom: UNZOOMED,
+    });
   } catch {
     threw = true;
   }
@@ -323,7 +330,13 @@ function floorMap(): GameMap {
 function render(gameMap: GameMap): Uint8ClampedArray {
   const canvas = createCanvas(MAP_PX, MAP_PX);
   const nodeCtx = canvas.getContext('2d');
-  gameMap.renderCanvas(asGameContext(nodeCtx), 0, 0, MAP_PX, MAP_PX);
+  gameMap.renderCanvas(asGameContext(nodeCtx), {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(MAP_PX),
+    viewHeight: worldPx(MAP_PX),
+    zoom: UNZOOMED,
+  });
   return nodeCtx.getImageData(0, 0, MAP_PX, MAP_PX).data;
 }
 
@@ -442,13 +455,13 @@ check(
 
 const decorated = decoratedMap();
 // Warmed first, so every cliff draws as one blit of its cached entry.
-decorated.renderDecorationsOverlay(
-  asGameContext(createCanvas(MAP_PX, MAP_PX).getContext('2d')),
-  0,
-  0,
-  MAP_PX,
-  MAP_PX,
-);
+decorated.renderDecorationsOverlay(asGameContext(createCanvas(MAP_PX, MAP_PX).getContext('2d')), {
+  x: 0,
+  y: 0,
+  viewWidth: worldPx(MAP_PX),
+  viewHeight: worldPx(MAP_PX),
+  zoom: UNZOOMED,
+});
 const failingPass = decorationPassAfterFailingBlit(decorated);
 check(!failingPass.threw, 'a decoration whose blit throws does not abort the decoration pass');
 check(

@@ -29,7 +29,7 @@ import { BuildingInteriorScene } from '../src/scenes/BuildingInteriorScene.js';
 import type { InteriorFloorContext } from '../src/scenes/interiorFloorContext.js';
 import { createShopStock } from '../src/economy/shopStock.js';
 import { detachedPrisonVisit } from '../src/systems/stealthKeySnatch/prisonVisit.js';
-import type { GoblinPrisonSystem } from '../src/systems/stealthKeySnatch/GoblinPrisonSystem.js';
+import { GoblinPrisonSystem } from '../src/systems/stealthKeySnatch/GoblinPrisonSystem.js';
 import type { SystemContext } from '../src/systems/GameSystem.js';
 import { settleArrival } from './settleArrival.js';
 import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
@@ -138,8 +138,10 @@ export async function enterPrison(
     floor,
   );
   if (!(await settleArrival(scene, ctx))) throw new Error('the prison never finished arriving');
-  const prison = scene['prison'];
-  if (prison === null) throw new Error('the prison scene built no GoblinPrisonSystem');
+  const prison = scene['encounter'];
+  if (!(prison instanceof GoblinPrisonSystem)) {
+    throw new Error('the prison scene built no GoblinPrisonSystem');
+  }
   const sceneHuman = scene.pm.human;
   const sceneCat = scene.pm.cat;
   return {

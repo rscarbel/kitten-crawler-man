@@ -595,6 +595,13 @@ export interface HumanRowMeta {
   readonly motionSet?: ArmedMotionSet;
   /** On a draw or a stow, which: the row a hotbar press plays as the weapon comes out or goes away. */
   readonly holster?: HolsterMotion;
+  /**
+   * On a fall that catches itself on its palms, the frame from which his main
+   * hand lies open on the floor and holds nothing: a carried item is let go
+   * there rather than closed in a fist pressed to the floor. Absent where he
+   * never lets go.
+   */
+  readonly letsGoOfCarriedFrom?: number;
 }
 
 /** The frame a row's first blow lands on, or undefined for a row that strikes nothing. */
@@ -697,8 +704,48 @@ export interface HumanRowDef extends HumanRowMeta {
   readonly pose: (frame: number) => BipedPose;
 }
 
-export interface RowSpec extends HumanRowDef {
-  readonly name: HumanRowName;
+export interface RowSpec<R extends string = HumanRowName> extends HumanRowDef {
+  readonly name: R;
+}
+
+/** Every row a figure on the rig is painted in, keyed by name. */
+export type HumanRowTable<R extends string> = Readonly<Record<R, HumanRowDef>>;
+
+/**
+ * The rows one figure on the rig is painted in: the crawler's own, or the
+ * crawler's extended by a figure that plays rows he never does. A figure's
+ * painting, sockets and held layers are all read off its book, so a row
+ * outside it cannot be asked for.
+ *
+ * `spec` takes a name and returns a row of the same names, which holds a
+ * book to exactly its own names: a book of fewer rows does not pass for one
+ * of more.
+ */
+export interface HumanRowBook<R extends string> {
+  /** Told apart in the id of every figure painted from the book, unless it is the crawler's. */
+  readonly id: string;
+  readonly table: HumanRowTable<R>;
+  /** In sheet order. */
+  readonly rows: readonly RowSpec<R>[];
+  readonly spec: (name: R) => RowSpec<R>;
+  /** The row a state name paints, or undefined for a name the book does not hold. */
+  readonly rowOf: (state: string) => RowSpec<R> | undefined;
+}
+
+function humanRowBook<R extends string>(
+  id: string,
+  names: readonly R[],
+  table: HumanRowTable<R>,
+): HumanRowBook<R> {
+  const rows = names.map((name): RowSpec<R> => ({ name, ...table[name] }));
+  const byName = new Map<string, RowSpec<R>>(rows.map((row) => [row.name, row]));
+  return {
+    id,
+    table,
+    rows,
+    spec: (name) => byName.get(name) ?? { name, ...table[name] },
+    rowOf: (state) => byName.get(state),
+  };
 }
 
 /** Loops sample the cycle evenly; one-shots sample the frame's own position. */
@@ -2117,8 +2164,8 @@ export const HUMAN_ROW_TABLE = {
  * ahead of time; that row is played once the view's fallback entry is gone,
  * and from then on every table must name one.
  */
-export type ViewRows = Readonly<
-  Record<HumanRowView, HumanRowName> & Partial<Record<FacingView, HumanRowName>>
+export type ViewRows<R extends string = HumanRowName> = Readonly<
+  Record<HumanRowView, R> & Partial<Record<FacingView, R>>
 >;
 
 export const BUILD_KNEEL_ROWS: ViewRows = {
@@ -2142,11 +2189,29 @@ export const TURN_VALVE_ROWS: ViewRows = {
 export const CHOP_ROWS: ViewRows = { front: 'chop', side: 'chop_side', back: 'chop_away' };
 export const MINE_ROWS: ViewRows = { front: 'mine', side: 'mine_side', back: 'mine_away' };
 
+/** The crawler's own rows: every row he plays, and nothing he does not. */
+export const HUMAN_ROW_BOOK: HumanRowBook<HumanRowName> = humanRowBook(
+  'human',
+  HUMAN_ROW_NAMES,
+  HUMAN_ROW_TABLE,
+);
+
+/**
+ * The crawler's rows followed by `extra`, the rows a figure on the rig plays
+ * that he never does. Every extra row's name is new: one the crawler already
+ * has is a type error.
+ */
+export function extendedHumanRowBook<E extends string>(
+  id: string,
+  names: readonly E[],
+  extra: HumanRowTable<E> & Partial<Record<HumanRowName, never>>,
+): HumanRowBook<HumanRowName | E> {
+  const table: HumanRowTable<HumanRowName | E> = { ...HUMAN_ROW_TABLE, ...extra };
+  return humanRowBook<HumanRowName | E>(id, [...HUMAN_ROW_NAMES, ...names], table);
+}
+
 /** The row table as a list, in sheet order. */
-export const HUMAN_ROWS: readonly RowSpec[] = HUMAN_ROW_NAMES.map((name) => ({
-  name,
-  ...HUMAN_ROW_TABLE[name],
-}));
+export const HUMAN_ROWS: readonly RowSpec[] = HUMAN_ROW_BOOK.rows;
 
 // ── Painting ─────────────────────────────────────────────────────────────────
 
@@ -2162,13 +2227,9 @@ function paintView(
   else drawBipedSide(ctx, pose, sized);
 }
 
-const HUMAN_ROWS_BY_NAME: ReadonlyMap<string, RowSpec> = new Map(
-  HUMAN_ROWS.map((row) => [row.name, row]),
-);
-
-/** The row a state name paints, or undefined for a name the figure does not declare. */
+/** The crawler's row a state name paints, or undefined for a name he does not play. */
 export function humanRowOf(state: string): RowSpec | undefined {
-  return HUMAN_ROWS_BY_NAME.get(state);
+  return HUMAN_ROW_BOOK.rowOf(state);
 }
 
 /** The first frame a named moment of a row is drawn on, if the row names it. */
@@ -2182,17 +2243,23 @@ export function eventFrame(row: HumanRowName, event: HumanRowEvent): number | un
  * onto a row's pose. It sees the row and frame the pose was authored for, so
  * gear that changes with the action is decided per cell.
  */
-export type HumanPoseDresser = (pose: BipedPose, row: RowSpec, frame: number) => BipedPose;
+export type HumanPoseDresser = (pose: BipedPose, row: RowSpec<string>, frame: number) => BipedPose;
 
-/** How one of the human figures turns a row's frame into a picture: who it paints, what it lays on the pose, and how it composes it. */
-export interface HumanFigurePainting {
+/** How one of the human figures turns a row's frame into a picture: who it paints, the rows it paints, what it lays on the pose, and how it composes it. */
+export interface HumanFigurePainting<R extends string = HumanRowName> {
   readonly look: HumanLook;
+  readonly rows: HumanRowBook<R>;
   readonly dress: HumanPoseDresser;
   /** The handle an equipment-chosen item in his grip is assumed to have. */
   readonly itemHandle: HandleRadius;
 }
 
 const undressedPaintings = new WeakMap<HumanLook, HumanFigurePainting>();
+
+/** What a painting lays on a pose of `look` in no garments, holding nothing. */
+export function undressedDresser(look: HumanLook): HumanPoseDresser {
+  return (pose) => withLookBuild(pose, look);
+}
 
 /**
  * How `look` is painted in no garments and holding nothing of its own
@@ -2204,7 +2271,8 @@ export function undressedHumanPainting(look: HumanLook): HumanFigurePainting {
   if (known !== undefined) return known;
   const painting: HumanFigurePainting = {
     look,
-    dress: (pose) => withLookBuild(pose, look),
+    rows: HUMAN_ROW_BOOK,
+    dress: undressedDresser(look),
     itemHandle: 'standard',
   };
   undressedPaintings.set(look, painting);
@@ -2212,7 +2280,11 @@ export function undressedHumanPainting(look: HumanLook): HumanFigurePainting {
 }
 
 /** A row's pose as `painting` paints it on `frame`. */
-export function paintedPose(painting: HumanFigurePainting, row: RowSpec, frame: number): BipedPose {
+export function paintedPose<R extends string>(
+  painting: HumanFigurePainting<R>,
+  row: RowSpec<R>,
+  frame: number,
+): BipedPose {
   return painting.dress(row.pose(frame), row, frame);
 }
 
@@ -2242,13 +2314,13 @@ function inCell(
  * ground line, by `HUMAN_SCALE` and the look's own build, so his feet stay on
  * it whatever either is set to.
  */
-export function paintDressedHumanFrame(
+export function paintDressedHumanFrame<R extends string>(
   ctx: CanvasRenderingContext2D,
   state: string,
   frame: number,
-  painting: HumanFigurePainting,
+  painting: HumanFigurePainting<R>,
 ): void {
-  const row = humanRowOf(state);
+  const row = painting.rows.rowOf(state);
   if (row === undefined) return;
   const pose = paintedPose(painting, row, frame);
   const { look, itemHandle } = painting;
@@ -2260,15 +2332,15 @@ export function paintDressedHumanFrame(
  * his grip: the whole figure into `back`, what lies in front of the item
  * into `front`.
  */
-export function paintDressedHumanLayers(
+export function paintDressedHumanLayers<R extends string>(
   back: CanvasRenderingContext2D,
   front: CanvasRenderingContext2D,
   state: string,
   frame: number,
-  painting: HumanFigurePainting,
+  painting: HumanFigurePainting<R>,
   compose: Pick<BipedComposeOptions, 'deferProps'> = {},
 ): void {
-  const row = humanRowOf(state);
+  const row = painting.rows.rowOf(state);
   if (row === undefined) return;
   const pose = paintedPose(painting, row, frame);
   const { look, itemHandle } = painting;
@@ -2284,13 +2356,13 @@ export function paintDressedHumanLayers(
  * compositor and from the same sockets the bake uses: what a parity check
  * lays between the layers of a cell painted with its props deferred.
  */
-export function paintRowProps(
+export function paintRowProps<R extends string>(
   ctx: CanvasRenderingContext2D,
   state: string,
   frame: number,
-  painting: HumanFigurePainting,
+  painting: HumanFigurePainting<R>,
 ): void {
-  const row = humanRowOf(state);
+  const row = painting.rows.rowOf(state);
   if (row === undefined) return;
   const draws = bipedPropDraws(paintedPose(painting, row, frame), VIEWS[row.view], {
     look: painting.look,
@@ -2305,9 +2377,9 @@ export function paintRowProps(
  * The hand sockets of one frame as `painting` paints it, solved on the pose
  * and in the view the painter draws.
  */
-export function paintedHandSockets(
-  painting: HumanFigurePainting,
-  row: RowSpec,
+export function paintedHandSockets<R extends string>(
+  painting: HumanFigurePainting<R>,
+  row: RowSpec<R>,
   frame: number,
 ): BipedHandSockets {
   return bipedHandSockets(paintedPose(painting, row, frame), VIEWS[row.view], {
@@ -2321,14 +2393,16 @@ export function paintedHandSockets(
  * his hands closes on an equipment-chosen item. Answered once per frame and
  * kept, since the cache asks on every bake and every direct paint.
  */
-export function humanHeldLayers(painting: HumanFigurePainting): FigureHeldLayers {
+export function humanHeldLayers<R extends string>(
+  painting: HumanFigurePainting<R>,
+): FigureHeldLayers {
   const layeredByCell = new Map<string, boolean>();
   return {
     layered: (state, frame) => {
       const key = `${state}:${frame}`;
       const known = layeredByCell.get(key);
       if (known !== undefined) return known;
-      const row = humanRowOf(state);
+      const row = painting.rows.rowOf(state);
       const sockets = row === undefined ? null : paintedHandSockets(painting, row, frame);
       const holds =
         sockets !== null && (sockets.left.occupant === 'item' || sockets.right.occupant === 'item');
@@ -2340,9 +2414,10 @@ export function humanHeldLayers(painting: HumanFigurePainting): FigureHeldLayers
   };
 }
 
-function humanStateFrames(): Record<string, number> {
+/** The frame count of every state a figure painted from `rows` holds. */
+export function humanStateFrames<R extends string>(rows: HumanRowBook<R>): Record<string, number> {
   const frames: Record<string, number> = {};
-  for (const row of HUMAN_ROWS) frames[row.name] = row.frameCount;
+  for (const row of rows.rows) frames[row.name] = row.frameCount;
   return frames;
 }
 
@@ -2396,7 +2471,7 @@ export function undressedHumanFigure(look: HumanLook): FigureDef {
     tileX: TILE_X,
     tileY: TILE_Y,
     tileScale: TILE_SCALE,
-    states: figureStates(humanStateFrames()),
+    states: figureStates(humanStateFrames(HUMAN_ROW_BOOK)),
     paintFrame: (ctx, state, frame) => paintDressedHumanFrame(ctx, state, frame, painting),
     budgetMegabytes: HUMAN_FIGURE_BUDGET_MEGABYTES,
     skipSupersample: true,

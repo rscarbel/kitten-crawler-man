@@ -38,7 +38,7 @@
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { hasRoomToMove } from '../src/map/findWalkableTile.js';
-import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
+import { mapSourceForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level3 } from '../src/levels/level3.js';
 import type { LevelDef } from '../src/levels/types.js';
@@ -122,8 +122,7 @@ function buildMap(levelDef: LevelDef, worldSeed: number): GameMap {
   return new GameMap({
     mapSize: levelDef.mapSize,
     tileHeight: TILE_SIZE,
-    mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
-    dungeon: dungeonOptionsForLevel(levelDef),
+    ...mapSourceForLevel(levelDef),
     worldSeed,
   });
 }

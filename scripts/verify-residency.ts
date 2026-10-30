@@ -99,7 +99,8 @@ const directRun = await runRouteInChild(SCRIPT, 'direct', []);
 function finalSnapshot(route: string, result: RouteResult | null): ResidencySnapshot | null {
   if (result === null) return null;
   for (const note of result.notes) failures.push(`${route}: ${note}`);
-  return result.snapshots.at(-1) ?? null;
+  const { snapshots } = result;
+  return snapshots.length === 0 ? null : snapshots[snapshots.length - 1];
 }
 
 function totalBytes(tallies: Readonly<Record<string, OwnerTally>>): number {

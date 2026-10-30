@@ -25,7 +25,10 @@ import type { ConversationRequest } from '../src/dialog/request';
 import { WALK_AWAY_MARGIN_TILES } from '../src/dialog/walkAway';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera';
 import { GameMap } from '../src/map/GameMap';
+import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
+import { level2 } from '../src/levels/level2';
 import { stampSafeRoomClinics } from '../src/map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -332,12 +335,18 @@ interface SafeRoomTally {
   overlappingHandOffs: number;
 }
 
-/** The scope every walk-away room is built in; any floor would do. */
-const SAFE_ROOM_SCOPE: SafeRoomScope = { kind: 'floor', level: 'level1' };
+/** The floor every walk-away room is built on; any floor would do. */
+const SAFE_ROOM_LEVEL = level2;
+const SAFE_ROOM_SCOPE: SafeRoomScope = { kind: 'floor', level: SAFE_ROOM_LEVEL.id };
 function roomsOf(
   seed: number,
 ): Array<{ room: Room; doctor: DoctorSystem; dave: DaveGuideSystem; conversation: Conversation }> {
-  const map = new GameMap({ tileHeight: TILE_SIZE, worldSeed: seed });
+  const map = new GameMap({
+    mapSize: SAFE_ROOM_LEVEL.mapSize,
+    tileHeight: TILE_SIZE,
+    dungeon: dungeonOptionsForLevel(SAFE_ROOM_LEVEL),
+    worldSeed: seed,
+  });
   const layouts = stampSafeRoomClinics(map);
   // After the doctor's corner, as the dungeon stamps them: the furnishings are solid,
   // and a walk that passed through a stove would prove nothing.
@@ -358,7 +367,7 @@ function roomsOf(
         safeRooms,
         conversation,
         whereabouts: new DaveWhereabouts(),
-        camera: () => ({ x: 0, y: 0 }),
+        camera: () => cameraAt({ x: 0, y: 0 }, UNZOOMED),
         audio: null,
       },
       roomId,

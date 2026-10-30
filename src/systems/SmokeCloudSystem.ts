@@ -6,7 +6,7 @@ import {
   type CanvasSurface,
 } from '../core/rendering/canvasSurface';
 import { platform } from '../core/input/Platform';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { worldPalette } from '../ui/theme/worldInk';
@@ -196,9 +196,10 @@ export class SmokeCloudSystem {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+  render(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
     for (const cloud of this.clouds) {
       const cx = cloud.x - camX;
       const cy = cloud.y - camY;

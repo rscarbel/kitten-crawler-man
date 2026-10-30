@@ -21,6 +21,7 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { EventBus } from '../src/core/EventBus.js';
 import { setViewportSize } from '../src/core/rendering/Viewport.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
 import { getLevelDef } from '../src/levels/index.js';
@@ -130,6 +131,20 @@ const cat = new CatPlayer(room.centre.x - 2, room.centre.y + 2, TILE_SIZE);
 human.isActive = true;
 cat.isActive = false;
 const roster = new MobRoster(gameMap, new SpellSystem());
+const viewTilesW = room.bounds.w + VIEW_MARGIN_TILES * 2;
+const viewTilesH = room.bounds.h + VIEW_MARGIN_TILES * 2;
+const camX = (room.bounds.x - VIEW_MARGIN_TILES) * TILE_SIZE;
+const camY = (room.bounds.y - VIEW_MARGIN_TILES) * TILE_SIZE;
+const viewW = viewTilesW * TILE_SIZE;
+const viewH = viewTilesH * TILE_SIZE;
+setViewportSize(viewW, viewH);
+const camera = {
+  x: camX,
+  y: camY,
+  viewWidth: worldPx(viewW),
+  viewHeight: worldPx(viewH),
+  zoom: UNZOOMED,
+};
 const context: SystemContext = {
   human,
   cat,
@@ -138,16 +153,9 @@ const context: SystemContext = {
   activeIsMoving: false,
   roster,
   gameMap,
+  camera,
 };
 quest.update(context);
-
-const viewTilesW = room.bounds.w + VIEW_MARGIN_TILES * 2;
-const viewTilesH = room.bounds.h + VIEW_MARGIN_TILES * 2;
-const camX = (room.bounds.x - VIEW_MARGIN_TILES) * TILE_SIZE;
-const camY = (room.bounds.y - VIEW_MARGIN_TILES) * TILE_SIZE;
-const viewW = viewTilesW * TILE_SIZE;
-const viewH = viewTilesH * TILE_SIZE;
-setViewportSize(viewW, viewH);
 
 function frame(name: string): void {
   const canvas: Canvas = createCanvas(viewW * scale, viewH * scale);
@@ -156,10 +164,16 @@ function frame(name: string): void {
   const gameCtx = asGameContext(ctx);
   renderCanvas(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
   renderDecorationsOverlay(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
-  quest.renderObjects(gameCtx, camX, camY, human, human);
+  quest.renderObjects(gameCtx, camera, human, human);
   human.render(gameCtx, camX, camY, TILE_SIZE);
-  lighting.render(gameCtx, camX, camY, viewW, viewH);
-  quest.renderAbove(gameCtx, camX, camY, human);
+  lighting.render(gameCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
+  quest.renderAbove(gameCtx, camera, human);
   const path = writePreviewPng(`${outBase}-${name}.png`, canvas.toBuffer('image/png'));
   console.log(path);
 }

@@ -39,6 +39,7 @@ installCanvasGlobals();
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { renderCanvas } = await import('../src/map/TileRenderer.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
@@ -439,6 +440,8 @@ function drawSpot(
   else drawContractOverlay(ctx, spec, x, y);
 }
 
+type HighlightView = Parameters<typeof drawAreaHighlightGround>[1];
+
 /** A moment in the highlight's pulse where its sparks and motes are both well under way. */
 const HIGHLIGHT_SNAPSHOT_MS = 900;
 const HIGHLIGHT_STYLE = {
@@ -457,16 +460,26 @@ function screenRect(spot: PlacedSpot, camX: number, camY: number) {
 }
 
 /** The ground half of every spot's highlight, as `ContractSiteWork.renderGround` draws it. */
-function drawSpotHighlights(ctx: CanvasRenderingContext2D, spots: readonly PlacedSpot[]): void {
-  for (const spot of spots) drawAreaHighlightGround(ctx, screenRect(spot, 0, 0), HIGHLIGHT_STYLE);
+function drawSpotHighlights(
+  ctx: CanvasRenderingContext2D,
+  view: HighlightView,
+  spots: readonly PlacedSpot[],
+): void {
+  for (const spot of spots) {
+    drawAreaHighlightGround(ctx, view, screenRect(spot, 0, 0), HIGHLIGHT_STYLE);
+  }
 }
 
 /** The frame half over every standing spot, as `ContractSiteWork.renderAbove` draws it. */
-function drawSpotFrames(ctx: CanvasRenderingContext2D, spots: readonly PlacedSpot[]): void {
+function drawSpotFrames(
+  ctx: CanvasRenderingContext2D,
+  view: HighlightView,
+  spots: readonly PlacedSpot[],
+): void {
   const scratch = { x: 0, y: 0, w: 0, h: 0 };
   for (const spot of spots) {
     const rect = contractSpotFrameRect(spot, 0, 0, scratch);
-    if (rect !== null) drawAreaHighlightFrame(ctx, rect, HIGHLIGHT_STYLE);
+    if (rect !== null) drawAreaHighlightFrame(ctx, view, rect, HIGHLIGHT_STYLE);
   }
 }
 
@@ -515,17 +528,29 @@ function taloncrestRoom(): void {
   }
   const viewW = (map.structure[0]?.length ?? 0) * TILE_SIZE;
   const viewH = map.structure.length * TILE_SIZE;
-  // The highlights cull against the viewport.
   setViewportSize(viewW, viewH);
+  const roomView = { viewWidth: worldPx(viewW), viewHeight: worldPx(viewH) };
   const paintRoom =
     (withSpots: boolean): ScenePainter =>
     (ctx) => {
-      map.renderCanvas(ctx, 0, 0, viewW, viewH);
+      map.renderCanvas(ctx, {
+        x: 0,
+        y: 0,
+        viewWidth: worldPx(viewW),
+        viewHeight: worldPx(viewH),
+        zoom: UNZOOMED,
+      });
       drawTownInteriorGroundProps(ctx, map, 0, 0, TILE_SIZE);
-      map.renderDecorationsOverlay(ctx, 0, 0, viewW, viewH);
+      map.renderDecorationsOverlay(ctx, {
+        x: 0,
+        y: 0,
+        viewWidth: worldPx(viewW),
+        viewHeight: worldPx(viewH),
+        zoom: UNZOOMED,
+      });
       if (withSpots) {
         for (const spot of spots.filter(isGroundSpot)) drawSpot(ctx, spot, 'taloncrest', 0, 0);
-        drawSpotHighlights(ctx, spots);
+        drawSpotHighlights(ctx, roomView, spots);
       }
       const figures = townInteriorPropFigures(map, withSpots ? hiddenPropIds : new Set()).sort(
         (a, b) => a.y - b.y,
@@ -535,7 +560,7 @@ function taloncrestRoom(): void {
         const spot = propSpotByPlacedId.get(figure.placed.id);
         if (withSpots && spot !== undefined) drawSpot(ctx, spot, 'taloncrest', 0, 0);
       }
-      if (withSpots) drawSpotFrames(ctx, spots);
+      if (withSpots) drawSpotFrames(ctx, roomView, spots);
     };
   writeAllScales(`room-taloncrest-${site.buildingId}`, viewW, viewH, paintRoom(true));
   writeAllScales(`room-taloncrest-${site.buildingId}-before`, viewW, viewH, paintRoom(false));
@@ -598,20 +623,28 @@ function hollowRoom(): void {
     pleaPhase: () => 'unmet',
   });
 
+  const camera = {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  };
   const paintRoom =
     (withSpots: boolean): ScenePainter =>
     (ctx) => {
       renderCanvas(ctx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
-      if (withSpots) contracts.renderGround(ctx, camX, camY, builder);
+      if (withSpots) contracts.renderGround(ctx, camera, builder);
       // Decorations first and a stable sort, as `RenderPipeline` queues them,
       // so an overlay whose foot ties with a wall's draws in front of it.
       const draws: Array<{ sortY: number; draw: () => void }> = [];
-      for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
-        camX,
-        camY,
-        viewW,
-        viewH,
-      )) {
+      for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles({
+        x: camX,
+        y: camY,
+        viewWidth: worldPx(viewW),
+        viewHeight: worldPx(viewH),
+        zoom: UNZOOMED,
+      })) {
         draws.push({
           sortY: ty * TILE_SIZE + sortYAnchorPx,
           draw: () => gameMap.drawDecorationAt(ctx, tx, ty, camX, camY),
@@ -627,7 +660,7 @@ function hollowRoom(): void {
       }
       draws.sort((a, b) => a.sortY - b.sortY);
       for (const item of draws) item.draw();
-      if (withSpots) contracts.renderAbove(ctx, camX, camY);
+      if (withSpots) contracts.renderAbove(ctx, camera);
     };
 
   writeAllScales(`room-hollow-${site.buildingId}-before`, viewW, viewH, paintRoom(false));

@@ -530,13 +530,13 @@ export abstract class Fairy extends Mob {
     }
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const hpBefore = this.hp;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (this.hp < hpBefore && this.isAlive) this.hurtTicksLeft = FAIRY_HURT_ROW_TICKS;
   }
 

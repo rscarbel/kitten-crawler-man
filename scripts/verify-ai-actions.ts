@@ -51,6 +51,7 @@ import {
   makeDoubleDamage,
   makePoison,
   type StatusEffect,
+  FULL_SHARE,
 } from '../src/core/combat/StatusEffect';
 import { DOUBLE_DAMAGE_SCALE } from '../src/core/combat/statusTuning';
 import { pendingStatusDamage } from '../src/Player';
@@ -122,6 +123,7 @@ import { SESSION_FLAG_NAMES } from '../src/ai/context/sessionContext';
 import { HUMAN_CRAWLER_AI_NAME, crawlerDisplayName } from '../src/characters/characters';
 import { DEV_PLAYER_IDENTITY, useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
 import { mulberry32 } from '../src/sprites/person/rng';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
 
@@ -538,6 +540,7 @@ function systemContextOf(world: FakeWorld): SystemContext {
     activeIsMoving: false,
     roster: new MobRoster(world.map, new SpellSystem()),
     gameMap: world.map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
 }
 
@@ -618,7 +621,7 @@ function randomiseScene(world: FakeWorld): void {
     combat: Math.random() < COMBAT_SCENE_CHANCE,
   };
   for (const crawler of [world.human, world.cat]) {
-    if (Math.random() < 1 / 2) crawler.applyStatus(makeBurn());
+    if (Math.random() < 1 / 2) crawler.applyStatus(makeBurn(FULL_SHARE));
     if (Math.random() < 1 / 2) crawler.applyStatus(makePoison());
   }
   world.human.coins = randomInt(0, STARTING_COINS);
@@ -1603,7 +1606,7 @@ section('floor keys, status damage forecasts and indoor spawns');
   );
 
   const shape: { make: () => StatusEffect; interval: number }[] = [
-    { make: () => makeBurn(), interval: BURN_FORECAST_INTERVAL },
+    { make: () => makeBurn(FULL_SHARE), interval: BURN_FORECAST_INTERVAL },
     { make: () => makePoison(), interval: POISON_FORECAST_INTERVAL },
   ];
   for (const { make, interval } of shape) {
@@ -1628,8 +1631,8 @@ section('floor keys, status damage forecasts and indoor spawns');
     }
     check(true, `${effect.type} forecasts match its clock`);
   }
-  const burnAlone = pendingStatusDamage([makeBurn()]);
-  const burnCursed = pendingStatusDamage([makeBurn(), makeDoubleDamage()]);
+  const burnAlone = pendingStatusDamage([makeBurn(FULL_SHARE)]);
+  const burnCursed = pendingStatusDamage([makeBurn(FULL_SHARE), makeDoubleDamage()]);
   check(
     burnCursed === burnAlone * DOUBLE_DAMAGE_SCALE,
     `double damage doubles a burn's forecast (${burnAlone} alone, ${burnCursed} cursed)`,

@@ -50,6 +50,7 @@ import { recommendedPartyLevelFor } from '../src/levels/spawner';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
 import type { MidgeEscortCarry } from '../src/core/quests/midgeEscortCarry';
 import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/blueprintsSoundCues';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 /** Briar Hollow stands on floor 3's overworld, so its map is that floor's size. */
 export const SIEGE_MAP_SIZE = level3.mapSize;
@@ -221,6 +222,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
       activeIsMoving: false,
       roster,
       gameMap: map,
+      camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
       extraTargets: targets.length > 0 ? targets : undefined,
     };
   };

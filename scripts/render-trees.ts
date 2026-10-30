@@ -22,6 +22,7 @@ import { createCanvas, type Canvas } from 'canvas';
 import manifest from '../src/images/environment/trees/manifest.json';
 import { treeSheetPlans } from '../src/sprites/sheets/treeSheets.js';
 import { bakePropSheet } from './propSheetBake.js';
+import { asGameContext } from './nodeGameContext.js';
 import { mulberry32 } from '../src/sprites/person/rng.js';
 import { floorArtSubSeed, TREE_SALT } from '../src/map/ground/floorArtSeed.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
@@ -325,8 +326,7 @@ async function drawForest(scale: number): Promise<Buffer> {
   const canvas = createCanvas(viewW * scale, viewH * scale);
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const gameCtx = ctx as unknown as CanvasRenderingContext2D;
+  const gameCtx = asGameContext(ctx);
 
   renderCanvas(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
   renderDecorationsOverlay(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);

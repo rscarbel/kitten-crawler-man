@@ -18,7 +18,7 @@ import {
   type PipeBoardLayout,
   type TurnDirection,
 } from '../systems/cloggedBathroom/pipeBoard';
-import type { BathroomCue } from '../systems/cloggedBathroom/bathroomSoundCues';
+import type { BathroomCue } from '../audio/bathroomSoundCues';
 import type { PipeBoardSource } from '../ui/screens/dialogs/pipeBoardSurface';
 
 const SIDE_COUNT = 4;

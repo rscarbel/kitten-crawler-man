@@ -1,5 +1,6 @@
 import { prewarmSkeletonEscortSprites, prewarmSkeletonLordSprite } from '../sprites/skeletonSprite';
 import type { Mob } from '../creatures/Mob';
+import type { BountyTypeId } from '../core/mobs/bossTypes';
 import type { GameMap } from '../map/GameMap';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { prewarmMantidApproach } from '../sprites/mantidSprite';
@@ -12,9 +13,6 @@ interface BountyEncounter {
   boss: Mob;
   minions: Mob[];
 }
-
-/** Every bounty type Shady can issue, one per entry in {@link BOUNTY_DEFS}. */
-export type BountyTypeId = 'evil_clown' | 'mantid' | 'skeleton_lord' | 'dark_knight' | 'rock_golem';
 
 export interface BountyDef {
   /** Stable registry key, also the key into BountyProgress's per-type name pools. */

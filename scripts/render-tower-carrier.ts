@@ -16,6 +16,7 @@
 import { createCanvas, type Canvas, type CanvasRenderingContext2D as NodeCtx } from 'canvas';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { bakeFigureCell, figureStateNames, frameCountOf } from './figureSheet.js';
 
@@ -132,10 +133,11 @@ function pillarCell(variant: number, progress: number | null): Canvas {
   paintFloor(ctx, 0, 0, size, size, TILE_SIZE);
   const col = 1;
   const row = 1;
-  drawTownInteriorProp(ctx, 'binding_pillar', variant, col, row, 0, 0, TILE_SIZE);
+  const gameCtx = asGameContext(ctx);
+  drawTownInteriorProp(gameCtx, 'binding_pillar', variant, col, row, 0, 0, TILE_SIZE);
   if (progress !== null) {
     drawBindingPillarShatter(
-      ctx,
+      gameCtx,
       (col + 0.5) * TILE_SIZE,
       (row + 1) * TILE_SIZE,
       TILE_SIZE,
@@ -209,8 +211,9 @@ function renderFlight(kind: TowerCarrierKind): void {
     const roomCtx = room.getContext('2d');
     paintFloor(roomCtx, 0, 0, roomW, roomH, TILE_SIZE);
     const broken = stage === 'leaving';
+    const roomGameCtx = asGameContext(roomCtx);
     drawTownInteriorProp(
-      roomCtx,
+      roomGameCtx,
       'binding_pillar',
       broken ? PILLAR_VARIANT.broken : PILLAR_VARIANT.lit,
       FLIGHT_PILLAR.col,
@@ -220,7 +223,7 @@ function renderFlight(kind: TowerCarrierKind): void {
       TILE_SIZE,
     );
     const pose = carrierFlightPose(stage, progress, FLIGHT_WINDOW, FLIGHT_PILLAR);
-    view.render(roomCtx, 0, 0, pose, 'pillar');
+    view.render(roomGameCtx, 0, 0, pose, 'pillar');
     const x = PADDING + index * (roomW * FLIGHT_ZOOM + PADDING);
     label(ctx, `${stage} ${progress}`, x, PADDING);
     ctx.drawImage(room, x, PADDING + LABEL_HEIGHT, roomW * FLIGHT_ZOOM, roomH * FLIGHT_ZOOM);

@@ -178,7 +178,7 @@ export class RegionMap {
     this.roomBounds = parts.rooms.map((room) => ({ ...room.bounds }));
   }
 
-  /** A map with no regions at all, for overworld, interior and free-roam maps. */
+  /** A map with no regions at all, for overworld and interior maps. */
   static empty(): RegionMap {
     return new RegionMap({
       width: 0,

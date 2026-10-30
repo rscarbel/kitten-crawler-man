@@ -1,6 +1,6 @@
 import type { AudioManager } from '../audio/AudioManager';
 import { TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
@@ -107,8 +107,8 @@ interface DaveGuideDeps {
   readonly safeRooms: SafeRoomSystem;
   readonly conversation: Conversation;
   readonly whereabouts: DaveWhereabouts;
-  /** The world-pixel top-left of the view, for whether a departure is worth showing. */
-  readonly camera: () => { readonly x: number; readonly y: number };
+  /** The scene's camera, for whether a departure is worth showing. */
+  readonly camera: () => Camera;
   readonly audio: Pick<AudioManager, 'playAt'> | null;
   /** Called the frame he has finished teleporting into a room the party entered. */
   readonly onArrived?: (room: SafeRoomInfo) => void;
@@ -365,9 +365,9 @@ export class DaveGuideSystem {
     const margin = TILE_SIZE;
     return (
       worldX + margin >= camera.x &&
-      worldX - margin <= camera.x + worldViewWidth() &&
+      worldX - margin <= camera.x + camera.viewWidth &&
       worldY + margin >= camera.y &&
-      worldY - margin <= camera.y + worldViewHeight()
+      worldY - margin <= camera.y + camera.viewHeight
     );
   }
 

@@ -22,7 +22,8 @@ import { worldText } from '../ui/world/worldText';
 import { inset, type Rect } from '../ui/core/geom';
 import { paintEntityTooltip, type EntityTooltipContent } from '../ui/hud/entityTooltip';
 import { chromeTarget, chromeTheme } from '../ui/screens/dialogs/canvasChrome';
-import { viewportWidth, viewportHeight, getWorldZoom } from '../core/rendering/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { screenToWorld, type Camera } from '../core/rendering/camera';
 
 const VIGNETTE_HEALTH_THRESHOLD = 0.25;
 const CRITICAL_HEALTH_THRESHOLD = 0.1;
@@ -272,16 +273,13 @@ function villagerTooltipContent(villager: Villager): EntityTooltipContent {
 
 export function renderEntityTooltip(
   ctx: CanvasRenderingContext2D,
-  camX: number,
-  camY: number,
+  camera: Camera,
   mouseX: number,
   mouseY: number,
   mobGrid: SpatialGrid<Mob>,
   villagers: readonly Villager[] = [],
 ): void {
-  const zoom = getWorldZoom();
-  const wx = mouseX / zoom + camX;
-  const wy = mouseY / zoom + camY;
+  const { x: wx, y: wy } = screenToWorld(camera, mouseX, mouseY);
 
   // An entity can only be hovered when the cursor is inside its tile square,
   // so every candidate has its origin within that square's diagonal of the

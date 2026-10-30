@@ -11,13 +11,25 @@ import { DEFAULT_DUNGEON_FLOOR_THEME } from '../map/dungeon/floorTheme';
  * numbers the game actually plays with.
  */
 export function dungeonOptionsForLevel(levelDef: LevelDef): DungeonLevelOptions {
+  const { progression } = levelDef;
+  if (progression === undefined) {
+    throw new Error(
+      `${levelDef.id} declares no progression, so it is not a generated dungeon floor`,
+    );
+  }
   return {
-    bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
     numStairwellsOverride: levelDef.numStairwells,
     stairwellCountMultiplier: levelDef.stairwellCountMultiplier,
     hasSpiderLab: levelDef.hasSpiderLab ?? false,
-    progression: levelDef.progression,
+    progression,
     questGrateCount: (levelDef.defendQuestIntensity ?? BASE_DEFEND_QUEST_INTENSITY).grateCount,
     floorTheme: levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME,
   };
+}
+
+/** Where a level's `GameMap` gets its tiles: the overworld generator, or the dungeon generator with this level's settings. */
+export function mapSourceForLevel(levelDef: LevelDef) {
+  return levelDef.isOverworld
+    ? { mapType: 'overworld' as const }
+    : { dungeon: dungeonOptionsForLevel(levelDef) };
 }

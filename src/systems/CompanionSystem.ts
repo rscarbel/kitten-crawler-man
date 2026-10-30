@@ -368,8 +368,9 @@ export class CompanionSystem implements GameSystem {
     // A storey change invalidates a hazard the same way it invalidates a
     // standing order: the fire and the impact circles belong to the room the
     // party just left, and a source left registered keeps answering — at the
-    // old floor's coordinates — for every frame spent on the new one. An
-    // encounter that is still live re-registers from its own update.
+    // old floor's coordinates — for every frame spent on the new one. A source
+    // still live is re-registered by its owner: the encounter's own update, or
+    // the scene that holds the encounter.
     this.hazardSources.length = 0;
   }
 

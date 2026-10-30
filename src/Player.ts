@@ -2,7 +2,12 @@ import type { StatusDamageOverTime, StatusEffect, StatusId } from './core/combat
 import type { ClimberFooting } from './creatures/climberFooting';
 import { drawThrownBombShadow } from './sprites/blackPowderBombSprite';
 import type { MobilityClass } from './map/mobility';
-import { outgoingHitDamageOn, proficiencyWardedAmount } from './core/combat/outgoingHit';
+import {
+  hitTrainingOn,
+  isCrawlerDealer,
+  proficiencyWardedAmount,
+  resolveCrawlerHit,
+} from './core/combat/outgoingHit';
 import {
   CRAWLER_HP_THRESHOLDS,
   HP_THRESHOLD_IDS,
@@ -20,7 +25,6 @@ import {
   ABSORB_BREAK_LINGER_TICKS,
   isAbsorbing,
   CHILLED_STATUS,
-  CHILL_WEAKENED_BY,
   FROZEN_STATUS,
   OVERHEAL_STATUS,
   WARD_STATUSES,
@@ -37,6 +41,10 @@ import {
   STATUS_DEFS,
   statusIncapacitates,
   reappliedStatus,
+  survivingShareOf,
+  weakenedSlowFactor,
+  FULL_SHARE,
+  type SurvivingShare,
 } from './core/combat/StatusEffect';
 import {
   BRASS_BELCH_TEXT,
@@ -889,17 +897,9 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     for (const effect of this.statusEffects) {
       const moveSlow = STATUS_DEFS[effect.type].moveSlow;
       if (moveSlow === null) continue;
-      factor *= this.resistedSlow(moveSlow.moveSpeedFactor, moveSlow.weakenedBy);
+      factor *= weakenedSlowFactor(moveSlow.moveSpeedFactor, effect.survivingShare);
     }
     return factor;
-  }
-
-  /**
-   * A slowing `factor` after the matching resistance takes its share of the
-   * slow off, the same share it would take off a blow of that channel.
-   */
-  private resistedSlow(factor: number, weakenedBy: ResistanceType): number {
-    return 1 - (1 - factor) * this.survivingShare(weakenedBy);
   }
 
   /**
@@ -916,9 +916,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * directly, because the timers are whole frames and this is a fraction.
    */
   get actionSpeedMultiplier(): number {
-    return this.hasStatus(CHILLED_STATUS)
-      ? this.resistedSlow(CHILLED_ACTION_SPEED_FACTOR, CHILL_WEAKENED_BY)
-      : 1;
+    const chill = this.findStatus(CHILLED_STATUS);
+    return chill === undefined
+      ? 1
+      : weakenedSlowFactor(CHILLED_ACTION_SPEED_FACTOR, chill.survivingShare);
   }
 
   /**
@@ -1420,8 +1421,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * turn, in {@link WARD_STATUSES} order. A ward drained dry stays on only for
    * {@link ABSORB_BREAK_LINGER_TICKS}, so its picture can be seen breaking.
    *
-   * Every door damage comes in by — `takeDamage` here, `Mob.takeDamageFrom` for
-   * a pet struck by another mob — runs through this, after its own immunity
+   * Every door damage comes in by — `takeDamage` here, `Mob.receiveDamage` for
+   * a mob struck by a crawler or another mob — runs through this, after its own immunity
    * checks and scaling and before HP is written, and bails out on a zero.
    */
   protected soakWithWards(amount: number): number {
@@ -2257,12 +2258,13 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   /**
    * Share of a blow of the given channel that survives this body's resistances:
    * one when nothing resists it. A magic resistance turns aside more the more
-   * magic its wearer has; every other channel loses a fixed share.
+   * magic its wearer has; every other channel loses a fixed share. A status of
+   * that channel is stamped with the same share when it is laid on.
    */
-  survivingShare(type: ResistanceType): number {
-    if (!this.resists(type)) return 1;
-    if (type === 'magic') return 1 - magicResistedShare(this.magic);
-    return RESISTED_DAMAGE_FRACTION;
+  survivingShare(type: ResistanceType): SurvivingShare {
+    if (!this.resists(type)) return FULL_SHARE;
+    if (type === 'magic') return survivingShareOf(1 - magicResistedShare(this.magic));
+    return survivingShareOf(RESISTED_DAMAGE_FRACTION);
   }
 
   /**
@@ -2274,15 +2276,6 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   resistedDamage(amount: number, type: ResistanceType): number {
     if (!this.resists(type)) return amount;
     return Math.max(0, Math.floor(amount * this.survivingShare(type)));
-  }
-
-  /**
-   * How long a magic status of `frames` holds this body after its magic
-   * resistance: shortened by the same share a magic blow loses. Rounded up, so
-   * a resisted status still lands.
-   */
-  magicResistedFrames(frames: number): number {
-    return Math.ceil(frames * this.survivingShare('magic'));
   }
 
   /**
@@ -2304,9 +2297,20 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     // A bite the crawler laid on is her hit, so her proficiencies weigh in on
     // it; one laid on by a foe, by nobody, or by something she only built is not.
     const crawlersOwnBite =
-      applier !== null && applier !== this && applier.isCrawler && effect.creditOnly !== true;
+      applier !== null &&
+      applier !== this &&
+      isCrawlerDealer(applier) &&
+      effect.creditOnly !== true;
     const damage = crawlersOwnBite
-      ? outgoingHitDamageOn(applier, this, bite, damageOverTime.tags)
+      ? resolveCrawlerHit({
+          dealer: applier,
+          delivery: 'unscaled',
+          blow: bite,
+          tags: damageOverTime.tags,
+          training: hitTrainingOn(this),
+          damageType: null,
+          struckBy: 'unguardable',
+        }).damage
       : bite;
     // A fully resisted tick must not reach `takeDamage`: a zero-damage hit still
     // flashes the crawler and suppresses regen, which reads as taking harm.

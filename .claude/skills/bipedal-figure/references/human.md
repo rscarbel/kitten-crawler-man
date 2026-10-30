@@ -47,16 +47,17 @@ value quoted beside them.
 | `travelling.ts`                                                                                                               | What every blow thrown on the move shares: entry phases, the kicking leg per entry, swing feet drawn back into reach.                                                                                                                                                                                                     |
 | `actionsBuild.ts` / `actionsThrow.ts` / `actionsSling.ts` / `actionsMisc.ts`                                                  | Rows systems ask for: build/place/repair; dynamite light/hold/throw; the sling shot; shell cast, drink, grab, chest open, talk.                                                                                                                                                                                           |
 | `reactions.ts`                                                                                                                | Rows done to him: hurt (front and behind), stagger, struggle, knockdown, knocked out, revive, death.                                                                                                                                                                                                                      |
-| `appearance.ts`                                                                                                               | Outfits: `humanFigureFor` / `humanFigureWearing` keyed by an `Outfit<'human'>`, `dressedPose`, `garmentRowOf` (what a row tells garments that move with it).                                                                                                                                                              |
-| `probe.ts`                                                                                                                    | `probeHumanJoints(row, frame)`: joints in cell pixels, read off the skeleton the painter solves, for gates and runtime anchors.                                                                                                                                                                                           |
-| `sockets.ts`                                                                                                                  | `humanSocketsAt(figure, row, frame)`: `mainHand` (his right), `offHand`, `back`, `hip` in cell pixels, memoised per figure, row and frame; `mirroredSocket`; `stampAnchorOf` (where a Seismic Stomp heel lands).                                                                                                          |
+| `appearance.ts`                                                                                                               | Outfits: `humanFigureFor` / `humanFigureWearing` keyed by an `Outfit<'human'>`; `humanFigureWithRows` for a figure painted from a row book of its own (see "Rows only another figure plays"); `dressedPose`, `garmentRowOf` (what a row tells garments that move with it).                                                |
+| `probe.ts`                                                                                                                    | `probeHumanJoints(row, frame)`: joints in cell pixels, read off the skeleton the painter solves, for gates and runtime anchors; `probeRowJoints(rowDef, frame)` for a row outside the crawler's table.                                                                                                                    |
+| `sockets.ts`                                                                                                                  | `humanSocketsAt(figure, row, frame)`: `mainHand` (his right), `offHand`, `back`, `hip` in cell pixels, memoised per figure, row and frame, the row read off the figure's own row book; `mirroredSocket`; `stampAnchorOf` (where a Seismic Stomp heel lands).                                                              |
 | `handTurn.ts` / `carry.ts`                                                                                                    | Authoring a gripping hand's turn in depth (`turnHand`, palm normals); how a carried item is held on rows not authored for it (`carryInMainHand`, `CarriedGrip`).                                                                                                                                                          |
 | `motionSets.ts` / `armedRows.ts` / `armedHold.ts` / `armedStrikes.ts` / `holster.ts` / `stowedGeometry.ts` / `weaponReach.ts` | The rows a weapon out in his hand plays, by grip and weight: the set an item picks, the armed row table, stance and stride holds, keyed blows and their travelling versions, draw and stow, where a stowed weapon rests, where a weapon blow lands. See "Motion sets" below.                                              |
 
 **Row table and figure** — `src/sprites/art/humanFigure.ts`: cell geometry
 (`FRAME_W`, `TILE_X`, `TILE_Y`, `GROUND_OFFSET_IN_TILE`, `ORIGIN_X/Y`),
-`HUMAN_ROW_NAMES`, `HUMAN_ROW_TABLE`, `HUMAN_ROWS`, `paintDressedHumanFrame`,
-and `undressedHumanFigure(look)`: a look in no garments, whose cell size and
+`HUMAN_ROW_NAMES`, `HUMAN_ROW_TABLE`, `HUMAN_ROWS`, `HUMAN_ROW_BOOK`,
+`extendedHumanRowBook`, `paintDressedHumanFrame`, and
+`undressedHumanFigure(look)`: a look in no garments, whose cell size and
 budget every dressed figure of that look shares.
 
 **Shared by every painted figure** — `src/sprites/art/bipedArt.ts` holds only the
@@ -126,7 +127,9 @@ onto a flat board. Offset light and shade along the form's own axis.
 
 Every row is one entry in `HUMAN_ROW_TABLE`, keyed by `HUMAN_ROW_NAMES`, so a
 row cannot exist on one side only. The runtime chooses rows from this metadata,
-never from names — a new row plugs in by being declared.
+never from names — a new row plugs in by being declared. The crawler's table
+holds only rows the crawler plays; a row only another figure on the rig plays
+goes in that figure's own table (below).
 
 | Field                              | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -141,6 +144,37 @@ never from names — a new row plugs in by being declared.
 | `ticksPerFrame` / `frameTicks`     | Holds for a clock-paced row; `frameTicks` is per frame and wins (the idle's blink is one short frame among long breaths).                                                                                                                                                                                                                                                                                                           |
 | `strike`                           | `tags` (`punch`, `kick`, `low`, `punt`, `stomp`, `high`, `long`, `finisher`, `downed`), `comboSlots` (0 is the opener), `standing` (on a travelling blow, the standing row it replaces), `reachLimb` (required: the part that lands it — a fist, foot, knee or the lead shoulder —), `drive` (`down` for a stamp, hammer-fist or knee drop; gate G5 checks the part is driven furthest, or stops coming down, on the impact frame). |
 | `levelUpOrder`                     | A fidget's place in the level-up gestures.                                                                                                                                                                                                                                                                                                                                                                                          |
+
+### Rows only another figure plays
+
+A figure on the rig that plays rows the crawler never does (Brother Anselm's
+staff rows) declares them beside its look as a table of its own, a names tuple
+and a `satisfies Record<Name, HumanRowDef>` table, and extends the crawler's
+book with them: `extendedHumanRowBook(id, names, table)`, whose names may not
+repeat one of the crawler's (a type error). It builds its figure with
+`humanFigureWithRows(book, look, outfit, held)`. The painting carries that
+`HumanRowBook`, and the painter, `humanHeldLayers` and `humanSocketsAt` read
+rows off it, so the figure paints, layers and sockets its own rows, and
+`HumanFigure<R>` / `HumanRowSelection<R>` only take a row of its book. Give
+such rows no `role`; the crawler's animator never sees them, so a stride row
+of this kind needs no ordering against his walk. The row builders stay
+generic to their motion set (`human/staffRows.ts`).
+
+The gates hold each book to its own figure. The crawler's looks are gated on
+his book alone (`humanGateFailures`). A figure with rows of its own runs
+`rigFigureGateFailures(rows, look, outfit, played)` from its own render
+script — Brother Anselm's from `render:brother-anselm` — which holds the rows
+it plays, in its own look and clothes, to the gates on a figure's own art
+(`RIG_FIGURE_GATES`: G1 and the per-row art gates, among them G10's slip
+check and G14's walk check; G10's runtime pacing, G14's run flight and every
+gate that builds a `HumanPlayer`, drives the crawler's animator or sizes his
+working set stay with the crawler). G27 measures the chest of the figure's
+own outfit. Its look needs an entry in `LOOK_GATE_SPECS`. `rigRowsOf` / `rigFigureOf` (`scripts/rigFigure.ts`) let a
+gate hold any book's figure by row name. `gates:equipment` checks a hireling's
+item once, in the hands of the figure that holds it, on every row it plays:
+`HIRELING_HOLDERS`, a `Record` over `HirelingHeldVisualId` whose entries are
+built by `hirelingHolder(figure, rows)`, which only takes rows of that
+figure's own book. A second figure joins by doing the same.
 
 Profile strikes are thrown from an orthodox guard facing +X: the left hand and
 foot lead (far side), the right are rear (near side).
@@ -366,7 +400,9 @@ What he holds is never a sticker over the finished figure.
   fist on it wherever the row leaves that hand free (`carryInMainHand`), one figure per carried grip
   (handle thickness × low or shouldered), so the cells are two-layered. A
   row with a prop in either hand, a tool in both or the Energy Shield's glow in that
-  palm keeps its hands and the item is not drawn. The carry angle is turned
+  palm keeps its hands and the item is not drawn, and so does a fall from the
+  frame its row names in `letsGoOfCarriedFrom` (the death's palms on the floor):
+  an item closed in a fist pressed to the floor sinks through it. The carry angle is turned
   off his face and out of the floor by a small search, the item's reach
   assumed per style.
 - **Gates**: `npm run gates:equipment` (`--item=<id>`) holds E1 registration

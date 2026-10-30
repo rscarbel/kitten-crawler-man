@@ -20,7 +20,7 @@ import {
   type BossRoomState,
   type RoomEnvironment,
 } from './harness.js';
-import { trashGremlinRoomGates } from './trashGremlinGates.js';
+import { TRASH_GREMLIN_SWEEP_GATES, trashGremlinRoomGates } from './trashGremlinGates.js';
 
 /** How far into its fall the review's toppling tower is caught: past the wobble, mid-air. */
 const REVIEW_FRAMES_INTO_FALL = 8;
@@ -79,4 +79,5 @@ export const trashGremlinRoom: BossRoomHarness = {
     });
   },
   gates: trashGremlinRoomGates,
+  sweepGates: TRASH_GREMLIN_SWEEP_GATES,
 };

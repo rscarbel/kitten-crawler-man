@@ -63,6 +63,7 @@ const {
   highStrikerMeterPower,
   highStrikerPeakAtS,
 } = await import('../src/systems/circus/highStrikerTimeline');
+const { UNZOOMED, worldPx } = await import('../src/core/rendering/camera.js');
 
 type Site = Exclude<ReturnType<typeof buildCircusSite>, string>;
 type Crawler = InstanceType<typeof HumanPlayer> | InstanceType<typeof CatPlayer>;
@@ -179,12 +180,13 @@ function renderPanel(system: System, crawler: Crawler, label: string): Panel {
   setInteractionPromptsSuppressed(false);
   renderCanvas(ctx, site.map.structure, TILE_SIZE, camX, camY, width, height);
   const draws: Array<{ sortY: number; draw: () => void }> = [];
-  for (const { tx, ty, sortYAnchorPx } of site.map.getVisibleDecorationTiles(
-    camX,
-    camY,
-    width,
-    height,
-  )) {
+  for (const { tx, ty, sortYAnchorPx } of site.map.getVisibleDecorationTiles({
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(width),
+    viewHeight: worldPx(height),
+    zoom: UNZOOMED,
+  })) {
     draws.push({
       sortY: ty * TILE_SIZE + sortYAnchorPx,
       draw: () => site.map.drawDecorationAt(ctx, tx, ty, camX, camY),

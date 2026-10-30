@@ -23,7 +23,7 @@ import {
   drawSpiderGroundTelegraphs,
   drawSpiderTelegraphOutlines,
 } from './grotesqueSpiderTelegraphs';
-import { makeStuck, makeSpitVenom } from '../core/combat/StatusEffect';
+import { FULL_SHARE, makeStuck, makeSpitVenom } from '../core/combat/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { tileSpeedFactor } from '../map/tileSpeed';
 import {
@@ -557,6 +557,11 @@ export class GrotesqueSpider extends Mob {
     return true;
   }
 
+  /** She roams the whole floor, so she keeps moving wherever the party is. */
+  override get exemptFromAiActivationRadius(): boolean {
+    return true;
+  }
+
   private mode: SpiderMode = 'idle';
   private _currentAttack: SpiderAttack | null = null;
   private _attackFrame = 0;
@@ -824,19 +829,19 @@ export class GrotesqueSpider extends Mob {
    * A blow that lands during a recovery window hits harder, and says so. Only
    * blows with an attacker count: a status tick is not a punish.
    */
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     const punishes = this.isExposed && attacker !== null && amount > 0;
     if (!punishes) {
-      super.takeDamageFrom(amount, attacker, damageType);
+      super.receiveDamage(amount, attacker, damageType);
       this.prewarmDeathIfNear();
       return;
     }
     const hpBefore = this.hp;
-    super.takeDamageFrom(Math.ceil(amount * EXPOSED_DAMAGE_MULTIPLIER), attacker, damageType);
+    super.receiveDamage(Math.ceil(amount * EXPOSED_DAMAGE_MULTIPLIER), attacker, damageType);
     this.prewarmDeathIfNear();
     if (this.hp < hpBefore) {
       this.exposedHitFlash = EXPOSED_HIT_FLASH_FRAMES;
@@ -976,7 +981,7 @@ export class GrotesqueSpider extends Mob {
     if ((this.rootWatch.get(target)?.immunityFrames ?? 0) > 0) return false;
     if (this.wouldTrapInPendingAreaStrike(target)) return false;
     if (this.wouldTrapUnderPendingSpit(target)) return false;
-    target.applyStatus(makeStuck(SPIDER_ROOT_FRAMES));
+    target.applyStatus(makeStuck(FULL_SHARE, SPIDER_ROOT_FRAMES));
     return true;
   }
 

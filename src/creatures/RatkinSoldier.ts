@@ -449,13 +449,13 @@ export class RatkinSoldier extends Mob {
     return connected;
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (this.downed || this.risingFramesLeft > 0) return;
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     this.fallIfSpent();
   }
 

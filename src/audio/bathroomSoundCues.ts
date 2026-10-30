@@ -14,8 +14,8 @@
  * and they play through a media element instead.
  */
 
-import type { AudioManager } from '../../audio/AudioManager';
-import type { MusicTrackId, SoundId } from '../../audio/sounds';
+import type { AudioManager } from './AudioManager';
+import type { MusicTrackId, SoundId } from './sounds';
 
 export const BATHROOM_CUES = {
   /** A board tile turned a quarter. */

@@ -81,6 +81,7 @@ const { environmentPaintDepth } = await import('../src/map/environmentArtCache.j
 const { buildScaledCity, cityFocus } = await import('./scaledCity.js');
 const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
 const { WorldResidency } = await import('../src/systems/WorldResidency.js');
+const { cameraAt, UNZOOMED } = await import('../src/core/rendering/camera.js');
 const { beginRenderFrame } = await import('../src/core/rendering/renderFrameClock.js');
 const { viewportHeight, viewportWidth } = await import('../src/core/rendering/Viewport.js');
 const {
@@ -544,7 +545,11 @@ cityNodeContext.scale(RETINA_DEVICE_PIXEL_RATIO, RETINA_DEVICE_PIXEL_RATIO);
 const cityContext = asGameContext(cityNodeContext);
 
 let party = cityFocus(city.crossing[0]);
-cityResidency.settleNow({ focus: [party], covered: true });
+cityResidency.settleNow({
+  focus: [party],
+  view: cameraAt(party, UNZOOMED),
+  covered: true,
+});
 let cityArrivalFrames = 0;
 while (cityArrivalFrames < MAX_SCALED_CITY_ARRIVAL_FRAMES && figurePrewarmDepth() > 0) {
   beginRenderFrame();
@@ -562,7 +567,11 @@ const cityPinnedOnArrival = pinnedFigureFootprint().bytes;
 function cityFrame(): void {
   beginRenderFrame();
   beginFigureFrame();
-  cityResidency.update(() => ({ focus: [party], covered: false }));
+  cityResidency.update(() => ({
+    focus: [party],
+    view: cameraAt(party, UNZOOMED),
+    covered: false,
+  }));
   const camX = party.x - viewportWidth() / 2;
   const camY = party.y - viewportHeight() / 2;
   for (const citizen of city.citizens) {

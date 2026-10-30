@@ -41,6 +41,8 @@ import {
 } from './dungeonEmitters';
 import type { DungeonCue } from './dungeonSoundCues';
 import { UINT32_SPAN } from '../../core/world/WorldRandom';
+import type { Camera } from '../../core/rendering/camera';
+import type { WorldPx } from '../../core/rendering/camera';
 
 /** Whether standing water covers a tile; the floor surface answers it. */
 export interface PuddleQuery {
@@ -92,8 +94,8 @@ export interface LifeFrame {
   readonly others: ReadonlyArray<Walker>;
   readonly camX: number;
   readonly camY: number;
-  readonly viewW: number;
-  readonly viewH: number;
+  readonly viewW: WorldPx;
+  readonly viewH: WorldPx;
 }
 
 interface Drip {
@@ -518,13 +520,8 @@ export class DungeonLifeSystem {
   }
 
   /** Ripples, rings and critters: floor-level, under every body. */
-  renderGround(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     ctx.save();
     ctx.lineWidth = RING_LINE_WIDTH;
     ctx.strokeStyle = RING_COLOUR;
@@ -547,13 +544,8 @@ export class DungeonLifeSystem {
   }
 
   /** Falling drops, flies, motes and paper: in the air, after the bodies, under the dark. */
-  renderAir(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  renderAir(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     ctx.save();
     ctx.strokeStyle = DROP_COLOUR;
     ctx.lineWidth = RING_LINE_WIDTH;

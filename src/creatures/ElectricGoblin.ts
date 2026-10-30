@@ -12,6 +12,7 @@ import { worldRandom } from '../core/world/WorldRandom';
 import type { GameMap } from '../map/GameMap';
 import { escapeFromCircleZones, type CircleHazardZone } from '../systems/circleHazardEscape';
 import type { HazardEscape } from '../systems/GroundHazardSource';
+import { crawlerWalkFramesTo } from '../systems/crawlerWalk';
 import type { TileRect } from '../systems/bossRooms/bossRoomLayout';
 import { labTileKey, type LabPuddle } from '../systems/bossRooms/powerLabLayout';
 import {
@@ -121,7 +122,9 @@ const FURY_STAGE_SHARE = 1 / Object.keys(FURY_PACING).length;
 const SURGING_HP_LOST_SHARE = FURY_STAGE_SHARE;
 const OVERLOADED_HP_LOST_SHARE = FURY_STAGE_SHARE * 2;
 /** A fan with a flank on one side only: the target's other side stays open. */
-const ONE_SIDED_FAN_LANES = 2;
+export const ONE_SIDED_FAN_LANES = 2;
+/** Either side of the target's lane, where the gaps of a fan of three or more open. */
+const FAN_GAP_SIDES = [1, -1] as const;
 /** No slam ever sends more lanes than this, whatever the stage and difficulty add up to. */
 const MAX_SLAM_LANES = 4;
 /**
@@ -673,7 +676,7 @@ export class ElectricGoblin extends Mob {
       elapsed: 0,
       tellFrames,
       origin,
-      lanes: this.fanLanes(origin, centreOf(target), pace, tellFrames),
+      lanes: this.fanLanes(origin, target, pace, tellFrames),
     };
   }
 
@@ -688,14 +691,16 @@ export class ElectricGoblin extends Mob {
    * edges: at the target's distance when that fits within
    * {@link SLAM_FAN_MAX_SPREAD_RAD}, and otherwise at the widest splay, where
    * the gap opens further out from him. A target that could not walk into
-   * that gap before the tell ends gets a two-lane fan instead.
+   * either gap beside its lane before the tell ends, at its own pace now and
+   * round whatever stands in the way, gets a two-lane fan instead.
    */
   private fanLanes(
     origin: WorldPoint,
-    aim: WorldPoint,
+    target: Player,
     pace: ElectricGoblinPacing,
     tellFrames: number,
   ): readonly WorldPoint[] {
+    const aim = centreOf(target);
     const centre = unitToward(origin, aim) ?? { x: this.facingX, y: this.facingY };
     const wanted = Math.min(
       MAX_SLAM_LANES,
@@ -712,13 +717,15 @@ export class ElectricGoblin extends Mob {
       return Math.min(SLAM_FAN_MAX_SPREAD_RAD, spreadKeeping(spacingPx, aimDistance));
     };
     const gappedSpread = spreadFor(wanted);
-    const gapMiddle = rotateUnit(centre, gappedSpread * HALF);
     const gapMiddleReach = (laneHalfWidthPx + gapPx * HALF) / Math.sin(gappedSpread * HALF);
-    const stepToGapPx = Math.hypot(
-      origin.x + gapMiddle.x * gapMiddleReach - aim.x,
-      origin.y + gapMiddle.y * gapMiddleReach - aim.y,
-    );
-    const gapReachable = stepToGapPx <= PLAYER_SPEED * tellFrames;
+    const gapMiddles = FAN_GAP_SIDES.map((side) => {
+      const toGap = rotateUnit(centre, side * gappedSpread * HALF);
+      return { x: origin.x + toGap.x * gapMiddleReach, y: origin.y + toGap.y * gapMiddleReach };
+    });
+    const map = this.map;
+    const gapReachable =
+      map !== null &&
+      gapMiddles.some((gap) => crawlerWalkFramesTo(map, target, gap, tellFrames) <= tellFrames);
     const lanes = oneSided(wanted) || gapReachable ? wanted : ONE_SIDED_FAN_LANES;
     const spread = spreadFor(lanes);
     // Alternates which flank the second lane takes from one slam to the next,

@@ -4,8 +4,9 @@
  * stick, the healing channel (planted, the light gathered in his raised
  * left palm), the hurried walk with it clutched to his chest, cowering
  * behind it, and the flinch that throws him back behind it held across him.
- * Brother Anselm plays them with his quarterstaff; they belong to the
- * two-handed set, so any long haft held that way sits in the same fists.
+ * They are no rows of the crawler's: a figure on the rig that plays them
+ * declares them in its own row table (`extendedHumanRowBook`). They belong to
+ * the two-handed set, so any long haft held that way sits in the same fists.
  *
  * Each lays a hold on the bare-handed idle or walk (`withHold`), so the legs
  * and the breath are the rig's own.
@@ -20,7 +21,21 @@ import { KNUCKLES_TO_CAMERA, PALM_TO_CAMERA, towards } from './handTurn';
 import { buildLoop } from './actionsBuild';
 import { idleBack, idleFront, idleSide } from './idles';
 import { walkFacing, walkSide } from './locomotion';
-import { STAFF_CHANNEL_FRAMES, STAFF_CHANNEL_RELEASE_FRAME } from './timing';
+import type { HumanRowDef } from '../humanFigure';
+import {
+  IDLE_FRAMES,
+  IDLE_FRAME_TICKS,
+  idleBlinkLid,
+  idleBreathPhase,
+  STAFF_BRACE_FRAMES,
+  STAFF_BRACE_TICKS_PER_FRAME,
+  STAFF_CHANNEL_FRAMES,
+  STAFF_CHANNEL_RELEASE_FRAME,
+  STAFF_CHANNEL_TICKS_PER_FRAME,
+  STAFF_FLINCH_FRAMES,
+  STAFF_FLINCH_TICKS_PER_FRAME,
+  WALK_FRAMES,
+} from './timing';
 
 function idlePose(view: CardinalView, phase: number): BipedPose {
   if (view === 'side') return idleSide(phase);
@@ -354,4 +369,105 @@ export function staffFlinch(view: CardinalView, frame: number): BipedPose {
   pose.leftHandShape = 'open';
   pose.leftFist = 0;
   return pose;
+}
+
+// ── The rows ─────────────────────────────────────────────────────────────────
+
+const NO_IMPACT: readonly number[] = [];
+
+function cyclePhase(frame: number, frameCount: number): number {
+  return frame / frameCount;
+}
+
+/** Standing with the haft planted upright, breathing as the idle breathes. */
+export function staffRestRow(view: CardinalView): HumanRowDef {
+  return {
+    frameCount: IDLE_FRAMES,
+    kind: 'loop',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    frameTicks: IDLE_FRAME_TICKS,
+    motionSet: 'twoHand',
+    pose: (f) => staffRest(view, idleBreathPhase(f), idleBlinkLid(f)),
+  };
+}
+
+/** The walk hunched forward in a hurry, on the walk's own legs and paced by the walk's ground. */
+export function staffHurryRow(view: CardinalView): HumanRowDef {
+  return {
+    frameCount: WALK_FRAMES,
+    kind: 'loop',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'travelling',
+    gait: 'walk',
+    motionSet: 'twoHand',
+    pose: (f) => staffHurry(view, cyclePhase(f, WALK_FRAMES)),
+  };
+}
+
+/** Walking with the staff as a walking stick, on the walk's own legs and paced by the walk's ground. */
+export function staffAmbleRow(view: CardinalView): HumanRowDef {
+  return {
+    frameCount: WALK_FRAMES,
+    kind: 'loop',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'travelling',
+    gait: 'walk',
+    motionSet: 'twoHand',
+    pose: (f) => staffAmble(view, cyclePhase(f, WALK_FRAMES)),
+  };
+}
+
+/** Struck while holding a haft: thrown back behind it and recovering. */
+export function staffFlinchRow(view: CardinalView): HumanRowDef {
+  return {
+    frameCount: STAFF_FLINCH_FRAMES,
+    kind: 'oneShot',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    ticksPerFrame: STAFF_FLINCH_TICKS_PER_FRAME,
+    motionSet: 'twoHand',
+    pose: (f) => staffFlinch(view, f),
+  };
+}
+
+const CHANNEL_EVENTS = { release: [STAFF_CHANNEL_RELEASE_FRAME] } as const;
+
+/** The healing channel with the haft planted. */
+export function staffChannelRow(view: CardinalView): HumanRowDef {
+  return {
+    frameCount: STAFF_CHANNEL_FRAMES,
+    kind: 'oneShot',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    ticksPerFrame: STAFF_CHANNEL_TICKS_PER_FRAME,
+    eventFrames: CHANNEL_EVENTS,
+    motionSet: 'twoHand',
+    pose: (f) => staffChannel(view, f),
+  };
+}
+
+/** Braced behind the haft, held as long as the threat is. */
+export function staffBraceRow(view: CardinalView): HumanRowDef {
+  return {
+    frameCount: STAFF_BRACE_FRAMES,
+    kind: 'loop',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    ticksPerFrame: STAFF_BRACE_TICKS_PER_FRAME,
+    motionSet: 'twoHand',
+    pose: (f) => staffBrace(view, f),
+  };
 }

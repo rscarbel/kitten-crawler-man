@@ -26,7 +26,7 @@ import { activeHumanLook, drawHumanSprite, prewarmHumanSprite } from '../sprites
 import { humanStatusFigureBoxOf } from '../creatures/HumanPlayer';
 import { humanMouthOf } from '../sprites/crawlerMouths';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
-import type { StatusEffect, StatusId } from '../core/combat/StatusEffect';
+import { FULL_SHARE, type StatusEffect, type StatusId } from '../core/combat/StatusEffect';
 import {
   statusBadge,
   statusBodyLayers,
@@ -240,6 +240,7 @@ export class StatusPreviewScene extends PreviewScene {
       type,
       ticksRemaining: ticks,
       totalTicks: FULL_DURATION_TICKS,
+      survivingShare: FULL_SHARE,
       // Nobody inflicted this one — it is a swatch in a review harness, and
       // there is no kill for it to be credited to.
       applier: null,

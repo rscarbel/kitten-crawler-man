@@ -11,7 +11,7 @@ import { worldPalette } from '../ui/theme/worldInk';
 import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import { dungeonFloorTheme, type DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { StairwellStyleId } from '../sprites/art/stairwellArt';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
 import { clamp } from '../utils';
 
 const TILE_CENTER_OFFSET = 0.5;
@@ -27,6 +27,7 @@ const STAIRWELL_PULSE_CENTER = 0.7;
 const STAIRWELL_PULSE_AMPLITUDE = 0.2;
 const STAIRWELL_PULSE_SPEED = 500; // ms
 const STAIRWELL_BORDER_WIDTH = 2;
+const STAIRWELL_BORDER_INSET_PX = 1;
 const STAIRWELL_ICON_SIZE_RATIO = 0.42;
 const STAIRWELL_ICON_Y_RATIO = 0.67;
 const STAIRWELL_ICON_Y_ADJUST = 0.8;
@@ -781,7 +782,8 @@ export class StairwellSystem implements GameSystem {
     return this.gameMap.isStairwellTile(tx, ty);
   }
 
-  renderStairwells(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderStairwells(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     if (!this.levelDef.nextLevelId) return;
     const ts = TILE_SIZE;
     const bw = ts * STAIRWELL_SCALE;
@@ -794,9 +796,9 @@ export class StairwellSystem implements GameSystem {
       const sy = y * ts - camY;
       if (
         sx < -bw * STAIRWELL_OFFSCREEN_MARGIN ||
-        sx > worldViewWidth() ||
+        sx > camera.viewWidth ||
         sy < -bh * STAIRWELL_OFFSCREEN_MARGIN ||
-        sy > worldViewHeight()
+        sy > camera.viewHeight
       )
         continue;
 
@@ -814,7 +816,12 @@ export class StairwellSystem implements GameSystem {
       ctx.globalAlpha = pulse;
       ctx.strokeStyle = worldPalette.waymark.stairwellEdge;
       ctx.lineWidth = STAIRWELL_BORDER_WIDTH;
-      ctx.strokeRect(sx + 1, sy + 1, bw - 2, bh - 2);
+      ctx.strokeRect(
+        sx + STAIRWELL_BORDER_INSET_PX,
+        sy + STAIRWELL_BORDER_INSET_PX,
+        bw - STAIRWELL_BORDER_INSET_PX * 2,
+        bh - STAIRWELL_BORDER_INSET_PX * 2,
+      );
       ctx.restore();
 
       const arrowSize = Math.floor(bh * STAIRWELL_ICON_SIZE_RATIO);
@@ -831,8 +838,8 @@ export class StairwellSystem implements GameSystem {
 
     ctx.save();
     ctx.fillStyle = worldPalette.waymark.stairwellDraft;
-    this.renderDraftMotes(ctx, camX, camY);
-    this.renderWayfinderMotes(ctx, camX, camY);
+    this.renderDraftMotes(ctx, camera);
+    this.renderWayfinderMotes(ctx, camera);
     ctx.restore();
   }
 
@@ -847,9 +854,10 @@ export class StairwellSystem implements GameSystem {
    * The pool-level test is only a cheap way to skip a field that cannot reach
    * the screen at all, so its margin has to cover the full mote spread.
    */
-  private renderDraftMotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+  private renderDraftMotes(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
     for (const pool of this.draftPools.values()) {
       const centerScreenX = pool.centerX - camX;
       const centerScreenY = pool.centerY - camY;
@@ -897,9 +905,10 @@ export class StairwellSystem implements GameSystem {
    * The fail-safe's motes, drawn in the draft's own dust so a crawler who has
    * learned what the dust means reads them without being told anything.
    */
-  private renderWayfinderMotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const viewW = worldViewWidth();
-    const viewH = worldViewHeight();
+  private renderWayfinderMotes(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    const viewW = camera.viewWidth;
+    const viewH = camera.viewHeight;
     for (const mote of this.wayfinderMotes) {
       const screenX = mote.x - camX;
       const screenY = mote.y - camY;

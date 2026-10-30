@@ -11,7 +11,7 @@ import {
   type SpiderAnimation,
   type SpiderDeathStyle,
 } from '../sprites/spiderSprite';
-import type { LootDrop } from './Mob';
+import type { LootDrop, PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
@@ -88,12 +88,10 @@ const SPASM_DEATH_CHANCE = 0.45;
 type SpiderState = 'idle' | 'pursuing' | 'crouching' | 'pouncing' | 'recovering';
 
 /**
- * Derived rather than restated, so this cannot drift from the base signature.
  * Nullable, because a blow with no weapon behind it — a damage-over-time tick
- * its applier owns — is a real way for this spider to die, and a type that
- * stripped the null would quietly narrow every time the base widened.
+ * its applier owns — is a real way for this spider to die.
  */
-type DamageType = Parameters<Mob['takeDamageFrom']>[2];
+type DamageType = PlayerDamageType | null;
 
 /** Blows that throw the body clear rather than dropping it where it stood. */
 const KNOCKBACK_DAMAGE_TYPES: ReadonlySet<DamageType> = new Set<DamageType>([
@@ -192,7 +190,7 @@ export class SmallSpider extends Mob {
    * from playing out behind a pause screen.
    */
   override tickCorpse(): void {
-    // Deaths that bypass takeDamageFrom still need a style to play.
+    // Deaths that bypass receiveDamage still need a style to play.
     this.deathStyle ??= pickDeathStyle('melee');
     this.corpseFrames++;
   }
@@ -213,12 +211,12 @@ export class SmallSpider extends Mob {
     return items;
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: DamageType = 'melee',
+    damageType: DamageType,
   ) {
-    super.takeDamageFrom(amount, attacker, damageType);
+    super.receiveDamage(amount, attacker, damageType);
     if (this.justDied && this.deathStyle === null) {
       this.deathStyle = pickDeathStyle(damageType);
     }

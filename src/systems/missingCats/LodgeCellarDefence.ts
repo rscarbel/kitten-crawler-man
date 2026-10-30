@@ -16,6 +16,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
+import type { Camera } from '../../core/rendering/camera';
 import {
   LODGE_CELLAR_WAVE_COUNT,
   lodgeCellarHeld,
@@ -33,7 +34,7 @@ import type { TopBandEntry } from '../../ui/hud/topBand';
 import type { SystemContext } from '../GameSystem';
 import { distinctSpawnTiles } from '../interiorSpawnTiles';
 import { questMobLevel } from '../questMobLevel';
-import { playMissingCatsCue } from './missingCatsSoundCues';
+import { playMissingCatsCue } from '../../audio/missingCatsSoundCues';
 import type { AudioManager } from '../../audio/AudioManager';
 
 const ENCOUNTER = 'quest:lodge-cellar' as const;
@@ -189,7 +190,8 @@ export class LodgeCellarDefence {
     if (nearest !== null) targets.push(nearest);
   }
 
-  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderEffects(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     for (const elf of this.elves) {
       if (!elf.isAlive) continue;
       drawPartyMarker(ctx, elf.x + HALF_TILE - camX, elf.y - MARKER_LIFT_TILES * TILE_SIZE - camY);

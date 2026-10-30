@@ -98,22 +98,27 @@ function wantsOffHand(pose: BipedPose): boolean {
  */
 const GESTURE_ROLES: ReadonlySet<HumanRowRole> = new Set(['action', 'fidget']);
 
-const freeByRow = new Map<string, boolean>();
+/** Keyed by the row itself: two books may each hold a row of one name. */
+const freeByRow = new WeakMap<RowSpec<string>, boolean>();
 
 /** Whether every frame of `row` leaves his left hand free; asked once a row and kept. */
-export function rowLeavesOffHandFree(row: RowSpec): boolean {
-  const known = freeByRow.get(row.name);
+export function rowLeavesOffHandFree(row: RowSpec<string>): boolean {
+  const known = freeByRow.get(row);
   if (known !== undefined) return known;
   let free = row.role === undefined || !GESTURE_ROLES.has(row.role);
   for (let frame = 0; frame < row.frameCount && free; frame++) {
     if (wantsOffHand(row.pose(frame))) free = false;
   }
-  freeByRow.set(row.name, free);
+  freeByRow.set(row, free);
   return free;
 }
 
 /** Closes his left fist on the shield on any row that leaves that hand free. */
-export function carryInOffHand(pose: BipedPose, row: RowSpec, grip: OffHandGrip): BipedPose {
+export function carryInOffHand(
+  pose: BipedPose,
+  row: RowSpec<string>,
+  grip: OffHandGrip,
+): BipedPose {
   if (!rowLeavesOffHandFree(row)) return pose;
   const turned = BLOCK_ROWS.has(row.name) ? BLOCKING[row.view] : CARRIED[row.view];
   return {

@@ -15,6 +15,7 @@
 import { createCanvas, type Canvas } from 'canvas';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
+import { asGameContext } from './nodeGameContext.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -95,10 +96,7 @@ const viewH = tilesH * TILE_SIZE;
 const canvas: Canvas = createCanvas(viewW * scale, viewH * scale);
 const ctx = canvas.getContext('2d');
 ctx.scale(scale, scale);
-// node-canvas implements the same drawing surface the game's renderers are
-// written against, but not the DOM's `CanvasRenderingContext2D` nominal type.
-// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-const gameCtx = ctx as unknown as CanvasRenderingContext2D;
+const gameCtx = asGameContext(ctx);
 
 renderCanvas(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 renderDecorationsOverlay(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);

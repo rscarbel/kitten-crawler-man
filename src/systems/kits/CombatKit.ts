@@ -14,8 +14,7 @@
  * be reached through casts.
  */
 
-import { outgoingHitDamageOn } from '../../core/combat/outgoingHit';
-import { MAGIC_HIT } from '../../core/combat/damageTags';
+import { energyShieldPulse } from '../../abilities/energyShield';
 import { GearSystem } from '../GearSystem';
 import { RELIC_HUM_HEARING_TILES, RELIC_HUM_LOOP, RELIC_HUM_VOLUME } from '../gearTraitSoundCues';
 import { TILE_SIZE } from '../../core/constants';
@@ -52,6 +51,7 @@ import type { DestructiblePropSystem } from '../DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from '../TownInteriorPropDestructionSystem';
 import type { TreeSystem } from '../TreeSystem';
 import type { SceneWorld } from './SceneWorld';
+import type { Camera } from '../../core/rendering/camera';
 
 const TILE_CENTRE_FRACTION = 0.5;
 const HALF_TILE = TILE_SIZE * TILE_CENTRE_FRACTION;
@@ -299,10 +299,7 @@ export class CombatKit {
         const dx = mob.x + HALF_TILE - shockwave.x;
         const dy = mob.y + HALF_TILE - shockwave.y;
         if (Math.hypot(dx, dy) >= reach) continue;
-        if (!human.zeroDamage) {
-          const wave = outgoingHitDamageOn(human, mob, SHOCKWAVE_DAMAGE, MAGIC_HIT);
-          mob.takeDamageFrom(wave, human, 'energy_shield');
-        }
+        if (!human.zeroDamage) mob.takeHit(energyShieldPulse(human, mob, SHOCKWAVE_DAMAGE));
         mob.applyStatus(makeElectrified(human));
       }
     }
@@ -313,10 +310,7 @@ export class CombatKit {
       for (const mob of nearby) {
         if (!mob.isHostileTarget || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
         if (!mob.takesPlayerDamage('energy_shield')) continue;
-        if (!human.zeroDamage) {
-          const bolt = outgoingHitDamageOn(human, mob, CHAIN_LIGHTNING_DAMAGE, MAGIC_HIT);
-          mob.takeDamageFrom(bolt, human, 'energy_shield');
-        }
+        if (!human.zeroDamage) mob.takeHit(energyShieldPulse(human, mob, CHAIN_LIGHTNING_DAMAGE));
         this.spells.addChainLightningBolt(target.x, target.y, mob.x + HALF_TILE, mob.y + HALF_TILE);
         hits++;
       }
@@ -410,27 +404,29 @@ export class CombatKit {
   }
 
   /** The layer under the entities: settled blood, parts that came to rest, the Seismic Stomp's floor. */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.gore.renderPuddles(ctx, camX, camY);
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    this.gore.renderPuddles(ctx, camera);
     this.bodyPartGore.renderSettled(ctx, camX, camY);
     this.seismicStompFx.renderGround(ctx, camX, camY);
   }
 
   /** The layer over the entities: airborne gore, shields, lightning, ripples, roots, smoke. */
-  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number, cat: CatPlayer): void {
-    this.gore.renderParticles(ctx, camX, camY);
+  renderEffects(ctx: CanvasRenderingContext2D, camera: Camera, cat: CatPlayer): void {
+    const { x: camX, y: camY } = camera;
+    this.gore.renderParticles(ctx, camera);
     this.bodyPartGore.renderFlying(ctx, camX, camY);
-    this.spells.renderEnergyShield(ctx, camX, camY);
+    this.spells.renderEnergyShield(ctx, camera);
     this.spells.renderCatMiniShield(ctx, camX, camY, cat);
     this.spells.renderChainLightning(ctx, camX, camY);
     this.stormcaller.render(ctx, camX, camY);
     this.spells.renderShockwaveRipples(ctx, camX, camY);
     this.spells.renderEntanglements(ctx, camX, camY);
-    this.smokeClouds.render(ctx, camX, camY);
-    this.gear.render(ctx, camX, camY);
+    this.smokeClouds.render(ctx, camera);
+    this.gear.render(ctx, camera);
     this.seismicStompFx.render(ctx, camX, camY);
-    this.meleeFx.render(ctx, camX, camY);
-    this.missileFx.render(ctx, camX, camY);
+    this.meleeFx.render(ctx, camera);
+    this.missileFx.render(ctx, camera);
   }
 
   /**

@@ -48,7 +48,7 @@ import type { TrackerEntry } from '../questTracker';
 import type { ProcessingStationKind } from './processingStations';
 import { RatkinCastPrewarm } from './ratkinCastPrewarm';
 import { VillageAmbience } from './VillageAmbience';
-import { worldViewWidth, worldViewHeight } from '../../core/rendering/Viewport';
+import type { Camera } from '../../core/rendering/camera';
 import {
   MAX_TOOL_TIER,
   TOOL_TIER_BASIC,
@@ -226,6 +226,8 @@ export interface BriarHollowHudChrome {
   readonly keepouts: readonly Rect[];
   /** The HUD's Build button, or null while it shows none. */
   readonly buildButton: Rect | null;
+  /** The camera the world was drawn with, for markers pointing into it. */
+  readonly camera: Camera;
 }
 
 export class BriarHollowKit {
@@ -750,12 +752,13 @@ export class BriarHollowKit {
    * immediately after `RenderPipeline.renderWorld` and before the Y-sorted
    * entity pass.
    */
-  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     this.defences?.renderGround(ctx, camX, camY);
     this.services?.renderGround(ctx, camX, camY);
-    this.blueprints?.renderGround(ctx, camX, camY);
-    this.contracts?.renderGround(ctx, camX, camY, this.activeCrawler);
-    if (this.blueprints?.busyWithWork !== true) this.questGuide?.renderGround(ctx, camX, camY);
+    this.blueprints?.renderGround(ctx, camera);
+    this.contracts?.renderGround(ctx, camera, this.activeCrawler);
+    if (this.blueprints?.busyWithWork !== true) this.questGuide?.renderGround(ctx, camera);
     renderNecromancerTelegraphs(ctx, camX, camY, this.world.roster.mobs);
   }
 
@@ -804,14 +807,15 @@ export class BriarHollowKit {
    * anything that must never be occluded by a mob or a crawler standing in
    * front of it.
    */
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.ambience.renderAbove(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    this.ambience.renderAbove(ctx, camera);
     this.villagers?.renderBarks(ctx, camX, camY);
     this.livestock?.renderAbove(ctx, camX, camY);
     this.defences?.renderAbove(ctx, camX, camY);
     this.services?.renderAbove(ctx, camX, camY);
-    this.blueprints?.renderAbove(ctx, camX, camY);
-    this.contracts?.renderAbove(ctx, camX, camY);
+    this.blueprints?.renderAbove(ctx, camera);
+    this.contracts?.renderAbove(ctx, camera);
     this.assault?.renderAbove(ctx, camX, camY);
     this.soldiers?.renderAbove(ctx, camX, camY);
     this.renderNoticeBoardMarker(ctx, camX, camY);
@@ -819,7 +823,7 @@ export class BriarHollowKit {
     // the quest guide's arrows and captions stand down until they are revived.
     const crawlerDown = this.deps.human.isKnockedOut || this.deps.cat.isKnockedOut;
     const busyWithWork = this.blueprints?.busyWithWork === true;
-    if (!crawlerDown && !busyWithWork) this.questGuide?.renderAbove(ctx, camX, camY);
+    if (!crawlerDown && !busyWithWork) this.questGuide?.renderAbove(ctx, camera);
   }
 
   /**
@@ -853,7 +857,7 @@ export class BriarHollowKit {
   renderHud(ctx: CanvasRenderingContext2D, chrome: BriarHollowHudChrome): void {
     this.assault?.renderCentreBanners(ctx);
     this.blueprints?.renderHud(ctx, chrome.keepouts);
-    this.blueprints?.escort.renderHud(ctx);
+    this.blueprints?.escort.renderHud(ctx, chrome.camera);
     this.questGuide?.renderConstructionHint(ctx, chrome.buildButton);
   }
 
@@ -1380,10 +1384,7 @@ export class BriarHollowKit {
    * @param camera Where the camera is, for anchoring the structure menu.
    * @param hud The HUD as last drawn, which the siege's alert cards keep clear of.
    */
-  surfaces(
-    camera: () => { readonly x: number; readonly y: number },
-    hud: () => SiegeHudKeepouts | null = () => null,
-  ): Surface[] {
+  surfaces(camera: () => Camera, hud: () => SiegeHudKeepouts | null = () => null): Surface[] {
     return [
       ...(this.defences?.surfaces(camera) ?? []),
       ...(this.services?.surfaces() ?? []),
@@ -1396,10 +1397,7 @@ export class BriarHollowKit {
    * The floating ones stand down while a menu halts the world: they sit in
    * the toast band, above every menu, and would otherwise draw over it.
    */
-  private siegeSurfaces(
-    camera: () => { readonly x: number; readonly y: number },
-    hud: () => SiegeHudKeepouts | null,
-  ): Surface[] {
+  private siegeSurfaces(camera: () => Camera, hud: () => SiegeHudKeepouts | null): Surface[] {
     const assault = this.assault;
     if (assault === null) return [];
     const floats = (): boolean => this.deps.worldHalted?.() !== true;

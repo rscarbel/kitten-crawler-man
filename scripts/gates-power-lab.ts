@@ -16,6 +16,9 @@
  *     him;
  *   - he blocks some Magic Missiles while free, and none during a wind-up;
  *   - a lit explosive in reach sends him running clear of its blast;
+ *   - a slam fans a gap between its lanes only when its target, at its own
+ *     pace and round the room's walls, can walk into that gap before the tell
+ *     ends: never for a stuck crawler or one walled in where it stands;
  *   - in a scripted fight every one of his telegraphed attacks comes round.
  *
  * Faults (each must turn its gate red without touching a source file):
@@ -27,15 +30,19 @@
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling.js';
 import {
   ElectricGoblin,
+  ONE_SIDED_FAN_LANES,
   SHOCK_GRENADE_RADIUS_TILES,
   SLAM_WAVE_HALF_WIDTH_TILES,
+  type SlamLane,
 } from '../src/creatures/ElectricGoblin.js';
 import { setExplosiveSources } from '../src/creatures/explosiveAwareness.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { TILE_SIZE } from '../src/core/constants.js';
+import { FULL_SHARE, makeStuck } from '../src/core/combat/StatusEffect.js';
 import { DIFFICULTY_ORDER, type Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import { settings } from '../src/core/input/Settings.js';
 import { applyMovement } from '../src/systems/GameLoopPhases.js';
+import { crawlerWalkPacePx } from '../src/systems/crawlerWalk.js';
 import type { GameMap } from '../src/map/GameMap.js';
 import type { Player } from '../src/Player.js';
 import type { PowerLabRoomSystem } from '../src/systems/bossRooms/PowerLabRoomSystem.js';
@@ -443,6 +450,159 @@ for (const side of DOOR_SIDES) {
         .map(([kind, count]) => `${kind} ${count}`)
         .join(', ')}`,
   );
+}
+
+// ── 7. A fan only opens a gap its target can walk into ───────────────────────
+
+/** Health left, as a share of his maximum, deep enough into the fight that every slam fans three lanes. */
+const OVERLOADED_HP_SHARE = 0.2;
+/** Slam tells watched in each stance before the gate is done with it. */
+const FAN_TELLS_WATCHED = 6;
+/** Points tried inside a tile for a spot clear of every lane, as offsets from its centre in tiles. */
+const GAP_PROBE_OFFSETS_TILES: readonly TilePoint[] = [
+  { x: 0, y: 0 },
+  { x: -0.25, y: -0.25 },
+  { x: 0.25, y: -0.25 },
+  { x: -0.25, y: 0.25 },
+  { x: 0.25, y: 0.25 },
+];
+const STUCK_FOR_WHOLE_WATCH_FRAMES = ATTACK_WAIT_FRAMES * FAN_TELLS_WATCHED;
+const NEIGHBOURS: readonly TilePoint[] = [-1, 0, 1]
+  .flatMap((dy) => [-1, 0, 1].map((dx) => ({ x: dx, y: dy })))
+  .filter((d) => d.x !== 0 || d.y !== 0);
+
+type FanStance = 'open' | 'stuck' | 'walled';
+const FAN_STANCES: readonly FanStance[] = ['open', 'stuck', 'walled'];
+
+function laneAngle(lane: SlamLane): number {
+  return Math.atan2(lane.dirY, lane.dirX);
+}
+
+function wrapAngle(angle: number): number {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+/** Whether `point` is clear of every lane and lies between two of them, inside the fan's span. */
+function isInFanGap(lanes: readonly SlamLane[], point: TilePoint): boolean {
+  const first = lanes[0];
+  const centreAngle = laneAngle(first);
+  const offsets = lanes.map((lane) => wrapAngle(laneAngle(lane) - centreAngle));
+  const pointAngle = wrapAngle(
+    Math.atan2(point.y - first.fromY, point.x - first.fromX) - centreAngle,
+  );
+  if (pointAngle <= Math.min(...offsets) || pointAngle >= Math.max(...offsets)) return false;
+  return lanes.every((lane) => {
+    const offsetX = point.x - lane.fromX;
+    const offsetY = point.y - lane.fromY;
+    const along = offsetX * lane.dirX + offsetY * lane.dirY;
+    const across = Math.abs(offsetX * lane.dirY - offsetY * lane.dirX);
+    const besideLane = along <= 0 || along >= lane.lengthPx;
+    return besideLane || across > laneHalfWidthPx;
+  });
+}
+
+/**
+ * Whether some tile holding floor clear of every lane can be walked to from
+ * `crawler`'s tile before `frames` run out: a tile-by-tile search of its own
+ * over walkable floor, diagonals not cutting wall corners, at the crawler's
+ * pace now.
+ */
+function canReachFanGap(
+  gameMap: GameMap,
+  crawler: Player,
+  lanes: readonly SlamLane[],
+  frames: number,
+): boolean {
+  const pace = crawlerWalkPacePx(crawler);
+  const reachPx = pace * frames;
+  const start = {
+    x: Math.floor(centreOf(crawler).x / TILE_SIZE),
+    y: Math.floor(centreOf(crawler).y / TILE_SIZE),
+  };
+  const best = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  const open: { tile: TilePoint; px: number }[] = [{ tile: start, px: 0 }];
+  while (open.length > 0) {
+    open.sort((a, b) => a.px - b.px);
+    const next = open.shift();
+    if (next === undefined) break;
+    const { tile, px } = next;
+    const isGapTile = GAP_PROBE_OFFSETS_TILES.some((o) =>
+      isInFanGap(lanes, {
+        x: (tile.x + o.x) * TILE_SIZE + HALF_TILE,
+        y: (tile.y + o.y) * TILE_SIZE + HALF_TILE,
+      }),
+    );
+    if (isGapTile) return true;
+    for (const d of NEIGHBOURS) {
+      const to = { x: tile.x + d.x, y: tile.y + d.y };
+      if (!gameMap.isWalkable(to.x, to.y, 'walker')) continue;
+      const cutsCorner =
+        d.x !== 0 &&
+        d.y !== 0 &&
+        (!gameMap.isWalkable(tile.x + d.x, tile.y, 'walker') ||
+          !gameMap.isWalkable(tile.x, tile.y + d.y, 'walker'));
+      if (cutsCorner) continue;
+      const stepPx = Math.hypot(d.x, d.y) * TILE_SIZE;
+      const total = px + stepPx;
+      if (total > reachPx) continue;
+      const key = `${to.x},${to.y}`;
+      if ((best.get(key) ?? Infinity) <= total) continue;
+      best.set(key, total);
+      open.push({ tile: to, px: total });
+    }
+  }
+  return false;
+}
+
+/** The crawler's own tile with every neighbour walled up, so no step leaves it. */
+function wallIn(gameMap: GameMap, crawler: Player): void {
+  const tile = {
+    x: Math.floor(centreOf(crawler).x / TILE_SIZE),
+    y: Math.floor(centreOf(crawler).y / TILE_SIZE),
+  };
+  for (const d of NEIGHBOURS) gameMap.blockTilePermanently(tile.x + d.x, tile.y + d.y);
+}
+
+for (const stance of FAN_STANCES) {
+  const scope = `fan gap ${stance}`;
+  const lab = buildLab('south');
+  const human = lab.env.frame.human;
+  const party = [human];
+  lab.boss.hp = Math.ceil(lab.boss.maxHp * OVERLOADED_HP_SHARE);
+  if (stance === 'stuck') human.applyStatus(makeStuck(FULL_SHARE, STUCK_FOR_WHOLE_WATCH_FRAMES));
+  if (stance === 'walled') wallIn(lab.env.gameMap, human);
+  // Held alive so every slam of the watch is aimed at the same body.
+  const untilHeld = (until: () => boolean): number | null =>
+    stepUntil(lab, party, () => {
+      human.hp = human.maxHp;
+      return until();
+    });
+  const tellProgress = (): number => {
+    const shown = lab.boss.slamLanes;
+    return shown.length === 0 ? 1 : shown[0].progress;
+  };
+  let gapped = 0;
+  let watched = 0;
+  for (let tell = 0; tell < FAN_TELLS_WATCHED; tell++) {
+    if (untilHeld(() => lab.boss.slamLanes.length > 0) === null) break;
+    const lanes = lab.boss.slamLanes;
+    const tellStart = untilHeld(() => tellProgress() >= 1);
+    if (tellStart === null) break;
+    const tellFrames = tellStart + 1;
+    watched++;
+    if (lanes.length > ONE_SIDED_FAN_LANES) {
+      gapped++;
+      check(
+        canReachFanGap(lab.env.gameMap, human, lanes, tellFrames),
+        scope,
+        `a ${lanes.length}-lane fan opened a gap the crawler cannot walk into in its ${tellFrames}-frame tell`,
+      );
+    }
+    untilHeld(() => lab.boss.slamLanes.length === 0);
+  }
+  check(watched > 0, scope, 'no slam came round');
+  if (stance === 'open') check(gapped > 0, scope, 'no gapped fan was ever dealt to a free crawler');
+  note(scope, `${gapped} of ${watched} slams fanned with a gap`);
 }
 
 if (fault !== undefined) console.log(`fault '${fault}' injected`);

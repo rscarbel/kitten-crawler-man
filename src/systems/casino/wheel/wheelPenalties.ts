@@ -10,6 +10,7 @@ import {
   makeDoubleDamage,
   makePoison,
   makeFrozen,
+  FULL_SHARE,
 } from '../../../core/combat/StatusEffect';
 import { frozenFramesFor } from '../../../core/combat/frostStatus';
 
@@ -55,7 +56,7 @@ export function applyWheelDoubleDamage(crawler: Player): void {
 }
 
 export function applyWheelBurn(crawler: Player): void {
-  crawler.applyStatus(makeBurn());
+  crawler.applyStatus(makeBurn(FULL_SHARE));
 }
 
 /**
@@ -67,7 +68,7 @@ export function applyWheelBurn(crawler: Player): void {
 export function applyWheelFreeze(crawler: Player): void {
   if (!crawler.isAlive) return;
   crawler.cureStatuses([CHILLED_STATUS]);
-  crawler.applyStatus(makeFrozen(frozenFramesFor(crawler, WHEEL_FREEZE_FRAMES)));
+  crawler.applyStatus(makeFrozen(FULL_SHARE, frozenFramesFor(crawler, WHEEL_FREEZE_FRAMES)));
 }
 
 /** Half the coins the crawler carries, rounded down, taken. Returns the amount for the coin drain. */

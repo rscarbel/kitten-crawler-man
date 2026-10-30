@@ -21,7 +21,6 @@ import { getManifestEntry } from '../src/core/spriteAssets/SpriteLoader';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { GameMap } from '../src/map/GameMap';
-import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level3 } from '../src/levels/level3';
 import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
 import { rectCentre } from '../src/map/overworld/briarHollowSite';
@@ -41,6 +40,7 @@ import {
   processingStationInReach,
   processingStationsOf,
 } from '../src/systems/briarHollow/processingStations';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 let failures = 0;
 let checks = 0;
@@ -130,7 +130,6 @@ function buildMap(worldSeed: number): GameMap {
     mapSize: level3.mapSize,
     tileHeight: TILE_SIZE,
     mapType: 'overworld',
-    dungeon: dungeonOptionsForLevel(level3),
     worldSeed,
   });
 }
@@ -251,6 +250,7 @@ function makeRig(): Rig {
     activeIsMoving: false,
     roster,
     gameMap,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   return { nodes, ledger, regrowth, trees, human, cat, bodies, claimed, ctx };
 }

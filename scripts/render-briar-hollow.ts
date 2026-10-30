@@ -29,6 +29,7 @@ import { createCanvas, type Canvas } from 'canvas';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
 import { buildingDisplayName } from '../src/map/buildingIds.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -158,12 +159,13 @@ function renderView(
   const ambience = new VillageAmbience(() => true);
   ambience.update(gameMap, REVIEW_TIME_SECONDS);
   const draws: SortedDraw[] = [];
-  for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
-    camX,
-    camY,
-    viewW,
-    viewH,
-  )) {
+  for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles({
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  })) {
     draws.push({
       sortY: ty * TILE_SIZE + sortYAnchorPx,
       draw: () => gameMap.drawDecorationAt(ctx, tx, ty, camX, camY),
@@ -193,7 +195,13 @@ function renderView(
   // Stable, like the game's: at a tie the decoration pushed first draws first.
   draws.sort((a, b) => a.sortY - b.sortY);
   for (const item of draws) item.draw();
-  ambience.renderAbove(ctx, camX, camY, viewW, viewH);
+  ambience.renderAbove(ctx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(viewW),
+    viewHeight: worldPx(viewH),
+    zoom: UNZOOMED,
+  });
   return canvas;
 }
 

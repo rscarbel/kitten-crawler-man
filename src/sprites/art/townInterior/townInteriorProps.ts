@@ -59,7 +59,7 @@ import { paintPlankBoard, paintStoneCourses, paintGlazing } from '../town/townMa
 import { mulberry32 } from '../../person/rng';
 import type { AnchorKind } from '../../../systems/InteriorOccupantSystem';
 import { WOOD_SMASHING_SOUNDS, type SoundId } from '../../../audio/sounds';
-import type { InteriorAmbienceCue } from '../../../systems/interiorAmbienceCues';
+import type { InteriorAmbienceCue } from '../../../audio/interiorAmbienceCues';
 import type { PropFlameSite } from './propFlames';
 import type { InteractionPerformer } from '../../../core/party/interactionPerformer';
 import {

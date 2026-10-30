@@ -17,7 +17,7 @@ import type { MusicTrackId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { isAtLumberYard } from './briarHollow/resourceZones';
-import { CATS_HOME_SONG } from './missingCats/missingCatsSoundCues';
+import { CATS_HOME_SONG } from '../audio/missingCatsSoundCues';
 
 type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'lumber_yard' | 'farm' | 'quarry';
 

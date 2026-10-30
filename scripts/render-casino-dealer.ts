@@ -22,6 +22,7 @@ import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlo
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { partyOwnsGear } from '../src/loot/gearPools.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -158,8 +159,20 @@ function renderClubCorner(): void {
   const gameCtx = asGameContext(ctx);
   const camX = CASINO_CROP.x0 * TILE_SIZE;
   const camY = CASINO_CROP.y0 * TILE_SIZE;
-  map.renderCanvas(gameCtx, camX, camY, cropW, cropH);
-  map.renderDecorationsOverlay(gameCtx, camX, camY, cropW, cropH);
+  map.renderCanvas(gameCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(cropW),
+    viewHeight: worldPx(cropH),
+    zoom: UNZOOMED,
+  });
+  map.renderDecorationsOverlay(gameCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(cropW),
+    viewHeight: worldPx(cropH),
+    zoom: UNZOOMED,
+  });
   club.renderFloor(gameCtx, camX, camY);
   const figures = [...club.sortedRenderables()].sort((a, b) => a.y - b.y);
   for (const figure of figures) figure.render(gameCtx, camX, camY, TILE_SIZE);
@@ -176,7 +189,13 @@ function paintStage(ctx: NodeCtx, phaseMs: number, dealing: boolean): void {
   const camY = CASINO_CROP.y0 * TILE_SIZE;
   const cropW = (CASINO_CROP.x1 - CASINO_CROP.x0) * TILE_SIZE;
   const cropH = (CASINO_CROP.y1 - CASINO_CROP.y0) * TILE_SIZE;
-  map.renderCanvas(gameCtx, camX, camY, cropW, cropH);
+  map.renderCanvas(gameCtx, {
+    x: camX,
+    y: camY,
+    viewWidth: worldPx(cropW),
+    viewHeight: worldPx(cropH),
+    zoom: UNZOOMED,
+  });
   club.renderFloor(gameCtx, camX, camY);
   const dealerSortY = CLUB_DEALER_POST.y * TILE_SIZE;
   for (const prop of casinoProps) {

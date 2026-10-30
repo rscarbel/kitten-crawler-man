@@ -135,10 +135,10 @@ export class PrisonCellDoor extends Mob {
     this.breakWith('melee');
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     _amount: number,
     _attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     if (!this.takesPlayerDamage(damageType)) return;
     this.breakWith(damageType ?? 'melee');

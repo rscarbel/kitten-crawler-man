@@ -130,7 +130,7 @@ function frameAt(row: RowSpec, ticks: number): number {
   if (row.kind === 'loop') return rowFrameAtTicks(row, ticks % rowLengthInTicks(row));
   // The run's start is paced by the ground he covers, like the cycle it leads into.
   const groundPaced = !isBlow && row.locomotion === 'travelling';
-  const ticksPerFrame = groundPaced ? groundPxPerFrame(row.name) / PLAYER_SPEED : hold;
+  const ticksPerFrame = groundPaced ? groundPxPerFrame(row) / PLAYER_SPEED : hold;
   const length = isBlow ? HUMAN_SWING_FRAMES : row.frameCount * ticksPerFrame;
   const withinPlay = ticks % (length + ONE_SHOT_REST_TICKS);
   const progress = Math.min(withinPlay / length, 1);

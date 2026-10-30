@@ -36,6 +36,7 @@ import { HirelingShotSystem, type HirelingShot } from '../../src/systems/Hirelin
 import { RockThrowSystem } from '../../src/systems/RockThrowSystem';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import { normalize } from '../../src/utils';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -173,6 +174,7 @@ function build(options: HarnessOptions = {}): Harness {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [merc],
   };
   return { map, roster, human, cat, merc, kit, shots, ctx, allies };
@@ -552,6 +554,7 @@ function boulderOutlivesThrower(die: Dying): boolean {
     activeIsMoving: false,
     roster,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [golem],
   };
   const startHp = goblin.hp;

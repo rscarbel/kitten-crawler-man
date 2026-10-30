@@ -3,7 +3,7 @@
  * than by file. All of them are in floor 1's preload group.
  */
 
-import { WOOD_SMASHING_SOUNDS, type SoundId } from '../../../audio/sounds';
+import { WOOD_SMASHING_SOUNDS, type SoundId } from './sounds';
 
 export const FLOODED_PUMP_ROOM_CUES = {
   /** Something enormous beyond the corridor, as the intro begins. */

@@ -453,16 +453,16 @@ export class Deinonychus extends Mob {
     return super.takeDamage(this.soften(amount, isStatusTick), source, options);
   }
 
-  override takeDamageFrom(
+  protected override receiveDamage(
     amount: number,
     attacker: Player | null,
-    damageType: PlayerDamageType | null = 'melee',
+    damageType: PlayerDamageType | null,
   ): void {
     // Free to charge nothing: this door returns void, so no caller is waiting to
     // be told whether the blow connected. A one-point mob-on-mob tick — the
     // energy shield edge, a thorn — is therefore genuinely resisted rather than forced
     // up to a full point forty per cent of the time.
-    super.takeDamageFrom(this.soften(amount, true), attacker, damageType);
+    super.receiveDamage(this.soften(amount, true), attacker, damageType);
   }
 
   /**

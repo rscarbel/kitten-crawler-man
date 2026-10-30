@@ -19,6 +19,7 @@
  * Hollow contact's thanks and payout once the work is done.
  */
 
+import type { Camera } from '../../core/rendering/camera';
 import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
@@ -513,13 +514,8 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
     this.work.cancelWork();
   }
 
-  renderGround(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: WorkChannelBuilder,
-  ): void {
-    this.work.renderGround(ctx, camX, camY, active);
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera, active: WorkChannelBuilder): void {
+    this.work.renderGround(ctx, camera, active);
   }
 
   /** Damage on walls and standing props, merged into the overworld's Y-sorted pass. */
@@ -527,8 +523,8 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
     return this.work.sortedOverlays();
   }
 
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.work.renderAbove(ctx, camX, camY);
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    this.work.renderAbove(ctx, camera);
   }
 
   renderPrompt(

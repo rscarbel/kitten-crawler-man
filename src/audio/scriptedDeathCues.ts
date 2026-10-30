@@ -9,7 +9,7 @@
  * limit's splats are `universal`, since any timed floor can end in one.
  */
 
-import type { CueSlot } from '../../audio/cueSlot';
+import type { CueSlot } from './cueSlot';
 
 /** The recordings the slots are waiting for. */
 type WantedScriptedDeathSound = 'caroline_detonation_burst';

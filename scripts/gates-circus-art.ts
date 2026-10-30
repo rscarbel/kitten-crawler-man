@@ -86,6 +86,7 @@ import {
   type FramePainter,
   type PropSheetPlan,
 } from '../src/sprites/sheets/propSheetPlan.js';
+import { UNZOOMED, worldPx } from '../src/core/rendering/camera.js';
 
 const FAULTS = ['wide-prop', 'flat-canvas', 'sheet-budget', 'loose-crossbar'] as const;
 type Fault = (typeof FAULTS)[number];
@@ -466,9 +467,21 @@ function centreTilePixels(gameMap: GameMap, overlay: boolean): Uint8ClampedArray
   const canvas = createCanvas(TEST_MAP_PX, TEST_MAP_PX);
   const nodeCtx = canvas.getContext('2d');
   const ctx = asGameContext(nodeCtx);
-  gameMap.renderCanvas(ctx, 0, 0, TEST_MAP_PX, TEST_MAP_PX);
+  gameMap.renderCanvas(ctx, {
+    x: 0,
+    y: 0,
+    viewWidth: worldPx(TEST_MAP_PX),
+    viewHeight: worldPx(TEST_MAP_PX),
+    zoom: UNZOOMED,
+  });
   if (overlay) {
-    for (const { tx, ty } of gameMap.getVisibleDecorationTiles(0, 0, TEST_MAP_PX, TEST_MAP_PX)) {
+    for (const { tx, ty } of gameMap.getVisibleDecorationTiles({
+      x: 0,
+      y: 0,
+      viewWidth: worldPx(TEST_MAP_PX),
+      viewHeight: worldPx(TEST_MAP_PX),
+      zoom: UNZOOMED,
+    })) {
       gameMap.drawDecorationAt(ctx, tx, ty, 0, 0);
     }
   }
@@ -548,7 +561,13 @@ for (const contract of TILE_CONTRACTS) {
   check(
     'registries',
     gameMap
-      .getVisibleDecorationTiles(0, 0, TEST_MAP_PX, TEST_MAP_PX)
+      .getVisibleDecorationTiles({
+        x: 0,
+        y: 0,
+        viewWidth: worldPx(TEST_MAP_PX),
+        viewHeight: worldPx(TEST_MAP_PX),
+        zoom: UNZOOMED,
+      })
       .some((entry) => entry.tx === TEST_TILE && entry.ty === TEST_TILE),
     scope,
     'missing from DECORATION_OVERLAY_TYPES (GameMap), so the Y-sorted pass never draws it',

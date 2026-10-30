@@ -23,6 +23,7 @@ const { asGameContext } = await import('./nodeGameContext.js');
 const { PREVIEW_DIR, writePreviewPng } = await import('./previewOut.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { cameraAt, UNZOOMED } = await import('../src/core/rendering/camera.js');
 const { planSewer } = await import('../src/map/sewer/sewerPlan.js');
 const { SEWER_VALVE_IDS } = await import('../src/map/sewer/sewerLayouts.js');
 const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
@@ -58,15 +59,16 @@ for (const section of plan.sections) {
     const roster = scene['world'].roster;
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, worldW, worldH);
-    map.renderCanvas(ctx, 0, 0, worldW, worldH);
-    encounter?.renderWorld?.(ctx, 0, 0, harness.human);
+    const wholeSection = cameraAt({ x: 0, y: 0 }, UNZOOMED);
+    map.renderCanvas(ctx, wholeSection);
+    encounter?.renderWorld?.(ctx, wholeSection, harness.human);
     const figures = [
       ...roster.mobs.filter((mob) => mob.belongsInMobGrid),
       harness.human,
       harness.cat,
     ].sort((first, second) => first.y - second.y);
     for (const figure of figures) figure.render(ctx, 0, 0, TILE_SIZE);
-    encounter?.renderDarkness?.(ctx, 0, 0);
+    encounter?.renderDarkness?.(ctx, wholeSection);
     written.push(
       writePreviewPng(`${OUT_DIR}/${section.layout.id}-${label}.png`, canvas.toBuffer('image/png')),
     );

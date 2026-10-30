@@ -24,6 +24,7 @@ import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { JourneyGateReporter } from './circusJourney';
+import { cameraAt, UNZOOMED } from '../../src/core/rendering/camera.js';
 
 const HIRE_ID = 'crush';
 const VIEWPORT_W = 1280;
@@ -79,6 +80,7 @@ function caughtUpWith(hostileColumn: number): boolean {
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
     extraTargets: [],
   };
   system.update(ctx);

@@ -100,7 +100,11 @@ import {
   missingCatsSiteTracked,
 } from './missingCatsPhase';
 import { completeMissingCats } from './missingCatsRewards';
-import { OLD_FRIENDS_SONG, REUNION_CUE, playMissingCatsCue } from './missingCatsSoundCues';
+import {
+  OLD_FRIENDS_SONG,
+  REUNION_CUE,
+  playMissingCatsCue,
+} from '../../audio/missingCatsSoundCues';
 import { PumpkinAtHome } from './PumpkinAtHome';
 import type { CatInConversation } from '../../creatures/castCatTalk';
 

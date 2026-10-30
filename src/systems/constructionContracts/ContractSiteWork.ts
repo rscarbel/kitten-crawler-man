@@ -11,6 +11,7 @@
  * progress and the finish puffs are the only things held here.
  */
 
+import type { Camera } from '../../core/rendering/camera';
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
 import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
@@ -69,14 +70,13 @@ import {
 } from './contractCatalog';
 import { contractContactName } from './contractContacts';
 import { isContractReady } from './contractGenerator';
+import { playContractCue, type ContractCue } from '../../audio/contractSoundCues';
 import {
   contractMaterialCues,
-  playContractCue,
   startContractWorkLoop,
-  type ContractCue,
   type ContractLoopAudio,
   type ContractWorkLoopHandle,
-} from './contractSoundCues';
+} from './contractMaterialSounds';
 import { footprintTiles, type ContractSpotFootprint } from './contractTargets';
 
 /** How near the nearest tile of a spot's footprint the active crawler must stand to work it. */
@@ -766,12 +766,8 @@ export class ContractSiteWork {
    * area highlight round every unfinished spot so each can be found from
    * across the room, and the reach glow on the one a press would work.
    */
-  renderGround(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: WorkChannelBuilder,
-  ): void {
+  renderGround(ctx: CanvasRenderingContext2D, camera: Camera, active: WorkChannelBuilder): void {
+    const { x: camX, y: camY } = camera;
     const bound = this.sync();
     if (bound === null) return;
     const done = bound.active.spotsDone;
@@ -782,7 +778,7 @@ export class ContractSiteWork {
     for (const spot of bound.spots) {
       if (done[spot.index]) continue;
       const rect = rectOnScreen(spot.footprint.rect, camX, camY, this.scratchRect);
-      drawAreaHighlightGround(ctx, rect, this.highlightFor(spot, nowMs));
+      drawAreaHighlightGround(ctx, camera, rect, this.highlightFor(spot, nowMs));
     }
     const inReach = this.job === null ? this.nearestInReach(active) : null;
     if (inReach !== null) {
@@ -807,8 +803,9 @@ export class ContractSiteWork {
    * Over every body: the highlight's frame round each unfinished standing
    * spot, the channel's bar, and the puff of each spot just finished.
    */
-  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.renderFrames(ctx, camX, camY);
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
+    this.renderFrames(ctx, camera);
     const job = this.job;
     if (job !== null) {
       const rect = rectOnScreen(job.spot.footprint.rect, camX, camY, this.scratchRect);
@@ -845,14 +842,15 @@ export class ContractSiteWork {
     }
   }
 
-  private renderFrames(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderFrames(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY } = camera;
     const bound = this.sync();
     if (bound === null) return;
     const nowMs = performance.now();
     for (const spot of bound.spots) {
       if (bound.active.spotsDone[spot.index]) continue;
       const rect = contractSpotFrameRect(spot.footprint, camX, camY, this.scratchRect);
-      if (rect !== null) drawAreaHighlightFrame(ctx, rect, this.highlightFor(spot, nowMs));
+      if (rect !== null) drawAreaHighlightFrame(ctx, camera, rect, this.highlightFor(spot, nowMs));
     }
   }
 

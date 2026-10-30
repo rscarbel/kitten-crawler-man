@@ -18,6 +18,7 @@
 
 import { TILE_SIZE } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
+import { openFloorGrid } from '../src/map/openFloorGrid';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
@@ -45,14 +46,10 @@ import {
   BLACK_POWDER_BLAST_RADIUS_PX,
   goblinBlastDamage,
 } from '../src/systems/goblinBombConstants';
+import { harnessHit } from './crawlerHitHarness';
 
 const MAP_SIZE = 60;
-/**
- * Every map here is built at the game's own tile size. A `GameMap` left on its
- * default tile height measures world pixels against a ten-pixel grid, which
- * silently breaks anything that mixes tiles and pixels.
- */
-const MAP_OPTIONS = { mapSize: MAP_SIZE, tileHeight: TILE_SIZE } as const;
+const MAP_CENTRE_TILE = MAP_SIZE / 2;
 
 /** Far more than any mob in the game has, so a blow that lands is unmistakable. */
 const OVERKILL_DAMAGE = 10_000;
@@ -103,8 +100,14 @@ function check(ok: boolean, message: string): void {
   if (!ok) failures++;
 }
 
-const map = new GameMap(MAP_OPTIONS);
-const start = map.startTile;
+/**
+ * Built at the game's own tile size. A `GameMap` left on its default tile height
+ * measures world pixels against a ten-pixel grid, which silently breaks anything
+ * that mixes tiles and pixels.
+ */
+const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: openFloorGrid(MAP_SIZE) });
+const start = { x: MAP_CENTRE_TILE, y: MAP_CENTRE_TILE };
+map.startTile = start;
 
 function makeCrawlers(): { human: HumanPlayer; cat: CatPlayer } {
   return {
@@ -143,7 +146,11 @@ function hpLostTo(
   damageType: PlayerDamageType | null,
 ): number {
   const before = victim.hp;
-  victim.takeDamageFrom(OVERKILL_DAMAGE, attacker, damageType);
+  if (attacker instanceof HumanPlayer || attacker instanceof CatPlayer) {
+    victim.takeHit(harnessHit(attacker, OVERKILL_DAMAGE, damageType));
+  } else {
+    victim.takeDamageFrom(OVERKILL_DAMAGE, attacker, damageType);
+  }
   return before - victim.hp;
 }
 

@@ -12,8 +12,8 @@
  * which floor 2 and the prison's door both load.
  */
 
-import type { AudioManager } from '../../audio/AudioManager';
-import type { MusicTrackId, SoundId } from '../../audio/sounds';
+import type { AudioManager } from './AudioManager';
+import type { MusicTrackId, SoundId } from './sounds';
 
 export const PRISON_CUES = {
   /** The locked gate bumped or tried. */

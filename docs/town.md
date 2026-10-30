@@ -2174,8 +2174,8 @@ village guide falls back to `ConstructionContractSystem.guidance()` after the Pl
 Blueprints: `shortfallGuidance` while the party is short of the remaining bill, else the
 site; null while the site is story-owned or the contract is ready.
 
-**Sound.** Every play site raises a cue from `CONTRACT_CUES` (`contractSoundCues.ts`);
-`contractMaterialCues` picks a spot's work loop, start and finish. Cues that wait on a
+**Sound.** Every play site raises a cue from `CONTRACT_CUES` (`src/audio/contractSoundCues.ts`);
+`contractMaterialCues` (`contractMaterialSounds.ts`) picks a spot's work loop, start and finish. Cues that wait on a
 recording name it in their JSDoc and borrow a stand-in or stay silent. The ids preload through the `constructionContracts`
 SFX group, which both the floor-3 overworld and every interior load.
 
@@ -2803,7 +2803,7 @@ marquee chase and the turn preview's dots.
 
 ### Sound
 
-Every Starlight Tent play site raises a cue from `src/systems/starlightTent/starlightTentSoundCues.ts`
+Every Starlight Tent play site raises a cue from `src/audio/starlightTentSoundCues.ts`
 (`STARLIGHT_TENT_CUES`, `STARLIGHT_TENT_BLOCK_CLEARED_CUES`), never a raw id. A cue is a list of takes
 rotated by the system's cue queue. Until each recording lands, a cue either borrows a
 stand-in or is an empty list, which is silent.

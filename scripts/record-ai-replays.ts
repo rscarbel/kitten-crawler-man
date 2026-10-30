@@ -62,6 +62,7 @@ import { aiReplayFixtureSchema, aiReplayJsonSchema, asSchemaInput } from './aiRe
 import { PetNameBook } from '../src/core/party/petNames';
 import type { CrawlerKind } from '../src/core/skills/SkillManager';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { cameraAt, UNZOOMED } from '../src/core/rendering/camera.js';
 
 useDevPlayerIdentity();
 
@@ -363,6 +364,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     activeIsMoving: false,
     roster: new MobRoster(map, new SpellSystem()),
     gameMap: map,
+    camera: cameraAt({ x: 0, y: 0 }, UNZOOMED),
   };
   const expectations: AIReplayExpectation[] = [];
   const settle = (): Promise<void> => sleep(SETTLE_MS);

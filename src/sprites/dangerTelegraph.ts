@@ -31,6 +31,8 @@ const DANGER_OUTLINE_ALPHA = 0.7;
 const STRIPE_ANIM_DIVISOR = 120;
 /** Gap between successive hazard stripes, in pixels. */
 const STRIPE_SPACING = 28;
+/** How long the stripes take to crawl one gap and line up as they started. */
+export const DANGER_STRIPE_CYCLE_MS = STRIPE_SPACING * STRIPE_ANIM_DIVISOR;
 const STRIPE_WIDTH = 10;
 const OUTLINE_WIDTH = 3;
 
@@ -44,6 +46,23 @@ const FILL_FRONT_ALPHA = 0.55;
 const FILL_FRONT_WIDTH = 2;
 const STRIKE_FLASH_RED_ALPHA = 0.55;
 const STRIKE_FLASH_WHITE_ALPHA = 0.5;
+
+const performanceClock = (): number => performance.now();
+
+/** The milliseconds the stripes crawl and the dashes march by. */
+let telegraphClock: () => number = performanceClock;
+
+/**
+ * Replaces the clock the stripes and dashes animate by, or restores
+ * `performance.now` given null.
+ *
+ * For gates: two frames of the same scene drawn a scheduler's whim apart put
+ * the stripes in different places, so a gate comparing one frame against
+ * another measures the machine's load as well as the art.
+ */
+export function setDangerTelegraphClock(clock: (() => number) | null): void {
+  telegraphClock = clock ?? performanceClock;
+}
 
 /**
  * How a telegraph shows timing on top of where it hits. Every field is
@@ -233,7 +252,7 @@ export function drawDangerCircle(
   options: DangerTelegraphOptions = {},
 ): void {
   const palette = DANGER_CIRCLE_PALETTE;
-  const now = performance.now();
+  const now = telegraphClock();
   const fillRadius = fillRadiusFor(radiusPx, options.fillProgress);
   const outlineOnly = options.outlineOnly ?? false;
   const flash = outlineOnly ? 0 : (options.strikeFlash ?? 0);
@@ -276,7 +295,8 @@ export function drawDangerCircle(
  * The third shape in the language, for hazards that live on the grid rather than
  * in a radius around a caster — the Starlight Tent's floor vents. The inner radius the
  * fill and stripes are drawn against is the tile's half-diagonal, so the stripes
- * reach the corners rather than stopping short of them.
+ * reach the corners rather than stopping short of them. A tile whose hazard
+ * cannot move or retime is drawn `locked`.
  */
 export function drawDangerTile(
   ctx: CanvasRenderingContext2D,
@@ -284,26 +304,25 @@ export function drawDangerTile(
   y: number,
   size: number,
   fade: number,
+  options: Pick<DangerTelegraphOptions, 'locked'> = {},
 ): void {
   const palette = DANGER_CONE_PALETTE;
-  const now = performance.now();
+  const now = telegraphClock();
   const cx = x + size / 2;
   const cy = y + size / 2;
   const coverRadius = size * Math.SQRT1_2 * 2;
+  const traceTile = (): void => {
+    ctx.beginPath();
+    ctx.rect(x, y, size, size);
+  };
 
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, size, size);
+  traceTile();
   ctx.clip();
   paintHazardFill(ctx, cx, cy, coverRadius, fade, palette, now);
   ctx.restore();
 
-  ctx.save();
-  beginDangerOutline(ctx, fade, palette, now);
-  ctx.beginPath();
-  ctx.rect(x, y, size, size);
-  ctx.stroke();
-  ctx.restore();
+  strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, traceTile);
 }
 
 /**
@@ -322,7 +341,7 @@ export function drawDangerCone(
   options: DangerTelegraphOptions = {},
 ): void {
   const palette = DANGER_CONE_PALETTE;
-  const now = performance.now();
+  const now = telegraphClock();
   const arcStart = facingAngle - halfAngleRad;
   const arcEnd = facingAngle + halfAngleRad;
   const fillRadius = fillRadiusFor(radiusPx, options.fillProgress);
@@ -379,7 +398,7 @@ export function drawDangerLane(
   options: DangerTelegraphOptions = {},
 ): void {
   const palette = DANGER_CONE_PALETTE;
-  const now = performance.now();
+  const now = telegraphClock();
   const fillLength = fillRadiusFor(lengthPx, options.fillProgress);
   const outlineOnly = options.outlineOnly ?? false;
   const flash = outlineOnly ? 0 : (options.strikeFlash ?? 0);
@@ -444,7 +463,7 @@ export function drawDangerRegion(
 ): void {
   if (tiles.length === 0) return;
   const palette = DANGER_CONE_PALETTE;
-  const now = performance.now();
+  const now = telegraphClock();
   const keys = new Set(tiles.map((t) => `${t.x},${t.y}`));
   const has = (x: number, y: number): boolean => keys.has(`${x},${y}`);
   let minX = Infinity;
@@ -539,7 +558,7 @@ export function drawDangerPath(
 ): void {
   if (points.length === 0) return;
   const palette = DANGER_CONE_PALETTE;
-  const now = performance.now();
+  const now = telegraphClock();
   const tracers = pathPieceTracers(ctx, points, radiusPx);
   let minX = Infinity;
   let minY = Infinity;

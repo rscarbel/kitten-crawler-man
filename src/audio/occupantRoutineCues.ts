@@ -9,8 +9,8 @@
  * `src/audio/sfxGroups.ts`, which every building interior loads.
  */
 
-import type { CueSlot } from '../audio/cueSlot';
-import type { SoundId } from '../audio/sounds';
+import type { CueSlot } from './cueSlot';
+import type { SoundId } from './sounds';
 
 /** The recordings the routine slots are waiting for. */
 type WantedRoutineSound = 'mop_swish' | 'mop_bucket_slosh';

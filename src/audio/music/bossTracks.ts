@@ -3,7 +3,7 @@ import type { MusicTrackId } from '../sounds';
 import type { MusicClaims } from '../AudioScope';
 import { MUSIC_STEM_SETS } from './stemSets';
 import type { GauntletBossType } from '../../map/bossRoomSizes';
-import type { BountyTypeId } from '../../systems/bountyDefs';
+import type { BountyTypeId } from '../../core/mobs/bossTypes';
 
 /** The Kraken's track once her room has drained and she fights. */
 export const KRAKEN_BATTLE_TRACK = 'the_kraken_battle' as const satisfies MusicTrackId;

@@ -33,6 +33,7 @@ import { fitStyleToWidth } from '../screens/dialogs/endScreenParts';
 import type { HudSurface } from './HudSurface';
 import { hudLayout, type HudGeometry } from './hudLayout';
 import { CHEVRON_LENGTH_RATIO, paintOffscreenTargetMarker } from './offscreenPetMarker';
+import { worldToScreen, type Camera } from '../../core/rendering/camera';
 
 const MS_PER_SECOND = 1000;
 const FULL_TURN = Math.PI * 2;
@@ -88,8 +89,8 @@ export interface SiegeHudKeepouts {
 /** What the alert surface reads each frame. */
 export interface SiegeBellAlertModel {
   readonly view: BellAlertView | null;
-  /** The camera's top-left in world pixels, which are canvas CSS pixels. */
-  readonly camera: { readonly x: number; readonly y: number };
+  /** The camera the world is drawn with, for where the bell sits on screen. */
+  readonly camera: Camera;
   /**
    * The HUD's keep-outs, read only while the surface draws; null before the
    * HUD has drawn, when its layout is worked out afresh.
@@ -649,10 +650,8 @@ function renderBellPointer(
   // The chevron reaches past the badge, furthest at the pulse's peak; the
   // edge inset keeps its tip on screen.
   const chevronReach = skin.markerSize * (1 + MARKER_PULSE_SCALE) * CHEVRON_LENGTH_RATIO;
-  const bell = {
-    x: (view.bellWorld.x - model.camera.x) / ui.uiScale,
-    y: (view.bellWorld.y - model.camera.y) / ui.uiScale,
-  };
+  const bellOnScreen = worldToScreen(model.camera, view.bellWorld.x, view.bellWorld.y);
+  const bell = { x: bellOnScreen.x / ui.uiScale, y: bellOnScreen.y / ui.uiScale };
   const centre = { x: ui.screen.x + ui.screen.w * HALF, y: ui.screen.y + ui.screen.h * HALF };
   const distanceTiles = Math.round(
     (Math.hypot(bell.x - centre.x, bell.y - centre.y) * ui.uiScale) / TILE_SIZE,

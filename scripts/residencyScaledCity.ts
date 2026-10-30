@@ -47,6 +47,7 @@ import { loadSprites } from '../src/core/spriteAssets/SpriteLoader.js';
 import { settings } from '../src/core/input/Settings.js';
 import { forceVarietyTier, FULL_VARIETY_TIER } from '../src/core/perf/varietyTier.js';
 import { setRenderScaleValue, setViewportSize } from '../src/core/rendering/Viewport.js';
+import { worldPx } from '../src/core/rendering/camera.js';
 import { beginRenderFrame } from '../src/core/rendering/renderFrameClock.js';
 import { BYTES_PER_MEGABYTE } from '../src/core/rendering/canvasSurface.js';
 import { level3 } from '../src/levels/level3.js';
@@ -90,6 +91,7 @@ import { FACADE_RING } from '../src/systems/EnvironmentSheetResidentSet.js';
 const RETINA_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 720;
+const RESIDENCY_VIEW = { viewWidth: worldPx(VIEWPORT_W), viewHeight: worldPx(VIEWPORT_H) };
 const MS_PER_SECOND = 1000;
 /** Milliseconds of prewarm baking per drained frame while the arrival's crowd is baked. */
 const ARRIVAL_DRAIN_BUDGET_MS = 50;
@@ -165,7 +167,11 @@ function citizensOfSquare(city: ScaledCity, side: number): ScaledCityCitizen[] {
 function decisionMicroseconds(city: ScaledCity, side: number, focus: TilePoint): number {
   const people = citizensOfSquare(city, side);
   const residency = crowdResidency(people);
-  const outlook: ResidencyOutlook = { focus: [cityFocus(focus)], covered: false };
+  const outlook: ResidencyOutlook = {
+    focus: [cityFocus(focus)],
+    view: RESIDENCY_VIEW,
+    covered: false,
+  };
   for (let decision = 0; decision < TIMED_DECISIONS; decision++) residency.settleNow(outlook);
   const startedAt = performance.now();
   for (let decision = 0; decision < TIMED_DECISIONS; decision++) residency.settleNow(outlook);
@@ -270,7 +276,7 @@ export async function runScaledCityRoute(route: ScaledCityRoute): Promise<RouteR
     const near = new Set<string>();
     let bytes = 0;
     for (const building of city.buildings) {
-      if (tilesUntilInView(party, building.area) > FACADE_HOLD_TILES) continue;
+      if (tilesUntilInView(party, building.area, RESIDENCY_VIEW) > FACADE_HOLD_TILES) continue;
       if (near.has(building.distinctSheetId)) continue;
       near.add(building.distinctSheetId);
       bytes += catalogue.bytesOf(building.sheetKey);
@@ -285,7 +291,7 @@ export async function runScaledCityRoute(route: ScaledCityRoute): Promise<RouteR
     beginRenderFrame();
     beginFigureFrame();
     beginEnvironmentArtFrame();
-    residency.update(() => ({ focus: [party], covered: false }));
+    residency.update(() => ({ focus: [party], view: RESIDENCY_VIEW, covered: false }));
     const camX = party.x - VIEWPORT_W / 2;
     const camY = party.y - VIEWPORT_H / 2;
     for (const citizen of city.citizens) {
@@ -337,7 +343,7 @@ export async function runScaledCityRoute(route: ScaledCityRoute): Promise<RouteR
     );
   }
 
-  residency.settleNow({ focus: [party], covered: true });
+  residency.settleNow({ focus: [party], view: RESIDENCY_VIEW, covered: true });
   let drainFrames = 0;
   for (; drainFrames < MAX_ARRIVAL_DRAIN_FRAMES && figurePrewarmDepth() > 0; drainFrames++) {
     beginRenderFrame();

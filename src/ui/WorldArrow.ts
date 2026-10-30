@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import type { WorldPx } from '../core/rendering/camera';
 import type { Rect } from './core/geom';
 import { elevation, palette } from './theme/tokens';
 
@@ -88,8 +89,8 @@ export function isWorldPointOnScreen(
   worldY: number,
   camX: number,
   camY: number,
-  viewportW: number,
-  viewportH: number,
+  viewW: WorldPx,
+  viewH: WorldPx,
   marginPx = VIEWPORT_VISIBILITY_MARGIN_PX,
 ): boolean {
   const screenX = worldX - camX;
@@ -97,8 +98,8 @@ export function isWorldPointOnScreen(
   return (
     screenX >= -marginPx &&
     screenY >= -marginPx &&
-    screenX <= viewportW + marginPx &&
-    screenY <= viewportH + marginPx
+    screenX <= viewW + marginPx &&
+    screenY <= viewH + marginPx
   );
 }
 

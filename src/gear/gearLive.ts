@@ -59,7 +59,6 @@ export type GearFxRequest =
       readonly dirX: number;
       readonly dirY: number;
       readonly rangePx: number;
-      readonly damage: number;
     };
 
 /** The most requests one crawler can hold undrained, so a scene with no drainer cannot leak. */

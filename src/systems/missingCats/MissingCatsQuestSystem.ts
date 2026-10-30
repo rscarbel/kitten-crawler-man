@@ -66,7 +66,7 @@ import {
   THIEF_GLIDE_HEARING_TILES,
   THIEF_GLIDE_LOOP,
   playMissingCatsCue,
-} from './missingCatsSoundCues';
+} from '../../audio/missingCatsSoundCues';
 import { STORM_DRAIN_ID, TOWN_TOWER_ID, type BuildingId } from '../../map/buildingIds';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
@@ -110,6 +110,7 @@ import {
   type StakeoutPlan,
   type ThiefEvent,
 } from './rooftopThief';
+import type { Camera } from '../../core/rendering/camera';
 
 const INN: BuildingId = 'taloncrest_inn';
 const BARRACKS: BuildingId = 'taloncrest_barracks';
@@ -726,13 +727,8 @@ export class MissingCatsQuestSystem {
   }
 
   /** Over every body and under every warning: the dusk. */
-  renderDusk(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    viewW: number,
-    viewH: number,
-  ): void {
+  renderDusk(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const { x: camX, y: camY, viewWidth: viewW, viewHeight: viewH } = camera;
     this.dusk.render(ctx, this.deps.map, camX, camY, viewW, viewH, this.deps.present());
   }
 

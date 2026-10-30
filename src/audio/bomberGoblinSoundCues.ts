@@ -10,8 +10,8 @@
  * `universal` as well, beside `dynamite_explosion`.
  */
 
-import type { AudioScope } from '../audio/AudioScope';
-import type { SoundId } from '../audio/sounds';
+import type { AudioScope } from './AudioScope';
+import type { SoundId } from './sounds';
 import { TILE_SIZE } from '../core/constants';
 import type { BomberGoblinSoundCue } from '../creatures/GoblinBomber';
 import type { ExplosionVariant } from '../sprites/dynamiteExplosion';

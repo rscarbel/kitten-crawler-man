@@ -3,7 +3,10 @@ import { roundRectPath } from './widgets/paint';
 import { withAlpha } from './theme/color';
 import { worldPalette } from './theme/worldInk';
 import { TILE_SIZE } from '../core/constants';
-import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import type { Camera } from '../core/rendering/camera';
+
+/** How much of the world the camera shows: a highlight wholly outside it is skipped. */
+type HighlightView = Pick<Camera, 'viewWidth' | 'viewHeight'>;
 
 /**
  * A highlight that hugs a rectangle of any size — one tile, a whole grain
@@ -20,7 +23,8 @@ import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
  * - {@link drawAreaHighlightFrame}, over every body: four corner brackets, so a
  *   tall sprite that hides the ground outline is still visibly framed.
  *
- * Both take the rectangle in screen pixels and cull themselves off screen.
+ * Both take the rectangle as an offset from the camera's top-left, in world
+ * pixels, and cull themselves against the camera's view.
  * A `pending` highlight is the same shape in a quieter voice — a marching
  * dashed outline and thin brackets, no sparks or motes — for a target the
  * player cannot act on yet, so "ready" reads at a glance as the brighter one.
@@ -148,12 +152,12 @@ const BRACKET_SHADOW_EXTRA_PX = 2;
 const BRACKET_GLOW_WIDTH_PX = 6;
 const BRACKET_GLOW_ALPHA = 0.3;
 
-function isOffScreen(rect: Rect): boolean {
+function isOffScreen(rect: Rect, view: HighlightView): boolean {
   return (
     rect.x + rect.w < -OFFSCREEN_MARGIN_PX ||
-    rect.x > worldViewWidth() + OFFSCREEN_MARGIN_PX ||
+    rect.x > view.viewWidth + OFFSCREEN_MARGIN_PX ||
     rect.y + rect.h < -OFFSCREEN_MARGIN_PX ||
-    rect.y > worldViewHeight() + OFFSCREEN_MARGIN_PX
+    rect.y > view.viewHeight + OFFSCREEN_MARGIN_PX
   );
 }
 
@@ -179,10 +183,11 @@ function cornerRadius(rect: Rect): number {
  */
 export function drawAreaHighlightGround(
   ctx: CanvasRenderingContext2D,
+  view: HighlightView,
   rect: Rect,
   options: AreaHighlightOptions,
 ): void {
-  if (isOffScreen(rect)) return;
+  if (isOffScreen(rect, view)) return;
   const mood = options.mood ?? 'ready';
   const strength = pulseStrength(options.nowMs, mood);
 
@@ -206,10 +211,11 @@ export function drawAreaHighlightGround(
  */
 export function drawAreaHighlightFrame(
   ctx: CanvasRenderingContext2D,
+  view: HighlightView,
   rect: Rect,
   options: AreaHighlightOptions,
 ): void {
-  if (isOffScreen(rect)) return;
+  if (isOffScreen(rect, view)) return;
   const mood = options.mood ?? 'ready';
   const strength = pulseStrength(options.nowMs, mood);
   const breathe = BRACKET_BREATHE_PX * pulsePhase(options.nowMs, mood);
@@ -245,11 +251,12 @@ export function drawAreaHighlightFrame(
 /** Both halves at once, for a caller with no sprite between them. */
 export function drawAreaHighlight(
   ctx: CanvasRenderingContext2D,
+  view: HighlightView,
   rect: Rect,
   options: AreaHighlightOptions,
 ): void {
-  drawAreaHighlightGround(ctx, rect, options);
-  drawAreaHighlightFrame(ctx, rect, options);
+  drawAreaHighlightGround(ctx, view, rect, options);
+  drawAreaHighlightFrame(ctx, view, rect, options);
 }
 
 function drawEdgeWash(
