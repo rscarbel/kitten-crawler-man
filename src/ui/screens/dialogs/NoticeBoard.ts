@@ -1,9 +1,9 @@
 /**
  * A notice board (the town square's or Briar Hollow's): the current postings
- * as a scannable list, each with a tone tag (DANGER / ACTIVE / OPEN / SOON /
- * DONE), a title and a short
- * body. A tap on the list pages down while postings remain below the fold
- * and puts the board away once the bottom is showing, so a phone can read
+ * as a scannable list, each with a tone tag (DANGER / ACTIVE / OPEN / DONE),
+ * a title and a short body; a bare board says so. A tap on the list pages
+ * down while postings remain below the fold and puts the board away once the
+ * bottom is showing, so a phone can read
  * every posting without a drag; Space (its Close button) and Escape put it
  * away at once. A board may also offer one action, such as tearing off a
  * work order. It is never what Space picks: taking a job is a deliberate
@@ -22,6 +22,7 @@ import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 const TITLE = 'Town notice board';
 export const VILLAGE_TITLE = 'Village notice board';
 const CLOSE_LABEL = 'Close';
+const BARE_BOARD_LINE = 'Nothing is pinned up yet. Only old tack holes and a curl of torn paper.';
 /** Share of the visible list a tap scrolls, so the last line of the old page stays as a landmark. */
 const TAP_SCROLL_FRACTION = 0.85;
 /** A scroll this close to its end counts as the bottom, in UI units. */
@@ -36,7 +37,6 @@ const TONE_STYLES: Record<NoticeTone, ToneStyle> = {
   danger: { label: 'DANGER', badge: 'danger' },
   active: { label: 'ACTIVE', badge: 'warning' },
   available: { label: 'OPEN', badge: 'success' },
-  upcoming: { label: 'SOON', badge: 'neutral' },
   done: { label: 'DONE', badge: 'neutral' },
 };
 
@@ -61,7 +61,6 @@ function toneColor(theme: Theme, tone: NoticeTone): string {
       return palette.state.warning;
     case 'available':
       return palette.state.success;
-    case 'upcoming':
     case 'done':
       return palette.text.muted;
   }
@@ -162,8 +161,11 @@ export class NoticeBoard {
         const width = 'md';
         const listW = panelBodyWidth(ui, width) - scrollGutterWidth(ui);
         const heights = this.notices.map((notice) => noticeHeight(ui, notice, listW));
-        const contentHeight =
+        const bare = this.notices.length === 0;
+        const bareLine = { text: BARE_BOARD_LINE, role: 'secondary' } as const;
+        const noticesHeight =
           heights.reduce((sum, h) => sum + h, 0) + space.lg * Math.max(0, heights.length - 1);
+        const contentHeight = bare ? measureTextHeight(ui, listW, bareLine) : noticesHeight;
         const p = panel(ui, {
           id,
           title: this.title,
@@ -183,6 +185,7 @@ export class NoticeBoard {
               focusable: false,
               sound: null,
             });
+            if (bare) text(ui, content, { ...bareLine, wrap: true });
             let y = content.y;
             this.notices.forEach((notice, index) => {
               const h = heights[index] ?? 0;

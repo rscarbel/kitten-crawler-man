@@ -404,12 +404,6 @@ function parsePendingBuild(value: unknown): PendingBuild | undefined {
   return { framesLeft, totalFrames, grateIdx, isRepair, builder: parsedBuilder };
 }
 
-function parseNPCMarkerType(
-  value: unknown,
-): PersistedDefendQuestCheckpoint['npcMarkerType'] | undefined {
-  return stringUnion(value, ['exclamation', 'question', 'none'] as const);
-}
-
 /** Every defense-quest phase, in the order the encounter reaches them; `failed` ends it. */
 export const DEFEND_QUEST_PHASE_ORDER = [
   'inactive',
@@ -446,13 +440,11 @@ function parsePersistedDefendQuestCheckpoint(
     audienceAbsenceFrames,
     encounterAborted,
     npcHp,
-    npcMarkerType,
   } = value;
   const parsedQuestStatuses = parseQuestStatuses(questStatuses);
   const parsedPhase = parseDefendQuestPhase(phase);
   const parsedBarriers = parseArray(barriers, parseWoodBarrier);
   const parsedPendingBuild = pendingBuild === null ? null : parsePendingBuild(pendingBuild);
-  const parsedMarkerType = parseNPCMarkerType(npcMarkerType);
   if (
     parsedQuestStatuses === undefined ||
     parsedPhase === undefined ||
@@ -465,8 +457,7 @@ function parsePersistedDefendQuestCheckpoint(
     parsedPendingBuild === undefined ||
     !isNumber(audienceAbsenceFrames) ||
     !isBoolean(encounterAborted) ||
-    !isNumber(npcHp) ||
-    parsedMarkerType === undefined
+    !isNumber(npcHp)
   ) {
     return undefined;
   }
@@ -483,7 +474,6 @@ function parsePersistedDefendQuestCheckpoint(
     audienceAbsenceFrames,
     encounterAborted,
     npcHp,
-    npcMarkerType: parsedMarkerType,
   };
 }
 

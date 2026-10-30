@@ -6,11 +6,18 @@
  */
 
 import { darken, lighten, mix, withAlpha } from './color';
+import { DOCUMENT_FONT_STACK, HANDWRITING_FONT_STACK } from './fonts';
 import {
   carolineFrame,
+  condensedType,
   FOCUS_RING,
+  paperSheetShapes,
+  paperStack,
   PRESS_DROP,
   type Elevation,
+  type PaperScale,
+  type PaperSheetVariant,
+  type PaperUnderSheet,
   type Theme,
   type TypeStyle,
 } from './tokens';
@@ -291,6 +298,57 @@ export interface ControlFlashSkin {
   readonly glowBlur: number;
 }
 
+/** A sheet beneath the top one of a paper stack, with its own shade. */
+export interface PaperUnderSheetSkin extends PaperUnderSheet {
+  readonly fill: string;
+}
+
+/** What is printed or pinned on a kind of paper besides the text. */
+export type PaperSheetMarks =
+  | {
+      /** A legal pad's page: a rule under every line and a double margin rule down the left. */
+      readonly kind: 'ruledPad';
+      readonly rule: string;
+      readonly ruleWidth: number;
+      readonly margin: string;
+      readonly marginWidth: number;
+      readonly marginInset: number;
+      readonly marginGap: number;
+      readonly ruleRise: number;
+    }
+  | {
+      /** A slip torn off along its top and pinned up by it. */
+      readonly kind: 'pinnedSlip';
+      readonly tearDepth: number;
+      readonly tearStep: number;
+      readonly pinHead: string;
+      readonly pinShine: string;
+      readonly pinRadius: number;
+      readonly pinDrop: number;
+      readonly pinShineShare: number;
+    };
+
+/** One kind of paper in a reading panel: the stack's sheets, the text's face and ink, and its marks. */
+export interface PaperSheetSkin {
+  readonly sheet: string;
+  /** Bottom first. */
+  readonly under: readonly PaperUnderSheetSkin[];
+  readonly shadow: string;
+  readonly shadowOffset: number;
+  readonly edge: string;
+  readonly edgeWidth: number;
+  readonly radius: number;
+  readonly ink: TextSkin;
+  readonly fontFamily: string;
+  /** From the sheet's edges to its text. */
+  readonly pad: { readonly t: number; readonly r: number; readonly b: number; readonly l: number };
+  readonly maxWidth: number;
+  /** Width over height the sheet keeps while its text is short. */
+  readonly aspect: number;
+  readonly minHeightViewportShare: number;
+  readonly marks: PaperSheetMarks;
+}
+
 /**
  * Caroline's frame: a chamfered terminal readout with a cyan hairline,
  * heavier corner brackets, a faint grid and drifting scanlines, a header
@@ -381,6 +439,10 @@ export interface Skins {
   readonly titleLogo: TitleLogoSkin;
   readonly controlFlash: ControlFlashSkin;
   readonly caroline: CarolineSkin;
+  /** By scale: `compact` on a phone's screen. */
+  readonly paperSheet: Readonly<
+    Record<PaperScale, Readonly<Record<PaperSheetVariant, PaperSheetSkin>>>
+  >;
   readonly soundHint: SoundHintSkin;
   readonly arrivalBanner: ArrivalBannerSkin;
 }
@@ -883,6 +945,82 @@ function buildCaroline(theme: Theme): CarolineSkin {
   };
 }
 
+function buildPaperSheets(
+  theme: Theme,
+  scale: PaperScale,
+): Record<PaperSheetVariant, PaperSheetSkin> {
+  const { palette, type, space } = theme;
+  const ink = palette.paper;
+  const compact = scale === 'compact';
+  const legal = paperSheetShapes[scale].legal;
+  const note = paperSheetShapes[scale].note;
+  const stack = paperStack[scale];
+  const [legalUnderBottom, legalUnderTop] = legal.under;
+  const [noteUnder] = note.under;
+  const marginToText = compact ? space.sm : space.md;
+  const documentStyle = compact ? type[condensedType.paperDocument] : type.paperDocument;
+  const handStyle = compact ? type[condensedType.paperHand] : type.paperHand;
+  const shared = {
+    shadow: ink.shadow,
+    shadowOffset: stack.shadowOffset,
+    edge: ink.edge,
+    edgeWidth: stack.edgeWidth,
+    minHeightViewportShare: stack.minHeightViewportShare,
+  };
+  return {
+    legal: {
+      ...shared,
+      sheet: ink.legal.sheet,
+      under: [
+        { ...legalUnderBottom, fill: ink.legal.underDeep },
+        { ...legalUnderTop, fill: ink.legal.under },
+      ],
+      radius: legal.radius,
+      ink: { style: documentStyle, color: ink.legal.ink },
+      fontFamily: DOCUMENT_FONT_STACK,
+      pad: {
+        t: legal.padTop,
+        r: legal.padRight,
+        b: legal.padBottom,
+        l: legal.marginInset + legal.marginGap + marginToText,
+      },
+      maxWidth: legal.maxWidth,
+      aspect: legal.aspect,
+      marks: {
+        kind: 'ruledPad',
+        rule: ink.legal.rule,
+        ruleWidth: legal.ruleWidth,
+        margin: ink.legal.margin,
+        marginWidth: legal.marginWidth,
+        marginInset: legal.marginInset,
+        marginGap: legal.marginGap,
+        ruleRise: legal.ruleRise,
+      },
+    },
+    note: {
+      ...shared,
+      sheet: ink.note.sheet,
+      under: [{ ...noteUnder, fill: ink.note.under }],
+      radius: note.radius,
+      ink: { style: handStyle, color: ink.note.ink },
+      fontFamily: HANDWRITING_FONT_STACK,
+      pad: { t: note.padTop, r: note.padRight, b: note.padBottom, l: note.padLeft },
+      maxWidth: note.maxWidth,
+      aspect: note.aspect,
+      marks: {
+        kind: 'pinnedSlip',
+        tearDepth: note.tearDepth,
+        tearStep: note.tearStep,
+        pinHead: ink.note.pinHead,
+        pinShine: ink.note.pinShine,
+        pinRadius: note.pinRadius,
+        pinDrop: note.pinDrop,
+        pinShineShare: note.pinShineShare,
+      },
+    },
+  };
+}
+
 function buildSkins(theme: Theme): Skins {
   const { palette, space, radius, type, elevation } = theme;
   const brass = buildBrass(theme);
@@ -923,6 +1061,10 @@ function buildSkins(theme: Theme): Skins {
       glowBlur: space.xl,
     },
     caroline: buildCaroline(theme),
+    paperSheet: {
+      roomy: buildPaperSheets(theme, 'roomy'),
+      compact: buildPaperSheets(theme, 'compact'),
+    },
     soundHint: {
       text: { style: type.hint, color: palette.text.secondary },
       halo: palette.surface.sunken,

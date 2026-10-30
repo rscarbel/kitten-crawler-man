@@ -19,7 +19,12 @@ import {
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import { QuestManager, type QuestId, type QuestStatus } from '../../core/quests/QuestManager';
-import { PrisonGoblin, type PrisonGoblinMarker } from '../../creatures/PrisonGoblin';
+import { PrisonGoblin } from '../../creatures/PrisonGoblin';
+import {
+  minimapMarkerFor,
+  npcMarkerShows,
+  type NpcQuestMarker,
+} from '../../sprites/npcQuestMarker';
 import {
   TALK_TIER_NAMED,
   TALK_TIER_QUEST,
@@ -130,12 +135,23 @@ function distance(a: Point, b: Point): number {
 const GUARD_SEED_SALT = 0x51ea1;
 
 /**
+ * The gate guard's marker in each phase: his ask until he is met, then the
+ * turn-in once the key is in hand, since it opens his gate.
+ */
+const GATE_GUARD_MARKER_BY_PHASE = {
+  unmet: 'available',
+  briefed: 'none',
+  keyHeld: 'turnIn',
+  opened: 'none',
+} as const satisfies Record<StealthKeySnatchPhase, NpcQuestMarker>;
+
+/**
  * The phase machine `unmet → briefed → keyHeld → opened`:
  * - `unmet`: the guard wears a gold '!'; his talk explains the gate, the key
  *   and the prison through the side door, and closing it starts the quest.
  *   The prison door refuses entry until then.
  * - `briefed`: no marker; the tracker points at the prison door.
- * - `keyHeld`: a gold '?'. Talking to him, or Space at the gate, hands the key
+ * - `keyHeld`: the turn-in '?'. Talking to him, or Space at the gate, hands the key
  *   over and opens the gate.
  * - `opened`: the gate is open and the quest complete.
  *
@@ -247,10 +263,8 @@ export class StealthKeySnatchSystem
     this.deps.bus.emit('questStarted', { questId: STEALTH_KEY_SNATCH_QUEST_ID });
   }
 
-  private guardMarker(): PrisonGoblinMarker {
-    if (this.currentPhase === 'unmet') return 'exclamation';
-    if (this.currentPhase === 'keyHeld') return 'question';
-    return 'none';
+  private guardMarker(): NpcQuestMarker {
+    return GATE_GUARD_MARKER_BY_PHASE[this.currentPhase];
   }
 
   /** Puts the guard's glyph in step with the phase; the scene calls it on halted frames too. */
@@ -603,8 +617,8 @@ export class StealthKeySnatchSystem
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     const room = this.room;
     const marker = this.guardMarker();
-    if (room === null || marker === 'none') return [];
-    const type: QuestMarkerType = marker === 'exclamation' ? 'exclamation' : 'question';
+    if (room === null || !npcMarkerShows(marker)) return [];
+    const type = minimapMarkerFor(marker);
     return [{ x: room.guardTile.x, y: room.guardTile.y, type }];
   }
 

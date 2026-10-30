@@ -4,7 +4,7 @@ import {
   timeFrameIndex,
   walkFrameIndex,
 } from '../core/spriteAssets/SpriteRenderer';
-import type { FigureDef } from './figure/figureDef';
+import { drawnFigureRow, type DrawnFigureRow, type FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import {
   GOBLIN_FIGURES,
@@ -450,17 +450,15 @@ export interface GoblinSpriteState {
 }
 
 /** Draw one goblin frame. Every figure faces +X, so the runtime mirrors it. */
-export function drawGoblinSprite(ctx: CanvasRenderingContext2D, sprite: GoblinSpriteState): void {
-  drawFigureCached(
-    ctx,
-    GOBLIN_FIGURES[sprite.archetype],
-    sprite.state,
-    sprite.frame,
-    sprite.x,
-    sprite.y,
-    sprite.tileSize,
-    { flipX: sprite.facingX < 0 },
-  );
+export function drawGoblinSprite(
+  ctx: CanvasRenderingContext2D,
+  sprite: GoblinSpriteState,
+): DrawnFigureRow {
+  const figure = GOBLIN_FIGURES[sprite.archetype];
+  drawFigureCached(ctx, figure, sprite.state, sprite.frame, sprite.x, sprite.y, sprite.tileSize, {
+    flipX: sprite.facingX < 0,
+  });
+  return drawnFigureRow(figure, sprite.state);
 }
 
 /** Where and how to draw the bathroom plumber; he has only the passive rows. */
@@ -476,7 +474,7 @@ export interface GoblinPlumberSpriteState extends Omit<GoblinSpriteState, 'arche
 export function drawGoblinPlumberSprite(
   ctx: CanvasRenderingContext2D,
   sprite: GoblinPlumberSpriteState,
-): void {
+): DrawnFigureRow {
   drawFigureCached(
     ctx,
     GOBLIN_PLUMBER_FIGURE,
@@ -487,6 +485,7 @@ export function drawGoblinPlumberSprite(
     sprite.tileSize,
     { flipX: sprite.facingX < 0 },
   );
+  return drawnFigureRow(GOBLIN_PLUMBER_FIGURE, sprite.state);
 }
 
 /** The passive animator for a bathroom goblin: the plumber's own build, or a queue goblin's archetype. */

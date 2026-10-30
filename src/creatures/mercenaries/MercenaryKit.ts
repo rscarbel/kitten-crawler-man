@@ -130,7 +130,7 @@ export const DEFAULT_STRIKE_RANGE_TILES = 0.9;
 export type ShellRow = 'idle' | 'walk' | 'death';
 
 /** The rows `EarthElementalGuardKit` asks for. */
-export type EarthElementalGuardRow = ShellRow | 'punch' | 'cast_shield' | 'hurt';
+export type EarthElementalGuardRow = ShellRow | 'punch' | 'earth_blast' | 'cast_shield' | 'hurt';
 /** The rows `ArcherKit` asks for. */
 export type ArcherRow = ShellRow | 'shoot' | 'hurt';
 /** The rows `MedicKit` asks for. */

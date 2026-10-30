@@ -317,7 +317,9 @@ function drawnWidth(placement: LightBeamPlacement): number {
 }
 
 /** The screen rectangle a beam can light, pool and motes included. */
-export function lightBeamBounds(placement: LightBeamPlacement): {
+export function lightBeamBounds(
+  placement: Pick<LightBeamPlacement, 'centreX' | 'groundY' | 'coverWidth' | 'height'>,
+): {
   readonly left: number;
   readonly right: number;
   readonly top: number;

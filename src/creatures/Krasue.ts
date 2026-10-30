@@ -32,7 +32,7 @@ const WOBBLE_AMOUNT = 0.65;
  * rising or sinking straight at its prey mirrors itself every frame.
  */
 const FACING_TURN_SHARE = 0.25;
-const FACING_TURN_TILES = 0.25;
+export const KRASUE_FACING_TURN_TILES = 0.25;
 const KRASUE_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /** Drawn only face-on, so in profile it still shows that face. */
@@ -138,7 +138,7 @@ export class Krasue extends Mob {
     }
 
     if (tacticalMove !== null) {
-      this.driftToward(tacticalMove.x, tacticalMove.y);
+      this.glideToward(tacticalMove.x, tacticalMove.y);
     } else if (nearestDist > attackRangePx) {
       this.driftToward(this.lastKnownTargetX, this.lastKnownTargetY);
     } else {
@@ -174,9 +174,28 @@ export class Krasue extends Mob {
     this.facingY = dirY;
   }
 
+  /**
+   * A flank's walk to its staging point: straight, with no wobble. The flank
+   * picks a slot only when the straight line to it is open and short, and the
+   * weave lasts longer than the whole walk, so every krasue of a pack — all
+   * bobbing in step — would be pushed the same way off its line, and the one
+   * whose slot lies against the push would come in beside its neighbour.
+   */
+  private glideToward(pointX: number, pointY: number): void {
+    const dx = pointX - this.x;
+    const dy = pointY - this.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+    this.moveWithCollision(dirX * this.speed, dirY * this.speed);
+    this.isMoving = true;
+    if (Math.abs(dirX) > FACING_TURN_SHARE) this.facingX = dirX > 0 ? 1 : -1;
+    this.facingY = dirY;
+  }
+
   /** Turns to face a target `dx` pixels to one side, once it is clearly to that side. */
   private faceTowardX(dx: number): void {
-    if (Math.abs(dx) <= this.tileSize * FACING_TURN_TILES) return;
+    if (Math.abs(dx) <= this.tileSize * KRASUE_FACING_TURN_TILES) return;
     this.facingX = dx > 0 ? 1 : -1;
   }
 

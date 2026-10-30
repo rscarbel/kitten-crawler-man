@@ -30,7 +30,10 @@ import {
   type PlacedInteraction,
 } from '../src/systems/InteriorPropInteractionSystem.js';
 import { Conversation } from '../src/dialog/Conversation.js';
-import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps.js';
+import {
+  TOWN_INTERIOR_PROPS,
+  townInteriorPropLiesFlat,
+} from '../src/sprites/art/townInterior/townInteriorProps.js';
 import {
   townInteriorGroundProps,
   townInteriorPropFigures,
@@ -122,19 +125,20 @@ check(totalBreakable > 0, 'at least one building has a breakable prop');
 
 if (generalStoreMap === null) throw new Error('General Store was not in this plan');
 
-// ── Walkable props draw in the ground layer, never in the Y-sorted pass ────
+// ── Flat walkable props draw in the ground layer, never in the Y-sorted pass ──
 //
 // A rug sorted with the figures paints over anyone standing on its upper
-// rows, since its sort line is its bottom row. Every walkable prop must come
-// back from the ground-layer list and never from the sorted one.
+// rows, since its sort line is its bottom row. Every walkable prop that lies
+// flat must come back from the ground-layer list and never from the sorted
+// one; a walkable prop that stands up (a bar stool) sorts with the figures.
 
-console.log('\nWalkable props stay out of the Y-sorted pass');
+console.log('\nFlat walkable props stay out of the Y-sorted pass');
 {
   let walkablePlaced = 0;
   for (const building of plan.buildings) {
     const map = buildInterior(building.id, building.kind, building.hasSafeRoom === true);
     const sortedWalkable = townInteriorPropFigures(map).filter((figure) =>
-      TOWN_INTERIOR_PROPS[figure.placed.propId].passableBy.has('walker'),
+      townInteriorPropLiesFlat(figure.placed.propId),
     );
     const sortedWalkableIds = sortedWalkable.map((figure) => figure.placed.id).join(', ');
     check(
@@ -143,7 +147,7 @@ console.log('\nWalkable props stay out of the Y-sorted pass');
         (sortedWalkable.length === 0 ? '' : ` (found ${sortedWalkableIds})`),
     );
     const walkableHere = map.placedInteriorProps.filter((placed) =>
-      TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker'),
+      townInteriorPropLiesFlat(placed.propId),
     );
     walkablePlaced += walkableHere.length;
     const groundIds = new Set(townInteriorGroundProps(map).map((placed) => placed.id));

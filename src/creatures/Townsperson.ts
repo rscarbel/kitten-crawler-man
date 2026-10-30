@@ -28,6 +28,7 @@ import {
 import {
   drawTownspersonBody,
   townspersonHurryGait,
+  townspersonOverhangTiles,
   townspersonSpeechStyle,
   townspersonWalkCyclePx,
   townspersonWalkFrames,
@@ -37,20 +38,22 @@ import type { BespokeResidentFigureId } from './bespokeResidentFigures';
 import type { RoutinePose } from './routinePose';
 import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 import { residentBody } from './residentFigures';
-import type { NPCMarkerType } from './QuestNPC';
-import { questMarkerColorFor } from '../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import {
+  IconAnchor,
   drawOverheadIcon,
+  drawOverheadIconBeacon,
   overheadIconFor,
+  overheadIconReach,
   overheadIconTopY,
-  type OverheadIcon,
+  type NpcOverheadIcon,
   type ShopSign,
 } from '../sprites/overheadIcon';
-import type { DrawnFigureRow } from '../sprites/figure/figureDef';
-import { drawQuestBeacon } from '../sprites/questBeacon';
+import type { DrawnFigureRow, FigureOverhangTiles } from '../sprites/figure/figureDef';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import type { CutscenePace } from '../systems/cutscene/cutsceneSteps';
+import type { Camera } from '../core/rendering/camera';
 
 /**
  * Draw size of a citizen in pixels before the humanoid scale-up — full-tile
@@ -200,6 +203,8 @@ export class Townsperson implements WanderState {
   /** The row the last render drew, which bubbles drawn in later passes stack over. */
   private drawnRow: DrawnFigureRow | undefined;
   private walkFrames: number;
+  /** How far the worn body's art reaches past its tile; re-read whenever the body changes. */
+  private overhang: FigureOverhangTiles;
   /** How many times the player has talked to this citizen — rotates their dialog. */
   conversationCount = 0;
   /** True while this citizen is mid-conversation — holds them in place facing the player. */
@@ -221,9 +226,10 @@ export class Townsperson implements WanderState {
    * citizen a questline has business with is ever given one, and the questline
    * that gave it is what sets it back to `'none'`.
    *
-   * Follows the shipped convention: `'exclamation'` offers, `'question'` turns in.
+   * The quest decides which (see `NpcQuestMarker`): an offer, a quest under
+   * way, or a turn-in.
    */
-  markerType: NPCMarkerType = 'none';
+  markerType: NpcQuestMarker = 'none';
   /** Whether this citizen keeps a counter that trades; their `markerType` outranks it overhead. */
   shopSign: ShopSign = 'closed';
   /**
@@ -257,6 +263,7 @@ export class Townsperson implements WanderState {
     this.speed = opts.speed;
     this.cycleDistance = townspersonWalkCyclePx(this.wornBody, PERSON_DRAW_SIZE);
     this.walkFrames = townspersonWalkFrames(this.wornBody);
+    this.overhang = townspersonOverhangTiles(this.wornBody);
   }
 
   /** What this person is drawn as. */
@@ -301,6 +308,7 @@ export class Townsperson implements WanderState {
     this.wornSpeechStyle = townspersonSpeechStyle(this.wornBody);
     this.cycleDistance = townspersonWalkCyclePx(this.wornBody, this.cycleDistanceDrawSize);
     this.walkFrames = townspersonWalkFrames(this.wornBody);
+    this.overhang = townspersonOverhangTiles(this.wornBody);
     this.drawnRow = undefined;
   }
 
@@ -449,6 +457,40 @@ export class Townsperson implements WanderState {
     this.facing = next;
   }
 
+  /**
+   * Whether anything this citizen paints can land inside `view`: the whole cell
+   * their look paints into at the size they were last drawn, and any overhead
+   * icon and quest beam. A figure overhangs its tile by more than a tile above
+   * and to the side, and a beam stands about four tiles over it, so a cull by
+   * the tile alone shows a head, a wing or a column of light arriving on screen
+   * before the citizen under it is drawn.
+   */
+  overlapsView(view: Pick<Camera, 'x' | 'y' | 'viewWidth' | 'viewHeight'>): boolean {
+    const overhang = this.overhang;
+    const drawSize = this.cycleDistanceDrawSize;
+    let paintLeft = this.x - overhang.left * drawSize;
+    let paintRight = this.x + drawSize + overhang.right * drawSize;
+    let paintTop = this.y - overhang.up * drawSize;
+    let paintBottom = this.y + drawSize + overhang.down * drawSize;
+    const icon = this.overheadIcon;
+    if (icon !== 'none') {
+      const box = scaleHumanoidBox(this.x, this.y, drawSize);
+      const reach = overheadIconReach(box.sx, box.sy, box.s, paintTop, icon);
+      if (reach !== null) {
+        paintLeft = Math.min(paintLeft, reach.left);
+        paintRight = Math.max(paintRight, reach.right);
+        paintTop = Math.min(paintTop, reach.top);
+        paintBottom = Math.max(paintBottom, reach.bottom);
+      }
+    }
+    return (
+      paintRight >= view.x &&
+      paintLeft <= view.x + view.viewWidth &&
+      paintBottom >= view.y &&
+      paintTop <= view.y + view.viewHeight
+    );
+  }
+
   /** Draws the citizen in world space. Y-sorted by the caller against `y`. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     this.followPurgedRecovery();
@@ -462,10 +504,7 @@ export class Townsperson implements WanderState {
     // it. Both it and the glyph below branch on `markerType` and nothing else,
     // so the two can never disagree about whether this citizen has something
     // to say.
-    const markerColor = questMarkerColorFor(this.markerType);
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
-    }
+    drawOverheadIconBeacon(ctx, box.sx, box.sy, box.s, camX, camY, this.markerType);
 
     const facing = this.facingXY();
     const routinePose = this.shownRoutinePose;
@@ -491,13 +530,15 @@ export class Townsperson implements WanderState {
       },
     );
 
-    if (this.drawsOwnOverheadIcon) {
-      drawOverheadIcon(ctx, box.sx, this.artTop(this.y - camY), box.s, this.overheadIcon);
+    const icon = this.overheadIcon;
+    if (this.drawsOwnOverheadIcon && icon !== 'none') {
+      const anchor = IconAnchor.ofRow(this.drawnRow, this.y - camY, drawSize);
+      drawOverheadIcon(ctx, box.sx, anchor, box.s, icon);
     }
   }
 
   /** The one icon over this citizen's head. */
-  get overheadIcon(): OverheadIcon {
+  get overheadIcon(): NpcOverheadIcon {
     return overheadIconFor(this.markerType, this.shopSign);
   }
 

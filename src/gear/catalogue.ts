@@ -23,10 +23,10 @@ import type {
   OffHandLook,
 } from '../sprites/garments/garmentIds';
 
-/** A relic is a world sprite at the shoulder, so neither crawler's figure shows it. */
+/** A relic is a world sprite circling its wearer, so neither crawler's figure shows it. */
 const RELIC_LOOK: NoLook = {
   kind: 'none',
-  reason: 'A relic floats beside the shoulder as a world sprite, never on the figure.',
+  reason: 'A relic circles its wearer at shoulder height as a world sprite, never on the figure.',
   heardAs: 'jewelry',
 };
 

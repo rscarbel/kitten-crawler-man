@@ -17,15 +17,15 @@ import { hasAcceptedMayorRequest } from '../../core/quests/villageQuestPhase';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';
-import { drawQuestBeacon } from '../../sprites/questBeacon';
 import { drawRatkinCastSprite, prewarmRatkinCastMember } from '../../sprites/ratkinCastSprite';
 import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  questMarkerTopY,
-  type QuestMarkerState,
-} from '../../sprites/questNPCSprite';
+  IconAnchor,
+  drawOverheadIcon,
+  drawOverheadIconBeacon,
+  overheadIconTopY,
+} from '../../sprites/overheadIcon';
 import type { DrawnFigureRow } from '../../sprites/figure/figureDef';
 import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle } from '../../dialog/request';
@@ -52,7 +52,7 @@ const TILE_CENTRE = 0.5;
 export class RecruiterNPC implements TownPropRenderable {
   x: number;
   y: number;
-  marker: QuestMarkerState = 'exclamation';
+  marker: NpcQuestMarker = 'available';
   private drawnRow: DrawnFigureRow | undefined;
 
   constructor(tile: TilePoint) {
@@ -67,18 +67,15 @@ export class RecruiterNPC implements TownPropRenderable {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
-    const markerColor = questMarkerColorFor(this.marker);
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, this.marker);
     this.drawnRow = drawRatkinCastSprite(ctx, RECRUITER_SPRITE_ID, sx, sy, tileSize, {
       action: 'idle',
       walkPhase: 0,
       facingX: 0,
       facingY: 1,
     });
-    if (markerColor === undefined) return;
-    drawQuestMarker(ctx, sx, this.artTop(sy, tileSize), tileSize, '!', markerColor);
+    if (this.marker === 'none') return;
+    drawOverheadIcon(ctx, sx, IconAnchor.ofRow(this.drawnRow, sy, tileSize), tileSize, this.marker);
   }
 
   /** The measured top of the row last drawn, or the villagers' fixed head clearance before the first draw. */
@@ -90,8 +87,7 @@ export class RecruiterNPC implements TownPropRenderable {
   /** Clear of his quest marker while he wears one, else of his art. */
   overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
     const artTop = this.artTop(sy, TILE_SIZE);
-    if (questMarkerColorFor(this.marker) === undefined) return artTop;
-    return questMarkerTopY(ctx, artTop, TILE_SIZE, '!');
+    return overheadIconTopY(ctx, artTop, TILE_SIZE, this.marker);
   }
 }
 
@@ -131,7 +127,7 @@ export class RecruiterSystem {
    */
   private syncMarker(): void {
     if (this.npc === null) return;
-    this.npc.marker = this.deps.state.quest.phase === 'unmet' ? 'exclamation' : 'none';
+    this.npc.marker = this.deps.state.quest.phase === 'unmet' ? 'available' : 'none';
   }
 
   /** Runs every gameplay frame: keeps the marker current. */

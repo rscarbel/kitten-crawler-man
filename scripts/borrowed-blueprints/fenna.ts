@@ -25,7 +25,7 @@ import { EventBus } from '../../src/core/EventBus';
 import { Inventory } from '../../src/core/items/inventory/Inventory';
 import { TIKKA_PLANS_UNLOCKS } from '../../src/core/quests/villageUnlocks';
 import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
-import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../src/sprites/npcQuestMarker';
 import type { ConversationRequest } from '../../src/dialog/request';
 import { FENNA } from '../../src/dialog/scripts/briarHollow';
 import { type VillagerId } from '../../src/core/quests/villagerIds';
@@ -156,7 +156,7 @@ export function villagerContext(state: BriarHollowState): VillagerContext {
   };
 }
 
-function markerOf(rig: FennaRig): NPCMarkerType {
+function markerOf(rig: FennaRig): NpcQuestMarker {
   return rig.lines.markerFor(villagerContext(rig.state));
 }
 
@@ -173,7 +173,7 @@ export function verifyFennaMarker(check: Check): void {
   rig.humanLearned = true;
   check(markerOf(rig) === 'none', 'Construction learned without the trebuchet plan shows no "!"');
   rig.state.unlocks.construction.push(...TIKKA_PLANS_UNLOCKS);
-  check(markerOf(rig) === 'exclamation', 'Fenna shows "!" the moment the trebuchet plan unlocks');
+  check(markerOf(rig) === 'available', 'Fenna shows "!" the moment the trebuchet plan unlocks');
 
   const siegePhases: readonly VillageQuestPhase[] = ['imminent', 'assault'];
   for (const phase of siegePhases) {
@@ -188,7 +188,7 @@ export function verifyFennaMarker(check: Check): void {
 
   const pleaNeedsFenna: QuestLineProvider = {
     lineFor: () => null,
-    markerFor: (id: VillagerId): NPCMarkerType => (id === 'fenna' ? 'question' : 'none'),
+    markerFor: (id: VillagerId): NpcQuestMarker => (id === 'fenna' ? 'inProgress' : 'none'),
   };
   const fennaOnly: QuestLineProvider = {
     lineFor: (id, ctx) => (id === 'fenna' ? rig.lines.lineFor(ctx) : null),
@@ -196,11 +196,11 @@ export function verifyFennaMarker(check: Check): void {
   };
   const ctx = villagerContext(rig.state);
   check(
-    firstQuestMarker('fenna', ctx, [pleaNeedsFenna, fennaOnly]) === 'question',
+    firstQuestMarker('fenna', ctx, [pleaNeedsFenna, fennaOnly]) === 'inProgress',
     "the Plea's marker on Fenna wins over the offer by provider order",
   );
   check(
-    firstQuestMarker('fenna', ctx, [fennaOnly]) === 'exclamation',
+    firstQuestMarker('fenna', ctx, [fennaOnly]) === 'available',
     'with the Plea silent, the offer marks Fenna',
   );
 
@@ -208,7 +208,7 @@ export function verifyFennaMarker(check: Check): void {
   const answered = BLUEPRINTS_QUEST_PHASE_ORDER.filter((phase) => phase !== 'unoffered');
   const markedAfterAnswer = answered.filter((phase) => {
     rig.state.blueprints.phase = phase;
-    const expected: NPCMarkerType = phase === 'show_fenna' ? 'question' : 'none';
+    const expected: NpcQuestMarker = phase === 'show_fenna' ? 'turnIn' : 'none';
     return markerOf(rig) !== expected;
   });
   check(
@@ -306,7 +306,10 @@ export function verifyFennaShowBlueprints(check: Check): void {
     'with the blueprints back in Wendell\'s chest, no "?" and no briefing: she asks after them',
   );
   rig.humanInventory.addItem('quest_blueprints', 1);
-  check(markerOf(rig) === 'question', 'a "?" over Fenna while she waits to see the blueprints');
+  check(
+    markerOf(rig) === 'turnIn',
+    'a turn-in "?" over Fenna while she waits to see the blueprints',
+  );
   const briefing = FENNA.blueprintsShown({
     sawCost: formatCost(stationUpgradeCost('saw')),
     ropeWalkCost: formatCost(stationUpgradeCost('ropeWalk')),
@@ -415,9 +418,15 @@ const WENDELL_QUESTION_PHASES: readonly BlueprintsQuestPhase[] = [
   'build_stations',
 ];
 
+/** What Wendell wears in a step before the quest is complete. */
+function wendellMarkerExpectedIn(phase: BlueprintsQuestPhase): NpcQuestMarker {
+  return WENDELL_QUESTION_PHASES.includes(phase) ? 'inProgress' : 'none';
+}
+
 /**
- * The quest-giver Fenna sends the party to: `'question'` over Wendell exactly
- * in the steps that need him, and not once the blueprints are in hand.
+ * The quest-giver Fenna sends the party to: a quest-under-way marker over
+ * Wendell exactly in the steps that need him, and not once the blueprints are
+ * in hand.
  */
 export function verifyWendellMarker(check: Check): void {
   const state = createBriarHollowState();
@@ -438,8 +447,8 @@ export function verifyWendellMarker(check: Check): void {
   const wrong = BLUEPRINTS_QUEST_PHASE_ORDER.filter((phase) => {
     state.blueprints.phase = phase;
     // Once the quest is complete his glyph belongs to the construction contracts.
-    const expected: NPCMarkerType | null =
-      phase === 'complete' ? null : WENDELL_QUESTION_PHASES.includes(phase) ? 'question' : 'none';
+    const expected: NpcQuestMarker | null =
+      phase === 'complete' ? null : wendellMarkerExpectedIn(phase);
     return hook.markerFor('wendell') !== expected;
   });
   check(
@@ -532,7 +541,7 @@ export function verifyFennaJournal(check: Check): void {
   const exclamationPips = quest.questMarkers.filter((marker) => marker.type === 'exclamation');
   check(offered?.status === 'available', 'the offer shows in the journal once Construction opens');
   check(
-    exclamationPips.length === 1 && quest.markerFor('fenna', ctx) === 'exclamation',
+    exclamationPips.length === 1 && quest.markerFor('fenna', ctx) === 'available',
     'the minimap pip and the glyph over Fenna both read "!"',
   );
 

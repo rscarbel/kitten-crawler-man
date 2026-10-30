@@ -279,6 +279,19 @@ Three things about the pipeline are load-bearing for the town rather than for th
   the door, and `SpriteLoader` recovers the walkable opening from that gap. A mismatch
   there is not a wrong-looking building — it is a game that throws at module load, so
   the gates check where each painted door actually lands.
+- **A crawler may stand behind the roof.** The top rows of a facade's footprint are
+  roof the 3/4 view lifts into the air, so `SpriteLoader` leaves up to
+  `ROOF_WALK_BEHIND_ROWS` (2) of them walkable, never reaching the wall band its
+  `blockedRegions` start. The Y-sort draws a crawler there under the roof. On most
+  facades the human's head clears the ridge, but the Cloak & Dagger's ridge sits
+  about 1.2 rows down and the cat is about 0.6 tiles tall, so the roof can hide a
+  crawler whole; `drawCrawlersBehindRoofs` (`src/systems/occludedCrawlers.ts`)
+  redraws any crawler on a walk-behind tile faintly over the roof. The anchor tile
+  is the frame's top-left, so it is walkable too (`isSpriteAnchorWalkable`).
+  Citizens are kept out of those rows (`TownLifeSystem.isCitizenGround`), and
+  runtime street clutter (market stalls, `TownPropSystem`, `TownDecorSystem`) is
+  placed only on `GameMap.isOpenStreetGround`: anything standing there would be
+  hidden under the roof.
 - **The art seed may not move any of that.** A floor's seed reaches texture grain,
   weathering and lighting jitter only; the projection, the footprint, the doorway and
   every component's position come from the spec's tile counts and are the same at every
@@ -740,7 +753,10 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
 - **Walkable props are a ground layer.** A `walkable: true` def (rugs, the forge floor, the
   temple dais, a trapdoor) is drawn by `drawTownInteriorGroundProps` after the floor and
   under every figure. Only standing props join the Y-sort, through
-  `townInteriorPropFigures`. Use the sized rugs (`rug_runner*`, `rug_small`, `rug_medium`,
+  `townInteriorPropFigures`. The exception is a walkable prop declared `standsUp`:
+  the taverns' `bar_stool`s, a seat on legs a crawler steps between and the counter,
+  which sort with the figures so they cover the legs of anyone north of them
+  (`townInteriorPropLiesFlat` is the split). Use the sized rugs (`rug_runner*`, `rug_small`, `rug_medium`,
   `rug_large`, `rug_ring`), never a row of 1×1 `rug`s.
 - **A fire is declared, not painted.** A prop body is baked once and cannot move, so a
   hearth, stove, brazier, forge or torchère paints its firebox, coals and logs without

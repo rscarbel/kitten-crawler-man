@@ -32,7 +32,7 @@ import {
 import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { Conversation } from '../../dialog/Conversation';
 import { contractThanksLines } from '../../dialog/scripts/contractThanks';
 import type { VillagerId } from '../../core/quests/villagerIds';
@@ -284,9 +284,9 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
     };
   }
 
-  /** The green `?` over a Briar Hollow contact while their payment waits, siege allowing. */
-  markerFor(villager: VillagerId): NPCMarkerType {
-    return this.payingSite(villager) === null ? 'none' : 'question';
+  /** The turn-in over a Briar Hollow contact while their payment waits, siege allowing. */
+  markerFor(villager: VillagerId): NpcQuestMarker {
+    return this.payingSite(villager) === null ? 'none' : 'turnIn';
   }
 
   /** Whether Wendell's note after a payout is on screen. */

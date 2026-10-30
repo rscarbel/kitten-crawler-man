@@ -8,7 +8,7 @@ import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
 
 /** The recordings a mob voice stands in for until they are sourced. */
-type WantedMobSound = 'dark_knight_punch';
+type WantedMobSound = 'dark_knight_punch' | 'earth_blast_launch';
 
 type MobCueSlot = CueSlot<WantedMobSound>;
 
@@ -168,9 +168,15 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   mantis: { ...SILENT_VOICE, attack: SLASH_STRIKES },
   // Raised on the frame the string is loosed.
   merc_archer: { ...SILENT_VOICE, attack: ARROW_LOOSED },
+  // The earth blast leaves on a punch thrown at the air, so it borrows the
+  // punch's thud until it has a launch of its own.
   merc_earth_elemental: {
     ...SILENT_VOICE,
     attack: { takes: ['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4'] },
+    projectile: {
+      takes: ['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4'],
+      standInFor: 'earth_blast_launch',
+    },
   },
   merc_medic: { ...SILENT_VOICE, attack: { takes: ['human_punch_weak'] } },
   // The same soul-fire as the Lich's bolts: the room's second half is meant to

@@ -27,11 +27,12 @@ import { settings } from '../../core/input/Settings';
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { makeRefreshed } from '../../core/combat/StatusEffect';
 import type { Camera } from '../../core/rendering/camera';
+import { BathroomGoblin, bathroomSeedFraction } from '../../creatures/BathroomGoblin';
 import {
-  BathroomGoblin,
-  bathroomSeedFraction,
-  type BathroomGoblinMarker,
-} from '../../creatures/BathroomGoblin';
+  minimapMarkerFor,
+  npcMarkerShows,
+  type NpcQuestMarker,
+} from '../../sprites/npcQuestMarker';
 import {
   TALK_TIER_AMBIENT,
   TALK_TIER_NAMED,
@@ -291,6 +292,17 @@ function insideRect(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
 }
 
+/**
+ * The plumber's marker in each phase: his ask until he is met, then the
+ * turn-in once the pipes run and his thanks is owed.
+ */
+const PLUMBER_MARKER_BY_PHASE = {
+  unmet: 'available',
+  met: 'none',
+  solved: 'turnIn',
+  thanked: 'none',
+} as const satisfies Record<CloggedBathroomPhase, NpcQuestMarker>;
+
 /** Where a crawler stands in a stall's doorway: centred on its two-tile front. */
 function stallStandPosition(door: Point): Point {
   const stallMiddleOffsetTiles = (STALL_WIDTH_TILES - 1) * HALF;
@@ -506,10 +518,8 @@ export class CloggedBathroomSystem
     this.deps.bus.emit('questStarted', { questId: CLOGGED_BATHROOM_QUEST_ID });
   }
 
-  private plumberMarker(): BathroomGoblinMarker {
-    if (this.phase === 'unmet') return 'exclamation';
-    if (this.phase === 'solved') return 'question';
-    return 'none';
+  private plumberMarker(): NpcQuestMarker {
+    return PLUMBER_MARKER_BY_PHASE[this.phase];
   }
 
   /** Puts the plumber's glyph in step with the phase; the scene calls it on halted frames too. */
@@ -1391,8 +1401,8 @@ export class CloggedBathroomSystem
 
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     const marker = this.plumberMarker();
-    if (marker === 'none') return [];
-    const type: QuestMarkerType = marker === 'exclamation' ? 'exclamation' : 'question';
+    if (!npcMarkerShows(marker)) return [];
+    const type = minimapMarkerFor(marker);
     return this.copies.map((copy) => ({
       x: copy.room.plumberTile.x,
       y: copy.room.plumberTile.y,

@@ -655,6 +655,13 @@ export interface TownInteriorPropDef {
   readonly flames?: ReadonlyArray<PropFlameSite>;
   /** Absent means the prop makes no sound of its own. */
   readonly ambientSound?: TownInteriorAmbientSound;
+  /**
+   * A walkable prop that still stands up off the floor, so it joins the
+   * Y-sort instead of the ground layer: a bar stool a crawler steps past on
+   * the way along the counter is drawn over the legs of anyone north of it.
+   * Absent means a walkable prop lies flat.
+   */
+  readonly standsUp?: true;
 }
 
 const ONE_BY_ONE: TownInteriorFootprint = { w: 1, h: 1 };
@@ -2351,6 +2358,7 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   table_medium: 0.5,
   chair: 0.55,
   stool: 0.4,
+  bar_stool: 0.4,
   bench_seat: 0.55,
   shelving_unit: 1.6,
   wall_shelf_goods: 1.2,
@@ -3770,7 +3778,7 @@ const TORCHERE_BURN: TownInteriorAmbientSound = {
 
 type TownInteriorPropExtras = Pick<
   TownInteriorPropDef,
-  'destructible' | 'interaction' | 'flames' | 'ambientSound'
+  'destructible' | 'interaction' | 'flames' | 'ambientSound' | 'standsUp'
 >;
 
 /**
@@ -4237,6 +4245,12 @@ export const TOWN_INTERIOR_PROPS = {
   }),
   stool: def('stool', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintStool, {
     destructible: DESTRUCTIBLE_STOOL,
+  }),
+  // A tavern's stool, the seat in the air on three legs: a crawler may step
+  // between the stools and the counter rather than walking round the run.
+  bar_stool: def('bar_stool', ONE_BY_ONE, PASSABLE_BY_EVERYONE, [], 'free', 2, paintStool, {
+    destructible: DESTRUCTIBLE_STOOL,
+    standsUp: true,
   }),
   // Plain seating takes no Space press, so a fight beside a bench always gets the swing.
   bench_seat: def('bench_seat', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintBenchSeat),
@@ -6162,6 +6176,15 @@ export function townInteriorPropSortY(
   tileSize: number,
 ): number {
   return (tileY + footprint.h - 1) * tileSize;
+}
+
+/**
+ * Whether a prop lies flat on the floor, drawn in the ground layer under every
+ * figure: walkable and not {@link TownInteriorPropDef.standsUp}.
+ */
+export function townInteriorPropLiesFlat(propId: TownInteriorPropId): boolean {
+  const propDef = TOWN_INTERIOR_PROPS[propId];
+  return propDef.passableBy.has('walker') && propDef.standsUp !== true;
 }
 
 /**

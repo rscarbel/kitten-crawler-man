@@ -43,7 +43,8 @@ import { drawSpeechBubbleWithText, speechBubbleWithTextTop } from '../sprites/sp
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../dialog/request';
 import { prewarmShadySprite } from '../sprites/shadySprite';
-import { Shady, type ShadyMarker } from '../creatures/Shady';
+import { Shady } from '../creatures/Shady';
+import { minimapMarkerFor, npcMarkerShows, type NpcQuestMarker } from '../sprites/npcQuestMarker';
 import { SHADY_BOUNTY } from '../dialog/scripts/scenes/shadyBounty';
 import { SHADY_LINES } from '../dialog/scripts/shady';
 import { findBountyDef, type BountyDef } from './bountyDefs';
@@ -115,12 +116,12 @@ function shadyBubbleAnchorY(sy: number): number {
  */
 export const BOUNTY_TRACKER_ID = 'shady_bounties';
 
-/** The glyph over Shady's head for each phase of the loop. */
-const SHADY_MARKER_BY_PHASE: Record<BountyPhase, ShadyMarker> = {
-  available: 'exclamation',
+/** The marker over Shady's head for each phase of the loop: an offer, nothing while hunting, then the payout. */
+const SHADY_MARKER_BY_PHASE = {
+  available: 'available',
   active: 'none',
-  kill_pending: 'question',
-};
+  kill_pending: 'turnIn',
+} as const satisfies Record<BountyPhase, NpcQuestMarker>;
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
 const TILE_CENTER_OFFSET = 0.5;
@@ -739,19 +740,9 @@ export class BountySystem implements GameSystem {
     return {
       priority: ARROW_PRIORITY.BOUNTY,
       draw: () =>
-        drawArrowAbovePlayer(
-          ctx,
-          activePlayer.x,
-          activePlayer.y,
-          target.x,
-          target.y,
-          camX,
-          camY,
-          color,
-          {
-            avoidRect: hudRect,
-          },
-        ),
+        drawArrowAbovePlayer(ctx, activePlayer, target.x, target.y, camX, camY, color, {
+          avoidRect: hudRect,
+        }),
     };
   }
 
@@ -775,11 +766,12 @@ export class BountySystem implements GameSystem {
       return markers;
     }
     const collect = this.collectPointWorld;
-    if (collect === null) return markers;
+    const shadyMarker: NpcQuestMarker = SHADY_MARKER_BY_PHASE[this.progress.phase];
+    if (collect === null || !npcMarkerShows(shadyMarker)) return markers;
     markers.push({
       x: Math.floor(collect.x / TILE_SIZE),
       y: Math.floor(collect.y / TILE_SIZE),
-      type: this.progress.phase === 'available' ? 'exclamation' : 'question',
+      type: minimapMarkerFor(shadyMarker),
     });
     return markers;
   }

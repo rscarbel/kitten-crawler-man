@@ -90,7 +90,9 @@ export class MercenaryStrike<R extends MercenaryRow> {
   private land(ctx: MercenaryKitContext, timing: StrikeTiming<R>): void {
     const victim = this.victim;
     const merc = ctx.merc;
-    if (victim?.isAlive !== true) return;
+    // A victim converted mid-swing is the party's now; the blow lands on the
+    // same terms as the pick, not just on whoever is still standing.
+    if (victim?.isHostileTarget !== true) return;
     const reachPx = merc.strikeRangePx * timing.reachRatio;
     if (Math.hypot(victim.x - merc.x, victim.y - merc.y) > reachPx) return;
     victim.takeCreditedDamage(this.damage, ctx.owner, 'melee', merc);

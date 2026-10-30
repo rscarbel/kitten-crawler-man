@@ -21,6 +21,8 @@ import {
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState, touchFigureState } from './figure/figureFrameCache';
 import { deferAboveDarkness } from '../systems/lighting/aboveDarkness';
+import { worldPalette } from '../ui/theme/worldInk';
+import { drawPresentRewardIcon } from '../ui/icons/presentIcon';
 
 // ── Goblin mother ───────────────────────────────────────────────────────────
 
@@ -149,29 +151,81 @@ const EXCLAMATION_FONT = 'monospace';
  * never reads as touching a hat brim or an ear tip.
  */
 export const QUEST_MARKER_HEAD_GAP_PX = 3;
+/** A bounce swings the glyph its amplitude either side of rest. */
+const BOUNCE_SIDES = 2;
+
+/**
+ * The most a marker sized from a box `s` wide can stand above the art it
+ * floats over, glow included, without measuring the glyph: a glyph's ink is
+ * never taller than its font size.
+ */
+export function questMarkerReachAboveArtPx(s: number): number {
+  return (
+    QUEST_MARKER_HEAD_GAP_PX +
+    s * EXCLAMATION_BOUNCE_AMP * BOUNCE_SIDES +
+    s * EXCLAMATION_FONT_SIZE_RATIO +
+    EXCLAMATION_OUTLINE_WIDTH +
+    EXCLAMATION_GLOW_BLUR
+  );
+}
 
 /** Standard gold of an available-quest marker. */
-export const QUEST_MARKER_GOLD = '#fbbf24';
+export const QUEST_MARKER_GOLD = worldPalette.questMarker.offer;
 /** Standard green of a turn-in marker. */
-export const QUEST_MARKER_GREEN = '#4ade80';
+const QUEST_MARKER_GREEN = worldPalette.questMarker.underway;
 
 /** The two overhead glyphs quest-givers wear. */
 export type QuestMarkerGlyph = '!' | '?';
 
-/** What a quest giver has for the player: something to say, something to hand in, or nothing. */
-export type QuestMarkerState = 'exclamation' | 'question' | 'none';
+/**
+ * What a quest object (a notice board, not a person) has for the player: a
+ * gold `!` to start something, a green `?` to finish it, or nothing. A quest
+ * NPC wears an `NpcQuestMarker` (`npcQuestMarker.ts`) instead.
+ */
+export type ObjectQuestMarker = 'exclamation' | 'question' | 'none';
+
+/** An object's marker that paints something. */
+export type ShownObjectQuestMarker = Exclude<ObjectQuestMarker, 'none'>;
+
+const OBJECT_MARKER_LOOKS = {
+  exclamation: { glyph: '!', color: QUEST_MARKER_GOLD, withPresent: false },
+  question: { glyph: '?', color: QUEST_MARKER_GREEN, withPresent: false },
+} as const satisfies Record<
+  ShownObjectQuestMarker,
+  { readonly glyph: QuestMarkerGlyph; readonly color: string; readonly withPresent: boolean }
+>;
+
+/** How an object's shown marker is painted. */
+export function objectMarkerLook(state: ShownObjectQuestMarker) {
+  return OBJECT_MARKER_LOOKS[state];
+}
 
 /**
- * The colour of a marker state, or `undefined` for a giver with nothing to say.
+ * The colour of an object's marker, or `undefined` for one with nothing to say.
  *
- * Shared so a giver's glyph and its beacon are painted from one branch on one
- * state. Drawn from two branches they drift: a state added to one and not the
- * other leaves an NPC with a column of light and no glyph, or the reverse.
+ * Shared so an object's glyph and its beacon are painted from one branch on
+ * one state. Drawn from two branches they drift: a state added to one and not
+ * the other leaves a column of light and no glyph, or the reverse.
  */
-export function questMarkerColorFor(state: QuestMarkerState): string | undefined {
-  if (state === 'exclamation') return QUEST_MARKER_GOLD;
-  if (state === 'question') return QUEST_MARKER_GREEN;
-  return undefined;
+export function objectMarkerColorFor(state: ObjectQuestMarker): string | undefined {
+  return state === 'none' ? undefined : OBJECT_MARKER_LOOKS[state].color;
+}
+
+/**
+ * The present beside a turn-in `?`, as a share of the glyph's font size, and
+ * how far its left edge sits right of the glyph's centre: clear of a bold
+ * monospace `?` and its outline.
+ */
+const PRESENT_SIZE_EM = 0.72;
+const PRESENT_LEFT_OFFSET_EM = 0.42;
+
+/**
+ * How far right of the glyph's centre the present beside a turn-in `?`
+ * reaches, edge stroke included, for a marker sized from a box `s` wide.
+ */
+export function questMarkerPresentReachRightPx(s: number): number {
+  const glyphFontSize = s * EXCLAMATION_FONT_SIZE_RATIO;
+  return glyphFontSize * (PRESENT_LEFT_OFFSET_EM + PRESENT_SIZE_EM) + EXCLAMATION_OUTLINE_WIDTH;
 }
 
 const glyphInkBySize = new Map<QuestMarkerGlyph, Map<number, WorldTextInkExtent>>();
@@ -238,6 +292,10 @@ export function questMarkerTopY(
  * The glyph is a parameter rather than something inferred from `color`:
  * deriving it by string-comparing the colour to the turn-in green would make
  * any caller with a slightly different hex silently show an exclamation.
+ *
+ * `withPresent` hangs a present beside the glyph, bouncing with it, for a
+ * giver whose next words pay a reward. It sits inside the glyph's height, so
+ * {@link questMarkerTopY} holds for it too.
  */
 export function drawQuestMarker(
   ctx: CanvasRenderingContext2D,
@@ -246,35 +304,61 @@ export function drawQuestMarker(
   s: number,
   glyph: QuestMarkerGlyph,
   color: string,
+  withPresent = false,
 ) {
   if (overheadMeasuringOn(ctx)) {
     reportOverheadTop(ctx, sx + s * EXCLAMATION_CENTER_X, questMarkerTopY(ctx, artTopY, s, glyph));
   }
   // Drawn from inside the entity pass, it waits for the dungeon's darkness so
   // a quest marker is never dimmed by it.
-  if (deferAboveDarkness((target) => drawQuestMarker(target, sx, artTopY, s, glyph, color))) {
+  if (
+    deferAboveDarkness((target) =>
+      drawQuestMarker(target, sx, artTopY, s, glyph, color, withPresent),
+    )
+  ) {
     return;
   }
   const t = performance.now() / MS_TO_SECONDS;
   const { bounceAmplitude, glyphFontSize, restingTextY } = markerLayout(ctx, artTopY, s, glyph);
   const bounce = Math.sin(t * EXCLAMATION_BOUNCE_FREQ) * bounceAmplitude;
   const cx = sx + s * EXCLAMATION_CENTER_X;
+  const textY = restingTextY + bounce;
 
   ctx.save();
   worldText(ctx, glyph, {
     x: cx,
-    y: restingTextY + bounce,
+    y: textY,
     size: glyphFontSize,
     bold: true,
     family: EXCLAMATION_FONT,
     color,
     align: 'center',
-    outline: '#000',
+    outline: worldPalette.outline,
     outlineWidth: EXCLAMATION_OUTLINE_WIDTH,
     glow: color,
     glowBlur: EXCLAMATION_GLOW_BLUR,
   });
   ctx.restore();
+  if (withPresent)
+    drawMarkerPresent(ctx, cx, textY, glyphFontSize, glyphInk(ctx, glyph, glyphFontSize));
+}
+
+/** The present beside a glyph whose text `y` is `textY`, centred on the glyph's ink. */
+function drawMarkerPresent(
+  ctx: CanvasRenderingContext2D,
+  glyphCenterX: number,
+  textY: number,
+  glyphFontSize: number,
+  ink: WorldTextInkExtent,
+): void {
+  const size = glyphFontSize * PRESENT_SIZE_EM;
+  const inkCenterY = textY + (ink.top + ink.bottom) / 2;
+  drawPresentRewardIcon(ctx, {
+    x: glyphCenterX + glyphFontSize * PRESENT_LEFT_OFFSET_EM,
+    y: inkCenterY - size / 2,
+    w: size,
+    h: size,
+  });
 }
 
 // ── Goblin toddler ───────────────────────────────────────────────────────────

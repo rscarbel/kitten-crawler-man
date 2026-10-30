@@ -1573,7 +1573,7 @@ function followTheScent(walk: Walk): boolean {
 /** Whether the regular on the bench outside the inn wears the `!` this frame. */
 function innWallSitterMarked(town: TownRig): boolean {
   return (
-    methodOf(MissingCatsQuestSystem.prototype, 'innWallSitterIcon')(town.quest) === 'exclamation'
+    methodOf(MissingCatsQuestSystem.prototype, 'innWallSitterIcon')(town.quest) === 'available'
   );
 }
 

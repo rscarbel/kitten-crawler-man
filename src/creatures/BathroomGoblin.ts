@@ -10,8 +10,9 @@ import {
   drawGoblinSprite,
   type GoblinArchetype,
 } from '../sprites/goblinSprite';
-import { drawQuestBeacon } from '../sprites/questBeacon';
-import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
+import { IconAnchor, drawOverheadIcon, drawOverheadIconBeacon } from '../sprites/overheadIcon';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { TimedSpeech, drawTimedSpeechBubble, type TimedBubbleStyle } from '../sprites/speechBubble';
 import { worldPalette } from '../ui/theme/worldInk';
 import type { BarkLine } from '../dialog/line';
@@ -20,9 +21,6 @@ import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Who a bathroom goblin is: one of the line, or the plumber at its head. */
 export type BathroomGoblinRole = 'queue' | 'plumber';
-
-/** Which glyph the plumber wears over his head, if any. */
-export type BathroomGoblinMarker = 'none' | 'exclamation' | 'question';
 
 /**
  * The HP handed to the base class. Nothing ever writes it: the goblin is
@@ -99,7 +97,9 @@ export class BathroomGoblin extends Mob {
   readonly speech = new TimedSpeech();
 
   /** The glyph over his head; only the plumber ever wears one. */
-  marker: BathroomGoblinMarker = 'none';
+  marker: NpcQuestMarker = 'none';
+  /** The row he was last drawn in, which his marker hangs from once it is measured. */
+  private drawnRow: DrawnFigureRow | undefined;
   /** Behind a shut stall door: not drawn, not hit, not talked to. */
   hidden = false;
   /** Whether nothing may shove him: true while he holds his place in line. */
@@ -305,13 +305,11 @@ export class BathroomGoblin extends Mob {
     const sy = this.y - camY;
     const showsMarker = this.marker !== 'none';
     // Behind the body, so the column stands behind him.
-    if (showsMarker) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), QUEST_MARKER_GOLD);
-    }
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, this.marker);
     const resolved = this.animator.resolvePassive(seconds, this.isMoving);
     const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
       if (this.role === 'plumber') {
-        drawGoblinPlumberSprite(ctx, {
+        this.drawnRow = drawGoblinPlumberSprite(ctx, {
           x: sx,
           y: sy,
           tileSize,
@@ -321,7 +319,7 @@ export class BathroomGoblin extends Mob {
         });
         return;
       }
-      drawGoblinSprite(ctx, {
+      this.drawnRow = drawGoblinSprite(ctx, {
         archetype: this.archetype,
         x: sx,
         y: sy,
@@ -332,8 +330,13 @@ export class BathroomGoblin extends Mob {
       });
     });
     if (showsMarker) {
-      const glyph = this.marker === 'question' ? '?' : '!';
-      drawQuestMarker(ctx, sx, artTopY, tileSize, glyph, QUEST_MARKER_GOLD);
+      drawOverheadIcon(
+        ctx,
+        sx,
+        IconAnchor.ofRow(this.drawnRow, sy, tileSize),
+        tileSize,
+        this.marker,
+      );
     }
     const style = this.role === 'plumber' ? PLUMBER_BUBBLE_STYLE : QUEUE_BUBBLE_STYLE;
     drawTimedSpeechBubble(ctx, this.speech, sx + tileSize * HALF, artTopY, style);

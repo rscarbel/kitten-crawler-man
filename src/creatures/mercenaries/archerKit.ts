@@ -42,7 +42,7 @@ function ticksFor(durationMs: number): number {
 // ── The bow ─────────────────────────────────────────────────────────────────
 
 /** Furthest she looses from. Past the far edge of the band she holds. */
-const ARROW_RANGE_TILES = 6.5;
+export const ARROW_RANGE_TILES = 6.5;
 /** An arrow flies a little past its aim point, so a target stepping back is still reached. */
 const ARROW_FLIGHT_RANGE_RATIO = 1.3;
 export const ARCHER_SHOT_TICKS = ticksFor(IVY_SHOT_DURATION_MS);
@@ -218,7 +218,7 @@ export class ArcherKit implements MercenaryKit {
     if (merc.knockbackFramesRemaining > 0) return true;
     if (this.kite(ctx)) return true;
 
-    if (!merc.canSee(target)) {
+    if (!merc.canShootAt(target)) {
       this.closing = true;
       merc.walkTo(target.x, target.y, TILE_SIZE * LOST_SIGHT_STOP_TILES);
       return true;
@@ -240,11 +240,11 @@ export class ArcherKit implements MercenaryKit {
     return this.hitsWithoutClosing(ctx, target, distancePx);
   }
 
-  /** An arrow reaches anything in range and in sight, with or without a way round. */
+  /** An arrow reaches anything in range with a clear flight line, with or without a way round. */
   hitsWithoutClosing(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
     if (distancePx > TILE_SIZE * ARROW_RANGE_TILES) return false;
     if (ctx.isInSafeRoom(ctx.merc) || ctx.isInSafeRoom(target)) return false;
-    return ctx.merc.canSee(target);
+    return ctx.merc.canShootAt(target);
   }
 
   startAttack(ctx: MercenaryKitContext, target: Mob, _distancePx: number): void {

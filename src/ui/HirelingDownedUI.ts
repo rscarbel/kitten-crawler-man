@@ -156,18 +156,8 @@ export function hirelingDownedArrowCandidate(
   return {
     priority: ARROW_PRIORITY.DOWNED_COMPANION,
     draw: () =>
-      drawArrowAbovePlayer(
-        ctx,
-        active.x,
-        active.y,
-        bodyCenterX,
-        bodyCenterY,
-        camX,
-        camY,
-        REVIVE_ARROW_COLOR,
-        {
-          avoidRect,
-        },
-      ),
+      drawArrowAbovePlayer(ctx, active, bodyCenterX, bodyCenterY, camX, camY, REVIVE_ARROW_COLOR, {
+        avoidRect,
+      }),
   };
 }

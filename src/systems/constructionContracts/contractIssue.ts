@@ -9,7 +9,7 @@
 import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
 import { formatCost } from '../../core/items/gathering/partyResources';
 import type { WorkOrderNoticeState } from '../townNotices';
-import type { QuestMarkerState } from '../../sprites/questNPCSprite';
+import type { ObjectQuestMarker } from '../../sprites/questNPCSprite';
 import { contractSiteFor, contractSpot, type ContractSiteDef } from './contractCatalog';
 import { contractContactName } from './contractContacts';
 import { contractSiteEligible, type ContractWorld } from './contractEligibility';
@@ -68,6 +68,6 @@ export function workOrderStateFor(state: BriarHollowState): WorkOrderNoticeState
  * "take contract" action, so the marker never promises a posting the board
  * will not hand over.
  */
-export function noticeBoardMarkerFor(state: BriarHollowState): QuestMarkerState {
+export function noticeBoardMarkerFor(state: BriarHollowState): ObjectQuestMarker {
   return workOrderStateFor(state).kind === 'open' ? 'exclamation' : 'none';
 }

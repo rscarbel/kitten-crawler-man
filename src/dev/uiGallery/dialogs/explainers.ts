@@ -1,7 +1,9 @@
 /**
  * Fixtures for the paged explainers and tutorials: every "how it works"
  * explainer on its first page and a later one, the rules sheets, the quest
- * tutorials, the near-goblin hint, a readable and the notice board.
+ * tutorials, the near-goblin hint, the readables (the longest, the order book
+ * on legal paper, a pinned note, a slate read off the panel) and the notice
+ * board.
  */
 
 import { CraftExplainers, type ExplainerId } from '../../../ui/screens/dialogs/CraftExplainers';
@@ -13,7 +15,12 @@ import { PROCESSING_EXPLAINER } from '../../../ui/screens/dialogs/processingExpl
 import { RESOURCING_EXPLAINER } from '../../../ui/screens/dialogs/resourcingExplainer';
 import { buildVillageNotices, workOrderNotice, type Notice } from '../../../systems/townNotices';
 import { WORK_ORDERS } from '../../../dialog/scripts/workOrders';
-import { readableBuildings, readablesFor, type Readable } from '../../../systems/townReadables';
+import {
+  readableBuildings,
+  readablesFor,
+  STORE_ORDER_BOOK_ID,
+  type Readable,
+} from '../../../systems/townReadables';
 import { BlackjackRules } from '../../../ui/screens/dialogs/BlackjackRules';
 import { defendTutorialSurface } from '../../../ui/screens/dialogs/defendTutorial';
 import { pipeBoardExplainerSurface } from '../../../ui/screens/dialogs/pipeBoardExplainer';
@@ -149,12 +156,35 @@ function longestReadable(): Readable | null {
   );
 }
 
-function readableFixture(name: string, page: number): DialogFixture {
+function readableNamed(id: string): Readable | null {
+  const all = readableBuildings().flatMap((building) => [...readablesFor(building)]);
+  return all.find((readable) => readable.id === id) ?? null;
+}
+
+/** A short note pinned up, for the note paper: no readable in town is one yet. */
+const PINNED_NOTE: Readable = {
+  id: 'gallery_pinned_note',
+  title: 'A Pinned Note',
+  where: 'tacked to the door at eye height',
+  anchor: 'board',
+  medium: 'sheet',
+  paper: 'note',
+  body: [
+    'Gone to the mill. Back by the second bell.',
+    'If the cat comes by, the saucer is under the step. Do NOT let her talk you into the ham.',
+  ],
+};
+
+function readableFixture(
+  name: string,
+  page: number,
+  pick: () => Readable | null = longestReadable,
+): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       const overlay = new ReadableOverlay();
-      const readable = longestReadable();
+      const readable = pick();
       const open = (): void => {
         if (readable !== null) overlay.openWith(readable);
       };
@@ -382,6 +412,9 @@ export const FIXTURES: readonly DialogFixture[] = [
   ...prisonExplainerFixtures(),
   readableFixture('readable', 0),
   readableFixture('readable-page2', 1),
+  readableFixture('readable-order-book', 0, () => readableNamed(STORE_ORDER_BOOK_ID)),
+  readableFixture('readable-note', 0, () => PINNED_NOTE),
+  readableFixture('readable-slate', 0, () => readableNamed('stump_slate')),
   noticeFixture('notice-board', 0),
   noticeFixture('notice-board-scrolled', 1),
   villageNoticeFixture('notice-board-village'),

@@ -576,7 +576,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
 
   // ── Unmet ──
   check(quest.phase === 'unmet', `${label}: the quest starts unmet (${quest.phase})`);
-  check(guardMarker(outside) === 'exclamation', `${label}: the guard wears '!'`);
+  check(guardMarker(outside) === 'available', `${label}: the guard wears '!'`);
   check(map.stealthGateState() === 'locked', `${label}: the gate starts locked`);
   check(
     room.gateTiles.every((tile) => !map.isWalkable(tile.x, tile.y, 'walker')),
@@ -779,7 +779,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   check(backQuest.phase === 'keyHeld', `${label}: the key comes back out (${backQuest.phase})`);
   check(backQuest.explainerSeen, `${label}: the explainer stays read after the visit`);
   back.update();
-  check(guardMarker(back) === 'question', `${label}: the guard wears '?' with the key held`);
+  check(guardMarker(back) === 'turnIn', `${label}: the guard wears '?' with the key held`);
   check(
     backQuest.trackerEntries()[0]?.target === room.guardTile,
     `${label}: the tracker points at the guard with the key held`,

@@ -8,7 +8,7 @@ import {
   GOBLIN_PRISONER_FIGURE,
   type TileAnchor,
 } from './art/goblinGuardFigure';
-import type { FigureDef } from './figure/figureDef';
+import { drawnFigureRow, type DrawnFigureRow, type FigureDef } from './figure/figureDef';
 
 export {
   GOBLIN_GUARD_WALK_GROUND_PER_CYCLE_TILES,
@@ -62,26 +62,27 @@ function drawPrisonFigure(
   ctx: CanvasRenderingContext2D,
   figure: FigureDef,
   sprite: PrisonGoblinSpriteState<string>,
-): void {
+): DrawnFigureRow {
   drawFigureCached(ctx, figure, sprite.state, sprite.frame, sprite.x, sprite.y, sprite.tileSize, {
     flipX: sprite.facingX < 0,
   });
+  return drawnFigureRow(figure, sprite.state);
 }
 
 /** Draw a patrol guard. Every figure faces +X, so the runtime mirrors it. */
 export function drawGoblinGuardSprite(
   ctx: CanvasRenderingContext2D,
   sprite: PrisonGoblinSpriteState<GoblinGuardState>,
-): void {
-  drawPrisonFigure(ctx, GOBLIN_GUARD_FIGURE, sprite);
+): DrawnFigureRow {
+  return drawPrisonFigure(ctx, GOBLIN_GUARD_FIGURE, sprite);
 }
 
 /** Draw the gate guard. */
 export function drawGoblinGateGuardSprite(
   ctx: CanvasRenderingContext2D,
   sprite: PrisonGoblinSpriteState<GoblinGateGuardState>,
-): void {
-  drawPrisonFigure(ctx, GOBLIN_GATE_GUARD_FIGURE, sprite);
+): DrawnFigureRow {
+  return drawPrisonFigure(ctx, GOBLIN_GATE_GUARD_FIGURE, sprite);
 }
 
 /** Draw a prisoner. */

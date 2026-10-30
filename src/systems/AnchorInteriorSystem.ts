@@ -25,7 +25,7 @@ import type { BuildingId } from '../map/buildingIds';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { ResidentId } from '../core/state/residentIds';
-import type { NPCMarkerType } from '../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import { QUEST_SLOT_IDX } from '../core/items/defs/ItemDefs';
 import type { ItemId } from '../core/items/defs/ItemDefs';
@@ -777,7 +777,7 @@ export class AnchorInteriorSystem {
    * The glyph this resident should be wearing, or null when the questline has no
    * opinion about them (not on the errand, or not one of its two indoor givers).
    */
-  markerFor(residentId: ResidentId): NPCMarkerType | null {
+  markerFor(residentId: ResidentId): NpcQuestMarker | null {
     if (this.progress.status !== 'active') return null;
     const errand = anchorErrandGivenBy(residentId, this.buildingId);
     return errand === null ? null : markerForStep(this.progress[errand]);
@@ -846,9 +846,18 @@ export class AnchorInteriorSystem {
   }
 }
 
-/** The shipped convention: `'exclamation'` offers, `'question'` turns in. */
-function markerForStep(step: AnchorQuestProgress['lori']): NPCMarkerType {
-  if (step === 'offered') return 'exclamation';
-  if (step === 'shard_owed') return 'question';
-  return 'none';
+/**
+ * An errand's giver's marker, by step. The errand is offered only once the Anchor quest
+ * is under way, so the offer is a quest step rather than a new quest; the
+ * shard they hand over once it is done is the turn-in.
+ */
+const ERRAND_GIVER_MARKER_BY_STEP = {
+  offered: 'inProgress',
+  in_progress: 'none',
+  shard_owed: 'turnIn',
+  done: 'none',
+} as const satisfies Record<AnchorQuestProgress['lori'], NpcQuestMarker>;
+
+function markerForStep(step: AnchorQuestProgress['lori']): NpcQuestMarker {
+  return ERRAND_GIVER_MARKER_BY_STEP[step];
 }

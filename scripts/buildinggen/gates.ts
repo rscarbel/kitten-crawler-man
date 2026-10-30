@@ -206,8 +206,9 @@ export function gateDoorway(
 /**
  * The blocked regions describe the ink.
  *
- * A building's whole footprint is blocked at runtime regardless of what these
- * rectangles say, so the risk is the other direction: the base course must
+ * At runtime a building blocks every footprint row below its walk-behind
+ * roof rows, whatever these rectangles say (they only decide where those
+ * rows end and where the doorway is), so the risk is the other direction: the base course must
  * actually be painted where it claims to block, or the facade has a hole in it
  * that the player can see but not walk through.
  */

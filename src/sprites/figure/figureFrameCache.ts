@@ -3242,7 +3242,7 @@ interface PendingRowInk {
 }
 
 const rowInkQueue: PendingRowInk[] = [];
-const queuedRowInk = new Set<DrawnFigureRow>();
+const queuedRowInk = new Map<DrawnFigureRow, PendingRowInk>();
 
 /**
  * The screen y of the highest pixel a row ever paints, across every one of its
@@ -3258,10 +3258,45 @@ const queuedRowInk = new Set<DrawnFigureRow>();
  * figure's cell. No painted pixel can stand above that, so the stand-in only
  * ever errs high. Another row of the same figure is no stand-in: a head toss
  * or a raised arm stands taller than the idle it would be borrowed from.
+ * An icon that must sit right on its first frame asks
+ * {@link figureRowInkTopWhenMeasured} instead.
  */
 export function figureRowInkTop(row: DrawnFigureRow, sy: number, tileSize: number): number {
+  return rowInkTopAt(row, sy, tileSize, rowInkTopCellPx(row));
+}
+
+/**
+ * {@link figureRowInkTop} for an overhead icon that must sit right from the
+ * first frame it shows, or null while the row is still being measured.
+ *
+ * A wearer that hangs its icon from the cell-top stand-in shows it a head too
+ * high on the frame a building is walked into, then drops it onto them once
+ * the row lands. Asked here, the row is measured on the spot out of what is
+ * left of this frame's bake budget ({@link FRAME_BAKE_BUDGET_MS}), and the
+ * prewarm queue goes on with it on later frames; the wearer leaves its icon
+ * off until the answer is final, so the icon arrives where it stays.
+ */
+export function figureRowInkTopWhenMeasured(
+  row: DrawnFigureRow,
+  sy: number,
+  tileSize: number,
+): number | null {
+  const measured = rowInkTopByRow.get(row);
+  if (measured !== undefined) return rowInkTopAt(row, sy, tileSize, measured);
+  rowInkTopCellPx(row);
+  const pending = queuedRowInk.get(row);
+  if (pending === undefined) return null;
+  while (!rowInkFinished(pending) && msBakedThisFrame < FRAME_BAKE_BUDGET_MS) {
+    measureNextRowInkFrame(pending);
+  }
+  if (!rowInkFinished(pending)) return null;
+  settleRowInk(pending);
+  return rowInkTopAt(row, sy, tileSize, pending.topCellPx);
+}
+
+function rowInkTopAt(row: DrawnFigureRow, sy: number, tileSize: number, topCellPx: number) {
   const scale = tileSize / row.def.tileScale;
-  return sy - (row.def.tileY - rowInkTopCellPx(row)) * scale;
+  return sy - (row.def.tileY - topCellPx) * scale;
 }
 
 /** In declared cell pixels; 0, the cell's top, until the row has been measured. */
@@ -3269,10 +3304,33 @@ function rowInkTopCellPx(row: DrawnFigureRow): number {
   const measured = rowInkTopByRow.get(row);
   if (measured !== undefined) return measured;
   if (!queuedRowInk.has(row)) {
-    queuedRowInk.add(row);
-    rowInkQueue.push({ row, nextFrame: 0, topCellPx: row.def.frameHeight });
+    const pending: PendingRowInk = { row, nextFrame: 0, topCellPx: row.def.frameHeight };
+    queuedRowInk.set(row, pending);
+    rowInkQueue.push(pending);
   }
   return 0;
+}
+
+function rowInkFinished(pending: PendingRowInk): boolean {
+  return pending.nextFrame >= figureFrameCount(pending.row.def, pending.row.state);
+}
+
+/** Takes a fully measured row off the queue and records its top. */
+function settleRowInk(pending: PendingRowInk): void {
+  const index = rowInkQueue.indexOf(pending);
+  if (index !== -1) rowInkQueue.splice(index, 1);
+  queuedRowInk.delete(pending.row);
+  rowInkTopByRow.set(pending.row, pending.topCellPx);
+}
+
+/** Measures `pending`'s next frame into its running top, booked against this frame's bake spend. */
+function measureNextRowInkFrame(pending: PendingRowInk): void {
+  const { def, state } = pending.row;
+  const startedAt = bakeClock();
+  const bounds = figureInkBounds(def, state, pending.nextFrame);
+  msBakedThisFrame += bakeClock() - startedAt;
+  pending.topCellPx = Math.min(pending.topCellPx, bounds.top);
+  pending.nextFrame++;
 }
 
 /**
@@ -3305,16 +3363,8 @@ export function figureRowInkPending(): number {
 function measureQueuedRowInk(budgetMs: number): void {
   while (rowInkQueue.length > 0 && msBakedThisFrame < budgetMs) {
     const pending = rowInkQueue[0];
-    const { def, state } = pending.row;
-    const startedAt = bakeClock();
-    const bounds = figureInkBounds(def, state, pending.nextFrame);
-    msBakedThisFrame += bakeClock() - startedAt;
-    pending.topCellPx = Math.min(pending.topCellPx, bounds.top);
-    pending.nextFrame++;
-    if (pending.nextFrame < figureFrameCount(def, state)) continue;
-    rowInkQueue.shift();
-    queuedRowInk.delete(pending.row);
-    rowInkTopByRow.set(pending.row, pending.topCellPx);
+    measureNextRowInkFrame(pending);
+    if (rowInkFinished(pending)) settleRowInk(pending);
   }
 }
 

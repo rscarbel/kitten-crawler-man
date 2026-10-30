@@ -1,7 +1,8 @@
 /**
- * The Quiet Needle. The tattooist will put one living mark on a crawler — expensive,
- * permanent, and strictly one per character (`Player.tattoo`), so the choice
- * of which mark to wear is the whole decision.
+ * The Quiet Needle. The tattooist puts living marks on a crawler — expensive and
+ * permanent, and at most one of each kind per character: one stat mark
+ * (`Player.tattoo`) and one skill mark (`Player.skillTattoo`), so the choice
+ * of which stat mark to wear is the whole decision.
  *
  * Pure data + line selection; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
@@ -80,7 +81,7 @@ function buildSkillTattooOption(player: Player): ShopRow {
 
 const TATTOOIST_BARKS: ReadonlyArray<string> = [
   'Quiet shop, quiet needle. The screaming is the crawler’s part, not mine.',
-  'One mark per skin. Choose like you mean it — I don’t do cover-ups and the ink won’t sit twice.',
+  'One mark of each kind per skin. Choose like you mean it — I don’t do cover-ups and the ink won’t sit twice.',
   'Pigment’s ground, needle’s hot. What are we putting on you?',
 ];
 

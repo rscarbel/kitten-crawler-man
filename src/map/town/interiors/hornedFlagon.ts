@@ -210,7 +210,7 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
     prop(barCol, barRow, 'flagon_bar', 0, contractTarget(CONTRACT_SITE, 'bar')),
   );
   for (let rx = barCol; rx <= eastCol; rx += barStoolPitch)
-    entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - barCol}`, 1));
+    entries.push(statefulProp(rx, barStoolRow, 'bar_stool', `bar_stool_${rx - barCol}`, 1));
 
   entries.push(
     prop(carpetCol, carpetRow, 'flagon_carpet'),

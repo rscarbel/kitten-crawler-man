@@ -183,8 +183,7 @@ export function downedCompanionArrowCandidate(
     draw: () =>
       drawArrowAbovePlayer(
         ctx,
-        active.x,
-        active.y,
+        active,
         inactive.x + TILE_SIZE / 2,
         inactive.y + TILE_SIZE / 2,
         camX,

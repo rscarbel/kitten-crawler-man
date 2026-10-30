@@ -33,7 +33,6 @@ import { PLAYER_CAT_LOOK } from '../sprites/art/catFigure';
 import type { CatLook } from '../sprites/looks/catLook';
 import { FacingState, type FacingSelection, selectFacing } from '../sprites/facingView';
 import type { Pt } from '../sprites/art/catArt';
-import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import { catMouthOf } from '../sprites/crawlerMouths';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
@@ -69,11 +68,7 @@ import {
 } from '../core/party/crawlerFormulas';
 import { WARP_SPEED_DODGE_BONUS_PER_LEVEL } from '../core/skills/SkillManager';
 import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
-import {
-  pauseOverheadMeasure,
-  reportOverheadTop,
-  resumeOverheadMeasure,
-} from '../ui/world/overheadStack';
+import { pauseOverheadMeasure, resumeOverheadMeasure } from '../ui/world/overheadStack';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
 const DEGREES_PER_HALF_TURN = 180;
@@ -217,15 +212,6 @@ export class CatPlayer extends Player {
     (CatPlayer.HOMING_CONE_HALF_ANGLE_DEGREES * Math.PI) / DEGREES_PER_HALF_TURN;
   /** Radians a homing missile may turn per frame. */
   private static readonly HOMING_TURN_RATE = 0.08;
-  private static readonly ACTIVE_SPHERE_RADIUS = 4;
-  /** Distance above the sprite top where the sphere centre sits. */
-  private static readonly ACTIVE_SPHERE_GAP = 3;
-  /**
-   * Her tallest frames stop this far below the tile anchor (she is drawn at two
-   * thirds of a tile), so the sphere has to drop into the tile to hover over
-   * her head instead of floating in the air above it.
-   */
-  private static readonly ACTIVE_SPHERE_SPRITE_TOP = -5;
   /**
    * Belly height, measured off the sheet rather than derived: at 14 px the
    * surface crossed her shoulders, which is a cat swimming, not wading. This
@@ -240,7 +226,19 @@ export class CatPlayer extends Player {
     return CatPlayer.BELLY_WATERLINE_PX;
   }
   private static readonly BELLY_WATERLINE_PX = 9;
-  /** Raises the health bar above the sphere so it doesn't overlap the cat's head. */
+  /**
+   * Her ear tips on her tallest frames: she is drawn at two thirds of a tile,
+   * so they stop this far inside the top of her tile.
+   */
+  private static readonly HEAD_TOP_ABOVE_TILE_PX = -5;
+  override get headTopAboveTilePx(): number {
+    return CatPlayer.HEAD_TOP_ABOVE_TILE_PX;
+  }
+
+  protected override get healthBarAnchorAboveTilePx(): number {
+    return CatPlayer.HEALTH_BAR_RAISE;
+  }
+  /** Raises the health bar clear of her ears. */
   private static readonly HEALTH_BAR_RAISE = 16;
   private static readonly AI_MIN_COOLDOWN = 20;
   private static readonly MISS_OFFSET_FACTOR = 0.44;
@@ -1050,14 +1048,6 @@ export class CatPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    if (this.isActive && !this.paintingBodyOnly) {
-      const r = CatPlayer.ACTIVE_SPHERE_RADIUS;
-      const sphereCX = sx + s * CatPlayer.TILE_CENTER_OFFSET;
-      const sphereCY = sy - CatPlayer.ACTIVE_SPHERE_SPRITE_TOP - CatPlayer.ACTIVE_SPHERE_GAP - r;
-      reportOverheadTop(ctx, sphereCX, sphereCY - r);
-      drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
-    }
-
     const held = this.heldDraw();
     const state = this.spriteState(held);
     const missileDepthY = this.y + s * CatPlayer.TILE_CENTER_OFFSET;
@@ -1086,7 +1076,7 @@ export class CatPlayer extends Player {
     });
     drawMissileLayer('near');
 
-    this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);
+    this.renderHealthBar(ctx, sx, sy - this.healthBarAnchorAboveTilePx);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }
 }

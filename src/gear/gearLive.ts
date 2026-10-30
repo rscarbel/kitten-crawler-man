@@ -11,6 +11,7 @@
 
 import type { Rarity } from '../core/items/defs/rarity';
 import type { ClawTrail } from '../core/items/equipment/weapons';
+import { ARRIVING_BOND, type PartnerBond } from './partnerBond';
 import type { GearSetId } from './sets';
 
 /**
@@ -93,6 +94,8 @@ export class GearLiveState {
   lastStandFrames = 0;
   /** Whether her partner piece is linked with the other crawler's this frame. */
   partnerLinked = false;
+  /** Whether her link has been heard forming, so it chimes only on a real reunion. */
+  partnerBond: PartnerBond = ARRIVING_BOND;
   /** The flat bonus to every stat the link lends while it holds. */
   partnerLinkStatBonus = 0;
   /** Whether her partner was down last tick, so the partner's downing shields her once. */
@@ -136,6 +139,7 @@ export class GearLiveState {
     this.lastStandFrames = 0;
     this.noticeRangeShare = FULL_NOTICE_RANGE_SHARE;
     this.partnerLinked = false;
+    this.partnerBond = ARRIVING_BOND;
     this.partnerLinkStatBonus = 0;
     this.partnerWasDown = false;
     this.swipeCount = 0;

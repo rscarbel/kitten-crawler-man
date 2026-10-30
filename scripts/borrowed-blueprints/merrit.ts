@@ -16,7 +16,7 @@ import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase'
 import type { DialogLine } from '../../src/dialog/line';
 import type { ConversationRequest } from '../../src/dialog/request';
 import { MERRIT } from '../../src/dialog/scripts/briarHollow';
-import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../src/sprites/npcQuestMarker';
 import {
   MERRIT_CALL_MIDGE_BARK,
   merritAskPages,
@@ -126,7 +126,7 @@ function talkToMerrit(talk: TalkRig): string[] {
 }
 
 /** Merrit's marker after a frame has refreshed it. */
-function merritMarker(talk: TalkRig): NPCMarkerType {
+function merritMarker(talk: TalkRig): NpcQuestMarker {
   talk.rig.step();
   return talk.rig.kit.villagers?.villagerFor('merrit')?.marker ?? 'none';
 }
@@ -141,7 +141,7 @@ export function verifyMerritAsk(check: Check): void {
   for (const pleaWon of [false, true]) {
     const talk = talkRig('ask_merrit', pleaWon ? 'complete' : 'fortifying');
     check(
-      merritMarker(talk) === 'question',
+      merritMarker(talk) === 'inProgress',
       `a "?" over Merrit at ask_merrit (Plea won: ${pleaWon})`,
     );
     const pages = talkToMerrit(talk);
@@ -178,7 +178,7 @@ export function verifyMerritAsk(check: Check): void {
 /** The fence reported, and the step moving on to the harvest. */
 export function verifyMerritFenceDone(check: Check): void {
   const talk = talkRig('report_fence', 'fortifying');
-  check(merritMarker(talk) === 'question', 'a "?" over Merrit at report_fence');
+  check(merritMarker(talk) === 'inProgress', 'a "?" over Merrit at report_fence');
   const pages = talkToMerrit(talk);
   check(
     same(pages, paragraphs(merritFenceDonePages(CRAWLER_SPEAKERS.human))),
@@ -205,7 +205,7 @@ export function verifyMerritGrainAndCall(check: Check): void {
   const { rig } = talk;
   rig.state.blueprints.grain = GRAIN_TARGET;
   rig.human.inventory.addItem('quest_scythe', 1);
-  check(merritMarker(talk) === 'question', 'a "?" over Merrit at deliver_grain');
+  check(merritMarker(talk) === 'inProgress', 'a "?" over Merrit at deliver_grain');
   const pages = talkToMerrit(talk);
   check(
     same(pages, paragraphs(merritGrainDeliveredPages())),
@@ -228,7 +228,7 @@ export function verifyMerritGrainAndCall(check: Check): void {
   const midgeTile = blueprints.escort.midgeTile();
   const pointedAt = blueprints.trackerEntries()[0]?.target;
   check(
-    midge !== null && midge.questMarker === 'exclamation',
+    midge !== null && midge.questMarker === 'inProgress',
     'Midge wears a "!" while she answers the call',
   );
   check(
@@ -284,8 +284,7 @@ export function verifyMerritGrainAndCall(check: Check): void {
     `the escort opens with "${ESCORT_START_BANNER.title}"`,
   );
   check(
-    midge?.questMarker === 'exclamation' &&
-      blueprints.moments.midgeCaption() === MIDGE_LEAD_CAPTION,
+    midge?.questMarker === 'inProgress' && blueprints.moments.midgeCaption() === MIDGE_LEAD_CAPTION,
     `at the escort's start Midge wears a "!" captioned "${MIDGE_LEAD_CAPTION}"`,
   );
   const guidance = blueprints.guidance();

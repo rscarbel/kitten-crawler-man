@@ -1,6 +1,6 @@
 /**
- * Everything a hireling looses once it has left them: today, an archer's
- * arrows.
+ * Everything a hireling looses once it has left them: the archer's arrows and
+ * the earth elementals' earth blasts.
  *
  * A system rather than state on the hireling for the reason every projectile
  * system here is one: a mob stops being updated and drawn the frame it dies, so
@@ -23,6 +23,11 @@ import type { Mob, PlayerDamageType } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawGoblinArrow } from '../sprites/goblinArrowSprite';
+import {
+  EARTH_BLAST_IMPACT_FRAMES,
+  drawEarthBlast,
+  drawEarthBlastImpact,
+} from '../sprites/earthBlastSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 /** The hireling behind a shot: a mob that wants to hear when its blow finishes something. */
@@ -31,7 +36,7 @@ export interface HirelingShooter extends Mob {
 }
 
 /** Every kind of shot a hireling's kit can loose. */
-export type HirelingShotKind = 'arrow';
+export type HirelingShotKind = 'arrow' | 'earth_blast';
 
 /** One shot, as the kit hands it over. */
 export interface HirelingShot {
@@ -60,19 +65,48 @@ interface HirelingShotKindSpec {
    * hireling's own strikes.
    */
   readonly damageType: PlayerDamageType;
-  /** Draws the shot in flight centred on (sx, sy), pointing along `headingRad`. */
+  /**
+   * Draws the shot in flight centred on (sx, sy), pointing along `headingRad`,
+   * `ageFrames` after it was loosed.
+   */
   readonly draw: (
     ctx: CanvasRenderingContext2D,
     sx: number,
     sy: number,
     tileSize: number,
     headingRad: number,
+    ageFrames: number,
+  ) => void;
+  /**
+   * What the shot leaves where it stops — on a body, a wall or the end of its
+   * flight — or null for one that leaves nothing.
+   */
+  readonly impact: HirelingShotImpactSpec | null;
+}
+
+/** An effect played out where a shot stopped. */
+interface HirelingShotImpactSpec {
+  readonly frames: number;
+  /** Draws the effect centred on (sx, sy); `progress` runs 0 → 1 across it. */
+  readonly draw: (
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    tileSize: number,
+    progress: number,
   ) => void;
 }
 
 /** An arrow outruns anything that walks, so a shot aimed at a mob reaches it. */
 const ARROW_SPEED_TILES_PER_FRAME = 0.32;
 const ARROW_HIT_RADIUS_TILES = 0.45;
+/**
+ * A thrown clump of earth is slower than an arrow but still outruns anything
+ * that walks over the few tiles it is thrown across.
+ */
+const EARTH_BLAST_SPEED_TILES_PER_FRAME = 0.2;
+/** A clump is broader than a shaft, so it catches a body a little further off its line. */
+const EARTH_BLAST_HIT_RADIUS_TILES = 0.5;
 
 /** A `Record` so a new shot kind fails the typecheck until it says how it flies and looks. */
 const HIRELING_SHOT_KINDS: Readonly<Record<HirelingShotKind, HirelingShotKindSpec>> = {
@@ -81,6 +115,14 @@ const HIRELING_SHOT_KINDS: Readonly<Record<HirelingShotKind, HirelingShotKindSpe
     hitRadiusTiles: ARROW_HIT_RADIUS_TILES,
     damageType: 'melee',
     draw: (ctx, sx, sy, tileSize, headingRad) => drawGoblinArrow(ctx, sx, sy, tileSize, headingRad),
+    impact: null,
+  },
+  earth_blast: {
+    speedTilesPerFrame: EARTH_BLAST_SPEED_TILES_PER_FRAME,
+    hitRadiusTiles: EARTH_BLAST_HIT_RADIUS_TILES,
+    damageType: 'melee',
+    draw: drawEarthBlast,
+    impact: { frames: EARTH_BLAST_IMPACT_FRAMES, draw: drawEarthBlastImpact },
   },
 };
 
@@ -110,16 +152,31 @@ interface Flight {
   readonly vy: number;
   readonly heading: number;
   travelledPx: number;
+  ageFrames: number;
   readonly shot: HirelingShot;
 }
 
+interface Impact {
+  readonly x: number;
+  readonly y: number;
+  frame: number;
+  readonly spec: HirelingShotImpactSpec;
+}
+
+/** How a flight ended: the impact sound is for a strike, not a shot that fell short. */
+type FlightEnd = 'struck' | 'spent';
+
 export class HirelingShotSystem implements GameSystem {
   private flights: Flight[] = [];
+  private impacts: Impact[] = [];
   /** Scratch set for grid queries, reused every frame. */
   private readonly nearby = new Set<Mob>();
 
-  /** Set when a shot lands or snaps on a wall; the scene plays the cue and clears it. */
-  impactSoundPending = false;
+  /**
+   * The kinds of shot that landed on a body or a wall since the scene last
+   * played their cues; the scene plays one cue per kind and clears it.
+   */
+  readonly landedKinds = new Set<HirelingShotKind>();
 
   /**
    * @param isInSafeRoom The test that keeps the party's own attacks out of a
@@ -139,6 +196,7 @@ export class HirelingShotSystem implements GameSystem {
   update(ctx: SystemContext): void {
     this.collectShots(ctx.roster.mobs);
     this.advance(ctx);
+    this.advanceImpacts();
   }
 
   /**
@@ -166,6 +224,7 @@ export class HirelingShotSystem implements GameSystem {
       vy: dirY * speed,
       heading: Math.atan2(dirY, dirX),
       travelledPx: 0,
+      ageFrames: 0,
       shot,
     });
   }
@@ -186,12 +245,13 @@ export class HirelingShotSystem implements GameSystem {
           y: nextY - TILE_SIZE * CENTER_OFFSET,
         });
       if (blocked) {
-        this.impactSoundPending = true;
+        this.endFlight(flight, 'struck');
         continue;
       }
       flight.x = nextX;
       flight.y = nextY;
       flight.travelledPx += Math.hypot(flight.vx, flight.vy);
+      flight.ageFrames++;
 
       const victim = this.victimOf(ctx, flight);
       if (victim !== null) {
@@ -199,13 +259,29 @@ export class HirelingShotSystem implements GameSystem {
         const damageType = HIRELING_SHOT_KINDS[shot.kind].damageType;
         victim.takeCreditedDamage(shot.damage, shot.owner, damageType, shot.shooter);
         shot.shooter.noteBlowLanded(victim);
-        this.impactSoundPending = true;
+        this.endFlight(flight, 'struck');
         continue;
       }
-      if (flight.travelledPx >= flight.shot.rangePx) continue;
+      if (flight.travelledPx >= flight.shot.rangePx) {
+        this.endFlight(flight, 'spent');
+        continue;
+      }
       survivors.push(flight);
     }
     this.flights = survivors;
+  }
+
+  private endFlight(flight: Flight, end: FlightEnd): void {
+    const kind = flight.shot.kind;
+    if (end === 'struck') this.landedKinds.add(kind);
+    const impact = HIRELING_SHOT_KINDS[kind].impact;
+    if (impact !== null) this.impacts.push({ x: flight.x, y: flight.y, frame: 0, spec: impact });
+  }
+
+  private advanceImpacts(): void {
+    if (this.impacts.length === 0) return;
+    for (const impact of this.impacts) impact.frame++;
+    this.impacts = this.impacts.filter((impact) => impact.frame < impact.spec.frames);
   }
 
   private victimOf(ctx: SystemContext, flight: Flight): Mob | null {
@@ -240,6 +316,15 @@ export class HirelingShotSystem implements GameSystem {
 
   /** Drawn over the creatures, so a shot crossing a fight never hides behind it. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const impact of this.impacts) {
+      impact.spec.draw(
+        ctx,
+        impact.x - camX,
+        impact.y - camY,
+        TILE_SIZE,
+        impact.frame / impact.spec.frames,
+      );
+    }
     for (const flight of this.flights) {
       HIRELING_SHOT_KINDS[flight.shot.kind].draw(
         ctx,
@@ -247,6 +332,7 @@ export class HirelingShotSystem implements GameSystem {
         flight.y - camY,
         TILE_SIZE,
         flight.heading,
+        flight.ageFrames,
       );
     }
   }
@@ -254,6 +340,7 @@ export class HirelingShotSystem implements GameSystem {
   /** A checkpoint restore must not resume a shot loosed in the run that died. */
   resetForCheckpoint(): void {
     this.flights = [];
-    this.impactSoundPending = false;
+    this.impacts = [];
+    this.landedKinds.clear();
   }
 }

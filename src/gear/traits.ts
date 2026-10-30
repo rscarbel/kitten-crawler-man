@@ -59,7 +59,7 @@ export type OnHitStatusKind = 'poison' | 'chill' | 'burn' | 'stun' | 'web' | 'in
 /** Which of the wearer's hits a trait rides on: melee blows only, or her missiles too. */
 export type HitDelivery = 'melee' | 'any';
 
-/** What a relic floating at the wearer's shoulder does each time it recharges. */
+/** What a relic circling its wearer does each time it recharges. */
 export type RelicBehaviour = 'bolt' | 'ward' | 'bramble';
 
 /** Every gear trait but the awakening, which carries a list of these. */

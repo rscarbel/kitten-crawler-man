@@ -297,7 +297,7 @@ section('1. The Mayor');
   );
   rig.step();
   check(
-    villagers.villagerFor('bramblewick')?.marker === 'exclamation',
+    villagers.villagerFor('bramblewick')?.marker === 'available',
     'the Mayor wears the ! before he is met',
   );
   const opening = talk('bramblewick');
@@ -447,7 +447,7 @@ section('3. Wood, then stone');
     `${STONE_TARGET} stone held sends the party to Tikka`,
   );
   rig.step();
-  check(villagers.villagerFor('tikka')?.marker === 'question', 'Tikka wears the ?');
+  check(villagers.villagerFor('tikka')?.marker === 'turnIn', 'Tikka wears the turn-in ?');
   checkpointStep('report_tikka');
 }
 

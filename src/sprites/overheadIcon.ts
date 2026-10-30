@@ -1,9 +1,9 @@
 /**
- * The one icon that floats over an NPC or a counter: a quest `!`/`?`, the
- * coin of somewhere that sells things, the cross of someone who heals, or
- * nothing.
+ * The one icon that floats over an NPC or a counter: a quest marker, the coin
+ * of somewhere that sells things, the cross of someone who heals, or nothing.
  *
  * A wearer never paints two. Every shopkeeper asks {@link overheadIconFor}
+ * (or, for a quest object rather than a person, {@link objectOverheadIconFor})
  * which one it wears and paints the answer with {@link drawOverheadIcon}, so
  * "the quest wins over the coin" is decided in one place rather than at each
  * call site.
@@ -21,15 +21,26 @@ import {
 } from '../ui/world/glyphBadge';
 import { TILE_SIZE } from '../core/constants';
 import { deferAboveDarkness } from '../systems/lighting/aboveDarkness';
+import type { DrawnFigureRow } from './figure/figureDef';
+import { figureRowInkTopWhenMeasured } from './figure/figureFrameCache';
 import {
   EXCLAMATION_CENTER_X,
   QUEST_MARKER_HEAD_GAP_PX,
   drawQuestMarker,
-  questMarkerColorFor,
+  objectMarkerLook,
+  questMarkerReachAboveArtPx,
+  questMarkerPresentReachRightPx,
   questMarkerTopY,
-  type QuestMarkerGlyph,
-  type QuestMarkerState,
+  type ObjectQuestMarker,
+  type ShownObjectQuestMarker,
 } from './questNPCSprite';
+import {
+  npcMarkerBeaconStrength,
+  npcMarkerLook,
+  type NpcMarker,
+  type ShownNpcMarker,
+} from './npcQuestMarker';
+import { drawQuestBeacon, questBeaconBounds } from './questBeacon';
 
 /**
  * Whether a counter has anything to sell. A shelf that is empty for now but
@@ -39,17 +50,34 @@ import {
  */
 export type ShopSign = 'trades' | 'treats' | 'closed';
 
-/** The single icon a wearer shows. */
-export type OverheadIcon = QuestMarkerState | 'shop' | 'medical';
+type BadgeIcon = 'shop' | 'medical';
+
+/** The single icon a person shows: an NPC marker (see `npcQuestMarker.ts`) or a counter's badge. */
+export type NpcOverheadIcon = NpcMarker | BadgeIcon;
+
+/** The single icon a quest object (a board, a stall) shows: the plain `!`/`?` or a counter's badge. */
+export type ObjectOverheadIcon = ShownObjectQuestMarker | BadgeIcon | 'none';
+
+/** Any overhead icon, for the painters that draw both kinds. */
+export type OverheadIcon = NpcOverheadIcon | ObjectOverheadIcon;
 
 const ICON_FOR_SIGN = {
   trades: 'shop',
   treats: 'medical',
   closed: 'none',
-} as const satisfies Record<ShopSign, OverheadIcon>;
+} as const satisfies Record<ShopSign, BadgeIcon | 'none'>;
 
-/** The icon a wearer with quest state `quest` and shop sign `shop` shows: a quest marker always outranks the counter's badge. */
-export function overheadIconFor(quest: QuestMarkerState, shop: ShopSign): OverheadIcon {
+/** The icon a person with marker `marker` and shop sign `shop` shows: a marker always outranks the counter's badge. */
+export function overheadIconFor(marker: NpcMarker, shop: ShopSign): NpcOverheadIcon {
+  if (marker !== 'none') return marker;
+  return ICON_FOR_SIGN[shop];
+}
+
+/** {@link overheadIconFor} for a quest object rather than a person. */
+export function objectOverheadIconFor(
+  quest: ObjectQuestMarker,
+  shop: ShopSign,
+): ObjectOverheadIcon {
   if (quest !== 'none') return quest;
   return ICON_FOR_SIGN[shop];
 }
@@ -71,12 +99,6 @@ const FULL_TURN = Math.PI * 2;
 /** The cross's arm length and thickness as fractions of the disc's radius. */
 const CROSS_ARM_RATIO = 0.62;
 const CROSS_THICKNESS_RATIO = 0.42;
-
-type BadgeIcon = Extract<OverheadIcon, 'shop' | 'medical'>;
-
-function glyphOf(icon: Exclude<OverheadIcon, BadgeIcon | 'none'>): QuestMarkerGlyph {
-  return icon === 'question' ? '?' : '!';
-}
 
 /** A flat emerald coin on a dark edge, in the same idiom as the station glyphs. */
 function drawCoinGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
@@ -154,26 +176,135 @@ function drawCounterBadge(
   drawGlyphBadge(ctx, cx, cy, BADGE_GLYPHS[icon], scale);
 }
 
+/** How a quest icon paints: its glyph, colour and whether a present rides beside it. */
+function questIconLook(icon: ShownNpcMarker | ShownObjectQuestMarker) {
+  switch (icon) {
+    case 'available':
+    case 'inProgress':
+    case 'turnIn':
+    case 'news':
+      return npcMarkerLook(icon);
+    case 'exclamation':
+    case 'question':
+      return objectMarkerLook(icon);
+    default: {
+      const unhandled: never = icon;
+      return unhandled;
+    }
+  }
+}
+
 /**
- * Paints `icon` over a wearer whose highest painted pixel is `artTopY`, centred
- * over the box at `sx` sized `s` — the same contract as `drawQuestMarker`,
- * which the quest states are handed to unchanged.
+ * The line an overhead icon hangs from: a top that will not move once the
+ * icon shows.
+ *
+ * A figure row's plain top (`figureRowInkTop`) is a stand-in at the top
+ * of its cell until the row is measured, so an icon hung from it shows a head
+ * too high, then drops onto the wearer a moment later. An anchor can only be
+ * made from a measured row ({@link IconAnchor.ofRow}, null until the row is
+ * measured, when the icon is left off) or from art whose top is final on its
+ * first frame ({@link IconAnchor.ofFixedArt}), so a wearer has to say which.
+ */
+export class IconAnchor {
+  private constructor(readonly y: number) {}
+
+  /** The measured top of the row a figure drew, or null while it is still being measured. */
+  static ofRow(row: DrawnFigureRow | undefined, sy: number, tileSize: number): IconAnchor | null {
+    if (row === undefined) return null;
+    const y = figureRowInkTopWhenMeasured(row, sy, tileSize);
+    return y === null ? null : new IconAnchor(y);
+  }
+
+  /**
+   * A top that is right on the first frame it is known: a baked sheet's ink,
+   * a figure's fixed head height. Never a figure row's top; that is
+   * {@link IconAnchor.ofRow}.
+   */
+  static ofFixedArt(y: number): IconAnchor {
+    return new IconAnchor(y);
+  }
+
+  /** This anchor raised to clear `top` as well: a health bar or a bubble at fixed geometry. */
+  clearing(top: number): IconAnchor {
+    return top < this.y ? new IconAnchor(top) : this;
+  }
+}
+
+/**
+ * Paints `icon` over a wearer whose art ends at `anchor`, centred over the box
+ * at `sx` sized `s` — the same contract as `drawQuestMarker`. Nothing while
+ * the anchor is null: the wearer's row is still being measured.
  */
 export function drawOverheadIcon(
   ctx: CanvasRenderingContext2D,
   sx: number,
-  artTopY: number,
+  anchor: IconAnchor | null,
   s: number,
   icon: OverheadIcon,
 ): void {
-  if (icon === 'none') return;
-  if (icon === 'shop' || icon === 'medical') {
-    drawCounterBadge(ctx, sx, artTopY, s, icon);
-    return;
+  if (anchor === null) return;
+  const artTopY = anchor.y;
+  switch (icon) {
+    case 'none':
+      return;
+    case 'shop':
+    case 'medical':
+      drawCounterBadge(ctx, sx, artTopY, s, icon);
+      return;
+    case 'available':
+    case 'inProgress':
+    case 'turnIn':
+    case 'news':
+    case 'exclamation':
+    case 'question': {
+      const look = questIconLook(icon);
+      drawQuestMarker(ctx, sx, artTopY, s, look.glyph, look.color, look.withPresent);
+    }
   }
-  const color = questMarkerColorFor(icon);
-  if (color === undefined) return;
-  drawQuestMarker(ctx, sx, artTopY, s, glyphOf(icon), color);
+}
+
+/**
+ * The column of light behind a wearer of `icon`, whose tile's top-left is at
+ * screen (`sx`, `sy`): only a quest icon has one, in its own colour, and an
+ * offer quiets while the party is on another quest. Call it before the
+ * wearer's body paint so the beam stands behind them. `strengthScale` is
+ * `drawQuestBeacon`'s, for a figure pale enough to wash out in the glow.
+ */
+export function drawOverheadIconBeacon(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  tileSize: number,
+  camX: number,
+  camY: number,
+  icon: OverheadIcon,
+  strengthScale = 1,
+): void {
+  switch (icon) {
+    case 'none':
+    case 'shop':
+    case 'medical':
+      return;
+    case 'available':
+    case 'inProgress':
+    case 'turnIn':
+    case 'news': {
+      const strength = strengthScale * npcMarkerBeaconStrength(icon);
+      const { color } = npcMarkerLook(icon);
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), color, strength);
+      return;
+    }
+    case 'exclamation':
+    case 'question': {
+      const color = questIconLook(icon).color;
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), color, strengthScale);
+      return;
+    }
+    default: {
+      const unhandled: never = icon;
+      return unhandled;
+    }
+  }
 }
 
 /**
@@ -187,9 +318,76 @@ export function overheadIconTopY(
   s: number,
   icon: OverheadIcon,
 ): number {
-  if (icon === 'none') return artTopY;
-  if (icon === 'shop' || icon === 'medical') {
-    return badgeLayout(artTopY, s).topY;
+  switch (icon) {
+    case 'none':
+      return artTopY;
+    case 'shop':
+    case 'medical':
+      return badgeLayout(artTopY, s).topY;
+    case 'available':
+    case 'inProgress':
+    case 'turnIn':
+    case 'news':
+    case 'exclamation':
+    case 'question':
+      return questMarkerTopY(ctx, artTopY, s, questIconLook(icon).glyph);
   }
-  return questMarkerTopY(ctx, artTopY, s, glyphOf(icon));
+}
+
+/** The part of the screen an overhead icon and its beam can paint over its wearer. */
+export interface OverheadIconReach {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  /** A quest beam's ground pool spreads below the wearer's tile; a badge stays above the art. */
+  readonly bottom: number;
+}
+
+/**
+ * Everything `icon` can paint over a wearer whose box is at `sx` sized `s`,
+ * whose tile's top-left is at (`sx`, `sy`) as {@link drawOverheadIconBeacon}
+ * takes it, and whose art can rise no higher than `artTopY`: the beam of a
+ * quest icon and the glyph or badge at the top of its bounce. Null for none.
+ * For a culler, which must draw the wearer before any of it reaches the view.
+ */
+export function overheadIconReach(
+  sx: number,
+  sy: number,
+  s: number,
+  artTopY: number,
+  icon: OverheadIcon,
+): OverheadIconReach | null {
+  switch (icon) {
+    case 'none':
+      return null;
+    case 'shop':
+    case 'medical': {
+      const layout = badgeLayout(artTopY, s);
+      const halfSize = (GLYPH_BADGE_SIZE * layout.scale) / 2;
+      const centreX = sx + s * EXCLAMATION_CENTER_X;
+      return {
+        left: Math.min(sx, centreX - halfSize),
+        right: Math.max(sx + s, centreX + halfSize),
+        top: layout.topY,
+        bottom: artTopY,
+      };
+    }
+    case 'available':
+    case 'inProgress':
+    case 'turnIn':
+    case 'news':
+    case 'exclamation':
+    case 'question': {
+      const beam = questBeaconBounds(sx, sy, s);
+      const presentRight = questIconLook(icon).withPresent
+        ? sx + s * EXCLAMATION_CENTER_X + questMarkerPresentReachRightPx(s)
+        : sx + s;
+      return {
+        left: Math.min(sx, beam.left),
+        right: Math.max(sx + s, beam.right, presentRight),
+        top: Math.min(beam.top, artTopY - questMarkerReachAboveArtPx(s)),
+        bottom: beam.bottom,
+      };
+    }
+  }
 }

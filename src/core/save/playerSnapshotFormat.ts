@@ -59,6 +59,8 @@ export interface PlayerSnapshot {
   skillTattoo: SkillId | null;
   /** Each piece of gear's own memory. */
   gearState: SavedGearItemState[];
+  /** Whether her partner piece's pair were apart when this was taken, so a reunion after it still chimes. */
+  partnerApart: boolean;
   /**
    * Frames left before the slingshot can fire again; the human's alone.
    * Without this, every scene transition zeroed the human's cooldown and
@@ -230,6 +232,7 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
     isKnockedOut,
     knockedOutFrames,
     reviveProgress,
+    partnerApart,
   } = value;
   const baseStats = parseBaseStats(value.baseStats);
   const inventorySlots = parseSavedSlots(value.inventorySlots);
@@ -264,6 +267,7 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
     !isNonNegativeFinite(juggJuiceHpBoost) ||
     typeof isActive !== 'boolean' ||
     typeof isKnockedOut !== 'boolean' ||
+    typeof partnerApart !== 'boolean' ||
     !isNonNegativeFinite(knockedOutFrames) ||
     !isNonNegativeFinite(reviveProgress) ||
     !humanOnlyFieldsValid ||
@@ -300,6 +304,7 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
     tattoo,
     skillTattoo,
     gearState,
+    partnerApart,
     drillTraining,
     statusEffects,
     juggJuiceHpBoost,

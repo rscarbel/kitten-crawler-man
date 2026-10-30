@@ -73,6 +73,12 @@ export interface InteriorPartyRun {
   readonly maySave: () => boolean;
   /** The page's wipe, or null where nothing is saved (dev routes, harnesses). */
   readonly progressWipe: ProgressWipe | null;
+  /**
+   * Whether any of the floor's quests is under way, asked of its quest
+   * systems whether or not the floor keeps a Journal, so offers indoors quiet
+   * as they do outside.
+   */
+  readonly questUnderway: () => boolean;
 }
 
 /** For an interior with no floor behind it: fresh state and no storage. */
@@ -94,5 +100,6 @@ export function detachedPartyRun(): InteriorPartyRun {
     commitSave: () => Promise.resolve('disabled'),
     maySave: () => true,
     progressWipe: null,
+    questUnderway: () => false,
   };
 }

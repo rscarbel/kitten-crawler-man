@@ -457,8 +457,7 @@ export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationMo
       draw: () =>
         drawArrowAbovePlayer(
           ctx,
-          active.x,
-          active.y,
+          active,
           target.x,
           target.y,
           camX,

@@ -110,7 +110,7 @@ function verifyOfferDoesNotStealTheSaw(check: Check): void {
   const rig = freshRig();
   const villagers = rig.kit.villagers;
   const sawmill = sawmillOf(rig);
-  check(fennaOf(rig).marker === 'exclamation', "Fenna wears her side quest's offer `!`");
+  check(fennaOf(rig).marker === 'available', "Fenna wears her side quest's offer `!`");
   if (!standBesideFenna(rig, 'machine_nearer')) {
     check(false, 'a tile reaches both Fenna and a nearer machine');
     return;
@@ -146,7 +146,7 @@ function verifyOwedFennaIsPaid(check: Check): void {
   stepFrames(rig, MARKER_FRAMES);
   const villagers = rig.kit.villagers;
   const sawmill = sawmillOf(rig);
-  check(fennaOf(rig).marker === 'question', 'Fenna wears the `?` of a payment owed');
+  check(fennaOf(rig).marker === 'turnIn', 'Fenna wears the `?` of a payment owed');
 
   if (standBesideFenna(rig, 'machine_nearer')) {
     rig.kit.tryInteract(rig.human, false);

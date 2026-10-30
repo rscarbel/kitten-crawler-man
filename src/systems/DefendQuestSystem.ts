@@ -27,7 +27,7 @@ import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { prewarmFuzzyNightmare } from '../sprites/fuzzyNightmareSprite';
 import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { QuestNPC } from '../creatures/QuestNPC';
-import type { NPCMarkerType } from '../creatures/QuestNPC';
+import { minimapMarkerFor, npcMarkerShows, type NpcQuestMarker } from '../sprites/npcQuestMarker';
 import { QuestManager } from '../core/quests/QuestManager';
 import type { QuestId, QuestStatus } from '../core/quests/QuestManager';
 import { secondsLabel, type TrackerEntry } from './questTracker';
@@ -247,6 +247,23 @@ export type DefendQuestPhase =
   | 'complete'
   | 'failed';
 
+/**
+ * What the goblin mother wears in each phase: her offer until the party takes
+ * it, then nothing while the nursery is held, then the turn-in once her child
+ * is home and her thanks (the quest's pay) waits on a word.
+ */
+const MOTHER_MARKER_BY_PHASE = {
+  inactive: 'none',
+  npc_waiting: 'available',
+  dialog: 'available',
+  tutorial: 'available',
+  countdown: 'none',
+  defending: 'none',
+  complete_pending: 'turnIn',
+  complete: 'none',
+  failed: 'none',
+} as const satisfies Record<DefendQuestPhase, NpcQuestMarker>;
+
 /** Phases in which the defense encounter is over, however it ended. */
 const RESOLVED_PHASES: ReadonlySet<DefendQuestPhase> = new Set([
   'complete_pending',
@@ -323,12 +340,25 @@ export interface DefendQuestCheckpoint {
    * the very first frame after a restore.
    */
   readonly npcHp: number;
-  readonly npcMarkerType: NPCMarkerType;
 }
 
 export class DefendQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
-  private phase: DefendQuestPhase = 'inactive';
+  private currentPhase: DefendQuestPhase = 'inactive';
+
+  private get phase(): DefendQuestPhase {
+    return this.currentPhase;
+  }
+
+  /** Every phase change re-dresses the goblin mother, so her marker can never lag the quest. */
+  private set phase(next: DefendQuestPhase) {
+    this.currentPhase = next;
+    this.syncMotherMarker();
+  }
+
+  private syncMotherMarker(): void {
+    if (this.npc !== null) this.npc.markerType = MOTHER_MARKER_BY_PHASE[this.currentPhase];
+  }
   /**
    * Whether a crawler has been seen standing in the nursery.
    *
@@ -465,6 +495,7 @@ export class DefendQuestSystem implements GameSystem {
       this.phase = 'npc_waiting';
 
       this.npc = new QuestNPC(this.roomData.npcTile.x, this.roomData.npcTile.y, DEFEND_QUEST_ID);
+      this.syncMotherMarker();
     }
   }
 
@@ -478,7 +509,6 @@ export class DefendQuestSystem implements GameSystem {
     this.questManager.startQuest(DEFEND_QUEST_ID);
     this.questManager.completeQuest(DEFEND_QUEST_ID);
     this.phase = 'complete';
-    this.npc.markerType = 'none';
     this.childVisible = true;
     this.childX = this.npc.x + TILE_SIZE;
     this.childY = this.npc.y;
@@ -503,13 +533,9 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase === 'failed') {
       return [{ x: tileX, y: tileY, type: 'red_x' }];
     }
-    if (this.phase === 'complete_pending') {
-      return [{ x: tileX, y: tileY, type: 'question' }];
-    }
-    if (this.phase === 'npc_waiting' || this.phase === 'dialog') {
-      return [{ x: tileX, y: tileY, type: 'exclamation' }];
-    }
-    return [];
+    const marker = MOTHER_MARKER_BY_PHASE[this.phase];
+    if (!npcMarkerShows(marker)) return [];
+    return [{ x: tileX, y: tileY, type: minimapMarkerFor(marker) }];
   }
 
   /**
@@ -1416,9 +1442,6 @@ export class DefendQuestSystem implements GameSystem {
       questId: DEFEND_QUEST_ID,
       objectiveId: 'goblin_child_returned',
     });
-    if (this.npc) {
-      this.npc.markerType = 'question';
-    }
 
     if (this.roomData && this.npc) {
       this.childVisible = true;
@@ -1454,7 +1477,6 @@ export class DefendQuestSystem implements GameSystem {
   private triggerQuestComplete(active: Player, party: CrawlerPair): void {
     this.phase = 'complete';
     this.questManager.completeQuest(DEFEND_QUEST_ID);
-    if (this.npc) this.npc.markerType = 'none';
 
     const def = this.questManager.getDef(DEFEND_QUEST_ID);
     if (!def) return;
@@ -1544,7 +1566,6 @@ export class DefendQuestSystem implements GameSystem {
     this.woodPileAvailable = true;
     this.audienceAbsenceFrames = 0;
     this.encounterAborted = false;
-    if (this.npc) this.npc.markerType = 'none';
   }
 
   private finishBuild(ctx: SystemContext): void {
@@ -2150,7 +2171,6 @@ export class DefendQuestSystem implements GameSystem {
       encounterAborted: this.encounterAborted,
       questMobs: [...this.questMobs],
       npcHp: this.npc?.hp ?? 0,
-      npcMarkerType: this.npc?.markerType ?? 'none',
     };
   }
 
@@ -2196,7 +2216,7 @@ export class DefendQuestSystem implements GameSystem {
 
     if (this.npc !== null) {
       this.npc.hp = snapshot.npcHp;
-      this.npc.markerType = snapshot.npcMarkerType;
+      this.syncMotherMarker();
       // The tint is a standing "she is under attack" alarm; the attack it warns
       // about is one of the things being rewound.
       this.npc.clearHurtState();

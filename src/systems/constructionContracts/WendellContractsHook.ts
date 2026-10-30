@@ -12,7 +12,7 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { Conversation } from '../../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../../dialog/line';
 import type { Choice, ConversationHandle, ConversationRequest, Ending } from '../../dialog/request';
@@ -106,14 +106,14 @@ export class WendellContractsHook implements ResidentQuestHook {
   }
 
   /**
-   * `'exclamation'` over Wendell while a contract is his to give, `'none'`
+   * The offer over Wendell while a contract is his to give, `'none'`
    * while one is held; null before the contracts unlock, leaving his glyph to
    * the Blueprints quest, and for anyone else.
    */
-  markerFor(residentId: ResidentId): NPCMarkerType | null {
+  markerFor(residentId: ResidentId): NpcQuestMarker | null {
     if (residentId !== WENDELL_RESIDENT_ID) return null;
     if (!contractsUnlocked(this.deps.state)) return null;
-    return this.contracts.active === null ? 'exclamation' : 'none';
+    return this.contracts.active === null ? 'available' : 'none';
   }
 
   dismissDialog(): boolean {

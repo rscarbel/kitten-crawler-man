@@ -28,9 +28,13 @@ import { CLUB_PROPS, propSortY, type ClubProp } from '../core/club/clubProps';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { beginOverheadMeasure, endOverheadMeasure } from '../ui/world/overheadStack';
 import { drawClubCastFigure, type ClubFigureRef } from '../sprites/clubCastFigure';
-import { drawOverheadIcon, overheadIconFor, type ShopSign } from '../sprites/overheadIcon';
+import {
+  IconAnchor,
+  drawOverheadIcon,
+  overheadIconFor,
+  type ShopSign,
+} from '../sprites/overheadIcon';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
-import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import {
   CLUB_BARTENDER,
   clubDancerAt,
@@ -688,9 +692,8 @@ export class CloakAndDaggerSystem {
           });
           if (icon !== 'none') {
             const box = scaleHumanoidBox(sx, sy, tileSize);
-            const artTop =
-              drawnRow === undefined ? box.sy : figureRowInkTop(drawnRow, sy, tileSize);
-            drawOverheadIcon(ctx, box.sx, artTop, box.s, icon);
+            const anchor = IconAnchor.ofRow(drawnRow, sy, tileSize);
+            drawOverheadIcon(ctx, box.sx, anchor, box.s, icon);
           }
         } finally {
           overheadTop = endOverheadMeasure();

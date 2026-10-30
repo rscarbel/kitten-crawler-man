@@ -130,9 +130,8 @@ export class GolemKit implements MercenaryKit {
     if (distancePx < minPx || distancePx > maxPx) return false;
     // Without this it lobs boulders into the wall it is standing behind
     // forever: the cooldown resets, the rock shatters on the same face, and the
-    // golem never closes. `canSee` is the shared cached check the wild golem
-    // uses, so both ends of the same attack agree on what "can see" means.
-    return merc.canSee(victim);
+    // golem never closes.
+    return merc.canShootAt(victim);
   }
 
   private begin(merc: Mercenary, attack: GolemAttack): void {

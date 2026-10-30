@@ -600,7 +600,7 @@ export class TownDecorSystem implements GameSystem {
   /**
    * @param claimedElsewhere tiles the market stalls and `TownPropSystem`'s props
    *   already stand on. Needed for the same reason `TownPropSystem` needs the
-   *   market's: placement tests `isWalkableIgnoringPermanent`, which by design
+   *   market's: placement tests `isOpenStreetGround`, which by design
    *   does not see those systems' permanent blocks.
    */
   constructor(
@@ -928,10 +928,7 @@ export class TownDecorSystem implements GameSystem {
     if (this.occupied.has(key) || this.claimedElsewhere.has(key)) return false;
     if (this.doorwayKeepClear.has(key)) return false;
     if (this.pastureKeepClear.has(key)) return false;
-    // `IgnoringPermanent` for the reason `TownPropSystem.findFreeTile` gives: the
-    // overworld map instance outlives a trip into a building, so a prop's own
-    // block would make re-placement pick a different tile every trip.
-    return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y, 'walker');
+    return this.gameMap.isOpenStreetGround(tile.x, tile.y);
   }
 
   private reserve(tile: TileXY): void {

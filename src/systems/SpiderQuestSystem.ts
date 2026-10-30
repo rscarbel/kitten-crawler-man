@@ -77,7 +77,8 @@ import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
 import { CAROLINE_SPIDER_WARNING, SCIENTIST } from '../dialog/scripts/scenes/spider';
-import { drawQuestMarker, QUEST_MARKER_GOLD, questMarkerTopY } from '../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
+import { IconAnchor, drawOverheadIcon, overheadIconTopY } from '../sprites/overheadIcon';
 import { ActivityDifficultyGate } from '../ui/screens/dialogs/activityDifficultyPicker';
 import {
   markSpiderTutorialPagesSeen,
@@ -85,6 +86,9 @@ import {
   type SpiderTutorialPageId,
 } from '../ui/screens/dialogs/spiderTutorial';
 import type { SpiderQuestCue } from '../audio/spiderQuestSoundCues';
+
+/** Dr. Moult waiting to be talked to is Pest Control on offer, not yet started. */
+const MOULT_OFFER_MARKER = 'available' as const satisfies NpcQuestMarker;
 
 export const SPIDER_QUEST_ID = 'grotesque_spider' as const satisfies QuestId;
 
@@ -1153,7 +1157,7 @@ export class SpiderQuestSystem implements GameSystem {
       if (this.isWithinScientistReach(active)) {
         const left = this.scientistX - TILE_SIZE * TILE_CENTER_OFFSET_PX - camX;
         const headTop = this.scientistFigure.headTop(this.scientistY, camY);
-        const markerTop = questMarkerTopY(ctx2d, headTop, TILE_SIZE, '!');
+        const markerTop = overheadIconTopY(ctx2d, headTop, TILE_SIZE, MOULT_OFFER_MARKER);
         const feetY = this.scientistY - camY;
         drawInteractionPrompt(ctx2d, left, markerTop, TILE_SIZE, feetY, 'Talk');
       }
@@ -2913,9 +2917,10 @@ export class SpiderQuestSystem implements GameSystem {
 
     if (this.phase === 'scientist_waiting') {
       const boxLeft = centreX - TILE_SIZE / 2;
-      drawQuestMarker(ctx, boxLeft, headTop, TILE_SIZE, '!', QUEST_MARKER_GOLD);
+      // His head height is fixed geometry, not a measured row.
+      drawOverheadIcon(ctx, boxLeft, IconAnchor.ofFixedArt(headTop), TILE_SIZE, MOULT_OFFER_MARKER);
       if (this.callOutBubbleFrames > 0) {
-        const markerTop = questMarkerTopY(ctx, headTop, TILE_SIZE, '!');
+        const markerTop = overheadIconTopY(ctx, headTop, TILE_SIZE, MOULT_OFFER_MARKER);
         paintSpeechBubble(ctx, boxLeft, markerTop, TILE_SIZE, CALL_OUT_LINE, 1);
       }
     }

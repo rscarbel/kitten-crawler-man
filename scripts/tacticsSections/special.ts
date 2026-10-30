@@ -51,7 +51,7 @@ import {
 import { Rat } from '../../src/creatures/Rat';
 import { ShrineVermin } from '../../src/creatures/ShrineVermin';
 import { LEMUR_THROW_STANDOFF_TILES, Lemur } from '../../src/creatures/Lemur';
-import { Krasue } from '../../src/creatures/Krasue';
+import { Krasue, KRASUE_FACING_TURN_TILES } from '../../src/creatures/Krasue';
 import { Hawkfolk } from '../../src/creatures/Hawkfolk';
 import { FuzzyNightmare } from '../../src/creatures/FuzzyNightmare';
 import { SmallSpider } from '../../src/creatures/SmallSpider';
@@ -306,11 +306,18 @@ function centreTile(body: TilePoint): TilePoint {
   };
 }
 
-/** Whether the mob's facing points at `target`, by vector or, for a mirrored sprite, by side. */
-function facesToward(mob: Mob, target: TilePoint, mirroredOnly: boolean): boolean {
+/**
+ * Whether the mob's facing points at `target`, by vector or, for a mirrored
+ * sprite, by side. A mirrored sprite within `turnTiles` of straight above or
+ * below its target holds whichever side it last faced, so either side counts.
+ */
+function facesToward(mob: Mob, target: TilePoint, mirroredOnly: boolean, turnTiles = 0): boolean {
   const dx = target.x - mob.x;
   const dy = target.y - mob.y;
-  if (mirroredOnly) return dx === 0 || Math.sign(mob.facingX) === Math.sign(dx);
+  if (mirroredOnly) {
+    const besideTarget = Math.abs(dx) <= turnTiles * TILE_SIZE;
+    return besideTarget || Math.sign(mob.facingX) === Math.sign(dx);
+  }
   return mob.facingX * dx + mob.facingY * dy > 0;
 }
 
@@ -335,6 +342,11 @@ interface FlankCase {
   readonly bearingAt: 'arrival' | 'settled';
   /** A sprite mirrored left and right only, whose facing is judged by side. */
   readonly mirroredOnly: boolean;
+  /**
+   * For a mirrored sprite: how far to one side of its target, in tiles, it
+   * must be before it turns that way.
+   */
+  readonly facingTurnTiles?: number;
   /** For a thrower: the stand-off no flanker may settle inside, in tiles. */
   readonly minSettledTiles?: number;
 }
@@ -357,6 +369,7 @@ const FLANK_CASES: readonly FlankCase[] = [
     startGapTiles: RANGED_FLANK_GAP_TILES,
     bearingAt: 'arrival',
     mirroredOnly: true,
+    facingTurnTiles: KRASUE_FACING_TURN_TILES,
   },
   {
     type: 'hawkfolk',
@@ -463,7 +476,7 @@ function flankRun(
     ...pack.map((mob) => centreDistance(mob, arena.human) / TILE_SIZE),
   );
   const finalFacingTowardTarget = pack.filter((mob) =>
-    facesToward(mob, arena.human, flankCase.mirroredOnly),
+    facesToward(mob, arena.human, flankCase.mirroredOnly, flankCase.facingTurnTiles),
   ).length;
   arena.loop.dispose();
   return {

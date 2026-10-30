@@ -143,7 +143,7 @@ function verifyWendell(check: Check): void {
   check(!rig.hook.tryOpenDialog(WENDELL, rig.human), 'locked: no contracts talk');
 
   rig.state.blueprints.phase = 'complete';
-  check(rig.hook.markerFor(WENDELL) === 'exclamation', 'unlocked and idle: a ! over Wendell');
+  check(rig.hook.markerFor(WENDELL) === 'available', 'unlocked and idle: a ! over Wendell');
   check(rig.hook.markerFor('old_lori') === null, 'nobody else gets his marker');
 
   const intro = talk(rig);
@@ -194,7 +194,7 @@ function verifyWendell(check: Check): void {
       rig.state.contracts.lastSiteKey === firstSite?.buildingId,
     'dropping clears the contract and remembers its site',
   );
-  check(rig.hook.markerFor(WENDELL) === 'exclamation', 'after the drop: the ! is back');
+  check(rig.hook.markerFor(WENDELL) === 'available', 'after the drop: the ! is back');
   check(
     progress.pinnedTrackerId === null,
     "after the drop: the auto pin is let go, so no beam lights Wendell's door",

@@ -1,9 +1,9 @@
 /**
- * A crawler standing just behind a tall village structure — north of the
- * palisade, the closed gate or a trebuchet — is drawn before it in the
- * Y-sort and so is partly hidden by it. This redraws that crawler faintly
- * over the structure, so the player never loses sight of who they are
- * steering.
+ * A crawler standing just behind something tall — north of a village
+ * palisade, closed gate or trebuchet, or in the roof rows behind a town
+ * facade — is drawn before it in the Y-sort and so is partly hidden by it.
+ * This redraws that crawler faintly over whatever hides it, so the player
+ * never loses sight of who they are steering.
  *
  * The crawler is painted opaque into a scratch canvas and the finished image
  * is blitted once at reduced alpha: `Player.render` sets absolute alphas on
@@ -12,15 +12,17 @@
  * whenever one of those is showing.
  */
 
-import type { Player } from '../../Player';
-import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../../Player';
-import { TILE_SIZE } from '../../core/constants';
+import type { Player } from '../Player';
+import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
+import { TILE_SIZE } from '../core/constants';
+import type { GameMap } from '../map/GameMap';
+import { tileUnderFeet } from '../map/collisionAnchors';
 import {
   allocCanvas,
   releaseSurface,
   freshSurfaceContext,
   type CanvasSurface,
-} from '../../core/rendering/canvasSurface';
+} from '../core/rendering/canvasSurface';
 
 /** How strongly the hidden crawler shows through: a ghost, not a second body. */
 export const OCCLUDED_CRAWLER_ALPHA = 0.5;
@@ -75,4 +77,22 @@ export function drawOccludedCrawler(
     cssSize,
   );
   ctx.restore();
+}
+
+/**
+ * Redraws each living crawler whose feet are in a town facade's walk-behind
+ * roof rows, over the roof that hides it. Call after the Y-sorted bodies.
+ */
+export function drawCrawlersBehindRoofs(
+  ctx: CanvasRenderingContext2D,
+  camX: number,
+  camY: number,
+  map: GameMap,
+  crawlers: ReadonlyArray<Player>,
+): void {
+  for (const crawler of crawlers) {
+    if (!crawler.isAlive) continue;
+    const feet = tileUnderFeet(crawler, TILE_SIZE);
+    if (map.isWalkBehindTile(feet.x, feet.y)) drawOccludedCrawler(ctx, camX, camY, crawler);
+  }
 }

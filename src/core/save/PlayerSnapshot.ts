@@ -6,6 +6,7 @@ import { ITEM_DEF } from '../items/defs/ItemDefs';
 import { REVIVE_HP_FRACTION } from '../party/reviveRules';
 import type { InventoryItem } from '../items/defs/ItemDefs';
 import type { PlayerSnapshot, SavedStack } from './playerSnapshotFormat';
+import { apartAtHandOff, bondAfterHandOff } from '../../gear/partnerBond';
 
 function savedStack(slot: InventoryItem | null): SavedStack | null {
   return slot === null ? null : { id: slot.id, quantity: slot.quantity };
@@ -49,6 +50,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     thirdEyeReadyAt: p.thirdEyeReadyAt,
     unseenUpgrades: [...p.inventory.unseenUpgrades],
     gearState: p.gear.snapshot(),
+    partnerApart: apartAtHandOff(p.gear.live.partnerBond, p.gear.live.partnerLinked),
   };
   if (p instanceof HumanPlayer) {
     snap.slingshotCooldown = p.slingshotCooldown;
@@ -143,6 +145,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   // Equipment first: the stat getters — and therefore max HP — read from it.
   p.inventory.equipment.replaceAll(snap.equippedEntries);
   p.gear.restore(snap.gearState);
+  p.gear.live.partnerBond = bondAfterHandOff(snap.partnerApart);
 
   for (const stat of ALL_STATS) p.setBaseStat(stat, snap.baseStats[stat]);
 

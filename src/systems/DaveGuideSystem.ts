@@ -22,14 +22,14 @@ import {
 } from '../sprites/teleportEffect';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
-import { drawQuestBeacon } from '../sprites/questBeacon';
+import { minimapMarkerFor, npcMarkerShows, type NpcMarker } from '../sprites/npcQuestMarker';
 import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  questMarkerTopY,
-  type QuestMarkerGlyph,
-  type QuestMarkerState,
-} from '../sprites/questNPCSprite';
+  IconAnchor,
+  drawOverheadIcon,
+  drawOverheadIconBeacon,
+  overheadIconTopY,
+} from '../sprites/overheadIcon';
+import type { QuestMarkerType } from './MiniMapSystem';
 import {
   drawSpeechBubble,
   speechBubbleOriginAbove,
@@ -95,12 +95,12 @@ export class DaveWhereabouts {
 }
 
 /** Keeps boss kills and the players' bags out of this system. */
-type DaveMarkerSource = (room: SafeRoomInfo) => QuestMarkerState;
+type DaveMarkerSource = (room: SafeRoomInfo) => NpcMarker;
 
 interface DaveMinimapMarker {
   readonly x: number;
   readonly y: number;
-  readonly type: Exclude<QuestMarkerState, 'none'>;
+  readonly type: QuestMarkerType;
 }
 
 interface DaveGuideDeps {
@@ -150,7 +150,7 @@ export class DaveGuideSystem {
    * walk-out rule without that.
    */
   private hasBeenInRoom = false;
-  private marker: QuestMarkerState = 'none';
+  private marker: NpcMarker = 'none';
   private markerSource: DaveMarkerSource | null = null;
   private held: () => boolean = () => false;
   private readonly sortedFigures: InteriorFigure[] = [];
@@ -530,15 +530,12 @@ export class DaveGuideSystem {
 
   get minimapMarker(): DaveMinimapMarker | null {
     const tile = this.minimapTile;
-    if (tile === null || this.marker === 'none') return null;
-    return { x: tile.x, y: tile.y, type: this.marker };
+    const marker = this.marker;
+    if (tile === null || !npcMarkerShows(marker)) return null;
+    return { x: tile.x, y: tile.y, type: minimapMarkerFor(marker) };
   }
 
   // Drawing
-
-  private markerGlyph(): QuestMarkerGlyph {
-    return this.marker === 'question' ? '?' : '!';
-  }
 
   /** The top of the row he last drew, or his head height before his first paint. */
   private artTop(sy: number, ts: number): number {
@@ -586,21 +583,19 @@ export class DaveGuideSystem {
     const wander = visit.wanderer.state;
     const present = visit.phase.kind === 'present';
     const dialogOpen = this.dialogOpen;
-    const markerColor = present && !dialogOpen ? questMarkerColorFor(this.marker) : undefined;
+    const marker: NpcMarker = present && !dialogOpen ? this.marker : 'none';
+    const marked = npcMarkerShows(marker);
     // Unlike the bubble, the marker shows at any distance to pull the player over.
-    const showBubble = markerColor === undefined && present && !dialogOpen && this.isNear(active);
+    const showBubble = !marked && present && !dialogOpen && this.isNear(active);
     const teleport = this.teleportDraw(visit.phase);
-    const markerGlyph = this.markerGlyph();
     this.sortedFigures.push({
       y: wander.y,
       render: (ctx, camX, camY, ts) => {
         const sx = wander.x - camX;
         const sy = wander.y - camY;
         // Before the body so the column stands behind him, and from the
-        // glyph's own colour so the beam and the glyph never disagree.
-        if (markerColor !== undefined) {
-          drawQuestBeacon(ctx, sx, sy, ts, camX, camY, performance.now(), markerColor);
-        }
+        // glyph's own marker so the beam and the glyph never disagree.
+        drawOverheadIconBeacon(ctx, sx, sy, ts, camX, camY, marker);
         this.drawnRow = drawDaveSprite(ctx, sx, sy, ts, {
           walkPhase: wander.walkPhase,
           isWalking: wander.isWalking,
@@ -611,8 +606,8 @@ export class DaveGuideSystem {
           idleOffsetSeconds: wander.idleOffsetSeconds,
           teleport,
         });
-        if (markerColor !== undefined) {
-          drawQuestMarker(ctx, sx, this.artTop(sy, ts), ts, markerGlyph, markerColor);
+        if (marked) {
+          drawOverheadIcon(ctx, sx, IconAnchor.ofRow(this.drawnRow, sy, ts), ts, marker);
         } else if (showBubble) {
           drawSpeechBubble(ctx, sx, this.bubbleOrigin(sy, ts), ts, speechBubblePulse);
         }
@@ -644,9 +639,8 @@ export class DaveGuideSystem {
     const sx = at.x - camX;
     const sy = at.y - camY;
     const headTop = this.artTop(sy, TILE_SIZE);
-    const marked = questMarkerColorFor(this.marker) !== undefined;
-    const promptY = marked
-      ? questMarkerTopY(ctx, headTop, TILE_SIZE, this.markerGlyph())
+    const promptY = npcMarkerShows(this.marker)
+      ? overheadIconTopY(ctx, headTop, TILE_SIZE, this.marker)
       : speechBubbleTop(this.bubbleOrigin(sy, TILE_SIZE), TILE_SIZE);
     drawInteractionPrompt(ctx, sx, promptY, TILE_SIZE, sy + TILE_SIZE, 'Talk');
   }

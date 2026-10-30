@@ -29,7 +29,12 @@ import {
   unpinFigureState,
 } from '../../sprites/figure/figureFrameCache';
 import { scaleHumanoidBox } from '../../sprites/humanoidScale';
-import { drawOverheadIcon, overheadIconTopY, type OverheadIcon } from '../../sprites/overheadIcon';
+import {
+  IconAnchor,
+  drawOverheadIcon,
+  overheadIconTopY,
+  type NpcOverheadIcon,
+} from '../../sprites/overheadIcon';
 import { townCastLook } from '../../sprites/person/townCastLooks';
 import { drawTownSheetFrame } from '../../sprites/townSheetProp';
 import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
@@ -92,7 +97,7 @@ export class InnWallSitter implements TownPropRenderable {
   /** `icon` is read every frame: the `!` while the party has not yet asked at the inn. */
   constructor(
     readonly tile: TilePoint,
-    private readonly icon: () => OverheadIcon,
+    private readonly icon: () => NpcOverheadIcon,
   ) {
     this.x = tile.x * TILE_SIZE;
     this.y = tile.y * TILE_SIZE;
@@ -118,8 +123,11 @@ export class InnWallSitter implements TownPropRenderable {
     if (figure === undefined) return;
     const frame = this.idleFrame();
     drawFigureCachedApprox(ctx, figure, SEATED_STATE, frame, sx, sy, tileSize);
+    const icon = this.icon();
+    if (icon === 'none') return;
+    const anchor = IconAnchor.ofRow(drawnFigureRow(figure, SEATED_STATE), sy, tileSize);
     const box = scaleHumanoidBox(sx, sy, tileSize);
-    drawOverheadIcon(ctx, box.sx, this.artTop(sy, tileSize), box.s, this.icon());
+    drawOverheadIcon(ctx, box.sx, anchor, box.s, icon);
   }
 
   /** The screen y a prompt hung over the regular must stay above. */

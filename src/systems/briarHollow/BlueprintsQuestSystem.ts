@@ -36,7 +36,7 @@ import { canAfford } from '../../core/items/gathering/partyResources';
 import { constructionUnlocked } from '../../core/quests/villageUnlocks';
 import { isVillageUnderSiege } from '../../core/quests/villageQuestPhase';
 import { TILE_SIZE } from '../../core/constants';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { VillagerId } from '../../core/quests/villagerIds';
 import type { ConversationTopic } from '../../dialog/request';
 import type { TilePoint } from '../../map/town/townPlan';
@@ -477,7 +477,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     return null;
   }
 
-  markerFor(villager: VillagerId, ctx: VillagerContext): NPCMarkerType {
+  markerFor(villager: VillagerId, ctx: VillagerContext): NpcQuestMarker {
     if (villager === 'fenna') return this.fenna.markerFor(ctx);
     if (villager === 'merrit') return this.merrit.markerFor(ctx);
     return 'none';

@@ -11,7 +11,7 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle } from '../../dialog/request';
 import { contractThanksLines } from '../../dialog/scripts/contractThanks';
@@ -120,12 +120,12 @@ export class ContractContactHook implements ResidentQuestHook {
   }
 
   /**
-   * `'question'` over this room's contact while their payment waits. Null
+   * The turn-in over this room's contact while their payment waits. Null
    * otherwise, so another questline's glyph over the same resident (the
    * Anchor's over Aviel or Lori) still shows.
    */
-  markerFor(residentId: ResidentId): NPCMarkerType | null {
-    return residentId === this.site.contact && this.awaitingPayment ? 'question' : null;
+  markerFor(residentId: ResidentId): NpcQuestMarker | null {
+    return residentId === this.site.contact && this.awaitingPayment ? 'turnIn' : null;
   }
 
   dismissDialog(): boolean {

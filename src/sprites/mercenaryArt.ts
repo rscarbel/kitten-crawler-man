@@ -188,6 +188,9 @@ const EARTH_ELEMENTAL_ACTION_ROWS: Readonly<Record<EarthElementalGuardRow, Earth
     idle: 'idle',
     walk: 'walk',
     punch: 'punch',
+    // The blast is a punch thrown at the air: the clump leaves the fist as it
+    // reaches full extension.
+    earth_blast: 'punch',
     cast_shield: 'cast_shield',
     hurt: 'hurt',
     death: 'death',

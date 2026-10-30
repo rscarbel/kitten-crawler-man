@@ -3,13 +3,11 @@ import type { MobilityClass } from '../map/mobility';
 import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../core/constants';
 import {
   drawQuestNPCSprite,
-  drawQuestMarker,
   prewarmQuestNPCSprite,
-  questMarkerColorFor,
   questNPCHelpBubbleTop,
-  type QuestMarkerState,
 } from '../sprites/questNPCSprite';
-import { drawQuestBeacon } from '../sprites/questBeacon';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
+import { IconAnchor, drawOverheadIcon, drawOverheadIconBeacon } from '../sprites/overheadIcon';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 
@@ -24,8 +22,6 @@ const HURT_FRAMES = HURT_HOLD_SECONDS * WORLD_TICKS_PER_SECOND + HURT_FADE_FRAME
 /** Share of a strike's flash intensity the sustained hurt tint carries. */
 const HURT_FLASH_PROGRESS = 0.45;
 
-export type NPCMarkerType = QuestMarkerState;
-
 /**
  * A non-combatant quest NPC: the goblin mother, carrying her baby.
  * Extends Player so Fuzzy Nightmares can target her via updateAI(targets).
@@ -39,7 +35,7 @@ export class QuestNPC extends Player {
     return 'walker';
   }
   /** Current overhead marker — drives minimap and overhead icon. */
-  markerType: NPCMarkerType = 'exclamation';
+  markerType: NpcQuestMarker = 'available';
   /** Which quest this NPC belongs to. */
   readonly questId: string;
   /** Frames remaining on the persistent hurt tint; it fades over the final {@link HURT_FADE_FRAMES}. */
@@ -71,22 +67,18 @@ export class QuestNPC extends Player {
     // Beacon first, so the column stands behind her rather than across her.
     // Both it and the glyph below branch on `markerType` and nothing else, so
     // the two can never disagree about whether she has something to say.
-    const markerColor = questMarkerColorFor(this.markerType);
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, this.markerType);
 
     const drawnRow = drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
     this.drawnRow = drawnRow;
 
     const hpBarVisible = this.hp < this.maxHp;
-    const glyph = this.markerType === 'question' ? '?' : '!';
-    if (markerColor !== undefined) {
-      const artTop = figureRowInkTop(drawnRow, sy, tileSize);
-      const barTop = hpBarVisible ? sy - HP_BAR_Y_OFFSET : artTop;
-      const bubbleTop = this.hurtTimer > 0 ? questNPCHelpBubbleTop(sy, tileSize) : artTop;
-      const clearOf = Math.min(artTop, barTop, bubbleTop);
-      drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
+    if (this.markerType !== 'none') {
+      const artAnchor = IconAnchor.ofRow(drawnRow, sy, tileSize);
+      const barTop = hpBarVisible ? sy - HP_BAR_Y_OFFSET : Infinity;
+      const bubbleTop = this.hurtTimer > 0 ? questNPCHelpBubbleTop(sy, tileSize) : Infinity;
+      const anchor = artAnchor?.clearing(Math.min(barTop, bubbleTop)) ?? null;
+      drawOverheadIcon(ctx, sx, anchor, tileSize, this.markerType);
     }
 
     if (hpBarVisible) {

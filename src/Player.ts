@@ -76,6 +76,7 @@ import type { GroundHazard } from './core/combat/groundHazard';
 import { normalize } from './utils';
 import { worldPlate } from './ui/world/worldShapes';
 import { worldText } from './ui/world/worldText';
+import { ACTIVE_RING_RADIUS_TILES, drawActiveCrawlerRing } from './ui/world/activeCrawlerRing';
 import { intoxicationMeleeBonus, intoxicationOf } from './core/combat/Intoxication';
 import type { IntoxicatingDrink } from './core/items/consumables/intoxicatingDrinks';
 import { computeDodgeChance } from './core/combat/dodge';
@@ -589,7 +590,11 @@ const KO_FONT_REVIVING_FRACTION = 0.28;
 const KO_FONT_KO_FRACTION = 0.38;
 const KO_LABEL_Y_PADDING = 2;
 
-/** Where on its tile a body's floor shadow falls when it stands up on a ledge, as shares of the tile. */
+/**
+ * Where on its tile a body stands, as shares of the tile: where its floor
+ * shadow falls when it is up on a ledge, and where the active crawler's
+ * selection ring lies.
+ */
 const FLOOR_SHADOW_FOOT_SHARE = { x: 0.5, y: 0.92 } as const;
 /** Draws a character keeps measuring its overhead stack for after the last ask. */
 const OVERHEAD_MEASURE_HOLD_FRAMES = 30;
@@ -2547,6 +2552,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     const measureOverhead = this.overheadMeasureFramesLeft > 0;
     if (measureOverhead) this.overheadMeasureFramesLeft--;
 
+    // On the floor, under the body: it stands inside its ring, and outside
+    // the silhouette composite so a hit flash never turns the ring red.
+    if (this.isActive) this.drawActiveRing(ctx, sx, sy, tileSize);
+
     // Behind everything drawn below: a status that wants to sit under the body
     // (Speed Fizz's trail and afterimages) has to land before the sprite is
     // blitted, not after.
@@ -2594,6 +2603,25 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     // Over the dungeon's darkness too: a burning or poisoned body is something
     // the player has to read wherever it stands.
     if (!deferChrome(this, 'worldFeedback', sx, sy)) this.drawWorldFeedback(ctx, sx, sy);
+  }
+
+  /** Half the width of the selection ring under this body while the player drives it. */
+  get activeRingRadiusPx(): number {
+    return this.tileSize * ACTIVE_RING_RADIUS_TILES;
+  }
+
+  private drawActiveRing(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    tileSize: number,
+  ): void {
+    drawActiveCrawlerRing(ctx, {
+      x: sx + tileSize * FLOOR_SHADOW_FOOT_SHARE.x,
+      y: sy + tileSize * FLOOR_SHADOW_FOOT_SHARE.y,
+      radiusX: this.activeRingRadiusPx,
+      timeMs: Date.now(),
+    });
   }
 
   private drawFloorShadowBelow(
@@ -2656,6 +2684,36 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     const figureTop = artTop ?? this.unmeasuredArtTop(sy);
     this.overheadReachAboveTilePx = sy - Math.min(figureTop, stackTop ?? figureTop);
     this.overheadMeasured = true;
+  }
+
+  /**
+   * How far the top of this character's head stands above the top of its
+   * tile, in world pixels; negative for a figure that stops inside its tile.
+   * A fixed figure height rather than the measured art, so what hangs over a
+   * crawler (the guide arrow) holds still while they swing or crouch.
+   */
+  get headTopAboveTilePx(): number {
+    return this.tileSize * HUMANOID_STAND_IN_RISE_TILES;
+  }
+
+  /**
+   * How far above the top of its tile a crawler hangs the anchor its health
+   * bar is drawn from; a subclass that lifts its bar over a tall head says so.
+   */
+  protected get healthBarAnchorAboveTilePx(): number {
+    return 0;
+  }
+
+  /**
+   * How far above the top of its tile the highest thing a character always
+   * wears stands: its head, or the health bar hung over it, raised with the
+   * rest of the body while it stands up on a ledge. What hangs over a crawler
+   * (the guide arrow) clears this.
+   */
+  get overheadTopAboveTilePx(): number {
+    const healthBarTop = this.healthBarAnchorAboveTilePx + HP_BAR_Y_OFFSET;
+    const ledgeRisePx = (this.climbing?.riseTiles(this) ?? 0) * this.tileSize;
+    return Math.max(this.headTopAboveTilePx, healthBarTop) + ledgeRisePx;
   }
 
   /**
@@ -2722,8 +2780,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * True while {@link paintBodyAt} is painting: `drawSelf` must leave off
-   * everything that is not the body — the health bar, the active-crawler
-   * marker, projectiles in flight.
+   * everything that is not the body — the health bar, projectiles in flight.
    */
   protected get paintingBodyOnly(): boolean {
     return this.bodyOnlyDepth > 0;
@@ -2989,8 +3046,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * Draws `paint` bent by the blood-vomiting retch, when one is playing. A
-   * subclass wraps only its figure in this, so the health bar and the active
-   * marker hold still while the body heaves.
+   * subclass wraps only its figure in this, so the health bar holds still
+   * while the body heaves.
    */
   protected drawRetching(
     ctx: CanvasRenderingContext2D,

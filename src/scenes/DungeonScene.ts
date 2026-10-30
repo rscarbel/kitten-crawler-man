@@ -145,11 +145,14 @@ import { crawlerGroundPoint, crawlerSpriteBox } from '../systems/questRoute/rout
 import {
   objectiveBeamTargets,
   characterTarget,
+  anyQuestUnderway,
+  anySourceQuestUnderway,
   collectTrackerEntries,
   isOutstanding,
   pinMatchesEntry,
   type ObjectiveBeaconSource,
   type TrackerEntry,
+  type TrackerSource,
   type TrackerTarget,
 } from '../systems/questTracker';
 import {
@@ -290,6 +293,7 @@ import { BuildingSystem, downedPartnerEntryRefusal } from '../systems/BuildingSy
 import { doorstepOf, type BuildingEntry } from '../map/buildingEntry';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
+import { drawCrawlersBehindRoofs } from '../systems/occludedCrawlers';
 import { CrowdResidentSet } from '../systems/CrowdResidentSet';
 import {
   EnvironmentSheetResidentSet,
@@ -689,7 +693,7 @@ import { displayPageCount } from '../dialog/Conversation';
 import type { CarolineMessage } from '../dialog/caroline';
 import type { DialogLine } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';
-import type { QuestMarkerState } from '../sprites/questNPCSprite';
+import { setPartyOnAQuest, type NpcMarker } from '../sprites/npcQuestMarker';
 import type { AISceneContext } from '../ai/aiActions';
 import { AIInteractionStage } from '../ai/interactions/AIInteractionStage';
 import { AIChallengeSystem } from '../systems/AIChallengeSystem';
@@ -1388,16 +1392,6 @@ const HAZARD_SOUNDS_TO_STOP_ON_RESPAWN: readonly SoundId[] = [
   ...DUNGEON_CUES.gasCylinderHiss,
   ...VILLAGE_CUES.miasmaHiss,
 ];
-
-// Spider-lab arrow geometry
-const ARROW_LENGTH_MULTIPLIER_BASE2 = 0.45;
-const ARROW_LENGTH_MULTIPLIER_HEIGHT = 0.5;
-const ARROW_LENGTH_MULTIPLIER_CENTER = 0.1;
-const ARROW_BOUNCE_FREQUENCY = 0.005;
-const ARROW_BOUNCE_AMPLITUDE = 4;
-const ARROW_LENGTH_PIXELS = 22;
-const ARROW_LINE_WIDTH = 1.5;
-const ARROW_VERTICAL_OFFSET_TILES = 1.5;
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
@@ -4496,19 +4490,9 @@ export class DungeonScene extends GameplayScene {
     return {
       priority: ARROW_PRIORITY.CHEAT_REVEAL,
       draw: () =>
-        drawArrowAbovePlayer(
-          ctx,
-          player.x,
-          player.y,
-          target.x,
-          target.y,
-          camX,
-          camY,
-          STAIRWELL_ARROW_COLOR,
-          {
-            avoidRect: this.worldViewFramesRect(),
-          },
-        ),
+        drawArrowAbovePlayer(ctx, player, target.x, target.y, camX, camY, STAIRWELL_ARROW_COLOR, {
+          avoidRect: this.worldViewFramesRect(),
+        }),
     };
   }
 
@@ -4522,40 +4506,22 @@ export class DungeonScene extends GameplayScene {
     if (lab === null) return null;
 
     const player = this.active();
-    const px = player.x + TILE_SIZE / 2;
-    const py = player.y + TILE_SIZE / 2;
     const targetX = lab.centre.x * TILE_SIZE;
     const targetY = lab.centre.y * TILE_SIZE;
 
-    const dx = targetX - px;
-    const dy = targetY - py;
-    const angle = Math.atan2(dy, dx);
-
     return {
       priority: ARROW_PRIORITY.CHEAT_REVEAL,
-      draw: () => {
-        const t = Date.now();
-        const bounce = Math.sin(t * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
-        const len = ARROW_LENGTH_PIXELS;
-        const arrowX = player.x - camX + TILE_SIZE / 2;
-        const arrowY = player.y - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
-
-        ctx.save();
-        ctx.translate(arrowX, arrowY);
-        ctx.rotate(angle);
-        ctx.fillStyle = worldPalette.waymark.cheatReveal;
-        ctx.strokeStyle = worldPalette.shade;
-        ctx.lineWidth = ARROW_LINE_WIDTH;
-        ctx.beginPath();
-        ctx.moveTo(len, 0);
-        ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-        ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
-        ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      },
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          player,
+          targetX,
+          targetY,
+          camX,
+          camY,
+          worldPalette.waymark.cheatReveal,
+          { outlineColor: worldPalette.shade },
+        ),
     };
   }
 
@@ -4912,8 +4878,7 @@ export class DungeonScene extends GameplayScene {
       draw: () =>
         drawArrowAbovePlayer(
           ctx,
-          player.x,
-          player.y,
+          player,
           facing.x,
           facing.y,
           camera.x,
@@ -6742,6 +6707,7 @@ export class DungeonScene extends GameplayScene {
       commitSave: (party, resumeAt) => this.commitSaveFromInterior(party, resumeAt),
       maySave: () => this.canSaveInTown,
       progressWipe: this.progressWipe,
+      questUnderway: () => anySourceQuestUnderway(this.trackerSources()),
     };
   }
 
@@ -8229,16 +8195,16 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  /** His `!`: a story beat his arrival held, news about gear behind a boss, or tactics for what is next not yet given. */
-  private daveMarkerFor(room: SafeRoomInfo): QuestMarkerState {
-    if (this.story.holdsArrivalBeat) return 'exclamation';
+  /** His news `!`: a story beat his arrival held, news about gear behind a boss, or tactics for what is next not yet given. */
+  private daveMarkerFor(room: SafeRoomInfo): NpcMarker {
+    if (this.story.holdsArrivalBeat) return 'news';
     const bossType = this.exitRoomBoss(room);
     if (bossType !== null && debriefHasNews(this.debriefMemoryFor(bossType), this.debriefState())) {
-      return 'exclamation';
+      return 'news';
     }
     const objective = this.currentObjective(room);
     const tacticsOwed = objective !== null && !this.daveWhereabouts.tacticsGiven.has(objective.id);
-    return tacticsOwed ? 'exclamation' : 'none';
+    return tacticsOwed ? 'news' : 'none';
   }
 
   /**
@@ -9780,6 +9746,13 @@ export class DungeonScene extends GameplayScene {
     // lets the player keep walking, and a "SPACE — Talk" cap still hovering over
     // the citizen they are already talking to is the loudest of these.
     setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver, this.interactionStance());
+    // Before anything draws a beacon. The Journal's lines are last frame's,
+    // gathered later in this one; a floor with no Journal asks its quests.
+    setPartyOnAQuest(
+      this.hasQuestJournal
+        ? anyQuestUnderway(this._trackerEntries)
+        : anySourceQuestUnderway(this.trackerSources()),
+    );
     const camera = this.camera();
     const { x: camX, y: camY } = camera;
     // The world, and every world-anchored marker and prompt over it, is drawn
@@ -9800,7 +9773,7 @@ export class DungeonScene extends GameplayScene {
       inactive: this.presentPartner(),
       mobs: this.world.roster.mobs,
       mobGrid: this.world.roster.grid,
-      townsfolk: this.townLife?.renderablePeople(camera),
+      townsfolk: this.townLife?.renderablePeople(camera, this.active()),
       townProps:
         this.briarHollowKit !== null ||
         this.gathering !== null ||
@@ -9920,6 +9893,7 @@ export class DungeonScene extends GameplayScene {
     for (const spider of this.grotesqueSpiders) {
       spider.renderAboveEntities(ctx, camX, camY, this.pm.presentCrawlers());
     }
+    drawCrawlersBehindRoofs(ctx, camX, camY, this.gameMap, this.pm.presentCrawlers());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.dungeonLife?.renderAir(ctx, camera);
     this.labHallway?.render(ctx, camera);
@@ -10211,7 +10185,7 @@ export class DungeonScene extends GameplayScene {
         statSpendButtonRect,
         menuCloseRect,
       };
-      this.tutorial.renderOverlay(ctx, camera, activePlayer.x, activePlayer.y, tutRenderCtx);
+      this.tutorial.renderOverlay(ctx, camera, activePlayer, tutRenderCtx);
     }
 
     // Over everything, HUD included: the loading screen fades out over the
@@ -10301,20 +10275,23 @@ export class DungeonScene extends GameplayScene {
   private collectTrackerEntries(): TrackerEntry[] {
     const entries = this._trackerEntries;
     entries.length = 0;
-    entries.push(
-      ...collectTrackerEntries([
-        this.defendQuest,
-        this.cloggedBathroom,
-        this.stealthKeySnatch,
-        this.spiderQuest,
-        this.anchorQuest,
-        this.levelDef.isOverworld ? this.missingCats : null,
-        this.bounty,
-        this.briarHollowKit,
-        this.aiChallenges,
-      ]),
-    );
+    entries.push(...collectTrackerEntries(this.trackerSources()));
     return entries;
+  }
+
+  /** Every system that has Journal lines on this floor. */
+  private trackerSources(): ReadonlyArray<TrackerSource | null | undefined> {
+    return [
+      this.defendQuest,
+      this.cloggedBathroom,
+      this.stealthKeySnatch,
+      this.spiderQuest,
+      this.anchorQuest,
+      this.levelDef.isOverworld ? this.missingCats : null,
+      this.bounty,
+      this.briarHollowKit,
+      this.aiChallenges,
+    ];
   }
 
   /**

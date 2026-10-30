@@ -10,7 +10,7 @@
  */
 
 import type { Player } from '../Player';
-import type { NPCMarkerType } from '../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import type { ResidentId } from '../core/state/residentIds';
 
 export interface ResidentQuestHook {
@@ -23,7 +23,7 @@ export interface ResidentQuestHook {
    */
   tryOpenDialog(residentId: ResidentId, talker: Player): boolean;
   /** The glyph `residentId` should wear, or null when the questline has no opinion about them. */
-  markerFor(residentId: ResidentId): NPCMarkerType | null;
+  markerFor(residentId: ResidentId): NpcQuestMarker | null;
   /** Escape on this hook's beat. Returns whether it had one to act on. */
   dismissDialog(): boolean;
   /** Once per gameplay frame. */
@@ -34,7 +34,7 @@ export interface ResidentQuestHook {
 export function firstResidentMarker(
   hooks: readonly ResidentQuestHook[],
   residentId: ResidentId,
-): NPCMarkerType | null {
+): NpcQuestMarker | null {
   for (const hook of hooks) {
     const marker = hook.markerFor(residentId);
     if (marker !== null) return marker;

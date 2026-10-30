@@ -128,6 +128,35 @@ export function figureBakeDensity(def: FigureDef): number {
   return def.skipSupersample === true ? CELL_DENSITY : FIGURE_SUPERSAMPLE;
 }
 
+/** How far a figure's cell can reach past the tile it stands on, in tiles, on each side. */
+export interface FigureOverhangTiles {
+  readonly left: number;
+  readonly up: number;
+  readonly right: number;
+  readonly down: number;
+}
+
+/** The anchor tile's own width and height, in tiles. */
+const ANCHOR_TILE_SPAN = 1;
+
+/**
+ * How far any frame of `def` can reach past its anchor tile. No painted pixel
+ * lies outside the cell, so a figure whose overhang misses a view cannot show
+ * in it. Left and right are the larger of the two: a side view is mirrored
+ * about the tile's centre, which swaps them.
+ */
+export function figureOverhangTiles(def: FigureDef): FigureOverhangTiles {
+  const leftOfTile = def.tileX / def.tileScale;
+  const rightOfTile = (def.frameWidth - def.tileX) / def.tileScale - ANCHOR_TILE_SPAN;
+  const sideways = Math.max(leftOfTile, rightOfTile);
+  return {
+    left: sideways,
+    up: def.tileY / def.tileScale,
+    right: sideways,
+    down: (def.frameHeight - def.tileY) / def.tileScale - ANCHOR_TILE_SPAN,
+  };
+}
+
 /** The frame count of a state, or 0 when the figure declares no such state. */
 export function figureFrameCount(def: FigureDef, state: string): number {
   return def.states.get(state)?.frames ?? 0;

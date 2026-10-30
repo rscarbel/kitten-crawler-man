@@ -1550,7 +1550,9 @@ const OCCLUSION_SIDES: ReadonlyArray<OcclusionSide> = [
  *
  * The doorway is deliberately left out (`getBlockedTileOffsetsByKey` is the
  * footprint *minus* the opening), so a threshold takes the north band from the
- * facade above it rather than being treated as facade itself.
+ * facade above it rather than being treated as facade itself. The roof rows a
+ * crawler may walk behind are left out too; the ground there is under the roof
+ * art, so whatever band it takes is never seen.
  *
  * Built once per map and not revalidated. That is a real assumption, stated
  * rather than hidden: a map's building anchors are written by the generator and
@@ -1599,8 +1601,8 @@ function buildFootprintIndex(structure: TileContent[][]): ReadonlySet<number> {
  * True when (tx, ty) lies inside a building's declared footprint.
  *
  * Built from `getBlockedTileOffsets*`, which is the manifest footprint minus the
- * doorway — and the footprint is the sprite's whole *frame*, so this includes
- * the transparent sky above a roof and any transparent columns beside it. Good
+ * doorway and the walk-behind roof rows — and the footprint is the sprite's
+ * whole *frame*, so this includes any transparent columns beside the facade. Good
  * enough for the occlusion pass, which only needs to know that the ground here
  * is under a structure rather than beside one; **not** an opacity test — reusing
  * it as one for the fence renderer anchored three rails into pixels under 2%

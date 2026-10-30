@@ -9,7 +9,11 @@
  * species-agnostic.
  */
 
-import type { DrawnFigureRow } from '../sprites/figure/figureDef';
+import {
+  figureOverhangTiles,
+  type DrawnFigureRow,
+  type FigureOverhangTiles,
+} from '../sprites/figure/figureDef';
 import { pinFigureState, unpinFigureState } from '../sprites/figure/figureFrameCache';
 import { mulberry32, pick, subSeed } from '../sprites/person/rng';
 import type { TownRole } from '../sprites/person/PersonAppearance';
@@ -39,9 +43,11 @@ import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
   RUN_FRAMES as HAWKFOLK_RUN_FRAMES,
   WALK_FRAMES as HAWKFOLK_WALK_FRAMES,
+  hawkfolkCastFigure,
   hawkfolkRunCyclePx,
   hawkfolkWalkCyclePx,
 } from '../sprites/art/hawkfolkCastFigure';
+import { townCastOutfitFigure } from '../sprites/art/townCastFigure';
 import { WALK_FRAMES as HUMAN_WALK_FRAMES } from '../sprites/art/townCastFrameCounts';
 import { HUMANOID_NPC_SCALE } from '../sprites/humanoidScale';
 
@@ -190,6 +196,12 @@ export function pickCitizenFigure(
 export function citizenWalkCyclePx(figure: CitizenFigure, tileSize: number): number {
   if (figure.species === 'hawkfolk') return hawkfolkWalkCyclePx(figure.look.id, tileSize);
   return figure.look.strideFraction * tileSize * HUMANOID_NPC_SCALE;
+}
+
+/** How far any row of a citizen's look can reach past the tile they stand on. */
+export function citizenOverhangTiles(figure: CitizenFigure): FigureOverhangTiles {
+  if (figure.species === 'hawkfolk') return figureOverhangTiles(hawkfolkCastFigure(figure.look.id));
+  return figureOverhangTiles(townCastOutfitFigure(figure.look));
 }
 
 /** Frames in a citizen's walk row: the most one tick may advance it is one of them. */

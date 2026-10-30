@@ -153,7 +153,7 @@ function everyCitizenSubject(): Subject[] {
         found.set(key, {
           label: key,
           draw(ctx, sx, sy, marked) {
-            person.markerType = marked ? 'exclamation' : 'none';
+            person.markerType = marked ? 'available' : 'none';
             const { camX, camY } = cameraFor(sx, sy);
             person.render(ctx, camX, camY, TILE_SIZE);
           },
@@ -215,15 +215,15 @@ function namedSubjects(): Subject[] {
   const seer = new FortuneTellerProp(TILE_POINT);
 
   return [
-    mobSubject('goblin mother', mother, (m) => (mother.markerType = m ? 'exclamation' : 'none')),
+    mobSubject('goblin mother', mother, (m) => (mother.markerType = m ? 'available' : 'none')),
     mobSubject(
       'Shady',
       shady,
-      (m) => (shady.markerType = m ? 'exclamation' : 'none'),
+      (m) => (shady.markerType = m ? 'available' : 'none'),
       (ctx, camX, camY) => shady.renderMarker(ctx, camX, camY, TILE_SIZE),
     ),
-    mobSubject('cow', cow, (m) => (cow.questMarker = m ? 'exclamation' : 'none')),
-    mobSubject('calf', calf, (m) => (calf.questMarker = m ? 'exclamation' : 'none')),
+    mobSubject('cow', cow, (m) => (cow.questMarker = m ? 'available' : 'none')),
+    mobSubject('calf', calf, (m) => (calf.questMarker = m ? 'available' : 'none')),
     {
       label: 'shrine vermin',
       draw(ctx, sx, sy, marked) {
@@ -242,11 +242,11 @@ function namedSubjects(): Subject[] {
         mantid.render(ctx, camX, camY, TILE_SIZE);
       },
     },
-    mobSubject('goblin plumber', plumber, (m) => (plumber.marker = m ? 'exclamation' : 'none')),
+    mobSubject('goblin plumber', plumber, (m) => (plumber.marker = m ? 'available' : 'none')),
     {
       label: 'ratkin villager',
       draw(ctx, sx, sy, marked) {
-        villager.marker = marked ? 'exclamation' : 'none';
+        villager.marker = marked ? 'available' : 'none';
         const { camX, camY } = cameraFor(sx, sy);
         villager.render(ctx, camX, camY, TILE_SIZE);
       },
@@ -272,7 +272,7 @@ function namedSubjects(): Subject[] {
     {
       label: 'recruiter',
       draw(ctx, sx, sy, marked) {
-        recruiter.marker = marked ? 'exclamation' : 'none';
+        recruiter.marker = marked ? 'available' : 'none';
         const { camX, camY } = cameraFor(sx, sy);
         recruiter.render(ctx, camX, camY, TILE_SIZE);
       },
@@ -280,7 +280,7 @@ function namedSubjects(): Subject[] {
     {
       label: 'fortune teller',
       draw(ctx, sx, sy, marked) {
-        seer.markerState = marked ? 'exclamation' : 'none';
+        seer.markerState = marked ? 'available' : 'none';
         seer.shopSign = 'closed';
         const { camX, camY } = cameraFor(sx, sy);
         seer.render(ctx, camX, camY, TILE_SIZE);
@@ -506,7 +506,7 @@ function bubbleClearsMarker(bubble: 'bark' | 'hush'): string | null {
   const draw = (marked: boolean, speaking: boolean): Subject => ({
     label: `villager ${bubble}`,
     draw(ctx, sx, sy) {
-      speaker.marker = marked ? 'exclamation' : 'none';
+      speaker.marker = marked ? 'available' : 'none';
       speaker.bark.clear();
       speaker.hushed = false;
       if (speaking && bubble === 'bark') speaker.bark.say(BARK_LINE);
@@ -553,7 +553,7 @@ function unmeasuredRowStandsInHigh(): string | null {
   const subject: Subject = {
     label: 'cow pet',
     draw(ctx, sx, sy, marked) {
-      cow.questMarker = marked ? 'exclamation' : 'none';
+      cow.questMarker = marked ? 'available' : 'none';
       const { camX, camY } = cameraFor(sx, sy);
       cow.render(ctx, camX, camY, TILE_SIZE);
     },

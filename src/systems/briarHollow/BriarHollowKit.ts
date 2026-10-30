@@ -59,7 +59,7 @@ import { VILLAGER_TALK_RANGE_TILES, VillagerSystem } from './VillagerSystem';
 import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
 import {
   drawQuestMarker,
-  questMarkerColorFor,
+  objectMarkerColorFor,
   questMarkerTopY,
 } from '../../sprites/questNPCSprite';
 import { hollowPropInkTop } from '../../map/tiles/hollowVillageTiles';
@@ -97,7 +97,12 @@ import {
   type SiegeHudKeepouts,
 } from '../../ui/hud/siegeBellAlert';
 import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
-import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../../ui/WorldArrow';
+import {
+  ARROW_PRIORITY,
+  drawArrowAbovePlayer,
+  type ArrowCandidate,
+  type ArrowWearer,
+} from '../../ui/WorldArrow';
 import { palette } from '../../ui/theme/tokens';
 import type { MusicClaims } from '../../audio/AudioScope';
 import {
@@ -766,7 +771,7 @@ export class BriarHollowKit {
   /** The village board's marker colour while a contract waits on it; undefined when it has nothing to post or cannot be read. */
   private noticeBoardMarkerColor(): string | undefined {
     if (this.noticeBoardTile === null || this.deps.openNoticeBoard === undefined) return undefined;
-    return questMarkerColorFor(noticeBoardMarkerFor(this.deps.state));
+    return objectMarkerColorFor(noticeBoardMarkerFor(this.deps.state));
   }
 
   private renderNoticeBoardMarker(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -1431,7 +1436,7 @@ export class BriarHollowKit {
    */
   siegeBellArrowCandidate(
     ctx: CanvasRenderingContext2D,
-    active: { readonly x: number; readonly y: number },
+    active: ArrowWearer,
     camX: number,
     camY: number,
     avoidRect?: Rect,
@@ -1443,8 +1448,7 @@ export class BriarHollowKit {
       draw: () =>
         drawArrowAbovePlayer(
           ctx,
-          active.x,
-          active.y,
+          active,
           view.bellWorld.x,
           view.bellWorld.y,
           camX,

@@ -16,7 +16,8 @@ import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import type { WorldGesture } from '../ui/core/UiRoot';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
-import { Shady, type ShadyMarker } from '../creatures/Shady';
+import { Shady } from '../creatures/Shady';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import { previewInk } from '../ui/theme/previewInk';
 
 const BG_COLOR = previewInk.slate.backdrop;
@@ -50,14 +51,14 @@ const LABEL_GUTTER = 130;
  */
 interface Column {
   readonly label: string;
-  readonly marker: ShadyMarker;
+  readonly marker: NpcQuestMarker;
   readonly talking: boolean;
 }
 
 const COLUMNS: readonly Column[] = [
-  { label: 'available (!)', marker: 'exclamation', talking: false },
+  { label: 'available (!)', marker: 'available', talking: false },
   { label: 'active (none)', marker: 'none', talking: false },
-  { label: 'kill pending (?)', marker: 'question', talking: false },
+  { label: 'kill pending (? + present)', marker: 'turnIn', talking: false },
   { label: 'talking', marker: 'none', talking: true },
 ];
 

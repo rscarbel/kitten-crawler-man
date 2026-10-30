@@ -14,7 +14,7 @@
  * not call Midge out while the herd is sheltering in the barn.
  */
 
-import type { NPCMarkerType } from '../../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../../sprites/npcQuestMarker';
 import type { BlueprintsQuestPhase } from '../../../core/quests/blueprintsQuestPhase';
 import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { ConversationHandle } from '../../../dialog/request';
@@ -105,14 +105,14 @@ export class MerritBlueprintsLines {
     }
   }
 
-  /** The glyph over Merrit for this quest: `'question'` in the steps the party must see her. */
-  markerFor(_villagerCtx: VillagerContext): NPCMarkerType {
+  /** The marker over Merrit for this quest: a quest under way in the steps the party must see her, none of which pays out. */
+  markerFor(_villagerCtx: VillagerContext): NpcQuestMarker {
     if (this.underSiege || this.calling) return 'none';
     switch (this.phase) {
       case 'ask_merrit':
       case 'report_fence':
       case 'deliver_grain':
-        return 'question';
+        return 'inProgress';
       case 'unoffered':
       case 'declined':
       case 'ask_wendell':

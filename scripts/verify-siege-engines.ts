@@ -26,6 +26,7 @@ import { computeDodgeChance } from '../src/core/combat/dodge';
 import { FULL_SHARE, makeBurn, makePoison } from '../src/core/combat/StatusEffect';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling';
 import { Mercenary } from '../src/creatures/Mercenary';
+import { PUNCH_TOTAL_TICKS } from '../src/creatures/mercenaries/earthElementalGuardKit';
 import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import type { Player } from '../src/Player';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
@@ -94,6 +95,8 @@ function section(name: string): void {
 // ── The request's own numbers ─────────────────────────────────────────────
 
 const EXPECTED_RANGE_TILES = 10;
+/** Frames a hireling is given to notice a hostile, or the lack of one, and act on it. */
+const HIRE_ENGAGE_FRAMES = 10;
 const EXPECTED_MIN_GAP_TILES = 1;
 const EXPECTED_INTERVAL_FRAMES = 180;
 const EXPECTED_BREAK_CHANCE = 0.04;
@@ -1175,10 +1178,13 @@ section('Converted allies');
     hire.updateAI([]);
     hire.tickTimers();
   };
-  for (let f = 0; f < 10; f++) hireTick();
+  for (let f = 0; f < HIRE_ENGAGE_FRAMES; f++) hireTick();
   const engagedBefore = hire.isFighting;
   hireRig.allies.convert(hireFoe, hireRig.human);
-  for (let f = 0; f < 10; f++) hireTick();
+  // Two tiles off is inside Crush's earth-blast band, so he is mid-throw when the
+  // foe turns; a committed row plays out before he looks for a new target.
+  const committedRowFrames = PUNCH_TOTAL_TICKS;
+  for (let f = 0; f < committedRowFrames + HIRE_ENGAGE_FRAMES; f++) hireTick();
   check(
     engagedBefore && !hire.isFighting,
     'a hireling engaged on an enemy drops it once converted (and has no one else to fight)',

@@ -781,7 +781,8 @@ function computeBlockedOffsetsFromRegions(
 }
 
 // Build per-key region-derived offsets for SPRITE_BUILDING variants (no tileTypeId
-// required). The exported blocked set is widened to the whole footprint further down.
+// required). The exported blocked set is widened further down to every footprint
+// row below the walk-behind roof rows.
 for (const [key, entry] of Object.entries(_manifest)) {
   if (entry.blockedRegions !== undefined && entry.blockedRegions.length > 0) {
     _spriteKeyRegionBlockedOffsets.set(
@@ -858,13 +859,33 @@ export function getSpriteDefByKey(key: string): SpriteDef | undefined {
  * Returns the blocked tile offsets for a sprite-building variant by manifest key.
  * Used to compute collision for SPRITE_BUILDING tiles with per-variant footprints.
  *
- * This is the sprite's whole footprint minus its doorway, not just the tiles its
- * `blockedRegions` cover: the art is opaque across the full frame, so any tile
- * under it that stayed walkable would be a pocket the player and townsfolk can
- * vanish into behind the facade.
+ * This is the sprite's footprint minus its doorway and minus its walk-behind
+ * rows (see {@link getSpriteWalkBehindRowsByKey}), not just the tiles its
+ * `blockedRegions` cover: the art is opaque across the full frame, so a tile
+ * deeper under the roof than the walk-behind rows would be a pocket the player
+ * and townsfolk could vanish into behind the facade.
  */
 export function getBlockedTileOffsetsByKey(key: string): ReadonlyArray<TileOffset> {
   return _spriteKeyBlockedOffsets.get(key) ?? [];
+}
+
+/**
+ * How many rows at the top of a sprite building's footprint a crawler may walk
+ * into, standing behind the roof and drawn under it by the Y-sort. Zero for a
+ * sprite with no derived doorway, whose whole footprint stays solid.
+ */
+export function getSpriteWalkBehindRowsByKey(key: string): number {
+  return _spriteKeyWalkBehindRows.get(key) ?? 0;
+}
+
+/**
+ * Whether a sprite building's own anchor tile may be stood on. The anchor
+ * carries the `SPRITE_BUILDING` type, which is solid by type, but a facade's
+ * anchor is the top-left of its frame and so lies in its walk-behind rows; this
+ * is what lets the type test agree with the footprint there.
+ */
+export function isSpriteAnchorWalkable(key: string): boolean {
+  return _spriteKeyWalkableAnchors.has(key);
 }
 
 /** Tile-space rectangle a map sprite occupies, relative to its anchor tile. */
@@ -890,6 +911,37 @@ export interface SpriteDoorway extends TileOffset {
 const _spriteKeyFootprints = new Map<string, SpriteFootprint>();
 const _spriteKeyDoorways = new Map<string, SpriteDoorway>();
 const _spriteKeyExtentsPx = new Map<string, MapSpriteExtentsPx>();
+const _spriteKeyWalkBehindRows = new Map<string, number>();
+const _spriteKeyWalkableAnchors = new Set<string>();
+
+/**
+ * The most roof rows a crawler may stand in behind a facade. The human is
+ * about one tile tall and most facades' ridge lines fall inside the top row,
+ * so two rows deep hides his body behind the roof while his head clears the
+ * ridge. Where the ridge sits lower (the Cloak & Dagger's, about 1.2 rows
+ * down) or the crawler is shorter (the cat, about 0.6 tiles), the roof can
+ * hide a crawler whole; `drawCrawlersBehindRoofs` redraws it faintly over the
+ * roof so it is never lost.
+ */
+const ROOF_WALK_BEHIND_ROWS = 2;
+
+/**
+ * The walk-behind rows of one sprite building: {@link ROOF_WALK_BEHIND_ROWS},
+ * cut short where the art's wall band begins. The topmost row its
+ * `blockedRegions` cover is where the facade's walls stand on the ground; every
+ * row above that is roof the 3/4 view lifts into the air.
+ */
+function walkBehindRowsFor(
+  regionOffsets: ReadonlyArray<TileOffset>,
+  footprint: SpriteFootprint,
+): number {
+  let wallTopDy = footprint.dy + footprint.h;
+  for (const offset of regionOffsets) {
+    if (offset.dy < wallTopDy) wallTopDy = offset.dy;
+  }
+  const roofRows = Math.max(0, wallTopDy - footprint.dy);
+  return Math.min(ROOF_WALK_BEHIND_ROWS, roofRows);
+}
 
 for (const [key, entry] of Object.entries(_manifest)) {
   // The anchor tile's top-left corner sits at (tileX, tileY) in sprite pixels, so
@@ -1084,14 +1136,20 @@ for (const [key, regionOffsets] of _spriteKeyRegionBlockedOffsets) {
   }
   _spriteKeyDoorways.set(key, doorway);
 
+  const walkBehindRows = walkBehindRowsFor(regionOffsets, footprint);
+  _spriteKeyWalkBehindRows.set(key, walkBehindRows);
+  const firstBlockedDy = footprint.dy + walkBehindRows;
   const blocked: TileOffset[] = [];
-  for (let dy = footprint.dy; dy < footprint.dy + footprint.h; dy++) {
+  for (let dy = firstBlockedDy; dy < footprint.dy + footprint.h; dy++) {
     for (let dx = footprint.dx; dx < footprint.dx + footprint.w; dx++) {
       const isDoorway = dy === doorway.dy && dx >= doorway.dx0 && dx < doorway.dx0 + doorway.width;
       if (!isDoorway) blocked.push({ dx, dy });
     }
   }
   _spriteKeyBlockedOffsets.set(key, blocked);
+  const anchorInsideFootprint =
+    footprint.dx <= 0 && footprint.dx + footprint.w > 0 && footprint.dy <= 0;
+  if (anchorInsideFootprint && firstBlockedDy > 0) _spriteKeyWalkableAnchors.add(key);
 }
 
 /** Returns the tile-space rectangle a map sprite covers, relative to its anchor tile. */

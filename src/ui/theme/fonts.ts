@@ -37,6 +37,22 @@ export const WORLD_FONT_STACK = 'monospace';
 export const MARKER_FONT_STACK =
   '"Marker Felt", "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", cursive';
 
+/**
+ * The stack for a document read off a sheet of paper (a ledger page, a
+ * letter, posted orders): a book serif, so the page reads as written matter
+ * rather than as the UI around it. System faces only; every platform has a
+ * serif to fall back on.
+ */
+export const DOCUMENT_FONT_STACK =
+  '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
+
+/**
+ * The stack for a short note scribbled by hand on a slip. Calmer faces than
+ * {@link MARKER_FONT_STACK}, since a note is read through rather than glanced at.
+ */
+export const HANDWRITING_FONT_STACK =
+  '"Bradley Hand", "Segoe Print", "Noteworthy", "Chalkboard SE", "Comic Sans MS", cursive';
+
 /** Page-relative URL of the bundled variable font; also what the service worker precaches. */
 export const UI_FONT_URL = 'src/fonts/InterVariable.woff2';
 

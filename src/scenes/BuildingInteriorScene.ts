@@ -102,7 +102,7 @@ import {
   type InteriorWorldAction,
 } from './interiorCutscene';
 import { RESIDENT_IDS } from '../core/state/residentIds';
-import type { QuestMarkerState } from '../sprites/questNPCSprite';
+import { npcMarkerShows, setPartyOnAQuest, type NpcMarker } from '../sprites/npcQuestMarker';
 import { pixelToTile } from '../utils';
 import { safeRoomIdIn, sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
 import {
@@ -4555,16 +4555,7 @@ export class BuildingInteriorScene extends GameplayScene {
     return {
       priority: ARROW_PRIORITY.PINNED_EXIT,
       draw: () =>
-        drawArrowAbovePlayer(
-          ctx,
-          active.x,
-          active.y,
-          aim.x,
-          aim.y,
-          camX,
-          camY,
-          worldPalette.objective.ready,
-        ),
+        drawArrowAbovePlayer(ctx, active, aim.x, aim.y, camX, camY, worldPalette.objective.ready),
     };
   }
 
@@ -4952,7 +4943,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const residentId = target?.residentId ?? null;
     if (residentId === null || target === this.citizenDialogTarget) return false;
     const marker = firstResidentMarker(this.residentQuestHooks, residentId);
-    return marker === 'question' || marker === 'exclamation';
+    return marker !== null && npcMarkerShows(marker);
   }
 
   private syncPlumblineFarmRoom(): void {
@@ -5498,14 +5489,18 @@ export class BuildingInteriorScene extends GameplayScene {
     this.dave?.openChat(active, aiAdapter.chatWithDave());
   }
 
-  /** His `!`: a story beat his arrival held, the plan to tell him, or tactics for what is next not yet given. */
-  private daveMarker(): QuestMarkerState {
-    if (this.story.holdsArrivalBeat) return 'exclamation';
-    if (this.missingCatsInterior?.daveRefusalOwed === true) return 'exclamation';
+  /**
+   * His news `!` for a story beat his arrival held or tactics for what is next
+   * not yet given, which are not a quest's next step; his `?` while
+   * the missing-cats plan is still his to hear, a quest under way.
+   */
+  private daveMarker(): NpcMarker {
+    if (this.story.holdsArrivalBeat) return 'news';
+    if (this.missingCatsInterior?.daveRefusalOwed === true) return 'inProgress';
     const objective = this.partyRun.story.currentObjective();
     const owed =
       objective !== null && !this.partyRun.daveWhereabouts.tacticsGiven.has(objective.id);
-    return owed ? 'exclamation' : 'none';
+    return owed ? 'news' : 'none';
   }
 
   /**
@@ -5796,6 +5791,10 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.turnFor(target) < residentLinesFor(target.residentId).lore.length;
   }
 
+  /** Whether the room is keeping a crawler out of the picture: mid-regroup, or taken by a cutscene. */
+  private readonly isCrawlerHidden = (crawler: HumanPlayer | CatPlayer): boolean =>
+    this.safeRoomRegroup?.hides(crawler) === true || this.cutscenes.director.hides(crawler);
+
   /**
    * Y-sorted pass over the room's occupants and its decoration tiles. Decorations
    * (braziers, hearth props) are drawn base-only by `renderCanvas`, which expects
@@ -5920,6 +5919,7 @@ export class BuildingInteriorScene extends GameplayScene {
     setInteractionPromptsSuppressed(surfacesOverHud(this.ui).length > 0, this.interactionStance());
     this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks);
     this.anchorPromptFocus(ctx, camX, camY);
+    setPartyOnAQuest(this.partyRun.questUnderway());
 
     ctx.fillStyle = worldPalette.shade;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
@@ -5986,11 +5986,9 @@ export class BuildingInteriorScene extends GameplayScene {
         (mob) => mob.belongsInMobGrid && !this.cutscenes.director.hides(mob),
       ),
       ...[this.partnerAnywhere(), this.active()].filter(
-        (crawler) =>
-          !crawler.isAway &&
-          this.safeRoomRegroup?.hides(crawler) !== true &&
-          !this.cutscenes.director.hides(crawler),
+        (crawler) => !crawler.isAway && !this.isCrawlerHidden(crawler),
       ),
+      ...combat.gear.sortedRelics(this.isCrawlerHidden),
       ...(this.safeRoomRegroup?.sortedFigures() ?? []),
       ...(this.occupants?.people ?? []).filter((person) => !this.cutscenes.director.hides(person)),
       ...(this.occupants?.sortedFigures() ?? []),

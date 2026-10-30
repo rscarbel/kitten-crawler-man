@@ -113,7 +113,7 @@ import {
   InnWallSitter,
   innWallSitterTile,
 } from './innWallSitter';
-import type { OverheadIcon } from '../../sprites/overheadIcon';
+import type { NpcOverheadIcon } from '../../sprites/overheadIcon';
 import type { TownPropRenderable } from '../townPropRenderable';
 import { towerStep, towerStepTarget, type TowerStepCarried } from './towerSteps';
 import type { ItemId } from '../../core/items/defs/ItemDefs';
@@ -756,11 +756,11 @@ export class MissingCatsQuestSystem {
 
   // ── The regular outside the inn ────────────────────────────────────────
 
-  /** The `!` while nobody has asked at the inn and the regular has not yet told the party. */
-  innWallSitterIcon(): OverheadIcon {
+  /** The offer's `!` while nobody has asked at the inn and the regular has not yet told the party. */
+  innWallSitterIcon(): NpcOverheadIcon {
     const { progress } = this.deps;
     const worthHearing = progress.phase === 'not_started' && !progress.innWallSitterHeard;
-    return worthHearing ? 'exclamation' : 'none';
+    return worthHearing ? 'available' : 'none';
   }
 
   /** Whether a press from `active` would reach the regular. */

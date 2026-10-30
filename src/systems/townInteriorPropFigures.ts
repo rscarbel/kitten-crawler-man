@@ -5,7 +5,8 @@
  * that looks furnished in review renders and bare in the real game.
  *
  * - **Ground layer** (`drawTownInteriorGroundProps`): every prop whose def is
- *   `walkable` — rugs, runners, a cellar hatch. These lie flat on the boards,
+ *   walkable and does not stand up (`townInteriorPropLiesFlat`) — rugs,
+ *   runners, a cellar hatch. These lie flat on the boards,
  *   so they draw straight after the floor and under every figure. Sorted with
  *   the figures instead, a rug sorts on its bottom row and paints over anyone
  *   standing on its upper rows.
@@ -24,6 +25,7 @@ import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   TOWN_INTERIOR_PROPS,
   drawTownInteriorProp,
+  townInteriorPropLiesFlat,
   townInteriorPropSortY,
 } from '../sprites/art/townInterior/townInteriorProps';
 import { drawPropFlames } from '../sprites/art/townInterior/propFlames';
@@ -37,7 +39,7 @@ const NOTHING_BROKEN: ReadonlySet<string> = new Set();
 
 /** Whether a placed prop lies flat on the floor and so belongs in the ground layer. */
 function liesOnFloor(placed: PlacedTownInteriorProp): boolean {
-  return TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker');
+  return townInteriorPropLiesFlat(placed.propId);
 }
 
 function drawPlaced(
@@ -72,11 +74,22 @@ function drawPlaced(
   );
 }
 
+/**
+ * How far down its own row a walkable standing prop sorts, in tiles. A figure
+ * on a tile sorts at the row's top, the same line a solid prop takes, and wins
+ * that tie; a bar stool sorted half a tile lower is drawn over the legs of a
+ * crawler whose feet are on its tile, while one standing in the row south of
+ * it still sorts after it.
+ */
+const STANDING_WALKABLE_SORT_DROP_TILES = 0.5;
+
 function figureFor(placed: PlacedTownInteriorProp): TownInteriorPropFigure {
   const propDef = TOWN_INTERIOR_PROPS[placed.propId];
+  const footprintSortY = townInteriorPropSortY(placed.tile.y, propDef.footprint, TILE_SIZE);
+  const sortDropPx = propDef.standsUp === true ? STANDING_WALKABLE_SORT_DROP_TILES * TILE_SIZE : 0;
   return {
     placed,
-    y: townInteriorPropSortY(placed.tile.y, propDef.footprint, TILE_SIZE),
+    y: footprintSortY + sortDropPx,
     render: (ctx, camX, camY, tileSize) => drawPlaced(ctx, placed, camX, camY, tileSize),
   };
 }

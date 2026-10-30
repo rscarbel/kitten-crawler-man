@@ -98,7 +98,6 @@ export function toPersistedDefendQuestCheckpoint(
     audienceAbsenceFrames: cp.audienceAbsenceFrames,
     encounterAborted: cp.encounterAborted,
     npcHp: cp.npcHp,
-    npcMarkerType: cp.npcMarkerType,
   };
 }
 

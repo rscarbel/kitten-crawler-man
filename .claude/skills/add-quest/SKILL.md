@@ -10,7 +10,7 @@ Quests are built from three pieces: a `QuestDef` in `QuestManager`, a `QuestNPC`
 ## Building blocks
 
 - **`QuestManager`** (`src/core/quests/QuestManager.ts`): pure state tracker. `QuestDef { id, name, type: 'story' | 'mini', rewards: QuestRewards }`; `QuestRewards { xp, coins? }` (the quest's completion function pays any items itself; see Rewards below). Status flows `available → active → completed | failed` via `register` / `startQuest` / `completeQuest` / `failQuest`.
-- **`QuestNPC`** (`src/creatures/QuestNPC.ts`): extends `Player` (so mobs can target/attack it — that's how defend quests fail), non-combatant, carries `questId` and an overhead `markerType` (`'exclamation' | 'question' | 'none'`).
+- **`QuestNPC`** (`src/creatures/QuestNPC.ts`): extends `Player` (so mobs can target/attack it — that's how defend quests fail), non-combatant, carries `questId` and an overhead `markerType` (an `NpcQuestMarker`; see the rule below).
 - **Quest system class**: a `GameSystem` (see `add-system`) constructed with `(gameMap, bus, addMob)` in `DungeonScene` — `addMob` is the callback the scene supplies as `(mob) => world.roster.add(mob)` — the one spawn path, which also hands the mob its map and spell context, so wave spawns register correctly. It owns a phase union type (e.g. `'inactive' → 'npc_waiting' → 'dialog' → 'defending' → 'complete' | 'failed'`) and drives timers, waves, and dialog in `update(ctx)`.
 
 ## Conventions to follow
@@ -91,11 +91,10 @@ from the current phase every frame, so nothing here can go stale.
 'nearest_step'` for steps done in any order (the anchor shards), `'header'`
   for a header that already names the step the story is on, so a closer house
   never overrules the lead (the missing-cats investigation).
-- **Quest beacons** — `drawQuestBeacon` (`src/sprites/questBeacon.ts`), a column of
-  light over anyone wearing a `!`/`?`. Called by the _creature_, before its own body
-  paint, so it Y-sorts with the figure. Gate it on the exact state that drives the
-  overhead glyph — `questMarkerColorFor` in `src/sprites/questNPCSprite.ts` is the
-  one place that mapping lives, so the two cannot disagree.
+- **Quest beacons** — a column of light over anyone wearing a quest marker, drawn by
+  the _creature_ with `drawOverheadIconBeacon` (`src/sprites/overheadIcon.ts`) before
+  its own body paint, so it Y-sorts with the figure. It and `drawOverheadIcon` read
+  the same marker value, so the beam and the glyph cannot disagree.
 
 Two traps worth knowing before you wire any of these:
 
@@ -113,6 +112,44 @@ The Journal itself is a pause-screen section (`src/ui/screens/pause/journalSecti
 Taloncrest up — see `add-ui`. Quests on floors below it still implement
 `trackerEntries()`; the gate is `DungeonScene.hasQuestJournal`, not the system.
 
+## Rule: what a quest NPC wears
+
+Every person or animal the party talks to for a quest wears an `NpcQuestMarker`
+(`src/sprites/npcQuestMarker.ts`), worked out from the quest's own state:
+
+- `'available'` — gold beacon and `!`: the quest is on offer and **not started**.
+- `'inProgress'` — green beacon and `?`: the party is **partway through** this quest
+  and talking to this NPC moves it on. Never a `!` mid-quest.
+- `'turnIn'` — green beacon, `?` and a **present** beside it: talking now **pays a
+  reward or unlocks something** (coins, XP, a skill, a station, a gate, a shard).
+  A quest item handed over only to carry to the next step (Wendell's blueprints)
+  is `'inProgress'`.
+- `'none'` — nothing to say.
+
+While any quest is `active` (a quest line with status `active`, asked of the floor's
+quest systems whether or not it keeps a Journal), every `'available'` beacon burns at
+a third of its strength (`AVAILABLE_BEACON_STRENGTH_WHILE_ON_A_QUEST` in
+`npcQuestMarker.ts`); the gameplay scenes set this at the top of `render` with
+`setPartyOnAQuest`, and a frame that does not set it reads "no quest". Nothing per
+quest is needed.
+
+Write the marker as a table over the quest's phase union — `{ … } as const satisfies
+Record<MyPhase, NpcQuestMarker>` (see `MOTHER_MARKER_BY_PHASE` in
+`DefendQuestSystem`, `PLEA_MARKERS_BY_PHASE` in `VillageQuestSystem`,
+`PLUMBER_MARKER_BY_PHASE` in `CloggedBathroomSystem`) — so a new phase cannot compile
+until it says what its NPC wears. Derive the minimap pip with `minimapMarkerFor`.
+A person's icon is an `NpcOverheadIcon` (`src/sprites/overheadIcon.ts`, from
+`overheadIconFor`), so a person cannot wear an object's marker. Objects (a notice
+board, a terminal, a crystal) are not NPCs: they wear an `ObjectOverheadIcon` built
+from the plain `ObjectQuestMarker` `!`/`?` (`src/sprites/questNPCSprite.ts`) and never
+take a present. Dave's story beats and tactics are not quests: he wears the
+`NpcMarker` `'news'`, a gold `!` that never quiets, since what he says is usually
+about the quest in hand. No quest uses `'news'`.
+`drawOverheadIcon` takes an `IconAnchor`, never a bare y: build it with
+`IconAnchor.ofRow(drawnRow, sy, tileSize)` for a figure (null, and no icon, until the
+row is measured, so the icon never hops onto the wearer) or `IconAnchor.ofFixedArt`
+for art whose top is final on its first frame (baked sheet ink, fixed head geometry).
+
 ## Checklist
 
 1. Create `src/systems/MyQuestSystem.ts` implementing `GameSystem` with a phase union, `QUEST_ID`, and `(gameMap, bus, addMob)` constructor.
@@ -120,5 +157,6 @@ Taloncrest up — see `add-ui`. Quests on floors below it still implement
 3. Construct the system in `DungeonScene`, call `update(ctx)` in `updateGameplay()`, add world render calls, add its surfaces to the scene's mounted list and its top-band entries to the `HudModel`, and wire interact into the Space chain.
 4. Emit the three quest events at transitions.
 5. Add `questMarkers` and `trackerEntries()`, and register the system in the scene's two collectors.
+6. Give every NPC of the quest its `NpcQuestMarker` from a `Record` over the phase union, following the rule above.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).

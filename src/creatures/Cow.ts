@@ -57,12 +57,8 @@ import { cowLookOf } from '../sprites/art/cowLooks';
 import { CowPen } from '../systems/briarHollow/cowPen';
 import type { TilePoint } from '../map/town/townPlan';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { drawQuestBeacon } from '../sprites/questBeacon';
-import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  type QuestMarkerState,
-} from '../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
+import { IconAnchor, drawOverheadIcon, drawOverheadIconBeacon } from '../sprites/overheadIcon';
 
 const SECONDS_PER_UPDATE = 1 / WORLD_TICKS_PER_SECOND;
 const TWO_PI = Math.PI * 2;
@@ -353,7 +349,7 @@ export class Cow extends Mob {
    * The quest glyph and beacon the animal wears, for the one a quest needs the
    * party to go to (Midge); `'none'` for the rest of the herd.
    */
-  questMarker: QuestMarkerState = 'none';
+  questMarker: NpcQuestMarker = 'none';
 
   private readonly random: () => number;
   private modeValue: CowMode = 'idle';
@@ -1641,11 +1637,8 @@ export class Cow extends Mob {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
-    const markerColor = questMarkerColorFor(this.questMarker);
     // Beacon first, so the column stands behind the animal rather than across it.
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, this.questMarker);
     const { action, progress } = this.spriteAction();
     const drawnRow = drawCowSprite(ctx, sx, sy, tileSize, {
       coat: this.coat,
@@ -1659,10 +1652,10 @@ export class Cow extends Mob {
     });
     const artTop = figureRowInkTop(drawnRow, sy, tileSize);
     if (!this.healthBarDrawnElsewhere) this.renderMobHealthBar(ctx, sx, sy, artTop);
-    if (markerColor !== undefined) {
-      const glyph = this.questMarker === 'question' ? '?' : '!';
-      const clearOf = this.overheadClearTop(artTop, sy);
-      drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
+    if (this.questMarker !== 'none') {
+      const artAnchor = IconAnchor.ofRow(drawnRow, sy, tileSize);
+      const anchor = artAnchor?.clearing(this.overheadClearTop(artAnchor.y, sy)) ?? null;
+      drawOverheadIcon(ctx, sx, anchor, tileSize, this.questMarker);
     }
   }
 }

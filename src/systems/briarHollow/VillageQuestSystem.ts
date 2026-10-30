@@ -39,7 +39,7 @@ import type { GrantedReward } from '../../core/items/loot/GrantedReward';
 import { TILE_SIZE } from '../../core/constants';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import {
@@ -278,6 +278,40 @@ export interface VillageQuestSystemDeps {
   /** Grants a quest's free spin at the wheel, once per quest; false when it was already granted. */
   readonly grantWheelFreeSpin: (questId: string) => boolean;
 }
+
+/** Who wears a marker in one phase of the Plea; a villager left out wears none. */
+type PleaMarkers = Partial<Record<VillagerId, Exclude<NpcQuestMarker, 'none'>>>;
+
+/**
+ * The Plea's markers, phase by phase. The Mayor's offer stands until it is
+ * accepted; after that every word that pays out (Oren's tools, Tikka's
+ * Construction and plans, Fenna's stations, the Mayor's soldier commands and
+ * his thanks) is a turn-in, and a talk that only moves the siege on is a
+ * quest under way.
+ */
+const PLEA_MARKERS_BY_PHASE = {
+  unmet: { bramblewick: 'available' },
+  offered: { bramblewick: 'available' },
+  declined: { bramblewick: 'available' },
+  need_tools: { oren: 'turnIn' },
+  gather_wood: {},
+  gather_stone: {},
+  report_tikka: { tikka: 'turnIn' },
+  see_fenna: { fenna: 'turnIn' },
+  processing: {},
+  return_tikka: { tikka: 'turnIn' },
+  build_trebuchet: {},
+  load_trebuchet: {},
+  build_wall: {},
+  summoned_by_mayor: { bramblewick: 'turnIn' },
+  fortifying: { bramblewick: 'inProgress' },
+  imminent: {},
+  assault: {},
+  repelled_failed: { bramblewick: 'inProgress' },
+  repair_bell: {},
+  victory: { bramblewick: 'turnIn' },
+  complete: {},
+} as const satisfies Record<VillageQuestPhase, PleaMarkers>;
 
 /** The skill-unlocked card Tikka's plans are announced with. */
 function constructionUnlockedReward(): GrantedReward {
@@ -970,26 +1004,10 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   // ── Markers and the journal ───────────────────────────────────────────────
 
-  /** The glyph over a villager's head. */
-  markerFor(villager: VillagerId, _ctx: VillagerContext): NPCMarkerType {
-    const phase = this.phase;
-    if (villager === 'bramblewick') {
-      if (phase === 'unmet' || phase === 'declined') return 'exclamation';
-      const question: readonly VillageQuestPhase[] = [
-        'offered',
-        'summoned_by_mayor',
-        'fortifying',
-        'repelled_failed',
-        'victory',
-      ];
-      return question.includes(phase) ? 'question' : 'none';
-    }
-    if (villager === 'oren') return phase === 'need_tools' ? 'question' : 'none';
-    if (villager === 'tikka') {
-      return phase === 'report_tikka' || phase === 'return_tikka' ? 'question' : 'none';
-    }
-    if (villager === 'fenna') return phase === 'see_fenna' ? 'question' : 'none';
-    return 'none';
+  /** The marker over a villager's head. */
+  markerFor(villager: VillagerId, _ctx: VillagerContext): NpcQuestMarker {
+    const markers: PleaMarkers = PLEA_MARKERS_BY_PHASE[this.phase];
+    return markers[villager] ?? 'none';
   }
 
   private villagerTarget(id: VillagerId): TrackerTarget | undefined {

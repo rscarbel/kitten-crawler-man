@@ -189,7 +189,7 @@ export function verifyWendellWaiting(check: Check): void {
 export function verifyWendellHandOver(check: Check): void {
   const rig = wendellRig('midge_delivered');
   const hook = rig.visit();
-  check(hook.markerFor('wendell') === 'question', 'a "?" over him once Midge is settled');
+  check(hook.markerFor('wendell') === 'inProgress', 'a "?" over him once Midge is settled');
 
   rig.cat.isKnockedOut = true;
   check(
@@ -231,7 +231,7 @@ export function verifyWendellHandOver(check: Check): void {
 export function verifyWendellHandBack(check: Check): void {
   const rig = wendellRig('build_stations');
   const hook = rig.visit();
-  check(hook.markerFor('wendell') === 'question', 'a "?" over him while no crawler holds them');
+  check(hook.markerFor('wendell') === 'inProgress', 'a "?" over him while no crawler holds them');
   check(hook.tryOpenDialog('wendell', rig.human), 'talking to him opens the hand-back');
   check(
     firstLineOf(rig.opened[0]) === WENDELL.blueprintsReturned,

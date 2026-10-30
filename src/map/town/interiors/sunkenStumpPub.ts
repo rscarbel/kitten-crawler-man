@@ -174,7 +174,7 @@ export function buildSunkenStumpPubLayout(w: number, h: number): TownInteriorLay
     statefulProp(eastCol, northRow, 'smoky_lamp', contractTargetId(CONTRACT_SITE, 'lamp'), 0),
   );
   for (let rx = westCol; rx <= barEndCol; rx += barStoolPitch)
-    entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - westCol}`, rx % 2));
+    entries.push(statefulProp(rx, barStoolRow, 'bar_stool', `bar_stool_${rx - westCol}`, rx % 2));
 
   const tables = [
     ...northTables.map((table) => ({ ...table, row: northRankRow })),

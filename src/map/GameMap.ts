@@ -211,6 +211,8 @@ import {
   getBlockedTileOffsets,
   getBlockedTileOffsetsByKey,
   getSpriteDefByKey,
+  getSpriteFootprintByKey,
+  getSpriteWalkBehindRowsByKey,
   getSortYAnchorPx,
   type MapSpriteExtentsPx,
 } from '../core/spriteAssets/SpriteLoader';
@@ -1215,6 +1217,15 @@ export class GameMap {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     return this.spriteBuildingMask[tileIndex(tileX, tileY, this.maskWidth)] === 1;
   }
+
+  /**
+   * True when (tileX, tileY) is one of a facade's walk-behind roof rows: under
+   * a sprite building's art and still walkable, so a crawler there is drawn
+   * behind the roof.
+   */
+  isWalkBehindTile(tileX: number, tileY: number): boolean {
+    return this.isSpriteBuildingTile(tileX, tileY) && this.isWalkable(tileX, tileY, 'walker');
+  }
   private _chunkCache: TileChunkCache | null = null;
   /**
    * Tiles whose base art changed since the last frame. Queued rather than
@@ -2168,7 +2179,10 @@ export class GameMap {
           this.addBlockFlag(tx + dx, ty + dy, BLOCK_EXTRA);
           if (isSpriteBuilding) this.markSpriteBuildingTile(tx + dx, ty + dy);
         }
-        if (isSpriteBuilding) this.markSpriteBuildingTile(tx, ty);
+        if (isSpriteBuilding && tile.spriteKey !== undefined) {
+          this.markSpriteBuildingTile(tx, ty);
+          this.markWalkBehindRows(tx, ty, tile.spriteKey);
+        }
       }
     }
 
@@ -2200,6 +2214,18 @@ export class GameMap {
   private removeBlockFlag(tileX: number, tileY: number, flag: number): void {
     if (!this.isInsideGrid(tileX, tileY)) return;
     this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] &= ~flag;
+  }
+
+  /** The roof rows a crawler may walk behind are still under the building's art. */
+  private markWalkBehindRows(anchorX: number, anchorY: number, spriteKey: string): void {
+    const footprint = getSpriteFootprintByKey(spriteKey);
+    if (footprint === undefined) return;
+    const walkBehindRows = getSpriteWalkBehindRowsByKey(spriteKey);
+    for (let dy = footprint.dy; dy < footprint.dy + walkBehindRows; dy++) {
+      for (let dx = footprint.dx; dx < footprint.dx + footprint.w; dx++) {
+        this.markSpriteBuildingTile(anchorX + dx, anchorY + dy);
+      }
+    }
   }
 
   private markSpriteBuildingTile(tileX: number, tileY: number): void {
@@ -2892,6 +2918,17 @@ export class GameMap {
     if (this.bathroomPlumbing === 'broken' && (flags & BLOCK_BATHROOM) !== 0) return false;
     if (this.stealthGate === 'locked' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX], mobility);
+  }
+  /**
+   * The one test for "runtime street clutter may stand here": walker ground by
+   * {@link isWalkableIgnoringPermanent}, for the idempotence that method gives,
+   * and not under a sprite building's art. The roof rows a crawler may walk
+   * behind are walkable, but a stall, lamp or pell placed there would stand
+   * hidden under the roof.
+   */
+  isOpenStreetGround(tileX: number, tileY: number): boolean {
+    if (this.isSpriteBuildingTile(tileX, tileY)) return false;
+    return this.isWalkableIgnoringPermanent(tileX, tileY, 'walker');
   }
 
   isStairwellTile(tileX: number, tileY: number): boolean {

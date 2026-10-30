@@ -22,7 +22,7 @@ import type { BlueprintsQuestPhase } from '../../../core/quests/blueprintsQuestP
 import { BLUEPRINTS_QUEST_ID } from './blueprintsProgress';
 import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { Cow } from '../../../creatures/Cow';
-import type { QuestMarkerState } from '../../../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../../../sprites/npcQuestMarker';
 import { worldText } from '../../../ui/world/worldText';
 import type { Rect } from '../../../ui/core/geom';
 import type { Ui } from '../../../ui/core/UiRoot';
@@ -154,18 +154,18 @@ export class BlueprintsStepMoments {
     if (cow !== null) cow.questMarker = this.midgeMarker();
   }
 
-  /** Whether the party has to go to Midge right now: the `!` she wears. */
-  midgeMarker(): QuestMarkerState {
+  /** Whether the party has to go to Midge right now: the `?` she wears, a step of a quest under way. */
+  midgeMarker(): NpcQuestMarker {
     if (isVillageUnderSiege(this.ctx.pleaPhase())) return 'none';
     // Out of the herd before the escort, she can only be answering Merrit's call.
     const answeringCall = this.phase === 'deliver_grain';
     const wanted = answeringCall || this.midgeCaption() !== null;
-    return wanted ? 'exclamation' : 'none';
+    return wanted ? 'inProgress' : 'none';
   }
 
   /**
    * What Midge's caption says, or null for none. While she answers Merrit's
-   * call she wears her `!` without one: she is walking to the party already.
+   * call she wears her `?` without one: she is walking to the party already.
    */
   midgeCaption(): string | null {
     if (this.phase !== 'escort_midge' || this.escort.midge === null) return null;

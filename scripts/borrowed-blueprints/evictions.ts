@@ -122,7 +122,7 @@ function wendellHandsBackBlueprints(
     toast: () => undefined,
     onItemGranted: () => undefined,
   });
-  check(wendell?.markerFor('wendell') === 'question', 'Wendell wears a "?" for them');
+  check(wendell?.markerFor('wendell') === 'inProgress', 'Wendell wears a "?" for them');
   check(wendell?.tryOpenDialog('wendell', crawler) === true, 'talking to him opens the hand-back');
   for (let press = 0; press < MAX_PRESSES_PER_BEAT && conversation.isOpen; press++) {
     conversation.update(null);

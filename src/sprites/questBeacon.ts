@@ -13,7 +13,7 @@
  * pass.
  */
 
-import { drawLightBeam } from './lightBeam';
+import { drawLightBeam, lightBeamBounds } from './lightBeam';
 
 /** How tall the beam stands above the marked figure's tile, in tiles. */
 const BEACON_HEIGHT_TILES = 3.6;
@@ -66,6 +66,25 @@ function nearnessFade(
   );
 }
 
+/** Where the beam stands for a figure whose tile's top-left corner is at (`sx`, `sy`). */
+function beaconGeometry(sx: number, sy: number, tileSize: number) {
+  return {
+    centreX: sx + tileSize / 2,
+    groundY: sy + tileSize,
+    coverWidth: tileSize * BEACON_COVER_WIDTH_FRACTION,
+    height: tileSize * BEACON_HEIGHT_TILES,
+  };
+}
+
+/**
+ * The rectangle {@link drawQuestBeacon} can light for a figure whose tile's
+ * top-left corner is at (`sx`, `sy`), in the same space: for a culler that
+ * must start drawing the figure before the top of its beam reaches the view.
+ */
+export function questBeaconBounds(sx: number, sy: number, tileSize: number) {
+  return lightBeamBounds(beaconGeometry(sx, sy, tileSize));
+}
+
 /**
  * Draws the beacon for a figure whose tile's top-left corner is at screen
  * (`sx`, `sy`).
@@ -94,10 +113,7 @@ export function drawQuestBeacon(
   const fade = nearnessFade(sx, sy, tileSize, camX, camY);
   if (fade <= 0) return;
   drawLightBeam(ctx, {
-    centreX: sx + tileSize / 2,
-    groundY: sy + tileSize,
-    coverWidth: tileSize * BEACON_COVER_WIDTH_FRACTION,
-    height: tileSize * BEACON_HEIGHT_TILES,
+    ...beaconGeometry(sx, sy, tileSize),
     color,
     strength: BEACON_STRENGTH * fade * strengthScale,
     timeMs,

@@ -12,7 +12,7 @@
  */
 
 import { TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../core/constants';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { TilePoint } from '../../map/town/townPlan';
 import {
   type RatkinCastAction,
@@ -29,16 +29,16 @@ import {
   timedSpeechBubbleTop,
   type TimedBubbleStyle,
 } from '../../sprites/speechBubble';
-import { questMarkerColorFor } from '../../sprites/questNPCSprite';
 import {
+  IconAnchor,
   drawOverheadIcon,
+  drawOverheadIconBeacon,
   overheadIconFor,
   overheadIconTopY,
-  type OverheadIcon,
+  type NpcOverheadIcon,
   type ShopSign,
 } from '../../sprites/overheadIcon';
 import type { DrawnFigureRow } from '../../sprites/figure/figureDef';
-import { drawQuestBeacon } from '../../sprites/questBeacon';
 import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { CivilianCastId, VillagerRoutine } from './villagerRoutines';
@@ -116,7 +116,7 @@ export class Villager implements TownPropRenderable {
   /** +1 toward the camera, −1 away, 0 along the horizontal. */
   facingY = 1;
   state: VillagerState = 'working';
-  marker: NPCMarkerType = 'none';
+  marker: NpcQuestMarker = 'none';
   /** Whether this villager has a counter open; their quest `marker` outranks it overhead. */
   shopSign: ShopSign = 'closed';
   readonly bark = new TimedSpeech();
@@ -374,7 +374,7 @@ export class Villager implements TownPropRenderable {
   }
 
   /** The one icon over this villager's head; none while they are talking. */
-  private get overheadIcon(): OverheadIcon {
+  private get overheadIcon(): NpcOverheadIcon {
     if (this.state === 'talking') return 'none';
     return overheadIconFor(this.marker, this.shopSign);
   }
@@ -413,12 +413,10 @@ export class Villager implements TownPropRenderable {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
-    const markerColor = this.state === 'talking' ? undefined : questMarkerColorFor(this.marker);
     // Beacon first, so the column stands behind the villager and follows them
     // frame by frame, rather than trailing a tile position sampled elsewhere.
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
+    const marker: NpcQuestMarker = this.state === 'talking' ? 'none' : this.marker;
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, marker);
     this.drawnRow = drawRatkinCastSprite(ctx, this.id, sx, sy, tileSize, {
       action: this.action,
       walkPhase: this.walkPhase,
@@ -427,7 +425,10 @@ export class Villager implements TownPropRenderable {
       loopOffsetSeconds: this.loopOffsetSeconds,
     });
 
-    drawOverheadIcon(ctx, sx, this.artTop(sy, tileSize), tileSize, this.overheadIcon);
+    const icon = this.overheadIcon;
+    if (icon !== 'none') {
+      drawOverheadIcon(ctx, sx, IconAnchor.ofRow(this.drawnRow, sy, tileSize), tileSize, icon);
+    }
 
     this.renderSparks(ctx, camX, camY);
   }

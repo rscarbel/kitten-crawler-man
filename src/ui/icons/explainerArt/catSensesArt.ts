@@ -8,7 +8,7 @@
 
 import { crawlerDisplayName } from '../../../characters/characters';
 import { worldPx } from '../../../core/rendering/camera';
-import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
+import { ACTIVE_RING_RADIUS_TILES, drawActiveCrawlerRing } from '../../world/activeCrawlerRing';
 import {
   catCellFor,
   drawCatSprite,
@@ -63,11 +63,8 @@ const SHADOW_FILL = 'rgba(0,0,0,0.4)';
 const SHADOW_RX = 16;
 const SHADOW_RY = 5;
 
-const HUMAN_HEAD_TILES = 1.85;
 const CAT_HEAD_TILES = 0.7;
-const MARKER_RADIUS = 6;
-const MARKER_GAP = 9;
-const MARKER_HOP_PX = 16;
+const RING_RADIUS = ACTOR_TILE * ACTIVE_RING_RADIUS_TILES;
 
 /** How far the trail meanders either side of the feet line, and over how many waves across the band. */
 const TRAIL_WAVE_PX = 7;
@@ -101,8 +98,8 @@ const POP_FRAMES = 50;
 const POP_RISE_PX = 26;
 const POP_SIZE = 15;
 const POP_COLOR = '#fde68a';
-/** How many marker gaps over her head the pop starts, so it clears the marker. */
-const POP_ABOVE_MARKER_GAPS = 4;
+/** How far over her head the pop starts. */
+const POP_ABOVE_HEAD_PX = 36;
 
 const PATCH_RADIUS_X = 44;
 const PATCH_RADIUS_Y = 14;
@@ -211,6 +208,7 @@ interface CatPose {
 
 function drawCat(ctx: CanvasRenderingContext2D, pose: CatPose): void {
   shadow(ctx, pose.x, pose.feet);
+  if (pose.active) drawRing(ctx, pose.x, pose.feet, pose.frame);
   const state: CatSpriteState = {
     facing: CAT_FACING,
     isMoving: pose.moving,
@@ -219,10 +217,10 @@ function drawCat(ctx: CanvasRenderingContext2D, pose: CatPose): void {
   };
   const tile = tileTopLeft(pose.x, pose.feet);
   drawCatSprite(ctx, EXPLAINER_CAT, tile.x, tile.y, ACTOR_TILE, catCellFor(state), state);
-  if (pose.active) {
-    const headY = pose.feet - ACTOR_TILE * CAT_HEAD_TILES;
-    drawActivePlayerMarker(ctx, pose.x, headY - MARKER_GAP, MARKER_RADIUS);
-  }
+}
+
+function drawRing(ctx: CanvasRenderingContext2D, x: number, feet: number, frame: number): void {
+  drawActiveCrawlerRing(ctx, { x, y: feet, radiusX: RING_RADIUS, timeMs: frame * MS_PER_FRAME });
 }
 
 function drawHuman(ctx: CanvasRenderingContext2D, cx: number, feet: number): void {
@@ -351,15 +349,10 @@ export function drawCatSensesSwitchPage(
   paintSenseCueRing(ctx, { x: catX, y: feet }, 1, paintView);
 
   const humanX = at(rect, SWITCH_HUMAN_X);
+  const slide = smooth(span(frame, SWITCH_AT, SWITCHED_AT));
+  drawRing(ctx, lerp(humanX, catX, slide), feet, frame);
   drawHuman(ctx, humanX, feet);
   drawCat(ctx, { x: catX, feet, moving: false, frame, active: false });
-
-  const hop = smooth(span(frame, SWITCH_AT, SWITCHED_AT));
-  const markerX = lerp(humanX, catX, hop);
-  const headTiles = lerp(HUMAN_HEAD_TILES, CAT_HEAD_TILES, hop);
-  const markerY =
-    feet - ACTOR_TILE * headTiles - MARKER_GAP - Math.sin(Math.PI * hop) * MARKER_HOP_PX;
-  drawActivePlayerMarker(ctx, markerX, markerY, MARKER_RADIUS);
 
   if (frame >= SWITCH_AT - CONTROL_LEAD_FRAMES && frame < SWITCHED_AT) {
     const controlX = at(rect, SWITCH_CONTROL_X);
@@ -471,7 +464,7 @@ export function drawCatSensesSniffPage(
     : null;
   drawCat(ctx, { x: catX, feet: catFeet, moving: walk < 1, frame, active: true, oneShot });
 
-  const popY = catFeet - ACTOR_TILE * CAT_HEAD_TILES - MARKER_GAP * POP_ABOVE_MARKER_GAPS;
+  const popY = catFeet - ACTOR_TILE * CAT_HEAD_TILES - POP_ABOVE_HEAD_PX;
   pop(ctx, 'Sniff!', catX, popY, frame - SNIFF_POP_AT);
   if (frame < SNIFF_AT)
     label(ctx, 'Strongest here', patchX, catFeet - ACTOR_TILE - LABEL_ABOVE_TRAIL);

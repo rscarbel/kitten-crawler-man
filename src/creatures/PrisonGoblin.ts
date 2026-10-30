@@ -15,8 +15,9 @@ import {
   type GoblinGuardState,
 } from '../sprites/goblinGuardSprite';
 import { GOBLIN_GATE_GUARD_ROWS, GOBLIN_GUARD_ROWS } from '../sprites/art/goblinGuardFigure';
-import { drawQuestBeacon } from '../sprites/questBeacon';
-import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
+import { IconAnchor, drawOverheadIcon, drawOverheadIconBeacon } from '../sprites/overheadIcon';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { TimedSpeech, drawTimedSpeechBubble, type TimedBubbleStyle } from '../sprites/speechBubble';
 import { worldPalette } from '../ui/theme/worldInk';
 import type { BarkLine } from '../dialog/line';
@@ -27,9 +28,6 @@ import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 /** Who a prison goblin is: the guard at the stealth gate, or a guard walking the prison. */
 export type PrisonGoblinRole = 'gateGuard' | 'patrol';
-
-/** Which glyph the gate guard wears over his head, if any. */
-export type PrisonGoblinMarker = 'none' | 'exclamation' | 'question';
 
 /**
  * The row a driver asks a patrol guard to show. `flinch` is never asked for:
@@ -144,7 +142,9 @@ export class PrisonGoblin extends Mob {
   readonly speech = new TimedSpeech();
 
   /** The glyph over his head; only the gate guard ever wears one. */
-  marker: PrisonGoblinMarker = 'none';
+  marker: NpcQuestMarker = 'none';
+  /** The row he was last drawn in, which his marker hangs from once it is measured. */
+  private drawnRow: DrawnFigureRow | undefined;
   /** What a patrol guard is doing; set by {@link applyPose}. */
   activity: PrisonGuardActivity = 'idle';
   /** What the gate guard shows while standing. */
@@ -514,21 +514,27 @@ export class PrisonGoblin extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const showsMarker = this.marker !== 'none';
-    if (showsMarker) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), QUEST_MARKER_GOLD);
-    }
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, this.marker);
     const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
       const place = { x: sx, y: sy, tileSize, facingX: this.facingX };
       if (this.role === 'gateGuard') {
-        drawGoblinGateGuardSprite(ctx, { ...place, ...this.resolveGateGuardFrame(seconds) });
+        this.drawnRow = drawGoblinGateGuardSprite(ctx, {
+          ...place,
+          ...this.resolveGateGuardFrame(seconds),
+        });
         return;
       }
-      drawGoblinGuardSprite(ctx, { ...place, ...this.resolveGuardFrame(seconds) });
+      this.drawnRow = drawGoblinGuardSprite(ctx, { ...place, ...this.resolveGuardFrame(seconds) });
     });
     this.artTopWorldY = artTopY + camY;
     if (showsMarker) {
-      const glyph = this.marker === 'question' ? '?' : '!';
-      drawQuestMarker(ctx, sx, artTopY, tileSize, glyph, QUEST_MARKER_GOLD);
+      drawOverheadIcon(
+        ctx,
+        sx,
+        IconAnchor.ofRow(this.drawnRow, sy, tileSize),
+        tileSize,
+        this.marker,
+      );
     }
     const style = this.role === 'gateGuard' ? GATE_GUARD_BUBBLE_STYLE : PATROL_BUBBLE_STYLE;
     drawTimedSpeechBubble(ctx, this.speech, sx + tileSize * HALF, artTopY, style);

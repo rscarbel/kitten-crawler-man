@@ -41,7 +41,11 @@ import {
 import type { DialogLine } from '../dialog/line';
 import type { CutsceneDirector } from './cutscene/CutsceneDirector';
 import { DAVE_TUTORIAL_REMINDERS } from '../dialog/scripts/dave';
-import { drawArrowAbovePlayer, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
+import {
+  drawArrowAbovePlayer,
+  drawBouncingArrowAboveEntity,
+  type ArrowWearer,
+} from '../ui/WorldArrow';
 import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { TUTORIAL_REWARD_POTIONS } from '../core/progression/AchievementManager';
 import type { InventoryRestrictions } from '../ui/screens/inventory/inventoryTypes';
@@ -1347,10 +1351,10 @@ export class TutorialController implements ObjectiveBeaconSource {
   renderOverlay(
     ctx: CanvasRenderingContext2D,
     camera: Camera,
-    activePlayerX: number,
-    activePlayerY: number,
+    activePlayer: ArrowWearer,
     renderCtx: TutorialRenderContext,
   ): void {
+    const { x: activePlayerX, y: activePlayerY } = activePlayer;
     if (this._state === 'COMPLETE') return;
     this.hintPlacement = hintPlacementFor(renderCtx);
 
@@ -1398,9 +1402,7 @@ export class TutorialController implements ObjectiveBeaconSource {
     // Also shows a navigation arrow above the cat pointing toward goblin B when the cat is
     // far from gate G2 — goblin B is behind G2 and may be off-screen on small displays.
     if (this._state === 'CAT_EQUIPPED_MAGIC_MISSILE' && this.goblinB.hp > 0) {
-      drawInWorldView(ctx, camera.zoom, () =>
-        this.renderGoblinBArrows(ctx, camera, activePlayerX, activePlayerY),
-      );
+      drawInWorldView(ctx, camera.zoom, () => this.renderGoblinBArrows(ctx, camera, activePlayer));
     }
 
     const target = STATE_ARROW_TARGETS[this._state];
@@ -1414,14 +1416,7 @@ export class TutorialController implements ObjectiveBeaconSource {
         const targetCentre = worldTargetCentrePx(target, renderCtx.davePosition);
         const promptRangePx = this.interactPromptRangePx(target);
         drawInWorldView(ctx, camera.zoom, () =>
-          this.renderArrowToTarget(
-            ctx,
-            camera,
-            activePlayerX,
-            activePlayerY,
-            targetCentre,
-            promptRangePx,
-          ),
+          this.renderArrowToTarget(ctx, camera, activePlayer, targetCentre, promptRangePx),
         );
       }
     }
@@ -1860,8 +1855,7 @@ export class TutorialController implements ObjectiveBeaconSource {
   private renderGoblinBArrows(
     ctx: CanvasRenderingContext2D,
     camera: Camera,
-    activePlayerX: number,
-    activePlayerY: number,
+    activePlayer: ArrowWearer,
   ): void {
     drawBouncingArrowAboveEntity(
       ctx,
@@ -1871,12 +1865,11 @@ export class TutorialController implements ObjectiveBeaconSource {
       camera.y,
       worldPalette.guide.accent,
     );
-    const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_GATE_THRESHOLD_PX;
+    const catNearGate = activePlayer.y >= TUTORIAL_GATE_G2.clampPxY - NEAR_GATE_THRESHOLD_PX;
     if (catNearGate) return;
     drawArrowAbovePlayer(
       ctx,
-      activePlayerX,
-      activePlayerY,
+      activePlayer,
       (GOBLIN_B_POS.x + TILE_FRACTION_CENTER) * TILE_SIZE,
       (GOBLIN_B_POS.y + TILE_FRACTION_CENTER) * TILE_SIZE,
       camera.x,
@@ -1893,11 +1886,11 @@ export class TutorialController implements ObjectiveBeaconSource {
   private renderArrowToTarget(
     ctx: CanvasRenderingContext2D,
     camera: Camera,
-    activePlayerX: number,
-    activePlayerY: number,
+    activePlayer: ArrowWearer,
     targetCentre: { x: number; y: number },
     promptRangePx: number | null,
   ): void {
+    const { x: activePlayerX, y: activePlayerY } = activePlayer;
     const { x: camX, y: camY } = camera;
     const targetWorldX = targetCentre.x;
     const targetWorldY = targetCentre.y;
@@ -1931,8 +1924,7 @@ export class TutorialController implements ObjectiveBeaconSource {
 
     drawArrowAbovePlayer(
       ctx,
-      activePlayerX,
-      activePlayerY,
+      activePlayer,
       targetWorldX,
       targetWorldY,
       camX,

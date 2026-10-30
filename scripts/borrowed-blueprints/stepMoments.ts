@@ -107,7 +107,7 @@ function verifyJobFinished(
   );
   rig.step();
   check(
-    rig.kit.villagers?.villagerFor('merrit')?.marker === 'question',
+    rig.kit.villagers?.villagerFor('merrit')?.marker === 'inProgress',
     `Merrit wears a "?" once the ${job.name} is done`,
   );
   check(

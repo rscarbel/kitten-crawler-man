@@ -448,7 +448,7 @@ const FENCE_POST_CAP_HEIGHT_PX = 2;
  * **The sprite footprints cannot close those sides either.**
  * `getBlockedTileOffsetsByKey` is not an opacity test:
  * `SpriteLoader` derives a footprint from the frame's whole width and height and
- * blocks all of it bar the doorway, so transparent sky and transparent side
+ * blocks all of it bar the doorway and the roof rows a crawler may walk behind, so transparent sky and transparent side
  * columns are "blocked" exactly as solid wall is. Measured over the real grid,
  * routing `anchorsRailAt` through it gains **6** anchored sides — far short of
  * the 43 that actually abut a facade — and alpha-scanning the art at those six

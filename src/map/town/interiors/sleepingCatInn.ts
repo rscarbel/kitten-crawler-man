@@ -341,7 +341,7 @@ export function buildSleepingCatInnLayout(
     prop(patientsMatCol, patientsMatRow, 'rag_rug', 1),
   );
   for (let rx = backBarCol; rx <= eastCol; rx += barStoolPitch)
-    entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - backBarCol}`));
+    entries.push(statefulProp(rx, barStoolRow, 'bar_stool', `bar_stool_${rx - backBarCol}`));
 
   // The supper tables, each with its bench on the room side.
   const tables = [

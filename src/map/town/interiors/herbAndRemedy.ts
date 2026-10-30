@@ -41,12 +41,17 @@ function dryingRoomNorthWall() {
   const dryingRackWidth = 5;
   const stillCol = dryingRackCol + dryingRackWidth;
   const stillWidth = 3;
-  return { westCol, northRow, pottingBenchCol, dryingRackCol, stillCol, stillWidth };
+  /**
+   * The still's back half stands in the north wall's row, so its alembic
+   * rises over the wall face and a stoking aisle opens in front of the firebox.
+   */
+  const stillRow = northRow - 1;
+  return { westCol, northRow, pottingBenchCol, dryingRackCol, stillCol, stillWidth, stillRow };
 }
 
 /** Herb & Remedy's floor and wall rects a construction contract can mark, keyed by spot id. */
 export function buildHerbAndRemedyContractAreas(_w: number, _h: number): ContractAreaRecord {
-  const { northRow, pottingBenchCol, stillCol, stillWidth } = dryingRoomNorthWall();
+  const { northRow, pottingBenchCol, stillCol, stillWidth, stillRow } = dryingRoomNorthWall();
   return {
     // The boards in front of the potting bench, west of the sorting table.
     drying_floor: {
@@ -56,7 +61,9 @@ export function buildHerbAndRemedyContractAreas(_w: number, _h: number): Contrac
       w: DRYING_FLOOR_SPOT_W,
       h: DRYING_FLOOR_SPOT_H,
     },
-    hearth_wall: { kind: 'wall', x: stillCol, y: northRow - 1, w: stillWidth, h: 1 },
+    // Beside the still rather than behind it, whose back row hides that wall,
+    // and over the bare step tile it is worked from.
+    hearth_wall: { kind: 'wall', x: stillCol + stillWidth, y: stillRow, w: 1, h: 1 },
   };
 }
 
@@ -65,7 +72,7 @@ export function buildHerbAndRemedyLayout(
   h: number,
   floorType: number,
 ): TownInteriorLayoutEntry[] {
-  const { westCol, northRow, pottingBenchCol, dryingRackCol, stillCol, stillWidth } =
+  const { westCol, northRow, pottingBenchCol, dryingRackCol, stillCol, stillWidth, stillRow } =
     dryingRoomNorthWall();
   const eastCol = w - 2;
   const southRow = h - 2;
@@ -107,7 +114,7 @@ export function buildHerbAndRemedyLayout(
   const waitingBenchCol = binsCol;
   const harvestSackCol = sortingTableCol + 2;
   const stillTenderStoolCol = stillCol + 1;
-  // The still's fuel stands at its firebox, beside the tender's stool.
+  // The still's fuel stands across the stoking aisle from its firebox, beside the tender's stool.
   const fuelBarrelCol = stillCol;
 
   const entries: TownInteriorLayoutEntry[] = [];
@@ -135,7 +142,7 @@ export function buildHerbAndRemedyLayout(
       0,
       contractTarget(CONTRACT_SITE, 'drying_rack'),
     ),
-    prop(stillCol, northRow, 'still', 0, contractTarget(CONTRACT_SITE, 'still')),
+    prop(stillCol, stillRow, 'still', 0, contractTarget(CONTRACT_SITE, 'still')),
     prop(eastWindowCol, windowRow, 'window_dressing'),
     statefulProp(eastCol, northRow, 'live_herb_pots', 'live_herb_pots_2', 1),
     // The day's cut, brought in and waiting to be bunched.

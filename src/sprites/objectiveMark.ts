@@ -4,7 +4,7 @@
  * and a bouncing `!` hung over it, both in the objective gold.
  *
  * It marks a thing, not a person. A quest giver's beacon and glyph come from
- * its own marker state (`questMarkerColorFor`); an objective has no such
+ * its own marker state (`NpcQuestMarker`); an objective has no such
  * state, it is simply there to be done until its owner stops drawing the mark.
  */
 

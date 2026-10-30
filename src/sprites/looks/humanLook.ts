@@ -105,7 +105,7 @@ export interface HumanLook extends OutfitBase<'human'> {
   readonly hipSpread: number;
   /** How much fuller than a pair of trousers' own cut their seat stands on this body. */
   readonly seatFullness: SeatFullness;
-  /** Where the status box, health bar and marker hang off the look's painted figure. */
+  /** Where the status box and health bar hang off the look's painted figure. */
   readonly figureExtent: HumanFigureExtent;
 }
 

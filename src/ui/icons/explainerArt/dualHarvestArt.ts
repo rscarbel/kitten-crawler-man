@@ -30,7 +30,7 @@ import {
 } from './controlsArt';
 import { drawSpriteKey } from '../../../core/spriteAssets/SpriteRenderer';
 import { TOOL_TIER_BASIC } from '../../../core/items/gathering/toolTiers';
-import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
+import { ACTIVE_RING_RADIUS_TILES, drawActiveCrawlerRing } from '../../world/activeCrawlerRing';
 import {
   CAT_WORK_SWING_DURATION_TICKS,
   catCellFor,
@@ -72,15 +72,12 @@ const BOULDER_X = 0.87;
 const TREE_TILE = 48;
 const HALF = 0.5;
 
-/** Heights above the ground line the marker floats over each crawler's head. */
-const HUMAN_HEAD_TILES = 1.62;
-const CAT_HEAD_TILES = 0.92;
-const MARKER_RADIUS = 6;
-const MARKER_GAP = 9;
-/** The marker hops in an arc on its way across, clearing the switch control below it. */
-const MARKER_HOP_PX = 16;
+const RING_RADIUS = STAGE_TILE * ACTIVE_RING_RADIUS_TILES;
+/** The figures' feet stand this far up from the bottom of their tiles, in tiles. */
+const FEET_ABOVE_TILE_BOTTOM_TILES = 0.08;
+const MS_PER_FRAME = LOOP_MS / LOOP_FRAMES;
 
-/** Low between the two pairs, under the path the marker slides along overhead. */
+/** Low between the two pairs, over the ground the ring slides along. */
 const CONTROL_ABOVE_GROUND = 76;
 const CONTROL_CAPTION_GAP = 6;
 const CONTROL_CAPTION_SIZE = 12;
@@ -107,7 +104,7 @@ function clamp01(t: number): number {
   return Math.min(1, Math.max(0, t));
 }
 
-/** Smoothstep, 3t² − 2t³: eases in and out of the marker's slide. */
+/** Smoothstep, 3t² − 2t³: eases in and out of the ring's slide. */
 const SMOOTHSTEP_SQUARE = 3;
 const SMOOTHSTEP_CUBE = 2;
 
@@ -154,7 +151,7 @@ function drawCat(
   drawCatSprite(ctx, EXPLAINER_CAT, tile.x, tile.y, STAGE_TILE, catCellFor(state), state, held);
 }
 
-function drawMarker(
+function drawRing(
   ctx: CanvasRenderingContext2D,
   ground: number,
   humanX: number,
@@ -162,11 +159,12 @@ function drawMarker(
   frame: number,
 ): void {
   const t = smooth(clamp01((frame - SWITCH_AT) / (BOTH_AT - SWITCH_AT)));
-  const x = lerp(humanX, catX, t);
-  const headTiles = lerp(HUMAN_HEAD_TILES, CAT_HEAD_TILES, t);
-  const hop = Math.sin(Math.PI * t) * MARKER_HOP_PX;
-  const y = ground - STAGE_TILE * headTiles - MARKER_GAP - hop;
-  drawActivePlayerMarker(ctx, x, y, MARKER_RADIUS);
+  drawActiveCrawlerRing(ctx, {
+    x: lerp(humanX, catX, t),
+    y: ground - STAGE_TILE * FEET_ABOVE_TILE_BOTTOM_TILES,
+    radiusX: RING_RADIUS,
+    timeMs: frame * MS_PER_FRAME,
+  });
 }
 
 function drawSwitchControl(
@@ -235,6 +233,7 @@ export function drawDualHarvestScene(
   const boulder = standingTile(rect, at(BOULDER_X));
   drawSpriteKey(ctx, BOULDER_KEY, 'idle', 0, boulder.x, boulder.y, STAGE_TILE);
 
+  drawRing(ctx, ground, at(HUMAN_X), at(CAT_X), frame);
   const human = standingTile(rect, at(HUMAN_X));
   drawChoppingHuman(ctx, human, frame);
   const cat = standingTile(rect, at(CAT_X));
@@ -247,8 +246,6 @@ export function drawDualHarvestScene(
   if (swingStart !== null) {
     drawResourcePop(ctx, '+1 Stone', boulder, frame - swingStart - CAT_IMPACT_FRAMES);
   }
-
-  drawMarker(ctx, ground, at(HUMAN_X), at(CAT_X), frame);
 
   const woodChopped = Math.floor(frame / chopFrames) + 1;
   drawTally(ctx, `Wood ${woodChopped}`, (at(HUMAN_X) + at(TREE_X)) * HALF, ground);

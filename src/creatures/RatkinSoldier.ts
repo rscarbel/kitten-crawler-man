@@ -15,9 +15,9 @@ import {
 } from '../sprites/ratkinCastSprite';
 import { ratkinCastRow } from '../sprites/art/ratkinCastFigure';
 import { TimedSpeech, timedSpeechBubbleTop } from '../sprites/speechBubble';
-import { drawQuestBeacon } from '../sprites/questBeacon';
-import { drawQuestMarker, questMarkerColorFor } from '../sprites/questNPCSprite';
-import type { NPCMarkerType } from './QuestNPC';
+import { IconAnchor, drawOverheadIcon, drawOverheadIconBeacon } from '../sprites/overheadIcon';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import { GHOUL_ATTACK_COOLDOWN_FRAMES, GHOUL_ATTACK_DAMAGE, GHOUL_HP } from './RuinsGhoul';
 
 /**
@@ -295,7 +295,9 @@ export class RatkinSoldier extends Mob {
   /** Whoever the soldier is talking to; it stands and faces them. */
   talkPartner: { readonly x: number; readonly y: number } | null = null;
   /** The glyph a questline puts over this soldier, written by `SoldierSystem` each frame. */
-  questMarker: NPCMarkerType = 'none';
+  questMarker: NpcQuestMarker = 'none';
+  /** The row the soldier was last drawn in, which their marker hangs from once it is measured. */
+  private drawnRow: DrawnFigureRow | undefined;
 
   /** What the soldier is calling out; drawn by `SoldierSystem` over every body. */
   readonly speech = new TimedSpeech();
@@ -1022,18 +1024,16 @@ export class RatkinSoldier extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const { action, progress } = this.drawAction();
-    const markerColor =
-      this.downed || this.talkPartner !== null ? undefined : questMarkerColorFor(this.questMarker);
+    const marker: NpcQuestMarker =
+      this.downed || this.talkPartner !== null ? 'none' : this.questMarker;
     // Behind the body, so the column stands behind the soldier and follows them frame by frame.
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
+    drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, marker);
     const heading =
       this.facingX === 0 && this.facingY === 0
         ? { x: 0, y: 1 }
         : normalize(this.facingX, this.facingY);
     const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
-      drawRatkinCastSprite(ctx, this.soldierId, sx, sy, tileSize, {
+      this.drawnRow = drawRatkinCastSprite(ctx, this.soldierId, sx, sy, tileSize, {
         action,
         walkPhase: this.walkPhase,
         facingX: heading.x,
@@ -1046,10 +1046,7 @@ export class RatkinSoldier extends Mob {
       this.renderKnockedOutOverlay(ctx, sx, sy);
       return;
     }
-    if (markerColor !== undefined) {
-      const glyph = this.questMarker === 'question' ? '?' : '!';
-      drawQuestMarker(ctx, sx, artTopY, tileSize, glyph, markerColor);
-    }
+    drawOverheadIcon(ctx, sx, IconAnchor.ofRow(this.drawnRow, sy, tileSize), tileSize, marker);
     this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 

@@ -13,6 +13,7 @@
  */
 
 import type { BuildingId, PlannedBuildingId } from '../map/buildingIds';
+import type { PaperSheetVariant } from '../ui/theme/tokens';
 
 /** The furniture a readable sits on, resolved to real tiles by the owning system. */
 export type ReadableAnchor = 'shelf' | 'table' | 'crate' | 'board';
@@ -32,6 +33,12 @@ export interface Readable {
   readonly where: string;
   readonly anchor: ReadableAnchor;
   readonly medium: ReadableMedium;
+  /**
+   * The paper the body is read off, drawn as a stack of sheets inside the
+   * modal; null for anything not read off a loose page (a slate, a board, a
+   * bound book, a map), whose text sits straight on the panel.
+   */
+  readonly paper: PaperSheetVariant | null;
   /** Paragraphs, laid out in order down one modal. */
   readonly body: ReadonlyArray<string>;
 }
@@ -49,6 +56,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'open on the shelf, spine cracked',
         anchor: 'shelf',
         medium: 'book',
+        paper: null,
         body: [
           'The printed text describes a marsh root, its preparation, and its use for those who cannot sleep. Every margin is crowded with a second hand in brown ink.',
           '"For the ones who came back out of the fray. They walk in at night and stand at their old doors, and they cannot rest, and neither can anybody who knew them."',
@@ -68,6 +76,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'weighted flat on the duty table',
         anchor: 'table',
         medium: 'sheet',
+        paper: 'legal',
         body: [
           'Garrison paper, scorched down one side. The hand is careful and unhurried.',
           '"...the ring below the Lodge is adequate and the soldiers above it are not curious. Continue to meet on the seventh night, and keep the candles below the grate."',
@@ -87,6 +96,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'chained to the lectern shelf',
         anchor: 'shelf',
         medium: 'book',
+        paper: null,
         body: [
           'A thin book, copied by hand, the ink faded to the colour of tea.',
           '"When the Fraying came, the ground came apart under the old city, and we flew. Record this plainly, so that no wing forgets it: we lifted what could be lifted, and we could not lift enough."',
@@ -106,6 +116,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'nailed above the bench, gone soft with damp',
         anchor: 'table',
         medium: 'sheet',
+        paper: null,
         body: [
           'ONE NIGHT ONLY, UNDER THE STARLIGHT TENT. Eleven wagons, forty performers, and the finest tumbling family on any road.',
           'TEST YOUR ARM at the High Striker: ring the bell and take home a prize. Clowns on the midway, fire and spotlights in the ring.',
@@ -124,6 +135,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'a slate, propped where he eats',
         anchor: 'table',
         medium: 'board',
+        paper: null,
         body: [
           'A slate ruled into a grid with a straightedge: the houses he delivered to down one side, the days of the week across the top.',
           'The Sleeping Cat, four churns a morning. The Horned Flagon, three. The Sunken Stump, one, "and the empty to be returned this time."',
@@ -142,6 +154,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'behind the counter, open at today',
         anchor: 'shelf',
         medium: 'book',
+        paper: null,
         body: [
           'Neat columns: item, source, cost, sold. Most lines are ordinary — honey, marsh root, clean linen, four kinds of moss.',
           'One line repeats down the whole page in a heavier hand: "ANTIDOTE — components: purchased at a loss. Do not raise the price."',
@@ -160,6 +173,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'hung by the taps, half wiped',
         anchor: 'table',
         medium: 'board',
+        paper: null,
         body: [
           "Marlow's running tab, names down one side and marks down the other.",
           'Ten names are struck through and paid. Three are not struck through, and beside each of those, instead of a mark, the same three words: "no longer calls."',
@@ -178,6 +192,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'open on the counter, quill across it',
         anchor: 'table',
         medium: 'book',
+        paper: null,
         body: [
           "Names, dates, rooms. Mostly traders. Every so often a line in a different ink, added later, in the innkeeper's hand.",
           '"Room 4 — party of six, came up the stair. Ate everything. Two came back down a week later and would not say where the others were."',
@@ -191,6 +206,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'propped on the guest-room shelf, so nobody argues the bill',
         anchor: 'shelf',
         medium: 'board',
+        paper: null,
         body: [
           'A plank of chalked slate, ruled into three rows in a careful hand.',
           'THE ATTIC COT. Four to a room, straw, one candle. Cheapest bed on the floor and the innkeep says so out loud.',
@@ -210,6 +226,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'under the bar, thumbed soft',
         anchor: 'table',
         medium: 'book',
+        paper: null,
         body: [
           'Not a reservation book — a map. Twenty years of who sits where, drawn and redrawn on tracing leaves laid over one another.',
           'The guild corner. The wool families along the north wall. The tower clerks, seventh night, the two tables by the fire, every leaf for twenty years.',
@@ -228,6 +245,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'chained to the bench',
         anchor: 'table',
         medium: 'book',
+        paper: null,
         body: [
           'Every job in and out, fifty years of it, three hands taking over from one another.',
           'The early pages are hinges, plough shares, cart tyres, horseshoes by the dozen. The word "horse" stops appearing about a third of the way in and never returns.',
@@ -246,6 +264,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'spiked on a nail by the door',
         anchor: 'table',
         medium: 'sheet',
+        paper: 'legal',
         body: [
           'SIXTEEN SACKS WEEKLY to the garrison at the rate set in the ninth year, the said rate to be reviewed at the pleasure of the office.',
           'The review dates are listed below. There are eleven of them. All eleven have been struck through and marked "deferred".',
@@ -264,6 +283,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'on the shelf where the clerk left it',
         anchor: 'shelf',
         medium: 'book',
+        paper: 'legal',
         body: [
           'What the shop has ordered in, month by month, and how fast it went back out. The first page is the standing orders.',
           'Tinned tuna, for the tower: two tins a week, charged to the tower and collected by a tower guard after closing. The same two tins, week after week, for as far back as the book goes.',
@@ -285,6 +305,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'nailed to the muster board, four sheets deep',
         anchor: 'board',
         medium: 'sheet',
+        paper: 'legal',
         body: [
           'ONE. This is not a safe room and no soldier is to tell a crawler otherwise. The room that cannot be argued with is the Sleeping Cat Inn. Send them there and stop sending them here.',
           'TWO. Nobody goes past the wall alone. Not for a bet, not for a shortcut, not for a lost animal.',
@@ -300,6 +321,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'pinned flat under counters and a broken rule',
         anchor: 'table',
         medium: 'sheet',
+        paper: null,
         body: [
           'The third floor as the garrison understands it, drawn over four times and corrected in three inks.',
           'The wall is drawn heavy and confident. Everything outside it is a guess, and the guesses get thinner the further out they go.',
@@ -319,6 +341,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'on the stand beside the chair',
         anchor: 'table',
         medium: 'book',
+        paper: null,
         body: [
           'Page after page of marks, drawn in a fine confident line: fists, ribs, eyes, serpents, a throat in beaten brass.',
           'Every design has a note under it in the tattooist\'s hand. "Settles in a day." "Argues with the ribs, do not pair." "Wakes when the wearer lies."',
@@ -332,6 +355,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'propped against the pigment jars, lettered in four inks',
         anchor: 'shelf',
         medium: 'board',
+        paper: null,
         body: [
           'A slate in a good hand, and the prices are not the interesting part.',
           'STAT MARK — one hundred. ONE PER SKIN. This is not a haggle and it is not a rule of the house, it is a rule of the ink.',
@@ -346,6 +370,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         where: 'open on the work table, weighted with a muller',
         anchor: 'table',
         medium: 'book',
+        paper: null,
         body: [
           'Names, dates, marks, and a fourth column with no heading on it.',
           'Most of the fourth column is blank. Where it is not blank it says a floor number, and every number is lower than the one on the line above it.',

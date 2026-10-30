@@ -20,7 +20,7 @@ import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/pro
 import type { GameSystem } from './GameSystem';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
 import type { QuestMarkerType } from './MiniMapSystem';
-import type { QuestMarkerState } from '../sprites/questNPCSprite';
+import { minimapMarkerFor, npcMarkerShows, type NpcQuestMarker } from '../sprites/npcQuestMarker';
 import { QuestManager, type QuestId, type QuestStatus } from '../core/quests/QuestManager';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
@@ -476,8 +476,8 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     const tile = this.fortuneTile();
     if (tile === null) return [];
     const state = this.markerState;
-    if (state === 'none') return [];
-    return [{ x: tile.x, y: tile.y, type: state }];
+    if (!npcMarkerShows(state)) return [];
+    return [{ x: tile.x, y: tile.y, type: minimapMarkerFor(state) }];
   }
 
   /**
@@ -486,9 +486,9 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
    * marker over her head can never disagree about whether she has something to
    * say.
    */
-  get markerState(): QuestMarkerState {
-    if (this.status === 'available') return 'exclamation';
-    if (this.status === 'active' && this.shardsHeld === SHARDS_REQUIRED) return 'question';
+  get markerState(): NpcQuestMarker {
+    if (this.status === 'available') return 'available';
+    if (this.status === 'active' && this.shardsHeld === SHARDS_REQUIRED) return 'turnIn';
     return 'none';
   }
 

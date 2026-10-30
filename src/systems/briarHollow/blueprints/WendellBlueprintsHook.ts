@@ -17,7 +17,7 @@ import type { EventBus } from '../../../core/EventBus';
 import type { BriarHollowState } from '../../../core/quests/briarHollowState';
 import { isWendellWaitingForCow } from '../../../core/quests/blueprintsQuestPhase';
 import type { ItemId } from '../../../core/items/defs/ItemDefs';
-import type { NPCMarkerType } from '../../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../../sprites/npcQuestMarker';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { Conversation } from '../../../dialog/Conversation';
@@ -152,18 +152,20 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
   }
 
   /**
-   * `'question'` over Wendell in the steps that need him; `'none'` over him
+   * A quest under way over Wendell in the steps that need him (the blueprints
+   * he hands over are the quest's own item to carry to Fenna, not its pay);
+   * `'none'` over him
    * in every other step, so a glyph cleared by the quest moving on is
    * actually taken down; null for anyone else, and once the quest is
    * complete, when his glyph belongs to the construction contracts.
    */
-  markerFor(residentId: ResidentId): NPCMarkerType | null {
+  markerFor(residentId: ResidentId): NpcQuestMarker | null {
     if (residentId !== WENDELL_RESIDENT_ID) return null;
     const phase = this.quest.phase;
     if (phase === 'complete') return null;
     const needsHim =
       phase === 'ask_wendell' || phase === 'midge_delivered' || this.blueprintsOwedBack;
-    return needsHim ? 'question' : 'none';
+    return needsHim ? 'inProgress' : 'none';
   }
 
   dismissDialog(): boolean {

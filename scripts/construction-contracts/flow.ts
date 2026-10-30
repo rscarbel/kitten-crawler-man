@@ -20,7 +20,7 @@ import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { Conversation } from '../../src/dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../../src/dialog/request';
-import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../src/sprites/npcQuestMarker';
 import { InteriorOccupantSystem } from '../../src/systems/InteriorOccupantSystem';
 import { createMissingCatsProgress } from '../../src/core/quests/missingCatsProgress';
 import type { InteriorStoryState } from '../../src/systems/interiorStoryOwnership';
@@ -126,7 +126,7 @@ function isSoldierId(id: string): id is SoldierId {
 function drawnMarker(
   rig: SiegeRig,
   contact: BriarHollowContractSiteDef['contact'],
-): NPCMarkerType | null {
+): NpcQuestMarker | null {
   if (isSoldierId(contact)) return rig.kit.soldiers?.soldierById(contact)?.questMarker ?? null;
   return rig.kit.villagers?.villagerFor(contact)?.marker ?? null;
 }
@@ -294,7 +294,7 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
     check(false, `${site.name}: the room has a contact hook`);
     return;
   }
-  check(hook.markerFor(site.contact) === 'question', `${site.name}: the contact wears a ?`);
+  check(hook.markerFor(site.contact) === 'turnIn', `${site.name}: the contact wears a ?`);
   const payout = contractPayout(active);
   const coinsBefore = human.coins;
   check(hook.tryOpenDialog(site.contact, human), `${site.name}: talking opens the thanks`);
@@ -316,7 +316,7 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
     followUpPendingAfterClose,
     followUpOpenAfterUpdate: hook.isFollowUpOpen,
   });
-  check(hook.markerFor(site.contact) !== 'question', `${site.name}: the contact's ? clears`);
+  check(hook.markerFor(site.contact) !== 'turnIn', `${site.name}: the contact's ? clears`);
   check(!hook.tryOpenDialog(site.contact, human), `${site.name}: a second talk pays nothing`);
   check(questCompleted.count() === 1, `${site.name}: still one questCompleted`);
 }
@@ -368,9 +368,9 @@ function verifyVillageSite(check: Check, site: BriarHollowContractSiteDef): void
     const conversation = villagers.conversation;
     const opened = recordOpens(conversation);
     const questCompleted = countQuestCompleted(rig.bus);
-    check(system.markerFor(site.contact) === 'question', `${site.name}: the contact is owed a ?`);
+    check(system.markerFor(site.contact) === 'turnIn', `${site.name}: the contact is owed a ?`);
     check(
-      drawnMarker(rig, site.contact) === 'question',
+      drawnMarker(rig, site.contact) === 'turnIn',
       `${site.name}: a ? is drawn over ${site.contact}`,
     );
     const payout = contractPayout(active);
@@ -399,7 +399,7 @@ function verifyVillageSite(check: Check, site: BriarHollowContractSiteDef): void
     });
     check(system.markerFor(site.contact) === 'none', `${site.name}: the contact's ? clears`);
     check(
-      drawnMarker(rig, site.contact) !== 'question',
+      drawnMarker(rig, site.contact) !== 'turnIn',
       `${site.name}: no ? is drawn over ${site.contact} once paid`,
     );
   } finally {
@@ -491,7 +491,7 @@ function verifySiegeAndChannel(check: Check): void {
       'under siege: a ready contact waits, no ?',
     );
     state.quest.phase = PEACETIME_PHASE;
-    check(system.markerFor(site.contact) === 'question', 'after the siege: the ? comes back');
+    check(system.markerFor(site.contact) === 'turnIn', 'after the siege: the ? comes back');
   } finally {
     state.quest.phase = PEACETIME_PHASE;
     rig.dispose();

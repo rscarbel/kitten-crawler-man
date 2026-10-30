@@ -19,10 +19,13 @@ import {
   EARTH_ELEMENTAL_PUNCH_IMPACT_FRAME,
   EARTH_ELEMENTAL_PUNCH_TICKS_PER_FRAME,
 } from '../../sprites/earthElementalTiming';
+import { ARROW_RANGE_TILES } from './archerKit';
 import { BasicMeleeKit } from './basicMeleeKit';
 import {
+  NO_PROJECTILES,
   locomotionState,
   type EarthElementalGuardRow,
+  type HirelingProjectile,
   type MercenaryDrawState,
   type MercenaryKitContext,
 } from './MercenaryKit';
@@ -30,7 +33,8 @@ import type { StrikeTiming } from './mercenaryStrike';
 
 /**
  * The earth elemental bodyguards' kit, shared by Crush and Hammer Hands: seven
- * feet of rock throwing heavy punches, and a warding Shield spell. What sets
+ * feet of rock throwing heavy punches, an earth blast for whatever stands a few
+ * tiles off, and a warding Shield spell. What sets
  * the two apart is an {@link EarthElementalGuardConfig} chosen by the guard
  * style each template's kit names, rather than two kits, because they are the
  * same kind of creature trained the same way — they differ in whom they guard.
@@ -62,6 +66,25 @@ const PUNCH: StrikeTiming<EarthElementalGuardRow> = {
   impactFrame: PUNCH_IMPACT_TICK,
   reachRatio: PUNCH_REACH_RATIO,
 };
+
+// ── Earth blast ──────────────────────────────────────────────────────────────
+
+/** A bodyguard's throw, not a marksman's shot: well short of the archer's bow. */
+const EARTH_BLAST_SHARE_OF_ARROW_RANGE = 0.6;
+const EARTH_BLAST_RANGE_TILES = ARROW_RANGE_TILES * EARTH_BLAST_SHARE_OF_ARROW_RANGE;
+/** Nearer than this is arm's length, where the fist does the work. */
+const EARTH_BLAST_MIN_RANGE_TILES = 1.5;
+const EARTH_BLAST_COOLDOWN_SECONDS = 3;
+const EARTH_BLAST_COOLDOWN_FRAMES = EARTH_BLAST_COOLDOWN_SECONDS * WORLD_TICKS_PER_SECOND;
+/** A clump of thrown earth lands softer than a stone fist. */
+const EARTH_BLAST_DAMAGE_RATIO = 0.6;
+/** The clump flies a little past its aim point, so a target stepping back is still reached. */
+const EARTH_BLAST_FLIGHT_RANGE_RATIO = 1.25;
+/** The fist is this far ahead of his centre at full extension, where the clump leaves it. */
+const EARTH_BLAST_FIST_FORWARD_TILES = 0.6;
+/** Played on the punch row, so it runs to the punch's clock and leaves at the punch's impact. */
+const EARTH_BLAST_TOTAL_TICKS = PUNCH_TOTAL_TICKS;
+const EARTH_BLAST_RELEASE_TICK = PUNCH_IMPACT_TICK;
 
 // ── Shield ───────────────────────────────────────────────────────────────────
 
@@ -192,6 +215,12 @@ interface ShieldCast {
   released: boolean;
 }
 
+interface EarthBlast {
+  readonly victim: Mob;
+  tick: number;
+  released: boolean;
+}
+
 function centerDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -216,6 +245,11 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
   private shieldCooldown = 0;
   private cast: ShieldCast | null = null;
 
+  private readonly blastDamage: number;
+  private blastCooldown = 0;
+  private blast: EarthBlast | null = null;
+  private pendingBlasts: HirelingProjectile[] = [];
+
   private catFoe: Mob | null = null;
   private catFocusFrames = 0;
 
@@ -236,11 +270,15 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
     template: MercenaryTemplate,
     readonly guard: EarthElementalGuardConfig,
   ) {
-    super({
-      damage: Math.max(MIN_PUNCH_DAMAGE, Math.round(template.damage * guard.punchDamageRatio)),
-      swings: [PUNCH],
-      cooldownFrames: PUNCH_COOLDOWN_FRAMES,
-    });
+    const punchDamage = Math.max(
+      MIN_PUNCH_DAMAGE,
+      Math.round(template.damage * guard.punchDamageRatio),
+    );
+    super({ damage: punchDamage, swings: [PUNCH], cooldownFrames: PUNCH_COOLDOWN_FRAMES });
+    this.blastDamage = Math.max(
+      MIN_PUNCH_DAMAGE,
+      Math.round(punchDamage * EARTH_BLAST_DAMAGE_RATIO),
+    );
   }
 
   /** Frames until the Shield can be cast again. */
@@ -264,6 +302,7 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
 
   override tick(ctx: MercenaryKitContext): void {
     if (this.shieldCooldown > 0) this.shieldCooldown--;
+    if (this.blastCooldown > 0) this.blastCooldown--;
     this.tickHurt(ctx.merc);
     this.tickCatFocus(ctx);
     this.hostileNearOwner = this.anyHostileNearOwner(ctx);
@@ -275,8 +314,45 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
       this.advanceCast(ctx, this.cast);
       return true;
     }
+    if (this.blast !== null) {
+      this.advanceBlast(ctx, this.blast);
+      return true;
+    }
     if (this.strike.isSwinging) return this.strike.advance(ctx);
     return this.tryStartCast(ctx);
+  }
+
+  override canStartAttack(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
+    if (this.canBlastAt(ctx, target, distancePx)) return true;
+    return super.canStartAttack(ctx, target, distancePx);
+  }
+
+  override startAttack(ctx: MercenaryKitContext, target: Mob, distancePx: number): void {
+    if (!this.canBlastAt(ctx, target, distancePx)) {
+      super.startAttack(ctx, target, distancePx);
+      return;
+    }
+    const merc = ctx.merc;
+    this.blast = { victim: target, tick: 0, released: false };
+    this.blastCooldown = EARTH_BLAST_COOLDOWN_FRAMES;
+    merc.attackCooldown = PUNCH_COOLDOWN_FRAMES;
+    merc.isMoving = false;
+    merc.faceToward(target);
+  }
+
+  /** A blast reaches anything in its band along a clear flight line, way round or not. */
+  hitsWithoutClosing(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
+    if (distancePx <= TILE_SIZE * EARTH_BLAST_MIN_RANGE_TILES) return false;
+    if (distancePx > TILE_SIZE * EARTH_BLAST_RANGE_TILES) return false;
+    if (ctx.isInSafeRoom(ctx.merc) || ctx.isInSafeRoom(target)) return false;
+    return ctx.merc.canShootAt(target);
+  }
+
+  override drainProjectiles(): readonly HirelingProjectile[] {
+    if (this.pendingBlasts.length === 0) return NO_PROJECTILES;
+    const thrown = this.pendingBlasts;
+    this.pendingBlasts = [];
+    return thrown;
   }
 
   chooseTarget(_ctx: MercenaryKitContext, nearest: Mob | null): Mob | null {
@@ -322,6 +398,9 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
     if (this.cast !== null) {
       return { row: 'cast_shield', progress: this.cast.tick / SHIELD_CAST_TOTAL_TICKS };
     }
+    if (this.blast !== null) {
+      return { row: 'earth_blast', progress: this.blast.tick / EARTH_BLAST_TOTAL_TICKS };
+    }
     const swing = this.strike.drawState();
     if (swing !== null) return swing;
     // A flinch while walking would slide him along the ground in a hurt pose;
@@ -335,12 +414,73 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
   override clearAirborne(): void {
     super.clearAirborne();
     this.cast = null;
+    this.blast = null;
+    this.pendingBlasts = [];
     // Whatever HP it had before is no baseline for what it has now: a hire
     // stood up by a revive would otherwise flinch at its own fall.
     this.lastHp = null;
     this.blockThreat = null;
     this.catFoe = null;
     this.lastOwnerDistance.clear();
+  }
+
+  // ── Earth blast ────────────────────────────────────────────────────────────
+
+  /**
+   * The switch between blast and punch: a target past arm's length
+   * (`EARTH_BLAST_MIN_RANGE_TILES`) and within `EARTH_BLAST_RANGE_TILES`, in
+   * sight and outside a safe room, gets a blast whenever it is off cooldown;
+   * anything nearer, or any time the blast is cooling, he walks in and punches.
+   * He never holds range like the archer: the blast is what he throws on the
+   * way in.
+   *
+   * Never during a body-block: the shell still asks for an attack after the
+   * block's approach, and a throw roots him for the whole punch row, short of
+   * the spot that puts him in the threat's path.
+   */
+  private canBlastAt(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
+    if (this.blastCooldown > 0) return false;
+    if (this.blockThreat !== null) return false;
+    return this.hitsWithoutClosing(ctx, target, distancePx);
+  }
+
+  private advanceBlast(ctx: MercenaryKitContext, blast: EarthBlast): void {
+    const merc = ctx.merc;
+    merc.isMoving = false;
+    if (!blast.released && blast.victim.isAlive) merc.faceToward(blast.victim);
+    if (!blast.released && blast.tick >= EARTH_BLAST_RELEASE_TICK) {
+      blast.released = true;
+      this.throwBlast(ctx, blast.victim);
+    }
+    blast.tick++;
+    if (blast.tick >= EARTH_BLAST_TOTAL_TICKS) this.blast = null;
+  }
+
+  /**
+   * Throws at wherever the victim stands now; one that died mid-swing gets the
+   * clump anyway, along the facing. Whatever it hits is decided where it lands.
+   */
+  private throwBlast(ctx: MercenaryKitContext, victim: Mob): void {
+    const merc = ctx.merc;
+    if (ctx.isInSafeRoom(merc)) return;
+    const originX = merc.x + TILE_CENTER_OFFSET;
+    const originY = merc.y + TILE_CENTER_OFFSET;
+    const heading = victim.isAlive
+      ? normalize(victim.x + TILE_CENTER_OFFSET - originX, victim.y + TILE_CENTER_OFFSET - originY)
+      : { x: merc.facingX, y: merc.facingY };
+    const fistPx = TILE_SIZE * EARTH_BLAST_FIST_FORWARD_TILES;
+    this.pendingBlasts.push({
+      kind: 'earth_blast',
+      x: originX + heading.x * fistPx,
+      y: originY + heading.y * fistPx,
+      dirX: heading.x,
+      dirY: heading.y,
+      damage: this.blastDamage,
+      rangePx: TILE_SIZE * EARTH_BLAST_RANGE_TILES * EARTH_BLAST_FLIGHT_RANGE_RATIO,
+      shooter: merc,
+      owner: ctx.owner,
+    });
+    merc.projectileSoundPending = true;
   }
 
   // ── Shield ─────────────────────────────────────────────────────────────────

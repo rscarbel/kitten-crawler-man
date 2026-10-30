@@ -93,18 +93,17 @@ const FRONTAGE_RADIUS = TILE_SIZE * FRONTAGE_RADIUS_TILES;
 // which travelers have no reason to walk.
 const STREET_NEAR_DOOR_TILES = 10;
 
-const PLAZA_POPULATION = 18;
+const PLAZA_POPULATION = 6;
 const TRAVELER_POPULATION = 12;
 
 /**
- * Doorstep loiterers drawn at most while render quality is reduced, nearest the
- * view's centre first. They stand still on the far edges of the frame, so they
- * are the cheapest figures to lose; the moving cohorts are what make the street
- * read as alive.
+ * Doorstep loiterers drawn at most while render quality is reduced. They
+ * potter about one doorstep, so they are the cheapest figures to lose; the
+ * moving cohorts are what make the street read as alive.
  */
 const REDUCED_DETAIL_LOITERER_CAP = 4;
-/** Slack round the view, at reduced quality, so a figure overlapping the edge is still drawn. */
-const REDUCED_DETAIL_VIEW_MARGIN_PX = TILE_SIZE;
+/** No cap: at full detail every loiterer coming into view is drawn. */
+const FULL_DETAIL_LOITERER_CAP = Number.POSITIVE_INFINITY;
 const LOITERERS_PER_BUILDING_MIN = 1;
 const LOITERERS_PER_BUILDING_MAX = 2;
 
@@ -228,6 +227,12 @@ const FULL_UPDATE_RADIUS_TILES = 30;
 const FULL_UPDATE_RADIUS_PX = TILE_SIZE * FULL_UPDATE_RADIUS_TILES;
 /** Everyone further out updates on one frame in this many. */
 const DISTANT_TICK_INTERVAL = 4;
+/**
+ * How far past their tile a citizen's art can show: a quest beam stands just
+ * over four tiles above the tile it marks.
+ */
+const CITIZEN_ART_REACH_TILES = 5;
+const CITIZEN_ART_REACH_PX = TILE_SIZE * CITIZEN_ART_REACH_TILES;
 
 // Bias spawns toward the plaza by keeping the more central of two candidate tiles.
 const CENTER_BIAS_SAMPLES = 2;
@@ -294,10 +299,19 @@ interface TileXY {
 export class TownLifeSystem implements GameSystem {
   private readonly townsfolk: Townsperson[] = [];
   private readonly frontageLoiterers = new Set<Townsperson>();
+  /**
+   * Loiterers in view and drawn, and loiterers in view and left undrawn by the
+   * reduced-detail cap. Each is decided once, the frame its art first reaches
+   * the view, and keeps that answer until it has left the view entirely, so the
+   * cap never makes someone appear, or vanish, in the middle of the screen.
+   */
+  private readonly shownLoiterers = new Set<Townsperson>();
+  private readonly refusedLoiterers = new Set<Townsperson>();
   /** Reused by `renderablePeople` so a reduced-detail frame allocates nothing. */
   private readonly renderScratch: Townsperson[] = [];
-  private readonly nearestLoiterers: Townsperson[] = [];
-  private readonly nearestLoitererDistancesSq: number[] = [];
+  /** Loiterers whose art reaches the view this frame for the first time, nearest the view's centre first. */
+  private readonly enteringLoiterers: Townsperson[] = [];
+  private readonly enteringDistancesSq: number[] = [];
   private readonly doorTiles: Set<number>;
   private readonly plazaTiles: TileXY[];
   private readonly streetTiles: TileXY[];
@@ -382,43 +396,85 @@ export class TownLifeSystem implements GameSystem {
   }
 
   /**
-   * The citizens to draw this frame. Thinning never touches what the crowd's
-   * resident set holds, which goes by where citizens stand, so a loiterer
-   * hidden at reduced quality is still warm the frame it is drawn again.
+   * The citizens to draw this frame. Called once per drawn frame: it is what
+   * notices a loiterer coming into view. Thinning never touches what the
+   * crowd's resident set holds, which goes by where citizens stand, so a
+   * loiterer left undrawn at reduced quality is still warm when next drawn.
    */
-  renderablePeople(camera: Camera): ReadonlyArray<Townsperson> {
-    const { x: camX, y: camY, viewWidth, viewHeight } = camera;
-    if (this.fullDetail()) return this.townsfolk;
-    const minX = camX - REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const minY = camY - REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const maxX = camX + viewWidth + REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const maxY = camY + viewHeight + REDUCED_DETAIL_VIEW_MARGIN_PX;
-    const viewCentreX = camX + viewWidth / 2;
-    const viewCentreY = camY + viewHeight / 2;
+  renderablePeople(
+    camera: Camera,
+    viewer: { readonly x: number; readonly y: number },
+  ): ReadonlyArray<Townsperson> {
+    const fullDetail = this.fullDetail();
+    this.settleLoiterersInView(
+      camera,
+      viewer,
+      fullDetail ? FULL_DETAIL_LOITERER_CAP : REDUCED_DETAIL_LOITERER_CAP,
+    );
+    if (fullDetail) return this.townsfolk;
     const drawn = this.renderScratch;
-    const nearest = this.nearestLoiterers;
-    const nearestDistancesSq = this.nearestLoitererDistancesSq;
     drawn.length = 0;
-    nearest.length = 0;
-    nearestDistancesSq.length = 0;
     for (const person of this.townsfolk) {
-      const inView = person.x >= minX && person.x <= maxX && person.y >= minY && person.y <= maxY;
-      if (!inView) continue;
-      if (!this.frontageLoiterers.has(person)) {
-        drawn.push(person);
+      if (this.refusedLoiterers.has(person)) continue;
+      drawn.push(person);
+    }
+    return drawn;
+  }
+
+  /**
+   * Runs at full detail too, uncapped, so a drop to reduced quality keeps
+   * drawing every loiterer already on screen and only refuses the ones that
+   * come into view after it.
+   *
+   * Loiterers coming into view together — the whole frame after a warp, an
+   * arrival or a step out of a shop door — are admitted nearest the view's
+   * centre first, so the cap never fills with the far edges while the one on
+   * the doorstep beside the player goes undrawn. A loiterer within talk range
+   * of `viewer` is never refused: the talk prompt must always hang over
+   * someone drawn.
+   */
+  private settleLoiterersInView(
+    camera: Camera,
+    viewer: { readonly x: number; readonly y: number },
+    cap: number,
+  ): void {
+    // Nothing is refused without a cap, and someone refused at reduced quality
+    // is drawn again once the player raises it, so they must be talkable too.
+    if (cap === FULL_DETAIL_LOITERER_CAP) {
+      for (const refused of this.refusedLoiterers) this.shownLoiterers.add(refused);
+      this.refusedLoiterers.clear();
+    }
+    const entering = this.enteringLoiterers;
+    const enteringDistancesSq = this.enteringDistancesSq;
+    entering.length = 0;
+    enteringDistancesSq.length = 0;
+    const viewCentreX = camera.x + camera.viewWidth / 2;
+    const viewCentreY = camera.y + camera.viewHeight / 2;
+    for (const loiterer of this.frontageLoiterers) {
+      if (!loiterer.overlapsView(camera)) {
+        this.shownLoiterers.delete(loiterer);
+        this.refusedLoiterers.delete(loiterer);
         continue;
       }
-      const distanceSq = (person.x - viewCentreX) ** 2 + (person.y - viewCentreY) ** 2;
-      insertNearest(nearest, nearestDistancesSq, person, distanceSq, REDUCED_DETAIL_LOITERER_CAP);
+      if (this.shownLoiterers.has(loiterer) || this.refusedLoiterers.has(loiterer)) continue;
+      const distanceSq = (loiterer.x - viewCentreX) ** 2 + (loiterer.y - viewCentreY) ** 2;
+      insertByDistance(entering, enteringDistancesSq, loiterer, distanceSq);
     }
-    for (const loiterer of nearest) drawn.push(loiterer);
-    return drawn;
+    for (const loiterer of entering) {
+      const withinTalkRange =
+        (loiterer.x - viewer.x) ** 2 + (loiterer.y - viewer.y) ** 2 <= TALK_RADIUS * TALK_RADIUS;
+      if (withinTalkRange || this.shownLoiterers.size < cap) this.shownLoiterers.add(loiterer);
+      else this.refusedLoiterers.add(loiterer);
+    }
   }
 
   /** The nearest citizen the player (at world origin `x`,`y`) can talk to, or `null`. */
   findTalkTarget(x: number, y: number): Townsperson | null {
     this.neighborQuery.clear();
     const nearby = this.grid.queryCircle(x, y, TALK_RADIUS, this.neighborQuery);
+    // Someone left undrawn by the reduced-detail cap cannot be talked to: the
+    // prompt would hang over empty cobble.
+    for (const refused of this.refusedLoiterers) nearby.delete(refused);
     return findNearestTownsperson(nearby, x, y, TALK_RADIUS);
   }
 
@@ -426,15 +482,21 @@ export class TownLifeSystem implements GameSystem {
     this.frameCounter++;
     const { active, camera } = ctx;
     const fullUpdateRadiusSq = this.fullUpdateRadiusSq(camera);
+    // A cutscene, a quest or a spotlight can centre the camera away from the
+    // active crawler, and whoever is on screen there must not stutter.
+    const viewCentreX = camera.x + camera.viewWidth / 2;
+    const viewCentreY = camera.y + camera.viewHeight / 2;
 
     for (let i = 0; i < this.townsfolk.length; i++) {
       const person = this.townsfolk[i];
-      const dx = person.x - active.x;
-      const dy = person.y - active.y;
-      const isNearPlayer = dx * dx + dy * dy <= fullUpdateRadiusSq;
+      const isNearPlayer =
+        (person.x - active.x) ** 2 + (person.y - active.y) ** 2 <= fullUpdateRadiusSq;
+      const isNearView =
+        (person.x - viewCentreX) ** 2 + (person.y - viewCentreY) ** 2 <= fullUpdateRadiusSq;
       // Distant citizens step coarsely. They still drift to plausible places,
       // and the phase offset keeps the skipped work spread across frames.
-      if (!isNearPlayer && (this.frameCounter + i) % DISTANT_TICK_INTERVAL !== 0) continue;
+      const stepsCoarsely = !isNearPlayer && !isNearView;
+      if (stepsCoarsely && (this.frameCounter + i) % DISTANT_TICK_INTERVAL !== 0) continue;
 
       const oldX = person.x;
       const oldY = person.y;
@@ -445,17 +507,19 @@ export class TownLifeSystem implements GameSystem {
   }
 
   /**
-   * How far a citizen may be from the player and still update every frame.
+   * How far a citizen may be from the player, or from the view's centre, and
+   * still update every frame.
    *
-   * Never less than the visible area: a citizen who is drawn but only stepped
-   * one frame in four visibly stutters, and the camera's view grows with the
-   * window and with any zoom out. The constant floor keeps a small window from
-   * making the crowd's behaviour depend on window size.
+   * Never less than the visible area plus the reach of a citizen's art: a
+   * citizen who is drawn but only stepped one frame in four visibly stutters,
+   * and the camera's view grows with the window and with any zoom out. The
+   * constant floor keeps a small window from making the crowd's behaviour
+   * depend on window size.
    */
   private fullUpdateRadiusSq(camera: Pick<Camera, 'viewWidth' | 'viewHeight'>): number {
     const halfViewW = camera.viewWidth / 2;
     const halfViewH = camera.viewHeight / 2;
-    const visibleReach = Math.hypot(halfViewW, halfViewH) + TILE_SIZE;
+    const visibleReach = Math.hypot(halfViewW, halfViewH) + CITIZEN_ART_REACH_PX;
     const radius = Math.max(FULL_UPDATE_RADIUS_PX, visibleReach);
     return radius * radius;
   }
@@ -481,7 +545,9 @@ export class TownLifeSystem implements GameSystem {
 
   /**
    * The one test for "a citizen belongs on this tile": walkable, not a building's
-   * own doorway, and inside the town wall.
+   * own doorway or the roof rows behind its facade, and inside the town wall.
+   * A crawler may step behind a roof, but a crowd gathered there would be a
+   * crowd nobody can see.
    *
    * The wall clause is what none of the radius gates can express. Every cohort is
    * bounded by a circle around the plaza, and the town is a rectangle inside a
@@ -494,6 +560,7 @@ export class TownLifeSystem implements GameSystem {
   private isCitizenGround(tx: number, ty: number): boolean {
     if (this.doorTiles.has(tileCoordKey(tx, ty))) return false;
     if (!this.isInsideTownWall(tx, ty)) return false;
+    if (this.gameMap.isSpriteBuildingTile(tx, ty)) return false;
     return this.gameMap.isWalkable(tx, ty, 'walker');
   }
 
@@ -891,21 +958,16 @@ function rollSpecies(hawkfolkShare: number, rng: Rng): CrowdSpecies {
 }
 
 /**
- * Keeps `people` as the `cap` nearest seen so far, ascending by distance, with
- * `distancesSq` in step; a bounded insertion rather than a sort, so a frame
- * allocates nothing.
+ * Inserts `person` into `people`, kept ascending by `distancesSq` in step; a
+ * bounded insertion rather than a sort, so a frame allocates nothing.
  */
-function insertNearest(
+function insertByDistance(
   people: Townsperson[],
   distancesSq: number[],
   person: Townsperson,
   distanceSq: number,
-  cap: number,
 ): void {
-  const full = people.length >= cap;
-  const fartherThanAll = full && distanceSq >= distancesSq[cap - 1];
-  if (fartherThanAll) return;
-  let index = full ? cap - 1 : people.length;
+  let index = people.length;
   while (index > 0 && distancesSq[index - 1] > distanceSq) {
     people[index] = people[index - 1];
     distancesSq[index] = distancesSq[index - 1];

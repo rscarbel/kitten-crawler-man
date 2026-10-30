@@ -16,7 +16,7 @@ import {
   SUMMON_BUTTON_HEIGHT,
   SUMMON_BUTTON_WIDTH,
 } from '../../../systems/DeinonychusSystem';
-import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
+import { ACTIVE_RING_RADIUS_TILES, drawActiveCrawlerRing } from '../../world/activeCrawlerRing';
 import {
   catCellFor,
   drawCatSprite,
@@ -92,7 +92,7 @@ const ACTOR_TILE = 72;
 const SPRITE_FOOT_TILES = 0.95;
 /** A figure's horizontal centre inside its tile, in tiles. */
 const SPRITE_CENTRE_TILES = 0.5;
-/** Where the cat's head sits above her feet, in tiles, for her marker and barks. */
+/** Where the cat's head sits above her feet, in tiles, for her barks. */
 const CAT_HEAD_TILES = 0.72;
 /** Where the sword goblin's head tops out above its feet, in tiles — measured off its idle. */
 const GOBLIN_HEAD_TILES = 1.0;
@@ -118,8 +118,9 @@ const DEINONYCHUS_DRAW_SCALE: Record<DeinonychusStage, number> = {
 const SHADOW_FILL = 'rgba(0,0,0,0.35)';
 const SHADOW_RX = 22;
 const SHADOW_RY = 5;
-const MARKER_RADIUS = 5;
-const MARKER_GAP = 9;
+const RING_RADIUS = ACTOR_TILE * ACTIVE_RING_RADIUS_TILES;
+/** The picture is still, so the ring's brackets are held at the start of their turn. */
+const RING_STILL_TIME_MS = 0;
 const BARK_GAP = 4;
 const BARK_TEXT_SIZE = 11;
 const BARK_PAD_X = 7;
@@ -491,15 +492,19 @@ function drawCat(
   options: { readonly active: boolean; readonly oneShot?: CatOneShotState | null },
 ): void {
   drawShadow(ctx, cx);
+  if (options.active) {
+    drawActiveCrawlerRing(ctx, {
+      x: cx,
+      y: FOOT_Y,
+      radiusX: RING_RADIUS,
+      timeMs: RING_STILL_TIME_MS,
+    });
+  }
   const state: CatSpriteState = {
     facing: selectFacing(1, 0),
     oneShot: options.oneShot ?? null,
   };
   drawCatSprite(ctx, EXPLAINER_CAT, tileLeft(cx), tileTop(), ACTOR_TILE, catCellFor(state), state);
-  if (options.active) {
-    const headY = FOOT_Y - ACTOR_TILE * CAT_HEAD_TILES;
-    drawActivePlayerMarker(ctx, cx, headY - MARKER_GAP, MARKER_RADIUS);
-  }
 }
 
 /**

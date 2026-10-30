@@ -15,7 +15,7 @@ import type { CueSlot } from './cueSlot';
 import type { SoundId } from './sounds';
 import { clawSoundsOf, handWeaponSoundsOf } from './weaponSoundCues';
 
-/** What a piece of gear is heard as when it goes on: a garment's own material, or a relic waking at the shoulder. */
+/** What a piece of gear is heard as when it goes on: a garment's own material, or a relic waking beside its wearer. */
 type EquipMaterial = GarmentMaterial | 'relic';
 
 /** The recordings the equip slots are waiting for. */

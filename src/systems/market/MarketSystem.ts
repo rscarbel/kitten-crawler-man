@@ -17,7 +17,7 @@ import type { WanderParams } from '../../creatures/townWander';
 import { STALL_WIDTH_TILES, stallRippleStep, stallVariantIndex } from '../../sprites/marketStall';
 import { drawTownSheetFrame } from '../../sprites/townSheetProp';
 import { sheetStateInkTop } from '../../core/spriteAssets/SpriteRenderer';
-import { drawOverheadIcon, overheadIconTopY } from '../../sprites/overheadIcon';
+import { IconAnchor, drawOverheadIcon, overheadIconTopY } from '../../sprites/overheadIcon';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import { tileKey } from '../tileKey';
 import { doorwayKeepClearTiles } from '../doorwayKeepClear';
@@ -136,7 +136,7 @@ export class MarketSystem implements GameSystem {
   /**
    * Tiles the stalls have claimed, so `TownPropSystem` can keep its own props off
    * them. `blockTilePermanently` alone would not do: prop placement deliberately
-   * tests `isWalkableIgnoringPermanent`, which ignores exactly those blocks.
+   * tests `isOpenStreetGround`, which ignores exactly those blocks.
    */
   get reservedTiles(): ReadonlySet<string> {
     return this.reserved;
@@ -244,7 +244,7 @@ export class MarketSystem implements GameSystem {
   /**
    * Spiral outward from `preferred` for the first pair of horizontally adjacent
    * free tiles whose vendor row behind them is also free. Tested against
-   * `isWalkableIgnoringPermanent`, not `isWalkable`: the overworld map instance is
+   * `isOpenStreetGround`, which ignores permanent blocks: the overworld map instance is
    * reused across building round-trips, and a stall's own permanent block would
    * otherwise make this pick drift to (and leak) new tiles every trip. That
    * predicate is stable across reconstructions, so re-placement is idempotent —
@@ -275,7 +275,7 @@ export class MarketSystem implements GameSystem {
   private isTileFree(tile: TileXY): boolean {
     const key = tileKey(tile.x, tile.y);
     if (this.reserved.has(key) || this.doorwayKeepClear.has(key)) return false;
-    return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y, 'walker');
+    return this.gameMap.isOpenStreetGround(tile.x, tile.y);
   }
 
   private makeVendor(def: VendorDef, span: readonly [TileXY, TileXY]): Townsperson {
@@ -415,8 +415,10 @@ class StallProp implements TownPropRenderable {
       tileSize,
     );
     // The canopy covers the vendor's head, so their icon hangs over it instead.
-    const canopyTop = stallCanopyTop(phase, sy, tileSize);
-    drawOverheadIcon(ctx, vendor.x - camX, canopyTop, tileSize, vendor.overheadIcon);
+    const canopyInkTop = sheetStateInkTop(STALL_CANOPY_SHEET_KEY, canopyState(phase), sy, tileSize);
+    // A sheet's ink is measured once it loads, and nothing is drawn before that.
+    const anchor = canopyInkTop === undefined ? null : IconAnchor.ofFixedArt(canopyInkTop);
+    drawOverheadIcon(ctx, vendor.x - camX, anchor, tileSize, vendor.overheadIcon);
     ctx.restore();
   }
 }

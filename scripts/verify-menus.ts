@@ -1908,6 +1908,7 @@ const SAMPLE_READABLE = {
   where: 'Pinned by the door',
   anchor: 'board',
   medium: 'sheet',
+  paper: 'note',
   body: ['Every menu must answer the keyboard.'],
 } as const;
 
@@ -2197,6 +2198,19 @@ function interiorCases(): InteriorCase[] {
             }
           },
           (scene) => towerStoreysOf(scene)['archive']['capture'].cancel(),
+        ),
+        menu(
+          'tower-cattery-capture-fade',
+          (scene) => {
+            const capture = towerStoreysOf(scene)['cattery']['capture'];
+            capture.begin();
+            // The cattery's capture is stepped only on its own storey, while
+            // its keeper watches, so it is run on by hand to the dark.
+            for (let frame = 0; frame < MAX_SETTLE_FRAMES && capture.alpha < 1; frame++) {
+              capture.step();
+            }
+          },
+          (scene) => towerStoreysOf(scene)['cattery']['capture'].cancel(),
         ),
       ],
     },

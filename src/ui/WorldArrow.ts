@@ -21,8 +21,40 @@ const DOWNWARD_RADIANS = Math.PI / 2;
 /** The dark edge every arrow is outlined in unless its caller names another. */
 const DEFAULT_OUTLINE_COLOR = palette.surface.sunken;
 
-/** Tiles above the player's tile origin where the arrow is drawn. */
+/** Tiles above an entity's tile origin where the fixed downward arrow is drawn. */
 const ARROW_VERTICAL_OFFSET_TILES = 1.5;
+
+/**
+ * Clear air between the top of what a crawler wears overhead (their head and
+ * the health bar over it) and the lowest point the arrow over them reaches,
+ * at the bottom of its bounce while it points straight down.
+ */
+const ARROW_OVERHEAD_CLEARANCE_PX = 3;
+
+/** The furthest the dart reaches from its centre in any direction: its tip, edge stroke included. */
+const ARROW_REACH_PX = ARROW_LENGTH_PIXELS + ARROW_LINE_WIDTH;
+
+/**
+ * What a directional arrow hangs over: a crawler's tile top-left in world
+ * pixels and how far the highest thing they wear (head or health bar) stands
+ * above that tile.
+ */
+export interface ArrowWearer {
+  readonly x: number;
+  readonly y: number;
+  readonly overheadTopAboveTilePx: number;
+}
+
+/**
+ * The world y of the arrow's centre at rest over `wearer`: low enough to read
+ * as theirs, high enough that pointing straight down at the bottom of its
+ * bounce the tip still keeps {@link ARROW_OVERHEAD_CLEARANCE_PX} over their
+ * head and health bar.
+ */
+function restingArrowCenterWorldY(wearer: ArrowWearer): number {
+  const overheadTopWorldY = wearer.y - wearer.overheadTopAboveTilePx;
+  return overheadTopWorldY - ARROW_OVERHEAD_CLEARANCE_PX - ARROW_REACH_PX - ARROW_BOUNCE_AMPLITUDE;
+}
 
 /** Gap kept between an arrow pushed clear of an avoid rect and that rect's edge. */
 const ARROW_AVOID_RECT_CLEARANCE = 6;
@@ -124,8 +156,7 @@ function clampArrowScreenY(screenX: number, screenY: number, avoidRect: Rect | u
  * in TutorialController, DungeonScene, and any future system that needs a world-space
  * objective indicator.
  *
- * @param playerWorldX - Player's pixel X (top-left of tile)
- * @param playerWorldY - Player's pixel Y (top-left of tile)
+ * @param player - The crawler the arrow hangs over
  * @param targetWorldX - Target's pixel X center
  * @param targetWorldY - Target's pixel Y center
  * @param camX - Camera scroll X
@@ -136,8 +167,7 @@ function clampArrowScreenY(screenX: number, screenY: number, avoidRect: Rect | u
  */
 export function drawArrowAbovePlayer(
   ctx: CanvasRenderingContext2D,
-  playerWorldX: number,
-  playerWorldY: number,
+  player: ArrowWearer,
   targetWorldX: number,
   targetWorldY: number,
   camX: number,
@@ -145,10 +175,10 @@ export function drawArrowAbovePlayer(
   color: string,
   options?: { outlineColor?: string; avoidRect?: Rect },
 ): void {
-  const playerCenterX = playerWorldX + TILE_SIZE / 2;
-  const playerCenterY = playerWorldY + TILE_SIZE / 2;
+  const playerCenterX = player.x + TILE_SIZE / 2;
+  const playerCenterY = player.y + TILE_SIZE / 2;
   const angle = Math.atan2(targetWorldY - playerCenterY, targetWorldX - playerCenterX);
-  drawBearingArrowAbovePlayer(ctx, playerWorldX, playerWorldY, angle, camX, camY, color, options);
+  drawBearingArrowAbovePlayer(ctx, player, angle, camX, camY, color, options);
 }
 
 /**
@@ -165,8 +195,7 @@ export function drawArrowAbovePlayer(
  */
 function drawBearingArrowAbovePlayer(
   ctx: CanvasRenderingContext2D,
-  playerWorldX: number,
-  playerWorldY: number,
+  player: ArrowWearer,
   bearingRadians: number,
   camX: number,
   camY: number,
@@ -174,8 +203,8 @@ function drawBearingArrowAbovePlayer(
   options?: { outlineColor?: string; avoidRect?: Rect },
 ): void {
   const bounce = Math.sin(Date.now() * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
-  const screenX = playerWorldX - camX + TILE_SIZE / 2;
-  const rawScreenY = playerWorldY - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
+  const screenX = player.x - camX + TILE_SIZE / 2;
+  const rawScreenY = restingArrowCenterWorldY(player) - camY + bounce;
   const screenY = clampArrowScreenY(screenX, rawScreenY, options?.avoidRect);
 
   paintArrow(ctx, screenX, screenY, bearingRadians, color, options?.outlineColor);

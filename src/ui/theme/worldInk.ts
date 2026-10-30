@@ -60,6 +60,18 @@ export const worldPalette = {
     disc: '#f8fafc',
     cross: '#16a34a',
   },
+  /** The `!`/`?` over a quest giver or a quest object, its beacon, and the present beside a turn-in. */
+  questMarker: {
+    /** A quest on offer, not yet started. */
+    offer: '#fbbf24',
+    /** A quest under way, or ready to hand in. */
+    underway: '#4ade80',
+    /** Rose rather than danger red, so the present over a turn-in never reads as a warning. */
+    presentBox: '#e11d48',
+    presentRibbon: '#fde047',
+    /** The dark edge round the present, so it reads on any floor the way the glyph's outline does. */
+    presentEdge: 'rgba(0,0,0,0.9)',
+  },
   /** The frames and arrows that mark where a quest wants the party to go. */
   objective: {
     /** An objective the party can act on now. */
@@ -146,6 +158,18 @@ export const worldPalette = {
     countdownCritical: '#ef4444',
     reviveEdge: '#ffffff',
     reviveInk: '#ffffff',
+  },
+  /**
+   * The selection ring on the floor under the crawler the player is driving.
+   * Ice white over a sky-blue glow: never red, which is every ground warning,
+   * never gold, which is every quest route and objective, and never green,
+   * which sinks into grass.
+   */
+  activeCrawler: {
+    ring: '#f0f9ff',
+    glow: '#38bdf8',
+    /** The dark band laid under the ring so it holds its edge on pale paving and sand. */
+    underlay: 'rgba(2, 6, 23, 0.55)',
   },
   /** The destination named over a crawler channelling a recall, in the recall bar's sky blue. */
   recallInk: '#e0f2fe',

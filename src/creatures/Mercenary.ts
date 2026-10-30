@@ -252,7 +252,7 @@ export class Mercenary extends Mob {
    * every frame. A merc that dies mid-throw must not take the boulder with it.
    */
   private pendingThrows: GolemRockThrow[] = [];
-  /** Arrows not yet handed to `HirelingShotSystem`, for the same reason. */
+  /** Arrows and earth blasts not yet handed to `HirelingShotSystem`, for the same reason. */
   private pendingShots: HirelingShot[] = [];
 
   constructor(
@@ -305,7 +305,7 @@ export class Mercenary extends Mob {
     return throws;
   }
 
-  /** Hands over every arrow loosed since the last call; `HirelingShotSystem` drains it. */
+  /** Hands over every shot loosed since the last call; `HirelingShotSystem` drains it. */
   takePendingHirelingShots(): readonly HirelingShot[] {
     if (this.pendingShots.length === 0) return NO_SHOTS;
     const shots = this.pendingShots;
@@ -432,6 +432,27 @@ export class Mercenary extends Mob {
   /** Line of sight to a target, through the shared per-mob cache. */
   canSee(target: Player): boolean {
     return this.hasLOS(target);
+  }
+
+  /**
+   * Whether a shot loosed at `target` from here would reach it: in sight, and
+   * along a line a walker could cross, which is where `HirelingShotSystem` and
+   * `RockThrowSystem` stop a flight. Sight alone passes over low props and
+   * water, so a kit judging its reach on sight would stand and throw into the
+   * same blocking tile for good, and never close.
+   */
+  canShootAt(target: Player): boolean {
+    if (!this.canSee(target)) return false;
+    const centre = TILE_SIZE * CENTER_OFFSET;
+    return (
+      this.map?.hasWalkableLine(
+        this.x + centre,
+        this.y + centre,
+        target.x + centre,
+        target.y + centre,
+        'walker',
+      ) ?? true
+    );
   }
 
   /**

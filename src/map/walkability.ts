@@ -100,6 +100,7 @@ import {
   SERVICE_SOLID_TILE_TYPES,
 } from './serviceLevelProps';
 import { CELLAR_SIGHT_TRANSPARENT_TILE_TYPES, CELLAR_SOLID_TILE_TYPES } from './cellarProps';
+import { isSpriteAnchorWalkable } from '../core/spriteAssets/SpriteLoader';
 
 /** Tile types nobody stands on. Every type in neither this list nor {@link CLASS_LIMITED_TILE_TYPES} is open to everyone. */
 const NON_WALKABLE_TILE_TYPES: readonly number[] = [
@@ -363,6 +364,11 @@ export function isSightTransparentTileType(tile: TileContent): boolean {
 export function isWalkableTileType(tile: TileContent, mobility: MobilityClass): boolean {
   if (tile.type === MODERN_DECORATION) {
     return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
+  }
+  // A facade's anchor is the top-left of its art, up in the roof a crawler may
+  // stand behind; its footprint's block mask decides the rest of the building.
+  if (tile.type === SPRITE_BUILDING && tile.spriteKey !== undefined) {
+    return isSpriteAnchorWalkable(tile.spriteKey);
   }
   return WALKABLE_BY_TILE_TYPE[mobility][tile.type] === 1;
 }

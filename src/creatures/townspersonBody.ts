@@ -7,6 +7,7 @@
 
 import {
   citizenHurryGait,
+  citizenOverhangTiles,
   prewarmCitizenHurry,
   citizenSpeechStyle,
   citizenWalkCyclePx,
@@ -30,11 +31,23 @@ import {
   type RoutinePoseTiming,
 } from './routinePose';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
-import type { DrawnFigureRow } from '../sprites/figure/figureDef';
+import type { DrawnFigureRow, FigureOverhangTiles } from '../sprites/figure/figureDef';
+import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 
 export type TownspersonBody =
   | { readonly kind: 'citizen'; readonly figure: CitizenFigure }
   | { readonly kind: 'bespoke'; readonly id: BespokeResidentFigureId };
+
+/**
+ * A bespoke painter declares no cell of its own, so it is given the widest
+ * overhang the render pass reserves for any creature.
+ */
+const BESPOKE_OVERHANG_TILES: FigureOverhangTiles = {
+  left: MAX_MOB_CULL_MARGIN_TILES,
+  up: MAX_MOB_CULL_MARGIN_TILES,
+  right: MAX_MOB_CULL_MARGIN_TILES,
+  down: MAX_MOB_CULL_MARGIN_TILES,
+};
 
 function unhandledBody(body: never): never {
   throw new Error(`unhandled townsperson body ${JSON.stringify(body)}`);
@@ -47,6 +60,18 @@ export function townspersonWalkCyclePx(body: TownspersonBody, tileSize: number):
       return citizenWalkCyclePx(body.figure, tileSize);
     case 'bespoke':
       return bespokeResidentFigure(body.id).walkCyclePx(tileSize);
+    default:
+      return unhandledBody(body);
+  }
+}
+
+/** How far this body's art can reach past the tile it stands on, in tiles. */
+export function townspersonOverhangTiles(body: TownspersonBody): FigureOverhangTiles {
+  switch (body.kind) {
+    case 'citizen':
+      return citizenOverhangTiles(body.figure);
+    case 'bespoke':
+      return BESPOKE_OVERHANG_TILES;
     default:
       return unhandledBody(body);
   }

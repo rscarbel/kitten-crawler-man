@@ -18,7 +18,7 @@ import { formatCost } from '../../../core/items/gathering/partyResources';
 import { constructionUnlocked, type CraftLearner } from '../../../core/quests/villageUnlocks';
 import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { ConversationRequest, ConversationTopic } from '../../../dialog/request';
-import type { NPCMarkerType } from '../../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../../sprites/npcQuestMarker';
 import { KEEP_TALKING, type QuestOpening, type VillagerContext } from '../villagerCircumstances';
 import type { VillagerConversationFlow } from '../villagerTopics';
 import type { BlueprintsQuestContext } from './blueprintsContext';
@@ -117,10 +117,14 @@ export class FennaBlueprintsLines {
     return isHeld([this.ctx.human, this.ctx.cat], 'quest_blueprints');
   }
 
-  /** The glyph over Fenna for this quest: `'exclamation'` while the offer stands, `'question'` while she waits to see the blueprints. */
-  markerFor(_villagerCtx: VillagerContext): NPCMarkerType {
-    if (this.offerStands) return 'exclamation';
-    return this.awaitingBlueprints ? 'question' : 'none';
+  /**
+   * The marker over Fenna for this quest: its offer while that stands, then a
+   * turn-in while she waits to see the blueprints, since seeing them opens
+   * the station upgrades.
+   */
+  markerFor(_villagerCtx: VillagerContext): NpcQuestMarker {
+    if (this.offerStands) return 'available';
+    return this.awaitingBlueprints ? 'turnIn' : 'none';
   }
 
   /** Fenna's rows for this quest: the re-offer topic after a decline. */

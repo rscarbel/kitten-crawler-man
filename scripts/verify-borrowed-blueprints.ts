@@ -31,7 +31,7 @@ import { SFX_GROUPS } from '../src/audio/sfxGroups';
 import type { SoundId } from '../src/audio/sounds';
 import type { DialogLine } from '../src/dialog/line';
 import type { VillagerId } from '../src/core/quests/villagerIds';
-import type { NPCMarkerType } from '../src/creatures/QuestNPC';
+import type { NpcQuestMarker } from '../src/sprites/npcQuestMarker';
 import {
   firstQuestMarker,
   firstQuestOpening,
@@ -248,7 +248,7 @@ function villagerContext(): VillagerContext {
 function standInProvider(
   villager: VillagerId,
   line: DialogLine,
-  marker: NPCMarkerType,
+  marker: NpcQuestMarker,
 ): QuestLineProvider & { asked: number } {
   const provider = {
     asked: 0,
@@ -256,7 +256,7 @@ function standInProvider(
       provider.asked++;
       return id === villager ? { pages: [line] as const, after: KEEP_TALKING } : null;
     },
-    markerFor: (id: VillagerId): NPCMarkerType => (id === villager ? marker : 'none'),
+    markerFor: (id: VillagerId): NpcQuestMarker => (id === villager ? marker : 'none'),
   };
   return provider;
 }
@@ -266,23 +266,23 @@ function verifyProviderOrder(): void {
   const humanVoice = CRAWLER_SPEAKERS.human;
   const [pleaLine] = merritFenceDonePages(humanVoice);
   const [sideLine] = merritAskPages(humanVoice, true);
-  const plea = standInProvider('fenna', pleaLine, 'question');
-  const side = standInProvider('fenna', sideLine, 'exclamation');
+  const plea = standInProvider('fenna', pleaLine, 'inProgress');
+  const side = standInProvider('fenna', sideLine, 'available');
   const opening = firstQuestOpening('fenna', ctx, [plea, side]);
   check(opening?.pages[0] === pleaLine, 'the first provider with an opening speaks');
   check(side.asked === 0, 'a later provider is not asked once an earlier one has spoken');
   check(
-    firstQuestMarker('fenna', ctx, [plea, side]) === 'question',
+    firstQuestMarker('fenna', ctx, [plea, side]) === 'inProgress',
     "the first provider's marker wins",
   );
 
-  const silent = standInProvider('oren', pleaLine, 'question');
+  const silent = standInProvider('oren', pleaLine, 'inProgress');
   check(
     firstQuestOpening('fenna', ctx, [silent, side])?.pages[0] === sideLine,
     'a provider with nothing to say leaves the villager to the next one',
   );
   check(
-    firstQuestMarker('fenna', ctx, [silent, side]) === 'exclamation',
+    firstQuestMarker('fenna', ctx, [silent, side]) === 'available',
     "a provider's 'none' marker lets the next provider's marker through",
   );
   check(

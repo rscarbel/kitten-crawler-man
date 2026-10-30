@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for worn gear's world effects: the relics at each crawler's
- * shoulder, what they throw, claw swipes and slash waves, and the marks traits
+ * Review harness for worn gear's world effects: the relics circling each
+ * crawler, what they throw, claw swipes and slash waves, and the marks traits
  * leave on their wearer.
  *
  * Each cell builds a real party and a real `GearSystem`, puts the gear on or
@@ -383,8 +383,11 @@ function renderCell(cell: Cell, floor: (typeof FLOORS)[number], scale: number): 
   paintFloor(ctx, floor);
   for (const mob of stage.mobs) mob.render(ctx, 0, 0, TILE_SIZE);
   const { human, cat } = stage.pm;
-  const byDepth = [human, cat].sort((a, b) => a.y - b.y);
-  for (const crawler of byDepth) crawler.render(ctx, 0, 0, TILE_SIZE);
+  const sorted = [
+    ...[human, cat].map((crawler) => ({ sortY: crawler.depthY + TILE_SIZE, figure: crawler })),
+    ...stage.gear.sortedRelics(() => false).map((relic) => ({ sortY: relic.sortY, figure: relic })),
+  ].sort((a, b) => a.sortY - b.sortY);
+  for (const { figure } of sorted) figure.render(ctx, 0, 0, TILE_SIZE);
   const cellCamera: Camera = {
     x: 0,
     y: 0,

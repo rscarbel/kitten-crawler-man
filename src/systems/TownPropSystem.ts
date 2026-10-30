@@ -24,12 +24,18 @@
 import { TILE_SIZE } from '../core/constants';
 import { playDrinkGesture } from '../creatures/humanGestures';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
-import { drawQuestBeacon } from '../sprites/questBeacon';
-import { questMarkerColorFor, type QuestMarkerState } from '../sprites/questNPCSprite';
+import type { ObjectQuestMarker } from '../sprites/questNPCSprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import {
+  IconAnchor,
   drawOverheadIcon,
+  drawOverheadIconBeacon,
+  objectOverheadIconFor,
   overheadIconFor,
   overheadIconTopY,
+  type NpcOverheadIcon,
+  type ObjectOverheadIcon,
+  type OverheadIcon,
   type ShopSign,
 } from '../sprites/overheadIcon';
 import { drawTownSheetFrame } from '../sprites/townSheetProp';
@@ -120,7 +126,7 @@ export type TownPropTarget =
   | {
       readonly kind: 'fortuneTeller';
       readonly teller: FortuneTellerProp;
-      readonly marker: QuestMarkerState;
+      readonly marker: NpcQuestMarker;
     }
   | { readonly kind: 'healSpot'; readonly spot: HealSpot; readonly tile: TileXY };
 
@@ -144,7 +150,7 @@ export class TownPropSystem implements GameSystem {
     private readonly getAudio: () => AudioManager | null,
     /**
      * Tiles another system has already claimed — the market's stall footprints.
-     * Needed because prop placement tests `isWalkableIgnoringPermanent`, which by
+     * Needed because prop placement tests `isOpenStreetGround`, which by
      * design ignores the permanent blocks those systems set.
      */
     private readonly claimedElsewhere: ReadonlySet<string> = new Set(),
@@ -163,7 +169,7 @@ export class TownPropSystem implements GameSystem {
   /**
    * Tiles this system's props stand on, for the systems built after it. Same
    * contract and same reason as `MarketSystem.reservedTiles`: placement tests
-   * `isWalkableIgnoringPermanent`, which by design ignores the permanent blocks
+   * `isOpenStreetGround`, which by design ignores the permanent blocks
    * these props set, so a later system would otherwise put a lamp inside the
    * notice board.
    */
@@ -200,7 +206,7 @@ export class TownPropSystem implements GameSystem {
       const key = tileKey(tile.x, tile.y);
       if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
       if (this.doorwayKeepClear.has(key)) continue;
-      if (!this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y, 'walker')) continue;
+      if (!this.gameMap.isOpenStreetGround(tile.x, tile.y)) continue;
       this.occupied.add(key);
       return tile;
     }
@@ -365,7 +371,7 @@ export class TownPropSystem implements GameSystem {
    * unlike every other quest giver she has no `markerType` field of her own for
    * the scene to write each frame — this is the one way in.
    */
-  setFortuneTellerMarker(state: QuestMarkerState): void {
+  setFortuneTellerMarker(state: NpcQuestMarker): void {
     if (this.fortuneTellerProp !== null) this.fortuneTellerProp.markerState = state;
   }
 
@@ -375,7 +381,7 @@ export class TownPropSystem implements GameSystem {
   }
 
   /** Sets the plaza notice board's overhead beacon/glyph; a prop, so like Voss it has no `markerType` of its own. */
-  setNoticeBoardMarker(state: QuestMarkerState): void {
+  setNoticeBoardMarker(state: ObjectQuestMarker): void {
     if (this.board !== null) this.board.markerState = state;
   }
 
@@ -423,12 +429,13 @@ export class TownPropSystem implements GameSystem {
 
   /**
    * Spiral outward from `preferred` for the first free tile, so a prop never
-   * lands in a wall, a building/sprite footprint, or atop another prop. Tested
-   * against `isWalkableIgnoringPermanent`, not `isWalkable`: the overworld map
-   * instance is reused across building round-trips, and a prop's own permanent
-   * block would otherwise make this pick drift to (and leak) a new tile every
-   * trip. That predicate is stable across reconstructions, so re-placement is
-   * idempotent — it re-selects the same tile.
+   * lands in a wall, under a building's art (its walkable roof rows included),
+   * or atop another prop. Tested against `isOpenStreetGround`, which ignores
+   * permanent blocks: the overworld map instance is reused across building
+   * round-trips, and a prop's own permanent block would otherwise make this
+   * pick drift to (and leak) a new tile every trip. That predicate is stable
+   * across reconstructions, so re-placement is idempotent — it re-selects the
+   * same tile.
    */
   private findFreeTile(preferred: TileXY): TileXY | null {
     for (let ring = 0; ring <= PROP_SEARCH_RADIUS; ring++) {
@@ -440,7 +447,7 @@ export class TownPropSystem implements GameSystem {
           const key = tileKey(tx, ty);
           if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
           if (this.doorwayKeepClear.has(key)) continue;
-          if (this.gameMap.isWalkableIgnoringPermanent(tx, ty, 'walker')) return { x: tx, y: ty };
+          if (this.gameMap.isOpenStreetGround(tx, ty)) return { x: tx, y: ty };
         }
       }
     }
@@ -517,17 +524,15 @@ const NOTICE_BOARD_SHOWS_BEACON = false;
 const FORTUNE_TELLER_SHOWS_BEACON = true;
 
 /**
- * Draws a single-picture town fixture with its one overhead icon: the quest
- * glyph while `markerState` has something to say, else the coin while
- * `shopSign` trades. A fixture that `showsBeacon` also gets
- * the quest beacon behind it — the same order every other quest giver draws
- * these in, so the column stands behind the fixture rather than across it.
+ * Draws a single-picture town fixture with its one overhead icon (its quest
+ * marker, else its coin). A fixture that `showsBeacon` also gets the quest
+ * beacon behind it — the same order every other quest giver draws these in,
+ * so the column stands behind the fixture rather than across it.
  */
 function drawMarkedFixture(
   ctx: CanvasRenderingContext2D,
   sheetKey: string,
-  markerState: QuestMarkerState,
-  shopSign: ShopSign,
+  icon: OverheadIcon,
   showsBeacon: boolean,
   tile: TileXY,
   camX: number,
@@ -537,16 +542,15 @@ function drawMarkedFixture(
   const sx = tile.x * tileSize - camX;
   const sy = tile.y * tileSize - camY;
 
-  const markerColor = questMarkerColorFor(markerState);
-  if (showsBeacon && markerColor !== undefined) {
-    drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-  }
+  if (showsBeacon) drawOverheadIconBeacon(ctx, sx, sy, tileSize, camX, camY, icon);
 
   drawTownSheetFrame(ctx, sheetKey, FIXTURE_STATE, FIXTURE_FRAME, sx, sy, tileSize);
 
-  const icon = overheadIconFor(markerState, shopSign);
   if (icon === 'none') return;
-  drawOverheadIcon(ctx, sx, fixtureArtTop(sheetKey, sy, tileSize), tileSize, icon);
+  const sheetInkTop = sheetStateInkTop(sheetKey, FIXTURE_STATE, sy, tileSize);
+  // A sheet's ink is measured once it loads, and nothing is drawn before that.
+  const anchor = sheetInkTop === undefined ? null : IconAnchor.ofFixedArt(sheetInkTop);
+  drawOverheadIcon(ctx, sx, anchor, tileSize, icon);
 }
 
 function fixtureArtTop(sheetKey: string, sy: number, tileSize: number): number {
@@ -557,17 +561,20 @@ function fixtureArtTop(sheetKey: string, sy: number, tileSize: number): number {
 function markedFixtureOverheadTop(
   ctx: CanvasRenderingContext2D,
   sheetKey: string,
-  markerState: QuestMarkerState,
-  shopSign: ShopSign,
+  icon: OverheadIcon,
   sy: number,
 ): number {
-  const icon = overheadIconFor(markerState, shopSign);
   return overheadIconTopY(ctx, fixtureArtTop(sheetKey, sy, TILE_SIZE), TILE_SIZE, icon);
 }
 
 class NoticeBoardProp implements TownPropRenderable {
   /** Whether a construction contract is waiting on the board — written each frame via `setNoticeBoardMarker`. */
-  markerState: QuestMarkerState = 'none';
+  markerState: ObjectQuestMarker = 'none';
+
+  /** A board is a quest object, not a person: it wears the plain `!`/`?`. */
+  private get icon(): ObjectOverheadIcon {
+    return objectOverheadIconFor(this.markerState, 'closed');
+  }
 
   constructor(readonly tile: TileXY) {}
 
@@ -580,15 +587,14 @@ class NoticeBoardProp implements TownPropRenderable {
   }
 
   overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
-    return markedFixtureOverheadTop(ctx, NOTICE_BOARD_SHEET_KEY, this.markerState, 'closed', sy);
+    return markedFixtureOverheadTop(ctx, NOTICE_BOARD_SHEET_KEY, this.icon, sy);
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     drawMarkedFixture(
       ctx,
       NOTICE_BOARD_SHEET_KEY,
-      this.markerState,
-      'closed',
+      this.icon,
       NOTICE_BOARD_SHOWS_BEACON,
       this.tile,
       camX,
@@ -624,9 +630,14 @@ class BenchProp implements TownPropRenderable {
 
 export class FortuneTellerProp implements TownPropRenderable {
   /** What Voss has for the player — written each frame by `AnchorQuestSystem` via `setFortuneTellerMarker`. */
-  markerState: QuestMarkerState = 'none';
+  markerState: NpcQuestMarker = 'none';
   /** Madame Voss reads for a fee at any hour, so her table always trades. */
   shopSign: ShopSign = 'trades';
+
+  /** Voss is a quest giver, so she wears an NPC's marker over her coin. */
+  private get icon(): NpcOverheadIcon {
+    return overheadIconFor(this.markerState, this.shopSign);
+  }
 
   constructor(readonly tile: TileXY) {}
 
@@ -639,21 +650,14 @@ export class FortuneTellerProp implements TownPropRenderable {
   }
 
   overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
-    return markedFixtureOverheadTop(
-      ctx,
-      FORTUNE_TELLER_SHEET_KEY,
-      this.markerState,
-      this.shopSign,
-      sy,
-    );
+    return markedFixtureOverheadTop(ctx, FORTUNE_TELLER_SHEET_KEY, this.icon, sy);
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     drawMarkedFixture(
       ctx,
       FORTUNE_TELLER_SHEET_KEY,
-      this.markerState,
-      this.shopSign,
+      this.icon,
       FORTUNE_TELLER_SHOWS_BEACON,
       this.tile,
       camX,

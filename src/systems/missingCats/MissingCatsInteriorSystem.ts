@@ -34,7 +34,7 @@ import type { ResidentId } from '../../core/state/residentIds';
 import type { MercenaryTemplateId } from '../../core/party/mercenaryTemplates';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { Conversation } from '../../dialog/Conversation';
 import {
   transientSpeaker,
@@ -446,30 +446,35 @@ export class MissingCatsInteriorSystem implements ResidentQuestHook {
     this.playCellarElfExplains([...CELLAR_LID_LET_DOWN, ...CELLAR_ELF_EXPLAINS]);
   }
 
-  markerFor(residentId: ResidentId): NPCMarkerType | null {
+  /**
+   * The offer over the inn's hook giver before the questline starts; every
+   * other mark is a step of the investigation under way. None pays out: the
+   * questline pays once, when Pumpkin walks home.
+   */
+  markerFor(residentId: ResidentId): NpcQuestMarker | null {
     const { progress } = this.deps;
     const owner = OWNERS[residentId];
     if (owner?.building === this.deps.buildingId) {
       return progress.phase === 'investigating' && !progress.clues.has(owner.heard)
-        ? 'exclamation'
+        ? 'inProgress'
         : null;
     }
     if (residentId === HOOK_GIVER) {
-      return progress.phase === 'not_started' ? 'exclamation' : null;
+      return progress.phase === 'not_started' ? 'available' : null;
     }
     if (residentId === FUR_SHOWER) {
-      return progress.phase === 'blame' && !progress.kesslerShowedFur ? 'exclamation' : null;
+      return progress.phase === 'blame' && !progress.kesslerShowedFur ? 'inProgress' : null;
     }
     if (residentId === CELLAR_ELF) {
-      if (progress.phase === 'seeking_entry' && !progress.elfWaitsAtGrate) return 'exclamation';
-      return progress.phase === 'blame' && lodgeCellarHeld(progress) ? 'exclamation' : null;
+      if (progress.phase === 'seeking_entry' && !progress.elfWaitsAtGrate) return 'inProgress';
+      return progress.phase === 'blame' && lodgeCellarHeld(progress) ? 'inProgress' : null;
     }
     if (residentId === LOAN_DESK) {
-      return this.hireOwedForTheDrain() ? 'exclamation' : null;
+      return this.hireOwedForTheDrain() ? 'inProgress' : null;
     }
     if (residentId === CONFESSOR) {
-      if (progress.phase === 'confession') return this.featherHeld() ? 'question' : 'exclamation';
-      return progress.phase === 'choice' ? 'exclamation' : null;
+      const confessorWaits = progress.phase === 'confession' || progress.phase === 'choice';
+      return confessorWaits ? 'inProgress' : null;
     }
     return null;
   }

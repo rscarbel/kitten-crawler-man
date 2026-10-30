@@ -37,8 +37,9 @@ Gear lives in `GEAR_CATALOGUE` (`src/gear/catalogue.ts`). `EQUIP_SUBSLOTS`
   by `GearSystem`, not on the rig.
 - **Main hand** weapons are held visuals (below). **Claws** are a
   `ClawWeaponStats` block whose `garment` paints over her paws. A **relic** is
-  armour with a `relic` trait and `RELIC_LOOK`: `GearSystem` floats it at the
-  shoulder; its `rechargeScalesWithMagic` says whether the wearer's Magic
+  armour with a `relic` trait and `RELIC_LOOK`: `GearSystem` sets it circling its
+  wearer at shoulder height, sorted behind or in front of her by where it is on
+  the lap; its `rechargeScalesWithMagic` says whether the wearer's Magic
   shortens its recharge. The **off hand** carries a shield in the `offHandHeld`
   archetype: the Pot-Lid Buckler's `look` is an `OffHandLook`
   (`{ kind: 'offHand', heldVisual, heardAs }`, `BUCKLER_LOOK`), and its
@@ -428,7 +429,7 @@ the compiler refuses an armour item without them. `look` is
 for a `'both'` item (a look for each). Where nothing can show, the look is
 `{ kind: 'none', reason }`, and the reason says why — what makes it unreadable
 on the figure, or what paints that crawler instead: `RELIC_LOOK` (a relic is a
-world sprite `GearSystem` floats at the shoulder, `src/gear/catalogue.ts`).
+world sprite `GearSystem` circles round its wearer, `src/gear/catalogue.ts`).
 An off-hand shield is `{ kind: 'offHand', heldVisual, heardAs }`: a held
 visual in the `offHandHeld` archetype, registered in
 `OFF_HAND_HELD_VISUAL_IDS` and `HELD_VISUALS`, its icon in its gear family

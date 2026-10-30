@@ -43,6 +43,7 @@ import {
 import {
   getBlockedTileOffsets,
   getBlockedTileOffsetsByKey,
+  isSpriteAnchorWalkable,
 } from '../core/spriteAssets/SpriteLoader';
 import {
   placeSpriteBuilding,
@@ -1195,7 +1196,11 @@ function assertTownIsFullyReachable(
   const walkable = (x: number, y: number) => {
     if (!inTown(x, y)) return false;
     const type = grid.typeAt(x, y);
-    if (type === undefined || grid.isSolid(x, y)) return false;
+    if (type === undefined) return false;
+    const spriteKey = grid.cells[y][x].spriteKey;
+    const isWalkableAnchor =
+      type === SPRITE_BUILDING && spriteKey !== undefined && isSpriteAnchorWalkable(spriteKey);
+    if (grid.isSolid(x, y) && !isWalkableAnchor) return false;
     if (type === TORCH || type === WELL || type === FOUNTAIN) return false;
     return !blockedByArt.has(y * size + x);
   };

@@ -15,6 +15,12 @@ import { button, measureButton } from './button';
 import { fillRounded } from './paint';
 import { roundRectPath } from './roundRect';
 import { panel } from './panel';
+import {
+  paperSheet,
+  paperSheetHeight,
+  type PaperSheetFit,
+  type PaperSheetVariant,
+} from './paperSheet';
 import { scrollView } from './scrollView';
 import { lineHeightOf, measureTextHeight, text } from './text';
 
@@ -24,6 +30,12 @@ export interface PagedOverlayPage {
   readonly overline?: string;
   /** Paragraphs separated by `\n`. */
   readonly body: string;
+  /**
+   * Set, the body is written on a stack of this kind of paper under the
+   * title, for something the player reads off a page or a note; unset, it is
+   * set straight on the panel.
+   */
+  readonly paper?: PaperSheetVariant;
   readonly illustration?: {
     /**
      * The height the art asks for. A function sizes it to the screen, for art
@@ -166,31 +178,39 @@ function besideColumns(ui: Ui, body: Rect, page: PagedOverlayPage): [Rect, Rect]
   return [art, words];
 }
 
-function textHeight(ui: Ui, page: PagedOverlayPage, width: number): number {
+function textHeight(ui: Ui, page: PagedOverlayPage, width: number, fit: PaperSheetFit): number {
   const { space } = ui.theme;
   let h = measureTextHeight(ui, width, { text: page.title, role: 'heading' });
   if (page.overline !== undefined) h += lineHeightOf(ui, 'overline') + space.xs;
-  h += space.sm + measureTextHeight(ui, width, { text: page.body, role: 'secondary' });
-  return h;
+  const bodyH =
+    page.paper === undefined
+      ? measureTextHeight(ui, width, { text: page.body, role: 'secondary' })
+      : paperSheetHeight(ui, width, { variant: page.paper, text: page.body, fit });
+  return h + space.sm + bodyH;
 }
 
-function pageHeight(ui: Ui, page: PagedOverlayPage, width: number): number {
+function pageHeight(ui: Ui, page: PagedOverlayPage, width: number, fit: PaperSheetFit): number {
   if (page.illustration !== undefined && illustrationBeside(ui, page, width)) {
     const [, words] = besideColumns(ui, { x: 0, y: 0, w: width, h: ui.viewport.h }, page);
     const chromeBesideText = pagedOverlayChromeHeight(ui, {});
     return Math.max(
       requestedIllustrationHeight(ui, page) - chromeBesideText,
-      textHeight(ui, page, words.w),
+      textHeight(ui, page, words.w, fit),
     );
   }
   const art =
     page.illustration === undefined ? 0 : illustrationHeight(ui, page) + ui.theme.space.lg;
-  return art + textHeight(ui, page, width);
+  return art + textHeight(ui, page, width, fit);
 }
 
-/** The body height a page's text and illustration take at `width`, for callers that paginate their own text to fit. */
+/**
+ * The least body height a page's text and illustration take at `width`, for
+ * callers that paginate their own text to fit. A page on paper counts its
+ * sheet at its text, not at its paper's proportions, since a sheet shrinks
+ * to the room it is given.
+ */
 export function pagedOverlayPageHeight(ui: Ui, page: PagedOverlayPage, width: number): number {
-  return pageHeight(ui, page, width);
+  return pageHeight(ui, page, width, 'least');
 }
 
 /** What the panel's body holds besides the page: the Back / Next row and any accessory row. */
@@ -218,7 +238,7 @@ export function pagedOverlay(ui: Ui, config: PagedOverlayConfig, nav: PagedOverl
   const tapAnywhere = config.advanceOnTapAnywhere === true ? advance : undefined;
   const estimateW = Math.min(theme.panelWidth[width], ui.viewport.w) - space.lg * 2;
   const contentHeight = Math.max(
-    ...config.pages.map((candidate) => pageHeight(ui, candidate, estimateW)),
+    ...config.pages.map((candidate) => pageHeight(ui, candidate, estimateW, 'natural')),
   );
   if (tapAnywhere !== undefined && config.scrim === false) {
     ui.hit(`${config.id}/outside`, ui.screen, {
@@ -280,11 +300,16 @@ export function pagedOverlay(ui: Ui, config: PagedOverlayConfig, nav: PagedOverl
       { text: page.title, role: 'heading', wrap: true },
     );
     y += titleH + space.sm;
-    text(
-      ui,
-      { x: area.x, y, w: area.w, h: area.y + area.h - y },
-      { text: page.body, role: 'secondary', wrap: true },
-    );
+    const bodyRect: Rect = { x: area.x, y, w: area.w, h: area.y + area.h - y };
+    if (page.paper === undefined) {
+      text(ui, bodyRect, { text: page.body, role: 'secondary', wrap: true });
+    } else {
+      paperSheet(ui, bodyRect, {
+        id: `${config.id}/paper${index}`,
+        variant: page.paper,
+        text: page.body,
+      });
+    }
   };
   const drawScrolling = (area: Rect, contentH: number, draw: (inner: Rect) => void): void => {
     if (contentH > area.h) {
@@ -297,13 +322,13 @@ export function pagedOverlay(ui: Ui, config: PagedOverlayConfig, nav: PagedOverl
   if (page.illustration !== undefined && artColumn !== null) {
     const artH = Math.min(requestedIllustrationHeight(ui, page), artColumn.h);
     paintArt({ ...artColumn, h: artH });
-    const wordsH = textHeight(ui, page, bodyArea.w);
+    const wordsH = textHeight(ui, page, bodyArea.w, 'least');
     const words = wordsH <= bodyArea.h ? { ...bodyArea, h: wordsH } : bodyArea;
     drawScrolling(words, wordsH, drawText);
   } else {
     const fullArtH = illustrationHeight(ui, page);
     const artGap = page.illustration === undefined ? 0 : space.lg;
-    const wordsH = textHeight(ui, page, bodyArea.w);
+    const wordsH = textHeight(ui, page, bodyArea.w, 'least');
     const roomForArt = bodyArea.h - wordsH - artGap;
     const artFits =
       page.illustration !== undefined && roomForArt >= Math.min(fullArtH, ILLUSTRATION_MIN_HEIGHT);

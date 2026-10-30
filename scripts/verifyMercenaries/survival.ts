@@ -463,8 +463,9 @@ function checkRecovery(r: SurvivalGateReporter): void {
     );
   }
 
-  // Hammer Hands' only attack is his punch, so a hostile he cannot reach is
-  // one he has engaged and never swung at.
+  // The walled cell stands between Hammer Hands and the goblin, blocking both
+  // his punch and his earth blast's flight line, so the goblin is one he has
+  // engaged and never attacked.
   const engaged = spawnedScene('hammer_hands');
   if (engaged !== null) {
     woundedAtHalf(engaged.merc);

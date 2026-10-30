@@ -8,6 +8,10 @@
  * finished one as DONE. Briar Hollow's board shares Wendell's work order and
  * adds the siege call as a DANGER alert.
  *
+ * A board only ever posts what is already true of the world: every posting
+ * declares the condition it waits on (`postedOnce`), so nothing is
+ * pinned up ahead of the quest or the work it announces.
+ *
  * Pure data + selection: no rendering, no audio, no scene coupling. The owning
  * `TownPropSystem` / `NoticeBoard` supply the context and draw the result.
  */
@@ -18,8 +22,8 @@ import type { TownCatId } from '../core/state/townCatIds';
 import { TOWN_CATS } from './critters/TownCats';
 import { buildingDisplayName } from '../map/buildingIds';
 
-/** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → SOON → DONE. */
-export type NoticeTone = 'danger' | 'active' | 'available' | 'upcoming' | 'done';
+/** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → DONE. */
+export type NoticeTone = 'danger' | 'active' | 'available' | 'done';
 
 export interface Notice {
   title: string;
@@ -29,7 +33,7 @@ export interface Notice {
 
 /** The quest flags that determine what the board posts. */
 export interface TownNoticeContext {
-  /** Live bounty state, or null on maps with no notice board bounty (non-overworld). */
+  /** Live bounty state, or null on maps with no Shady to take a bounty from. */
   bounty: BountyNoticeState | null;
   workOrder: WorkOrderNoticeState;
   /** The town cats posted missing, one notice each; empty while nobody has put them up. */
@@ -42,6 +46,13 @@ export type WorkOrderNoticeState =
   | { readonly kind: 'open' }
   | { readonly kind: 'held'; readonly siteName: string; readonly remaining: readonly string[] }
   | { readonly kind: 'ready'; readonly contactName: string };
+
+/** The work-order states a board posts: a locked contract has nothing to pin up yet. */
+type PostedWorkOrder = Exclude<WorkOrderNoticeState, { readonly kind: 'locked' }>;
+
+function isPostedWorkOrder(state: WorkOrderNoticeState): state is PostedWorkOrder {
+  return state.kind !== 'locked';
+}
 
 /** What the board knows about Shady's current job. */
 export interface BountyNoticeState {
@@ -57,8 +68,7 @@ const TONE_PRIORITY: Record<NoticeTone, number> = {
   danger: 0,
   active: 1,
   available: 2,
-  upcoming: 3,
-  done: 4,
+  done: 3,
 };
 
 function byTonePriority(a: Notice, b: Notice): number {
@@ -70,9 +80,9 @@ function byTonePriority(a: Notice, b: Notice): number {
  * still — so the board is the second place (after the arrow) a player can find
  * out who they are hunting.
  */
-function bountyNotice(state: BountyNoticeState | null): Notice {
+function bountyNotice(state: BountyNoticeState): Notice {
   const hooded = 'Speak to the hooded man loitering outside the Quiet Needle, in the Low Quarter.';
-  if (state === null || state.phase === 'available') {
+  if (state.phase === 'available') {
     return {
       title: 'Ruins Bounty',
       body: `The Watch pays coin for every horror culled beyond the town walls. ${hooded}`,
@@ -111,14 +121,8 @@ const PLUMBLINE_FARM_NOTICE: Notice = {
 };
 
 /** Wendell's work order: a posting on both notice boards that also hands out his contracts. */
-export function workOrderNotice(state: WorkOrderNoticeState): Notice {
+export function workOrderNotice(state: PostedWorkOrder): Notice {
   switch (state.kind) {
-    case 'locked':
-      return {
-        title: 'Builder Wanted, Plumbline Farm',
-        body: 'Wendell of Plumbline Farm expects more repair work than one man and a ladder can manage, once a certain set of borrowed drawings is back where it belongs. Paid work orders will be pinned here.',
-        tone: 'upcoming',
-      };
     case 'open':
       return {
         title: 'WORK ORDER: Plumbline Farm',
@@ -173,32 +177,94 @@ const VILLAGE_SIEGE_NOTICE: Notice = {
   tone: 'danger',
 };
 
+const POSTING_DECLARED: unique symbol = Symbol('postingDeclared');
+
+/**
+ * One posting on a board. Only `postedFromStart` and `postedOnce` write the
+ * mark, so every posting declares what must already be true of the world
+ * before it goes up.
+ */
+interface Posting<Ctx> {
+  readonly post: (ctx: Ctx) => readonly Notice[];
+  readonly [POSTING_DECLARED]: true;
+}
+
+/** A posting about what the town has from the party's first day in it. */
+function postedFromStart<Ctx>(notices: readonly Notice[]): Posting<Ctx> {
+  return { post: () => notices, [POSTING_DECLARED]: true };
+}
+
+/**
+ * A posting about a quest, a job or an event: `basisOf` reads the state that
+ * makes it true, null until it is, and `notices` is written from that state alone.
+ */
+function postedOnce<Ctx, Basis>(
+  basisOf: (ctx: Ctx) => Basis | null,
+  notices: (basis: Basis) => readonly Notice[],
+): Posting<Ctx> {
+  return {
+    post: (ctx) => {
+      const basis = basisOf(ctx);
+      return basis === null ? [] : notices(basis);
+    },
+    [POSTING_DECLARED]: true,
+  };
+}
+
+function boardNotices<Ctx>(postings: Readonly<Record<string, Posting<Ctx>>>, ctx: Ctx): Notice[] {
+  const notices = Object.values(postings).flatMap((posting) => posting.post(ctx));
+  notices.sort(byTonePriority);
+  return notices;
+}
+
+function postedWorkOrder(state: WorkOrderNoticeState): PostedWorkOrder | null {
+  return isPostedWorkOrder(state) ? state : null;
+}
+
+type TownPostingId = 'missingCats' | 'ruinsBounty' | 'dryLoft' | 'workOrder';
+
+const TOWN_POSTINGS = {
+  missingCats: postedOnce<TownNoticeContext, readonly TownCatId[]>(
+    (ctx) => (ctx.missingCats.length > 0 ? ctx.missingCats : null),
+    (cats) => cats.map(missingCatNotice),
+  ),
+  ruinsBounty: postedOnce<TownNoticeContext, BountyNoticeState>(
+    (ctx) => ctx.bounty,
+    (bounty) => [bountyNotice(bounty)],
+  ),
+  // Wendell lets the loft from the first day, before any quest of his.
+  dryLoft: postedFromStart<TownNoticeContext>([PLUMBLINE_FARM_NOTICE]),
+  workOrder: postedOnce<TownNoticeContext, PostedWorkOrder>(
+    (ctx) => postedWorkOrder(ctx.workOrder),
+    (order) => [workOrderNotice(order)],
+  ),
+} as const satisfies Record<TownPostingId, Posting<TownNoticeContext>>;
+
 /** What Briar Hollow's board needs to know. */
 export interface VillageNoticeContext {
   readonly workOrder: WorkOrderNoticeState;
   readonly underSiege: boolean;
 }
 
-/** Briar Hollow's board postings, most urgent first. Never empty: the work order is always up. */
+type VillagePostingId = 'siege' | 'workOrder';
+
+const VILLAGE_POSTINGS = {
+  siege: postedOnce<VillageNoticeContext, Notice>(
+    (ctx) => (ctx.underSiege ? VILLAGE_SIEGE_NOTICE : null),
+    (notice) => [notice],
+  ),
+  workOrder: postedOnce<VillageNoticeContext, PostedWorkOrder>(
+    (ctx) => postedWorkOrder(ctx.workOrder),
+    (order) => [workOrderNotice(order)],
+  ),
+} as const satisfies Record<VillagePostingId, Posting<VillageNoticeContext>>;
+
+/** Briar Hollow's board postings, most urgent first; bare until the siege or Wendell's contracts give it something to say. */
 export function buildVillageNotices(ctx: VillageNoticeContext): Notice[] {
-  const notices: Notice[] = [];
-  if (ctx.underSiege) notices.push(VILLAGE_SIEGE_NOTICE);
-  notices.push(workOrderNotice(ctx.workOrder));
-  notices.sort(byTonePriority);
-  return notices;
+  return boardNotices<VillageNoticeContext>(VILLAGE_POSTINGS, ctx);
 }
 
-/**
- * Assemble the current board postings, most urgent first. Always returns at
- * least the standing ruins bounty so the board is never blank.
- */
+/** The town board's current postings, most urgent first. */
 export function buildTownNotices(ctx: TownNoticeContext): Notice[] {
-  const notices = [
-    ...ctx.missingCats.map(missingCatNotice),
-    bountyNotice(ctx.bounty),
-    PLUMBLINE_FARM_NOTICE,
-    workOrderNotice(ctx.workOrder),
-  ];
-  notices.sort(byTonePriority);
-  return notices;
+  return boardNotices<TownNoticeContext>(TOWN_POSTINGS, ctx);
 }

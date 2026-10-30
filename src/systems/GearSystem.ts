@@ -1,5 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Camera } from '../core/rendering/camera';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { Rarity } from '../core/items/defs/rarity';
 import type { ClawTrail } from '../core/items/equipment/weapons';
@@ -10,6 +11,7 @@ import { hitTrainingOn, resolveCrawlerHit, type ResolvedHit } from '../core/comb
 import { FIRE_HIT, UNTAGGED_HIT, type DamageTags } from '../core/combat/damageTags';
 import { runTickHooks, wornClaws, wornTraits } from '../gear/gearHooks';
 import { FULL_NOTICE_RANGE_SHARE, type GearFxRequest } from '../gear/gearLive';
+import { advancePartnerBond } from '../gear/partnerBond';
 import { setCompletionPieces, setRarity, wornSets } from '../gear/setProgress';
 import type { GearSetId } from '../gear/sets';
 import {
@@ -46,10 +48,13 @@ import { worldPlate } from '../ui/world/worldShapes';
 import type { GameSystem } from './GameSystem';
 import { GEAR_CUES, type GearSoundCue } from './gearTraitSoundCues';
 import type { SceneWorld } from './kits/SceneWorld';
+import type { TownPropRenderable } from './townPropRenderable';
 
 /** The fixed step the scene loop runs at, in frames per update. */
 const FRAMES_PER_UPDATE = 1;
 const HALF_TILE = TILE_SIZE / 2;
+/** A body sorts on the foot of its tile, one tile below its depth line; a relic sorts on the same footing. */
+const RELIC_SORT_FOOT_PX = TILE_SIZE;
 
 /** How far she may drift in a frame and still count as standing still, in world pixels. */
 const STILL_TOLERANCE_PX = 0.5;
@@ -99,17 +104,33 @@ const FX_FRAMES: Readonly<Record<GearFxRequest['kind'], number>> = {
 };
 
 /**
- * Each relic floats on its wearer's outer shoulder, the side away from her
- * partner, so a pair standing together never stack their relics between them.
+ * Each crawler's outer side, away from her partner, where her hourglass
+ * floats, so a pair standing together never stack their marks between them.
  * Where the two stand level, each keeps the side it had.
  */
-const RELIC_START_SIDE: Readonly<Record<CrawlerKind, number>> = { human: -1, cat: 1 };
-/** How far apart, across the screen, the pair must stand before a relic changes shoulder. */
-const RELIC_SWAP_GAP_PX = 4;
-/** The share of the way to its new shoulder a relic glides each frame, so a swap is a drift, not a jump. */
-const RELIC_SIDE_EASE = 0.12;
-const RELIC_SIDE_TILES = 0.42;
-const RELIC_SIDE_PX = TILE_SIZE * RELIC_SIDE_TILES;
+const OUTER_START_SIDE: Readonly<Record<CrawlerKind, number>> = { human: -1, cat: 1 };
+/** How far apart, across the screen, the pair must stand before an outer side changes over. */
+const SIDE_SWAP_GAP_PX = 4;
+/** The share of the way to its new side a mark glides each frame, so a swap is a drift, not a jump. */
+const SIDE_EASE = 0.12;
+const HOURGLASS_SIDE_TILES = 0.42;
+const HOURGLASS_SIDE_PX = TILE_SIZE * HOURGLASS_SIDE_TILES;
+/** One slow lap of a relic round its wearer, in gear ticks. */
+const RELIC_ORBIT_PERIOD_FRAMES = 360;
+const RELIC_ORBIT_RADIANS_PER_FRAME = (Math.PI * 2) / RELIC_ORBIT_PERIOD_FRAMES;
+/** Half the orbit's width: wide enough that the relic clears the body as it passes in front. */
+const RELIC_ORBIT_RADIUS_TILES = 0.55;
+const RELIC_ORBIT_RADIUS_X_PX = TILE_SIZE * RELIC_ORBIT_RADIUS_TILES;
+/** The orbit is a level circle seen in the 3/4 view, so its depth is drawn this much as tall as it is wide. */
+const RELIC_ORBIT_FORESHORTENING = 0.42;
+const RELIC_ORBIT_RADIUS_Y_PX = RELIC_ORBIT_RADIUS_X_PX * RELIC_ORBIT_FORESHORTENING;
+/**
+ * Each crawler's bob runs half a beat from the other's, so the pair never bob
+ * in step. Their laps share one phase instead: two relics in step keep the
+ * pair's own spacing, where laps half a turn apart would swing both into the
+ * gap between a pair standing side by side and stack them there.
+ */
+const RELIC_BOB_PHASE: Readonly<Record<CrawlerKind, number>> = { human: 0, cat: Math.PI };
 /** How far above each crawler's tile centre her shoulder is: he stands tall, she is low to the floor. */
 const HUMAN_SHOULDER_RISE_TILES = 0.72;
 const CAT_SHOULDER_RISE_TILES = 0.3;
@@ -119,9 +140,6 @@ const RELIC_SHOULDER_RISE_PX: Readonly<Record<CrawlerKind, number>> = {
 };
 const RELIC_BOB_PX = 1.5;
 const RELIC_BOB_RADIANS_PER_FRAME = 0.06;
-/** A slow sideways drift on a different beat from the bob, so the float never reads as a metronome. */
-const RELIC_DRIFT_PX = 1;
-const RELIC_DRIFT_RADIANS_PER_FRAME = 0.023;
 /** Where the floor is under a crawler, as a share of a tile below her tile's top. */
 const FEET_TILES = 0.92;
 const FEET_PX = TILE_SIZE * FEET_TILES;
@@ -138,10 +156,7 @@ const BODY_RISE_PX: Readonly<Record<CrawlerKind, number>> = {
   human: TILE_SIZE * HUMAN_BODY_RISE_TILES,
   cat: 0,
 };
-/**
- * The hourglass floats beside her head on the side away from her relic: the
- * space over her head already holds her own bar and marker.
- */
+/** The hourglass floats beside her head: the space over it already holds her own bar. */
 const HOURGLASS_DROP_PX = 6;
 /** The partner tether runs between chests, not feet or tile centres. */
 const HUMAN_CHEST_RISE_TILES = 0.4;
@@ -157,11 +172,12 @@ const RIPOSTE_GLINT_REACH_PX = TILE_SIZE * RIPOSTE_GLINT_REACH_TILES;
 
 /**
  * Combo pips: their size and gap, and how far below her feet they sit. They go
- * under her rather than over her head, where her own bar and marker already are.
+ * under her rather than over her head, where her own bar already is, and drop
+ * clear of the selection ring lying round the feet of the crawler being driven.
  */
 const COMBO_PIP_SIZE_PX = 4;
 const COMBO_PIP_GAP_PX = 2;
-const COMBO_PIP_DROP_PX = 3;
+const COMBO_PIP_DROP_PX = 9;
 
 /** The shades a set's shimmer is drawn in, by rarity. */
 const RARITY_SHIMMER: Readonly<Record<Rarity, string>> = {
@@ -174,6 +190,18 @@ const RARITY_SHIMMER: Readonly<Record<Rarity, string>> = {
 };
 
 type Crawler = HumanPlayer | CatPlayer;
+
+/**
+ * A worn relic as a figure in a scene's Y-sorted pass: the dungeon's sorts on
+ * `sortY`, an interior's on `depthY`, and both cull on `x`/`y`, the wearer's
+ * tile.
+ */
+export interface RelicFigure extends TownPropRenderable, InteriorFigure {
+  x: number;
+  y: number;
+  depthY: number;
+  sortY: number;
+}
 
 /**
  * What a relic's bolt is, for the proficiency skills: the burn it lands says
@@ -251,7 +279,7 @@ function fxLeft(fx: LiveFx): number {
  * Runs the two crawlers' gear between frames: every worn trait's tick hook,
  * each reading and writing the per-item state on its wearer's `gear`, which
  * travels with the crawler through every snapshot; set completion; the relics
- * at their shoulders and what those relics throw; and the pictures traits ask
+ * circling them and what those relics throw; and the pictures traits ask
  * for. It is also each trait's view of the world (`GearWorld`).
  *
  * Equip and unequip hooks run from the crawler's own equipment listener
@@ -267,8 +295,11 @@ export class GearSystem implements GameSystem, GearWorld {
   private fx: LiveFx[] = [];
   private soundCues: GearSoundCue[] = [];
   private frame = 0;
-  /** Where each relic sits across its wearer, -1 her left shoulder to 1 her right, eased between. */
-  private readonly relicSides: Record<CrawlerKind, number> = { ...RELIC_START_SIDE };
+  /** Each crawler's side away from her partner, -1 her left to 1 her right, eased between. */
+  private readonly outerSides: Record<CrawlerKind, number> = { ...OUTER_START_SIDE };
+  /** One figure per crawler for her relic in the Y-sorted pass, reused every frame. */
+  private readonly relicFigureOf: Readonly<Record<CrawlerKind, RelicFigure>>;
+  private readonly relicFigures: RelicFigure[] = [];
   /** Whether each crawler's last stand and vanish were running last tick, so each sounds as it starts and ends. */
   private readonly heardRunning: Record<CrawlerKind, { lastStand: boolean; vanished: boolean }> = {
     human: { lastStand: false, vanished: false },
@@ -286,6 +317,10 @@ export class GearSystem implements GameSystem, GearWorld {
   constructor(private readonly world: SceneWorld) {
     this.human = world.pm.human;
     this.cat = world.pm.cat;
+    this.relicFigureOf = {
+      human: this.relicFigure(this.human),
+      cat: this.relicFigure(this.cat),
+    };
     // A curse binds until the party next walks into a safe room.
     this.unsubscribe = world.bus.on('safeRoomEntered', () => {
       this.human.gear.releaseBinds();
@@ -303,7 +338,7 @@ export class GearSystem implements GameSystem, GearWorld {
     this.cat.gear.live.noticeRangeShare = FULL_NOTICE_RANGE_SHARE;
     this.tickCrawler(this.human, together ? this.cat : null);
     this.tickCrawler(this.cat, together ? this.human : null);
-    this.easeRelicSides();
+    this.easeOuterSides();
     this.updateBolts();
     this.updateBrambles();
     this.updateWaves();
@@ -392,7 +427,6 @@ export class GearSystem implements GameSystem, GearWorld {
     // Every bonus a tick grants is granted afresh each tick, so one that stops
     // applying — a set broken, a partner walked off — lapses on its own.
     const statBonusBefore = live.partnerLinkStatBonus;
-    const wasLinked = live.partnerLinked;
     for (const key of GEAR_REGEN_KEYS) crawler.clearRegenModifier(key);
     live.stillnessRegenActive = false;
     live.partnerLinked = false;
@@ -402,7 +436,13 @@ export class GearSystem implements GameSystem, GearWorld {
     runTickHooks(crawler, { dtFrames: FRAMES_PER_UPDATE, partner, world: this });
 
     if (live.partnerLinkStatBonus !== statBonusBefore) crawler.syncHpToMaxHp();
-    this.noteRunningChanges(crawler, wasLinked);
+    const { bond, formed } = advancePartnerBond(
+      live.partnerBond,
+      live.partnerLinked,
+      FRAMES_PER_UPDATE,
+    );
+    live.partnerBond = bond;
+    this.noteRunningChanges(crawler, formed);
     this.noteSetCompletions(crawler);
     this.takeFx(crawler);
   }
@@ -425,8 +465,8 @@ export class GearSystem implements GameSystem, GearWorld {
     if (!worn.has('slashWave')) live.swipeCount = 0;
   }
 
-  /** Sounds a last stand or a vanish as it starts or ends, and a partner link as it forms. */
-  private noteRunningChanges(crawler: Crawler, wasLinked: boolean): void {
+  /** Sounds a last stand or a vanish as it starts or ends, and a partner link as it forms anew. */
+  private noteRunningChanges(crawler: Crawler, linkFormed: boolean): void {
     const live = crawler.gear.live;
     const heard = this.heardRunning[this.kindOf(crawler)];
     const at = this.bodyOf(crawler);
@@ -438,7 +478,7 @@ export class GearSystem implements GameSystem, GearWorld {
     if (live.vanished && !heard.vanished) {
       this.soundCues.push({ takes: GEAR_CUES.vanish, x: at.x, y: at.y });
     }
-    if (live.partnerLinked && !wasLinked) {
+    if (linkFormed) {
       this.soundCues.push({ takes: GEAR_CUES.partnerLink, x: at.x, y: at.y });
     }
     heard.lastStand = standing;
@@ -650,6 +690,16 @@ export class GearSystem implements GameSystem, GearWorld {
 
   // ── Drawing ─────────────────────────────────────────────────────────────
 
+  private relicFigure(crawler: Crawler): RelicFigure {
+    return {
+      x: crawler.x,
+      y: crawler.y,
+      depthY: crawler.depthY,
+      sortY: crawler.depthY + RELIC_SORT_FOOT_PX,
+      render: (ctx, camX, camY) => this.drawRelic(ctx, crawler, camX, camY),
+    };
+  }
+
   /** The relic trait a crawler has on, if any: one relic per crawler, so the first one found. */
   private relicOf(crawler: Crawler): {
     trait: GearTraitOf<'relic'>;
@@ -662,33 +712,68 @@ export class GearSystem implements GameSystem, GearWorld {
     return null;
   }
 
-  private easeRelicSides(): void {
+  private easeOuterSides(): void {
     const gap = this.human.x - this.cat.x;
     for (const [kind, awayFromPartner] of [
       ['human', Math.sign(gap)],
       ['cat', -Math.sign(gap)],
     ] as const) {
-      const target = Math.abs(gap) < RELIC_SWAP_GAP_PX ? this.keptSide(kind) : awayFromPartner;
-      this.relicSides[kind] += (target - this.relicSides[kind]) * RELIC_SIDE_EASE;
+      const target = Math.abs(gap) < SIDE_SWAP_GAP_PX ? this.keptSide(kind) : awayFromPartner;
+      this.outerSides[kind] += (target - this.outerSides[kind]) * SIDE_EASE;
     }
   }
 
   private keptSide(kind: CrawlerKind): number {
-    return this.relicSides[kind] >= 0 ? 1 : -1;
+    return this.outerSides[kind] >= 0 ? 1 : -1;
   }
 
   /** Where a crawler's relic floats this frame, in world pixels. */
   private relicPosition(crawler: Crawler): { x: number; y: number } {
+    const { x, y } = this.relicOrbit(crawler);
+    return { x, y };
+  }
+
+  /**
+   * Where a crawler's relic is on its lap round her this frame. `depthPx` is
+   * how far nearer the camera than her it is, on the floor plane: negative on
+   * the far half of the lap, where her body hides it.
+   */
+  private relicOrbit(crawler: Crawler): { x: number; y: number; depthPx: number } {
     const at = centreOf(crawler);
     const kind = this.kindOf(crawler);
-    // Each crawler's float runs half a beat from the other's, so the pair never bob in step.
-    const phase = crawler === this.human ? 0 : Math.PI;
-    const bob = Math.sin(this.frame * RELIC_BOB_RADIANS_PER_FRAME + phase) * RELIC_BOB_PX;
-    const drift = Math.sin(this.frame * RELIC_DRIFT_RADIANS_PER_FRAME + phase) * RELIC_DRIFT_PX;
+    const angle = this.frame * RELIC_ORBIT_RADIANS_PER_FRAME;
+    const depthPx = Math.sin(angle) * RELIC_ORBIT_RADIUS_Y_PX;
+    const bobPhase = RELIC_BOB_PHASE[kind];
+    const bob = Math.sin(this.frame * RELIC_BOB_RADIANS_PER_FRAME + bobPhase) * RELIC_BOB_PX;
     return {
-      x: at.x + this.relicSides[kind] * RELIC_SIDE_PX + drift,
-      y: at.y - RELIC_SHOULDER_RISE_PX[kind] + bob,
+      x: at.x + Math.cos(angle) * RELIC_ORBIT_RADIUS_X_PX,
+      y: at.y - RELIC_SHOULDER_RISE_PX[kind] + depthPx + bob,
+      depthPx,
     };
+  }
+
+  /**
+   * The worn relics as figures for a scene's Y-sorted pass, each sorting a
+   * little ahead of or behind its wearer by where it is on its lap: behind
+   * her on the far half, in front of her on the near half. `hides` is the
+   * scene's own test for a crawler it is not drawing, so a relic never circles
+   * a body the scene has taken out of the picture.
+   */
+  sortedRelics(hides: (crawler: Crawler) => boolean): readonly RelicFigure[] {
+    this.relicFigures.length = 0;
+    for (const crawler of [this.human, this.cat]) {
+      if (crawler.concealed || crawler.isAway || hides(crawler)) continue;
+      const relic = this.relicOf(crawler);
+      if (relic === null) continue;
+      const { depthPx } = this.relicOrbit(crawler);
+      const figure = this.relicFigureOf[this.kindOf(crawler)];
+      figure.x = crawler.x;
+      figure.y = crawler.y;
+      figure.depthY = crawler.depthY + depthPx;
+      figure.sortY = figure.depthY + RELIC_SORT_FOOT_PX;
+      this.relicFigures.push(figure);
+    }
+    return this.relicFigures;
   }
 
   private feetOf(crawler: Crawler): { x: number; y: number } {
@@ -749,7 +834,6 @@ export class GearSystem implements GameSystem, GearWorld {
     for (const crawler of [this.human, this.cat]) {
       if (crawler.concealed || crawler.isAway) continue;
       this.drawWearerMarks(ctx, crawler);
-      this.drawRelic(ctx, crawler);
       this.drawComboPips(ctx, crawler);
     }
     for (const wave of this.waves) {
@@ -789,7 +873,7 @@ export class GearSystem implements GameSystem, GearWorld {
         ctx,
         this.bodyOf(crawler),
         {
-          x: feet.x - this.relicSides[this.kindOf(crawler)] * RELIC_SIDE_PX,
+          x: feet.x + this.outerSides[this.kindOf(crawler)] * HOURGLASS_SIDE_PX,
           y: this.headTopOf(crawler) + HOURGLASS_DROP_PX,
         },
         this.lastStandSandLeft(crawler),
@@ -798,17 +882,25 @@ export class GearSystem implements GameSystem, GearWorld {
     }
   }
 
-  private drawRelic(ctx: CanvasRenderingContext2D, crawler: Crawler): void {
+  private drawRelic(
+    ctx: CanvasRenderingContext2D,
+    crawler: Crawler,
+    camX: number,
+    camY: number,
+  ): void {
     const relic = this.relicOf(crawler);
     if (relic === null) return;
-    const at = this.relicPosition(crawler);
+    const orbit = this.relicOrbit(crawler);
+    ctx.save();
+    ctx.translate(-camX, -camY);
     drawRelic(ctx, relic.trait.behaviour, {
-      x: at.x,
-      y: at.y,
-      groundY: this.feetOf(crawler).y,
+      x: orbit.x,
+      y: orbit.y,
+      groundY: this.feetOf(crawler).y + orbit.depthPx,
       frame: this.frame,
       ready: !relic.recharging,
     });
+    ctx.restore();
   }
 
   private drawBolt(ctx: CanvasRenderingContext2D, bolt: RelicBolt): void {

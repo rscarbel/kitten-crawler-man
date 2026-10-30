@@ -180,6 +180,25 @@ const STATUS_ORDER: Record<TrackerStatus, number> = {
   completed: 3,
 };
 
+/**
+ * Whether the party is on a quest: any line in `entries` is `active`, a quest
+ * started and not yet finished, failed or turned in. A quest merely on offer
+ * does not count, so the offers of the others quiet only once one is taken.
+ */
+export function anyQuestUnderway(entries: ReadonlyArray<TrackerEntry>): boolean {
+  return entries.some((entry) => entry.status === 'active');
+}
+
+/** {@link anyQuestUnderway} asked of the sources, for a scene that does not gather their lines. */
+export function anySourceQuestUnderway(
+  sources: ReadonlyArray<TrackerSource | null | undefined>,
+): boolean {
+  return sources.some(
+    (source) =>
+      source !== null && source !== undefined && anyQuestUnderway(source.trackerEntries()),
+  );
+}
+
 /** Whether a status counts toward the Journal button's badge number. */
 export function isOutstanding(status: TrackerStatus): boolean {
   return status === 'active' || status === 'available';

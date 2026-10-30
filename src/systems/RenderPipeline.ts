@@ -74,6 +74,7 @@ import {
   type WallFixture,
 } from '../map/dungeon/wallFixtures';
 import { drawWallFixture } from '../sprites/art/wallFixtureArt';
+import { drawActiveCrawlerRing } from '../ui/world/activeCrawlerRing';
 import type { ScriptedDeathSystem } from './scriptedDeath/ScriptedDeathSystem';
 
 /** Draw kind for decoration tiles. */
@@ -193,6 +194,12 @@ interface DrawEntry {
   waterlineScreenY: number | null;
   /** Screen x of the wader's centre; only meaningful when wading. */
   waterlineScreenX: number;
+  /**
+   * Half the width of the selection ring to lay on the water round a wading
+   * active crawler, or `null`. Her own ring lies at her feet, under the
+   * surface the body is cut at, so on the river it moves up to the waterline.
+   */
+  wadingRingRadiusPx: number | null;
 }
 
 /** Everything the render pipeline needs, provided by the scene each frame. */
@@ -232,8 +239,8 @@ export interface RenderContext {
   meleeFx: MeleeImpactEffectSystem;
   /** The Stormcaller's waves; drawn beside the chain lightning they throw. */
   stormcallerFx: Pick<StormcallerStrikeSystem, 'render'>;
-  /** Worn gear's relics, trails, arcs and marks. */
-  gearFx: Pick<GearSystem, 'render'>;
+  /** Worn gear's trails, arcs and marks, and the relics sorted in with the bodies they circle. */
+  gearFx: Pick<GearSystem, 'render' | 'sortedRelics'>;
   missileFx: MagicMissileImpactEffectSystem;
   globs: GlobProjectileSystem;
   rockThrows: RockThrowSystem;
@@ -327,6 +334,7 @@ export class RenderPipeline {
       // pooled entry that last held a wading player would otherwise hand a stale
       // clip to whatever decoration or mob reused the slot.
       pooled.waterlineScreenY = null;
+      pooled.wadingRingRadiusPx = null;
       return pooled;
     }
     const e: DrawEntry = {
@@ -338,6 +346,7 @@ export class RenderPipeline {
       chestRef: null,
       waterlineScreenY: null,
       waterlineScreenX: 0,
+      wadingRingRadiusPx: null,
     };
     this._drawPool.push(e);
     this._drawCount++;
@@ -619,6 +628,8 @@ export class RenderPipeline {
         ? player.y + TILE_SIZE - player.waterlineAboveFootPx - surfaceCamY
         : null;
       e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - surfaceCamX;
+      e.wadingRingRadiusPx =
+        e.waterlineScreenY !== null && player.isActive ? player.activeRingRadiusPx : null;
     }
 
     // Dave sorts with the crawlers rather than with the room he stands in, so
@@ -642,13 +653,7 @@ export class RenderPipeline {
 
     if (townsfolk !== undefined) {
       for (const person of townsfolk) {
-        if (
-          person.x < viewMinX ||
-          person.x > viewMaxX ||
-          person.y < viewMinY ||
-          person.y > viewMaxY
-        )
-          continue;
+        if (!person.overlapsView(camera)) continue;
         const e = this._getEntry();
         e.sortY = person.y + ENTITY_SORT_Y_OFFSET;
         e.kind = DRAW_KIND_TOWNSPERSON;
@@ -663,6 +668,9 @@ export class RenderPipeline {
     for (const prop of rc.bossRoomDressings.renderEntities()) this._pushPropEntry(prop, camera);
     for (const pickup of rc.groundPickups.renderEntities()) this._pushPropEntry(pickup, camera);
     for (const fixture of rc.sortedFixtures ?? []) this._pushPropEntry(fixture, camera);
+    const crawlerHidden = (crawler: HumanPlayer | CatPlayer): boolean =>
+      rc.isCrawlerHidden?.(crawler) === true;
+    for (const relic of rc.gearFx.sortedRelics(crawlerHidden)) this._pushPropEntry(relic, camera);
 
     // Sort only the active portion of the pool
     const items = this._drawPool;
@@ -701,6 +709,7 @@ export class RenderPipeline {
       // Wading: clip the body off at the surface and cap the cut with a
       // meniscus, so the crawler is *in* the river rather than standing on it.
       const waterlineScreenY = item.waterlineScreenY;
+      this._drawWadingRingHalf(ctx, camera, item, waterlineScreenY, 'far');
       ctx.save();
       try {
         ctx.beginPath();
@@ -712,8 +721,40 @@ export class RenderPipeline {
       }
       const surface = terrainAlignedCamera(camera);
       rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY, surface.x, surface.y);
+      this._drawWadingRingHalf(ctx, camera, item, waterlineScreenY, 'near');
     } else {
       item.entity?.render(ctx, camX, camY, TILE_SIZE);
+    }
+  }
+
+  /**
+   * One half of the selection ring on the water round a wading active
+   * crawler: the far half before the body, so the body stands in front of it,
+   * and the near half after, across the front of her.
+   */
+  private _drawWadingRingHalf(
+    ctx: CanvasRenderingContext2D,
+    camera: Camera,
+    item: DrawEntry,
+    waterlineScreenY: number,
+    half: 'far' | 'near',
+  ): void {
+    const radiusX = item.wadingRingRadiusPx;
+    if (radiusX === null) return;
+    ctx.save();
+    try {
+      ctx.beginPath();
+      if (half === 'far') ctx.rect(0, 0, camera.viewWidth, waterlineScreenY);
+      else ctx.rect(0, waterlineScreenY, camera.viewWidth, camera.viewHeight - waterlineScreenY);
+      ctx.clip();
+      drawActiveCrawlerRing(ctx, {
+        x: item.waterlineScreenX,
+        y: waterlineScreenY,
+        radiusX,
+        timeMs: Date.now(),
+      });
+    } finally {
+      ctx.restore();
     }
   }
 

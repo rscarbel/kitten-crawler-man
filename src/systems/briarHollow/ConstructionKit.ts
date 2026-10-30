@@ -78,7 +78,7 @@ import { ConvertedAllyController } from './ConvertedAllyController';
 import { resolveSiegeLevel } from './siegeLevel';
 import { partyLevelOf } from '../../levels/spawner';
 import { activeDifficultyProfile } from '../../core/difficulty/difficultyProfiles';
-import { drawOccludedCrawler } from './occludedCrawlers';
+import { drawOccludedCrawler } from '../occludedCrawlers';
 import { HOLLOW_GATE, HOLLOW_PALISADE } from '../../map/tileTypes';
 import {
   BUILD_OPTIONS,

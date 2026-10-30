@@ -1,6 +1,6 @@
 /**
- * What worn gear looks like in the world: the relics floating at a crawler's
- * shoulder and what they throw, claw swipes and slash waves, and the marks a
+ * What worn gear looks like in the world: the relics circling a crawler at
+ * shoulder height and what they throw, claw swipes and slash waves, and the marks a
  * trait leaves on its wearer while it runs.
  *
  * Every painter is a pure function of the state it is handed and a frame

@@ -20,7 +20,7 @@ import type { ToolTier } from '../../core/items/gathering/toolTiers';
 import type { SoldierOrder, VillageQuestState } from '../../core/quests/briarHollowState';
 import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import type { VillageUnlocks } from '../../core/quests/villageUnlocks';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { ConversationRequest } from '../../dialog/request';
 import type { VillagerConversationFlow } from './villagerTopics';
 
@@ -201,7 +201,7 @@ export interface OpeningLine {
 export interface QuestLineProvider {
   lineFor(villager: VillagerId, ctx: VillagerContext): QuestOpening | null;
   /** The glyph over a villager's head: what the questline has for the party there. Absent means none. */
-  markerFor?(villager: VillagerId, ctx: VillagerContext): NPCMarkerType;
+  markerFor?(villager: VillagerId, ctx: VillagerContext): NpcQuestMarker;
 }
 
 export interface QuestOpening {
@@ -236,7 +236,7 @@ export function firstQuestMarker(
   villager: VillagerId,
   ctx: VillagerContext,
   providers: readonly QuestLineProvider[],
-): NPCMarkerType {
+): NpcQuestMarker {
   for (const provider of providers) {
     const marker = provider.markerFor?.(villager, ctx) ?? 'none';
     if (marker !== 'none') return marker;

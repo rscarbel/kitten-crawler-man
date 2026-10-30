@@ -8,6 +8,9 @@
  * across as many pages as it takes and advancing walks them. The page count
  * depends on the screen, so it is worked out each frame. Any tap, Space,
  * Enter or the attack key reads on and the last page puts it down; Escape puts it down from anywhere.
+ *
+ * A readable on loose paper has its body written on a stack of that paper
+ * (`paperSheet`) under the title; the rest sit straight on the panel.
  */
 
 import type { Readable } from '../../../systems/townReadables';
@@ -75,6 +78,7 @@ export class ReadableOverlay {
       title: readable.title,
       overline: readable.where,
       body: paragraphs.join(PARAGRAPH_BREAK),
+      paper: readable.paper ?? undefined,
     });
     const groups: string[][] = [];
     let current: string[] = [];

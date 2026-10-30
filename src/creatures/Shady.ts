@@ -3,16 +3,15 @@ import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite';
+import type { NpcQuestMarker } from '../sprites/npcQuestMarker';
 import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  questMarkerTopY,
-  type QuestMarkerGlyph,
-  type QuestMarkerState,
-} from '../sprites/questNPCSprite';
+  IconAnchor,
+  drawOverheadIcon,
+  drawOverheadIconBeacon,
+  overheadIconTopY,
+} from '../sprites/overheadIcon';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
-import { drawQuestBeacon } from '../sprites/questBeacon';
 import { randomInt } from '../utils';
 
 /** He never fights and never dies; the HP exists only because every Mob has one. */
@@ -25,9 +24,6 @@ const SCRATCH_GAP_MAX_FRAMES = 720;
 
 /** Seconds of phase offset a second Shady would be desynced by. */
 const LOOP_OFFSET_SPREAD_SECONDS = 4;
-
-/** Which glyph floats over him, or none. Driven by `BountyProgress.phase`. */
-export type ShadyMarker = QuestMarkerState;
 
 /** Drawn only face-on, so in profile it still shows that face. */
 const SHADY_EYES: EyePlacement = {
@@ -61,7 +57,7 @@ export class Shady extends Mob {
   description = 'A hooded man who never quite looks at you, and never stops moving.';
 
   /** Set by the scene each frame from `BountyProgress.phase`. */
-  markerType: ShadyMarker = 'none';
+  markerType: NpcQuestMarker = 'none';
   /** Set by the scene while his dialog is open, so he leans in while he talks. */
   isTalking = false;
   /**
@@ -130,10 +126,7 @@ export class Shady extends Mob {
     const box = this.spriteBox(camX, camY, tileSize);
     // Beacon first, so the column stands behind him. It branches on the same
     // `markerType` his glyph does, so the two can never disagree.
-    const markerColor = questMarkerColorFor(this.markerType);
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
-    }
+    drawOverheadIconBeacon(ctx, box.sx, box.sy, box.s, camX, camY, this.markerType);
     // Talking wins over scratching, not the other way round. `updateAI` — the
     // only thing that advances the scratch — does not run while a dialog is
     // open, so a conversation started mid-tic would otherwise freeze him with
@@ -154,11 +147,10 @@ export class Shady extends Mob {
    * where a market stall drawn after him would cover it.
    */
   renderMarker(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const markerColor = questMarkerColorFor(this.markerType);
-    if (!this.isAlive || markerColor === undefined) return;
+    if (!this.isAlive || this.markerType === 'none') return;
     const box = this.spriteBox(camX, camY, tileSize);
-    const artTop = this.markerArtTop(box.sy, box.s);
-    drawQuestMarker(ctx, box.sx, artTop, box.s, this.markerGlyph, markerColor);
+    const anchor = IconAnchor.ofRow(this.drawnRow, box.sy, box.s);
+    drawOverheadIcon(ctx, box.sx, anchor, box.s, this.markerType);
   }
 
   /**
@@ -167,22 +159,18 @@ export class Shady extends Mob {
    */
   override overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
     const bodyTop = super.overheadTop(ctx, sy);
-    if (!this.isAlive || questMarkerColorFor(this.markerType) === undefined) return bodyTop;
-    const markerTop = questMarkerTopY(
+    if (!this.isAlive || this.markerType === 'none') return bodyTop;
+    const markerTop = overheadIconTopY(
       ctx,
       this.markerArtTop(sy, this.tileSize),
       this.tileSize,
-      this.markerGlyph,
+      this.markerType,
     );
     return Math.min(bodyTop, markerTop);
   }
 
   protected override rememberedArtTop(sy: number): number | null {
     return this.drawnRow === undefined ? null : figureRowInkTop(this.drawnRow, sy, this.tileSize);
-  }
-
-  private get markerGlyph(): QuestMarkerGlyph {
-    return this.markerType === 'question' ? '?' : '!';
   }
 
   /** The line his marker hangs over: the row his last body paint drew, or his tile's top before one. */

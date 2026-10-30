@@ -62,7 +62,7 @@ const { TutorialController } = await import('../src/systems/TutorialController.j
 const { noteFrameInputMode, resetInputMode } = await import('../src/ui/core/inputMode.js');
 const { worldPalette } = await import('../src/ui/theme/worldInk.js');
 
-type RenderContext = Parameters<InstanceType<typeof TutorialController>['renderOverlay']>[4];
+type RenderContext = Parameters<InstanceType<typeof TutorialController>['renderOverlay']>[3];
 type TutorialState = InstanceType<typeof TutorialController>['state'];
 
 interface Rect {
@@ -211,6 +211,9 @@ interface Viewpoint {
   readonly player: Point;
   readonly camera: Point;
 }
+/** Where the arrow over the crawler hangs plays no part in what this gate checks. */
+const VIEWER_OVERHEAD_TOP_ABOVE_TILE_PX = 0;
+
 const ORIGIN_VIEW: Viewpoint = { player: { x: 0, y: 0 }, camera: { x: 0, y: 0 } };
 
 function draw(
@@ -226,8 +229,11 @@ function draw(
   tutorial.renderOverlay(
     ctx,
     cameraAt(view.camera, UNZOOMED),
-    view.player.x,
-    view.player.y,
+    {
+      x: view.player.x,
+      y: view.player.y,
+      overheadTopAboveTilePx: VIEWER_OVERHEAD_TOP_ABOVE_TILE_PX,
+    },
     renderCtx,
   );
   return drawing;

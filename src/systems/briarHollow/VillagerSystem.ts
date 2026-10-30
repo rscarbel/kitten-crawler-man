@@ -31,7 +31,7 @@ import type { TilePoint } from '../../map/town/townPlan';
 import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
 import type { ShopSign } from '../../sprites/overheadIcon';
 import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
-import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { NpcQuestMarker } from '../../sprites/npcQuestMarker';
 import type { Conversation } from '../../dialog/Conversation';
 import type { BarkLine, DialogLine, NonEmpty } from '../../dialog/line';
 import type {
@@ -593,7 +593,7 @@ export class VillagerSystem {
     id: VillagerId,
     position: VillagerCrawler,
     soldierStance: SoldierStance | null,
-  ): NPCMarkerType {
+  ): NpcQuestMarker {
     if (this.questLines.length === 0) return 'none';
     return firstQuestMarker(id, this.contextFor(id, position, soldierStance), this.questLines);
   }

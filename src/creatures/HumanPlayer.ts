@@ -61,7 +61,6 @@ import {
   type HumanRowName,
   type ViewRows,
 } from '../sprites/art/humanFigure';
-import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { AbilityManager } from '../core/skills/AbilityManager';
 import { getSeismicStompStats } from '../abilities/seismicStomp';
 import {
@@ -111,11 +110,7 @@ import { humanSocketsAt } from '../sprites/art/human/sockets';
 import type { WorkingTool } from '../core/items/gathering/toolTiers';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { HumanLook } from '../sprites/looks/humanLook';
-import {
-  pauseOverheadMeasure,
-  reportOverheadTop,
-  resumeOverheadMeasure,
-} from '../ui/world/overheadStack';
+import { pauseOverheadMeasure, resumeOverheadMeasure } from '../ui/world/overheadStack';
 import {
   bareFistDamage,
   HUMAN_BASE_HP_OFFSET,
@@ -304,11 +299,8 @@ export class HumanPlayer extends Player {
   /** His spell and his healing sit under the first two number keys. */
   private static readonly TOME_HOTBAR_SLOT = 0;
   private static readonly POTION_HOTBAR_SLOT = 1;
-  private static readonly ACTIVE_SPHERE_RADIUS = 4;
-  /** Distance above the sprite so the sphere sits just below the health bar. */
-  private static readonly ACTIVE_SPHERE_GAP = 3;
-  /** Extra lift from the marker sphere's centre up to the health bar's anchor. */
-  private static readonly BAR_LIFT_ABOVE_SPHERE = 7;
+  /** Clearance from the top of his art up to the health bar's anchor. */
+  private static readonly BAR_LIFT_ABOVE_HEAD = 7;
   override get waterlineAboveFootPx(): number {
     return waistAboveFootPx(activeHumanLook());
   }
@@ -346,11 +338,19 @@ export class HumanPlayer extends Player {
   }
 
   /**
-   * The marker sphere and health bar are stacked from the top of his hair,
+   * His health bar is stacked from the top of his hair,
    * which sits where the look he is drawn as puts it.
    */
   private get spriteTopAboveTile(): number {
     return activeHumanLook().figureExtent.spriteTopAboveTilePx;
+  }
+
+  override get headTopAboveTilePx(): number {
+    return this.spriteTopAboveTile;
+  }
+
+  protected override get healthBarAnchorAboveTilePx(): number {
+    return this.spriteTopAboveTile + HumanPlayer.BAR_LIFT_ABOVE_HEAD;
   }
 
   protected override get statusMouth(): FigureMouth | null {
@@ -1367,14 +1367,6 @@ export class HumanPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    if (this.isActive && !this.paintingBodyOnly) {
-      const r = HumanPlayer.ACTIVE_SPHERE_RADIUS;
-      const sphereCX = sx + s * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
-      const sphereCY = sy - this.spriteTopAboveTile - HumanPlayer.ACTIVE_SPHERE_GAP - r;
-      reportOverheadTop(ctx, sphereCX, sphereCY - r);
-      drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
-    }
-
     this.dressInGear();
     const selection = this.spriteSelection();
     const held = this.heldDraw(selection);
@@ -1393,8 +1385,7 @@ export class HumanPlayer extends Player {
       }
     }
 
-    const healthBarAboveAnchor = this.spriteTopAboveTile + HumanPlayer.BAR_LIFT_ABOVE_SPHERE;
-    this.renderHealthBar(ctx, sx, sy - healthBarAboveAnchor);
+    this.renderHealthBar(ctx, sx, sy - this.healthBarAnchorAboveTilePx);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }
 }
