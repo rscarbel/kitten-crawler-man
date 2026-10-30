@@ -1,24 +1,25 @@
-import type { LevelId } from '../levels/levelIds';
 import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { StatId } from '../core/party/stats';
 import type { SkillId } from '../core/skills/SkillManager';
 import type { AbilityId } from '../core/skills/AbilityManager';
 import type { MobKind } from '../levels/mobKinds';
-import type { GauntletBossType } from '../map/bossRoomSizes';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
-import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { MercenaryTemplateId } from '../core/party/mercenaryTemplates';
 import type { PartyToolsState } from '../core/items/gathering/PartyTools';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { BlueprintsQuestPhase } from '../core/quests/blueprintsQuestPhase';
-import type { TownBuildingId, BriarHollowBuildingId } from '../map/buildingIds';
+import type { MissingCatsPhase } from '../core/quests/missingCatsProgress';
+import type { TownBuildingId, BriarHollowBuildingId, STORM_DRAIN_ID } from '../map/buildingIds';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/items/gathering/toolTiers';
 import { buyPrice } from '../economy/pricing';
 import { createShopStock } from '../economy/shopStock';
+import type { RunMilestone } from './playtestProgress';
 
 /**
- * Named starting points for playtesting, each one a floor plus the party that
- * should arrive on it. `npm run playtest -- <id>` opens the game straight into
+ * Named starting points for playtesting, each one a point in the run plus the
+ * party that should arrive there. The loadouts hold each preset's own kit —
+ * levels, stats, supplies, and any piece a preset exists to test; the gear a
+ * run picks up on the way is rolled on top of it at boot. `npm run playtest -- <id>` opens the game straight into
  * one; nothing here is reachable from a shipped build.
  *
  * Its value imports are kept to pure data and pricing modules so the npm
@@ -47,7 +48,10 @@ export type PlaytestSpawn =
   /** Just inside Briar Hollow's gate, on the main street. */
   | { readonly kind: 'briarHollowGate' }
   /** The street tile just south of a town building's door. */
-  | { readonly kind: 'townBuildingDoor'; readonly buildingId: TownBuildingId }
+  | {
+      readonly kind: 'townBuildingDoor';
+      readonly buildingId: TownBuildingId | typeof STORM_DRAIN_ID;
+    }
   /** On the threshold of a Briar Hollow building. */
   | { readonly kind: 'briarHollowBuilding'; readonly buildingId: BriarHollowBuildingId };
 
@@ -108,44 +112,44 @@ export interface PlaytestContractsSetup {
   readonly lastSpotAt?: BriarHollowBuildingId;
 }
 
-/** Deinonychus not yet earned, earned but waiting on a summon, or already out. */
-export type PlaytestDeinonychus = 'locked' | 'unlocked' | 'out';
-
 export interface PlaytestPreset {
   readonly id: string;
   /** Printed by the npm script when it lists what can be played. */
   readonly description: string;
-  readonly levelId: LevelId;
+  /**
+   * How far through the run the party is, which decides the floor, the story
+   * Dave and Caroline have told, the bosses already dead, the achievements
+   * earned and the gear the run has paid out on top of the loadouts below.
+   * See `playtestProgress.ts`.
+   */
+  readonly progress: RunMilestone;
   readonly spawn: PlaytestSpawn;
   /**
-   * Where Deinonychus stands on the first frame. He comes from the chest the
-   * `dungeon_kills_200` achievement awards, so a preset says whether the run
-   * it stands in for has earned him yet, and `out` puts him beside the cat
-   * rather than waiting on a summon.
+   * Deinonychus beside the cat on the first frame rather than waiting on a
+   * summon. Whether he has been earned at all follows from `progress`: he
+   * comes from the chest the `dungeon_kills_200` achievement awards.
    */
-  readonly deinonychus: PlaytestDeinonychus;
+  readonly deinonychusOut?: true;
   /** Applied to `Settings` before the floor is built. Omitted presets keep the player's own choice. */
   readonly difficulty?: Difficulty;
   /** Ability levels, shared by both crawlers through one AbilityManager. */
   readonly abilityLevels: Partial<Record<AbilityId, number>>;
   readonly human: PlaytestLoadout;
   readonly cat: PlaytestLoadout;
-  /**
-   * Boss types to skip spawning entirely and mark won before the first frame —
-   * for a preset that drops the party past a gauntlet gate it never fought.
-   * Its room seals shut on skip like any other win: revealed on the minimap,
-   * no chest guard, no hard-mode healer spawned for a boss that was never there.
-   */
-  readonly preDefeatedBossTypes?: readonly GauntletBossType[];
-  /**
-   * Drops the party into the doomsday finale at this stage, with a full
-   * countdown and the Krasue Murders closed behind it at the Lich's death.
-   */
-  readonly doomsdayStage?: Extract<DoomsdayStage, 'containment' | 'escape'>;
   /** Pest Control already taken up, Dr. Moult at his lab post waiting for the hack. */
   readonly spiderQuestAwaitingHacking?: boolean;
   /** A Barracks hire already under contract for this floor, standing beside the party. */
   readonly hire?: MercenaryTemplateId;
+  /**
+   * The storm-drain grate: `'open'` starts it unbolted, `'enter'` also drops
+   * the party straight down it on the first frame.
+   */
+  readonly stormDrain?: 'open' | 'enter';
+  /**
+   * "A Cat Always Comes Back" standing at the start of this phase, with
+   * everything an earlier phase leaves behind already done.
+   */
+  readonly missingCatsPhase?: MissingCatsPhase;
   /** The party put down on the circus grounds instead of at `spawn`. */
   readonly spawnAtCircus?: boolean;
   /**
@@ -180,8 +184,7 @@ export interface PlaytestPreset {
 const TRASH_GREMLIN: PlaytestPreset = {
   id: 'trash_gremlin',
   description: 'Safe room just before the Trash Gremlin',
-  levelId: 'level1',
-  deinonychus: 'locked',
+  progress: 'floor1_before_trash_gremlin',
   spawn: { kind: 'safeRoomBefore', bossType: 'trash_gremlin' },
   abilityLevels: { seismic_stomp: 3, magic_missile: 3, energy_shield: 3 },
   human: {
@@ -194,7 +197,6 @@ const TRASH_GREMLIN: PlaytestPreset = {
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 13 },
       { id: 'dynamite', quantity: 2 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
     ],
     bag: [{ id: 'smoke_bomb', quantity: 1 }],
   },
@@ -216,10 +218,8 @@ const TRASH_GREMLIN: PlaytestPreset = {
 const KRAKEN: PlaytestPreset = {
   id: 'kraken',
   description: 'Safe room just before the Kraken',
-  levelId: 'level1',
-  deinonychus: 'locked',
+  progress: 'floor1_before_kraken',
   spawn: { kind: 'safeRoomBefore', bossType: 'kraken' },
-  preDefeatedBossTypes: ['trash_gremlin'],
   abilityLevels: { seismic_stomp: 4, magic_missile: 4, energy_shield: 3 },
   human: {
     level: 11,
@@ -231,12 +231,8 @@ const KRAKEN: PlaytestPreset = {
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 17 },
       { id: 'dynamite', quantity: 6 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
     ],
-    bag: [
-      { id: 'smoke_bomb', quantity: 3 },
-      { id: 'scrapmail_vest', quantity: 1, equipped: true },
-    ],
+    bag: [{ id: 'smoke_bomb', quantity: 3 }],
   },
   cat: {
     level: 7,
@@ -256,8 +252,7 @@ const KRAKEN: PlaytestPreset = {
 const LEVEL2: PlaytestPreset = {
   id: 'level2',
   description: 'Start of the second floor',
-  levelId: 'level2',
-  deinonychus: 'unlocked',
+  progress: 'floor2_start',
   spawn: { kind: 'mapStart' },
   abilityLevels: { seismic_stomp: 5, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -270,15 +265,9 @@ const LEVEL2: PlaytestPreset = {
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 22 },
       { id: 'dynamite', quantity: 10 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
-      { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
       { id: 'smoke_bomb', quantity: 4 },
-      { id: 'scrapmail_vest', quantity: 1, equipped: true },
-      { id: 'patched_duster', quantity: 1, equipped: true },
-      { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'fire_axe', quantity: 1 },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -294,12 +283,7 @@ const LEVEL2: PlaytestPreset = {
       { id: 'health_potion', quantity: 28 },
       { id: 'scroll_of_entanglement', quantity: 7 },
     ],
-    bag: [
-      { id: 'dynamite', quantity: 7 },
-      { id: 'ink_dipped_claws', quantity: 1, equipped: true },
-      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'nimble_bangle', quantity: 1, equipped: true },
-    ],
+    bag: [{ id: 'dynamite', quantity: 7 }],
   },
 };
 
@@ -308,16 +292,15 @@ const ELECTRIC_GOBLIN: PlaytestPreset = {
   ...LEVEL2,
   id: 'electric_goblin',
   description: 'Safe room just before the Current Goblin',
+  progress: 'floor2_before_current_goblin',
   spawn: { kind: 'safeRoomBefore', bossType: 'electric_goblin' },
 };
 
 const BIG_ROOSTER: PlaytestPreset = {
   id: 'big_rooster',
   description: 'Safe room just before Big Rooster',
-  levelId: 'level2',
-  deinonychus: 'unlocked',
+  progress: 'floor2_before_big_rooster',
   spawn: { kind: 'safeRoomBefore', bossType: 'big_rooster' },
-  preDefeatedBossTypes: ['electric_goblin'],
   abilityLevels: { seismic_stomp: 6, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 17,
@@ -329,16 +312,10 @@ const BIG_ROOSTER: PlaytestPreset = {
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 31 },
       { id: 'dynamite', quantity: 24 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
       { id: 'smoke_bomb', quantity: 5 },
-      { id: 'scrapmail_vest', quantity: 1, equipped: true },
-      { id: 'patched_duster', quantity: 1, equipped: true },
-      { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'fire_axe', quantity: 1 },
-      { id: 'lineman_boots', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -354,12 +331,7 @@ const BIG_ROOSTER: PlaytestPreset = {
       { id: 'health_potion', quantity: 28 },
       { id: 'scroll_of_entanglement', quantity: 7 },
     ],
-    bag: [
-      { id: 'dynamite', quantity: 7 },
-      { id: 'ink_dipped_claws', quantity: 1, equipped: true },
-      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'nimble_bangle', quantity: 1, equipped: true },
-    ],
+    bag: [{ id: 'dynamite', quantity: 7 }],
   },
 };
 
@@ -371,10 +343,8 @@ const BIG_ROOSTER: PlaytestPreset = {
 const SPIDER: PlaytestPreset = {
   id: 'spider',
   description: "In the spider lab's station, Dr. Moult waiting at his terminal",
-  levelId: 'level2',
-  deinonychus: 'unlocked',
+  progress: 'floor2_past_current_goblin',
   spawn: { kind: 'spiderLabStation' },
-  preDefeatedBossTypes: ['electric_goblin'],
   spiderQuestAwaitingHacking: true,
   abilityLevels: { seismic_stomp: 6, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -387,16 +357,10 @@ const SPIDER: PlaytestPreset = {
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'dynamite', quantity: 14 },
       { id: 'health_potion', quantity: 34 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
       { id: 'smoke_bomb', quantity: 5 },
-      { id: 'scrapmail_vest', quantity: 1, equipped: true },
-      { id: 'patched_duster', quantity: 1, equipped: true },
-      { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'fire_axe', quantity: 1 },
-      { id: 'lineman_boots', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -412,20 +376,14 @@ const SPIDER: PlaytestPreset = {
       { id: 'health_potion', quantity: 28 },
       { id: 'scroll_of_entanglement', quantity: 7 },
     ],
-    bag: [
-      { id: 'dynamite', quantity: 7 },
-      { id: 'ink_dipped_claws', quantity: 1, equipped: true },
-      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'nimble_bangle', quantity: 1, equipped: true },
-    ],
+    bag: [{ id: 'dynamite', quantity: 7 }],
   },
 };
 
 const LEVEL3: PlaytestPreset = {
   id: 'level3',
   description: 'Third floor town',
-  levelId: 'level3',
-  deinonychus: 'unlocked',
+  progress: 'floor3_arrival',
   spawn: { kind: 'mapStart' },
   abilityLevels: { seismic_stomp: 7, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -438,17 +396,12 @@ const LEVEL3: PlaytestPreset = {
       { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'dynamite', quantity: 18 },
       { id: 'health_potion', quantity: 38 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'rattlestick_sling', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
       { id: 'smoke_bomb', quantity: 5 },
-      { id: 'scrapmail_vest', quantity: 1, equipped: true },
-      { id: 'patched_duster', quantity: 1, equipped: true },
-      { id: 'riot_kneeguards', quantity: 1, equipped: true },
-      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -466,10 +419,6 @@ const LEVEL3: PlaytestPreset = {
     ],
     bag: [
       { id: 'dynamite', quantity: 7 },
-      { id: 'cockscomb_crest', quantity: 1, equipped: true },
-      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
-      { id: 'plumed_coat', quantity: 1, equipped: true },
-      { id: 'nimble_bangle', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 1 },
     ],
   },
@@ -483,8 +432,7 @@ const LEVEL3: PlaytestPreset = {
 const GEAR: PlaytestPreset = {
   id: 'gear',
   description: 'Third floor town, both crawlers kitted in the enchanted gear',
-  levelId: 'level3',
-  deinonychus: 'unlocked',
+  progress: 'floor3_arrival',
   spawn: { kind: 'mapStart' },
   abilityLevels: { seismic_stomp: 7, magic_missile: 6, energy_shield: 3 },
   human: {
@@ -539,6 +487,7 @@ const GEAR: PlaytestPreset = {
  */
 const ANCHOR_SHARDS: PlaytestPreset = {
   ...LEVEL3,
+  progress: 'floor3_settled',
   id: 'anchor-shards',
   description: 'Third floor town, all three Anchor shards in hand (split across both crawlers)',
   human: {
@@ -558,26 +507,15 @@ const ANCHOR_SHARDS: PlaytestPreset = {
 /**
  * The far side of the questline: the stone assembled and on both hotbars, which
  * is where it lands on assembly. For testing the recall itself, not the errand.
- *
- * The human's row is written out rather than appended to `LEVEL3`'s: these
- * entries fill hotbar slots from zero, and a eighth one would land in the
- * reserved quest slot, where the next quest item picked up would overwrite it.
  */
 const ANCHOR_STONE: PlaytestPreset = {
   ...LEVEL3,
+  progress: 'floor3_settled',
   id: 'anchor-stone',
   description: "Third floor town, Wayfinder's Anchor already assembled on both hotbars",
   human: {
     ...LEVEL3.human,
-    hotbar: [
-      { id: 'seismic_stomp_tome', quantity: 1 },
-      { id: 'health_potion', quantity: 38 },
-      { id: 'dynamite', quantity: 18 },
-      { id: 'lucky_hoodie', quantity: 1, equipped: true },
-      { id: 'rattlestick_sling', quantity: 1 },
-      { id: 'gym_bench_press', quantity: 2 },
-      { id: 'wayfinders_anchor', quantity: 1 },
-    ],
+    hotbar: [...LEVEL3.human.hotbar, { id: 'wayfinders_anchor', quantity: 1 }],
   },
   cat: {
     ...LEVEL3.cat,
@@ -623,6 +561,7 @@ const NURSERY: PlaytestPreset = {
   ...KRAKEN,
   id: 'nursery',
   description: 'Inside the goblin mother’s nursery, between the Trash Gremlin and the Kraken',
+  progress: 'floor1_nursery',
   spawn: { kind: 'questRoomEntrance' },
 };
 
@@ -649,6 +588,7 @@ const PRISON: PlaytestPreset = {
   ...BIG_ROOSTER,
   id: 'prison',
   description: 'Stealth gate room past the Current Goblin, in front of the gate guard, gate locked',
+  progress: 'floor2_past_current_goblin',
   spawn: { kind: 'stealthGateRoom' },
 };
 
@@ -668,18 +608,6 @@ const FAIRIES: PlaytestPreset = {
 };
 
 /**
- * The countdown after the Lich, with the soul crystal not yet contained: the
- * escape stairwell by the tower door is showing and sealed, and the crystal
- * waits on the tower's top floor. Starts in the town square.
- */
-const DOOMSDAY_CONTAINMENT: PlaytestPreset = {
-  ...LEVEL3,
-  id: 'doomsday-containment',
-  description: 'Third floor town, post-Lich countdown running, soul crystal not yet contained',
-  doomsdayStage: 'containment',
-};
-
-/**
  * The town with both companions already out — Crush under contract and Deinonychus
  * at the cat's side — for walking them through shop doors, up the tower's
  * storeys and back out again.
@@ -690,8 +618,9 @@ const COMPANIONS_INDOORS: PlaytestPreset = {
   description:
     'Third floor town, a hire under contract and Deinonychus out, for taking both indoors',
   abilityLevels: { ...LEVEL3.abilityLevels, deinonychus: 5 },
+  progress: 'floor3_settled',
   hire: 'crush',
-  deinonychus: 'out',
+  deinonychusOut: true,
 };
 
 /** How many of each raw/refined resource the Briar Hollow preset starts with. */
@@ -706,6 +635,7 @@ const BRIAR_HOLLOW_STARTING_HAMBURGERS = 5;
  */
 const BRIAR_HOLLOW_KIT: PlaytestPreset = {
   ...LEVEL3,
+  progress: 'floor3_settled',
   id: 'briar-hollow-kit',
   description: 'Third floor town, starter tools and a Briar Hollow resource stockpile',
   toolTiers: { axeTier: TOOL_TIER_BASIC, pickaxeTier: TOOL_TIER_BASIC },
@@ -932,12 +862,6 @@ const CONTRACTS_PRESET_ROPE = 10;
 const CONTRACTS_PRESET_STONE = 50;
 
 const CONTRACTS_PRESET_TREADMILLS = 2;
-/**
- * The hotbar slot the HUD labels 7 (keys run 1 to 8 over indices 0 to 7). Not
- * the reserved quest slot, which is the eighth: the next quest item picked up
- * would overwrite the stone there.
- */
-const CONTRACTS_ANCHOR_HOTBAR_IDX = 6;
 
 /**
  * Outside Plumbline Farm with the Borrowed Blueprints finished, so Wendell
@@ -954,9 +878,7 @@ const CONTRACTS: PlaytestPreset = {
   human: {
     ...BRIAR_HOLLOW_VILLAGE.human,
     constructionLevel: BLUEPRINTS_PRESET_CONSTRUCTION,
-    hotbar: BRIAR_HOLLOW_VILLAGE.human.hotbar.map((stack, slotIdx) =>
-      slotIdx === CONTRACTS_ANCHOR_HOTBAR_IDX ? { id: 'wayfinders_anchor', quantity: 1 } : stack,
-    ),
+    hotbar: [...BRIAR_HOLLOW_VILLAGE.human.hotbar, { id: 'wayfinders_anchor', quantity: 1 }],
     bag: [
       ...withQuantities(BRIAR_HOLLOW_VILLAGE.human.bag, {
         wood_board: CONTRACTS_PRESET_BOARDS,
@@ -994,6 +916,7 @@ const THRALL_PRESET_CAT_RESOURCING = 15;
  */
 const RESOURCING_THRALLS: PlaytestPreset = {
   ...LEVEL3,
+  progress: 'floor3_settled',
   id: 'resourcing-thralls',
   description: 'Third floor town, long-haft tools, the human at Resourcing 10 and the cat at 15',
   toolTiers: { axeTier: TOOL_TIER_LONG_HAFT, pickaxeTier: TOOL_TIER_LONG_HAFT },
@@ -1028,7 +951,11 @@ const STORMCALLER: PlaytestPreset = {
   description: 'Start of the second floor, the Stormcaller in the hotbar',
   human: {
     ...LEVEL2.human,
-    hotbar: [...LEVEL2.human.hotbar, { id: 'stormcaller', quantity: 1 }],
+    hotbar: [
+      ...LEVEL2.human.hotbar,
+      { id: 'rattlestick_sling', quantity: 1 },
+      { id: 'stormcaller', quantity: 1 },
+    ],
   },
 };
 
@@ -1042,25 +969,21 @@ const SPIDER_HALLWAY: PlaytestPreset = {
 };
 
 /**
- * Floor 1 from its own start, with the `kraken` preset's party to survive what
- * comes, less the Trash Gremlin's drop, since he is still ahead of them.
+ * Floor 1 from its own start, with the `kraken` preset's levels and supplies to
+ * survive what comes, but only the gear a run has on arriving.
  */
 const LEVEL1: PlaytestPreset = {
   ...KRAKEN,
   id: 'level1',
-  description:
-    "Start of the first floor, the kraken preset's party without the Trash Gremlin's drop",
+  description: "Start of the first floor, the kraken preset's levels and supplies",
+  progress: 'floor1_start',
   spawn: { kind: 'mapStart' },
-  preDefeatedBossTypes: [],
-  human: {
-    ...KRAKEN.human,
-    bag: KRAKEN.human.bag.filter((stack) => stack.id !== 'scrapmail_vest'),
-  },
 };
 
-/** Floor 1 a few steps short of its stairwell, with the `kraken` preset's party, for watching a descent. */
+/** Floor 1 a few steps short of its stairwell, both bosses down, with the `kraken` preset's party, for watching a descent. */
 const STAIRWELL: PlaytestPreset = {
   ...KRAKEN,
+  progress: 'floor1_past_kraken',
   id: 'stairwell',
   description: "A few tiles short of the first floor's stairwell, the kraken preset's party",
   spawn: { kind: 'stairwellApproach' },
@@ -1082,6 +1005,95 @@ const CASINO_FLOOR: PlaytestPreset = {
   spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_nightclub' },
 };
 
+/**
+ * The tower drain under the Civic Terrace, with the questline at its sewer
+ * phase, so the party is split: Belle waits on her archive landing in the
+ * tower while the human and a hire climb straight down the storm-drain
+ * grate, the cellar elf waiting below to guide them to the tower cistern.
+ */
+const SEWER: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'sewer',
+  description:
+    'The human and a hire down the storm-drain grate, the cellar elf guiding; Belle on her archive landing',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_storm_drain' },
+  hire: 'crush',
+  stormDrain: 'enter',
+  missingCatsPhase: 'sewer',
+};
+
+/** "A Cat Always Comes Back" at the inn, before anyone has told the party. */
+const MISSING_CATS_HOOK: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_hook',
+  description: 'Outside the Sleeping Cat Inn, the innkeeper about to tell you her cat is gone',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_inn' },
+  missingCatsPhase: 'not_started',
+};
+
+/** The notices read, every owner and clue still to find. */
+const MISSING_CATS_INVESTIGATION: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_investigation',
+  description: 'Outside the Sleeping Cat Inn with the missing cats to look into',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_inn' },
+  missingCatsPhase: 'investigating',
+};
+
+/** Every clue in, the town blaming the elves. */
+const MISSING_CATS_CELLAR: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_cellar',
+  description: 'Outside Blackwood Lodge, Kessler waiting to show you the fur',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_garrison_lodge' },
+  missingCatsPhase: 'blame',
+};
+
+/** The cellar held; the last cat waits on the General Store's step at dusk. */
+const MISSING_CATS_STAKEOUT: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_stakeout',
+  description: 'Outside the General Store at dusk, the thief about to come for its cat',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_general_store' },
+  missingCatsPhase: 'stakeout',
+};
+
+/** The thief already away over the roofs with the cat. */
+const MISSING_CATS_CHASE: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_chase',
+  description: 'The winged shape taking off from the General Store, the chase on',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_general_store' },
+  missingCatsPhase: 'chase',
+};
+
+/** At the temple with the feather, Aviel to confess. */
+const MISSING_CATS_TEMPLE: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_temple',
+  description: 'Outside the Temple of the Sky with the grey feather, Aviel to confess',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_temple' },
+  missingCatsPhase: 'confession',
+  human: { ...LEVEL3.human, questSlot: { id: 'quest_grey_feather', quantity: 1 } },
+};
+
+/** The choice made; Dave to refuse the bait plan in the safe room. */
+const MISSING_CATS_BAIT: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_settled',
+  id: 'missing_cats_bait',
+  description: 'Outside the Sleeping Cat Inn, Dave to hear the bait plan',
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_inn' },
+  missingCatsPhase: 'bait',
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   TRASH_GREMLIN,
   KRAKEN,
@@ -1099,7 +1111,6 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   ANCHOR_STONE,
   CLUB_STAT_BOOST,
   FAIRIES,
-  DOOMSDAY_CONTAINMENT,
   COMPANIONS_INDOORS,
   BRIAR_HOLLOW_KIT,
   BRIAR_HOLLOW_VILLAGE,
@@ -1120,6 +1131,14 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   STAIRWELL,
   STARLIGHT_TENT,
   CASINO_FLOOR,
+  SEWER,
+  MISSING_CATS_HOOK,
+  MISSING_CATS_INVESTIGATION,
+  MISSING_CATS_CELLAR,
+  MISSING_CATS_STAKEOUT,
+  MISSING_CATS_CHASE,
+  MISSING_CATS_TEMPLE,
+  MISSING_CATS_BAIT,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

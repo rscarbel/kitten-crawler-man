@@ -179,8 +179,11 @@ export class MobUpdateLoop implements GameSystem {
     setAirspaceBodies(airspaceBodies);
 
     // Only activate mobs near players
-    const activeMobs = mobGrid.queryCircle(human.x, human.y, AI_RADIUS);
-    mobGrid.queryCircle(cat.x, cat.y, AI_RADIUS, activeMobs);
+    // Seeded from the steered crawler, who is always on this map; an away
+    // crawler's coordinates belong to another map and wake nothing here.
+    const lead = human.isAway ? cat : human;
+    const activeMobs = mobGrid.queryCircle(lead.x, lead.y, AI_RADIUS);
+    if (!cat.isAway && !human.isAway) mobGrid.queryCircle(cat.x, cat.y, AI_RADIUS, activeMobs);
 
     for (const mob of mobs) {
       if (!mob.isAlive || activeMobs.has(mob)) continue;
@@ -340,7 +343,7 @@ export class MobUpdateLoop implements GameSystem {
     this.players.length = 0;
     this.players.push(human, cat);
     for (const player of this.players) {
-      if (!player.isAlive || player.concealed) continue;
+      if (!player.isAlive || player.concealed || player.isAway) continue;
       for (const mob of this.separationMobs) {
         if (!mob.isAlive || !mob.displacesPlayers) continue;
         const dx = player.x - mob.x;
@@ -365,13 +368,14 @@ export class MobUpdateLoop implements GameSystem {
             dx * full * playerShare,
             dy * full * playerShare,
             gameMap,
+            player.mobility,
           );
           const mobOx = mob.x;
           const mobOy = mob.y;
           mob.applySeparation(-dx * full * mobShare, -dy * full * mobShare);
           if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
         } else {
-          pushPlayerWithCollision(player, dx * full, dy * full, gameMap);
+          pushPlayerWithCollision(player, dx * full, dy * full, gameMap, player.mobility);
         }
       }
     }

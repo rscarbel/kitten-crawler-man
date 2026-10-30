@@ -49,14 +49,12 @@ const { AcidLlama } = await import('../src/creatures/AcidLlama.js');
 const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
-const { MissQuill } = await import('../src/creatures/MissQuill.js');
 const { Lion } = await import('../src/creatures/Lion.js');
 const { Deinonychus } = await import('../src/creatures/Deinonychus.js');
 const { Necromancer } = await import('../src/creatures/Necromancer.js');
 const { RaisedRatkin } = await import('../src/creatures/RaisedRatkin.js');
 const { Rat } = await import('../src/creatures/Rat.js');
 const { RatkinSoldier } = await import('../src/creatures/RatkinSoldier.js');
-const { Remex } = await import('../src/creatures/Remex.js');
 const { RockGolem } = await import('../src/creatures/RockGolem.js');
 const { RuinsGhoul } = await import('../src/creatures/RuinsGhoul.js');
 const { SkeletonArcher } = await import('../src/creatures/SkeletonArcher.js');
@@ -197,13 +195,11 @@ function subjects(): Subject[] {
     beetleAt('larva', 'gravedigger larva'),
     beetleAt('pupa', 'gravedigger pupa'),
     beetleAt('adult', 'gravedigger beetle'),
-    unmarked(new Remex(...at), 'remex'),
     unmarked(new Hawkfolk(...at, HAWKFOLK_TOUGH_FAMILY.canonical), 'hawkfolk'),
     unmarked(new Wereboar(...at), 'wereboar'),
     unmarked(new TrashGremlin(...at), 'the Trash Gremlin'),
     unmarked(new SmallSpider(...at), 'small spider'),
     unmarked(new GrotesqueSpider(...at), 'grotesque spider'),
-    unmarked(new MissQuill(...at, () => undefined), 'Miss Quill'),
     unmarked(new Necromancer(...at, Math.random), 'necromancer'),
     unmarked(new BigRooster(...at), 'Big Rooster'),
     unmarked(drained(new Kraken(...at)), 'Kraken'),

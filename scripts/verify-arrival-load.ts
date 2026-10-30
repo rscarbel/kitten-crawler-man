@@ -30,7 +30,16 @@
 
 import { spawnSync } from 'node:child_process';
 
-const ENVIRONMENTS = ['tutorial', 'level1', 'level2', 'level3', 'interior', 'inn'] as const;
+const ENVIRONMENTS = [
+  'tutorial',
+  'level1',
+  'level2',
+  'level3',
+  'interior',
+  'inn',
+  'sewer',
+  'cistern',
+] as const;
 type Environment = (typeof ENVIRONMENTS)[number];
 
 function isEnvironment(value: string): value is Environment {
@@ -95,6 +104,11 @@ console.warn = (...args: unknown[]) => {
 const WORLD_SEED = 1;
 /** The town's one building with a safe room, whose counter is painted from dungeon ground. */
 const INN_ID = 'taloncrest_inn';
+const { STORM_DRAIN_ID, TOWN_TOWER_ID } = await import('../src/map/buildingIds.js');
+const { TOWER_CISTERN_STOREY } = await import('../src/map/GameMap.js');
+const { TOWER_CISTERN_ARRIVAL_TILE } = await import('../src/map/town/interiors/townCenterTower.js');
+const { TOWN_INTERIOR_FLOOR } = await import('../src/scenes/interiorFloorContext.js');
+const { createStarlightTentProgress } = await import('../src/core/state/StarlightTentProgress.js');
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
@@ -173,16 +187,27 @@ function buildScene(): Scene {
         audio,
       });
     case 'interior':
-    case 'inn': {
+    case 'inn':
+    case 'sewer':
+    case 'cistern': {
       const town = new GameMap({
         mapSize: level3.mapSize,
         tileHeight: TILE_SIZE,
         mapType: 'overworld',
         worldSeed: WORLD_SEED,
       });
-      const store = town.buildingEntries.find((entry) =>
-        environment === 'inn' ? entry.id === INN_ID : entry.type === 'store',
-      );
+      const store = town.buildingEntries.find((entry) => {
+        switch (environment) {
+          case 'inn':
+            return entry.id === INN_ID;
+          case 'sewer':
+            return entry.id === STORM_DRAIN_ID;
+          case 'cistern':
+            return entry.id === TOWN_TOWER_ID;
+          default:
+            return entry.type === 'store';
+        }
+      });
       if (store === undefined) throw new Error(`the town has no building for ${environment}`);
       const human = new HumanPlayer(0, 0, TILE_SIZE);
       const cat = new CatPlayer(1, 0, TILE_SIZE);
@@ -201,8 +226,11 @@ function buildScene(): Scene {
         undefined,
         audio,
         undefined,
-        undefined,
-        undefined,
+        {
+          starlightTent: createStarlightTentProgress(),
+          worldSeed: WORLD_SEED,
+          sewerGuided: environment === 'sewer',
+        },
         undefined,
         undefined,
         undefined,
@@ -213,6 +241,23 @@ function buildScene(): Scene {
         undefined,
         undefined,
         town.artSeed,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environment === 'cistern'
+          ? {
+              ...TOWN_INTERIOR_FLOOR,
+              arrival: {
+                storey: TOWER_CISTERN_STOREY,
+                tile: TOWER_CISTERN_ARRIVAL_TILE,
+                card: null,
+              },
+            }
+          : undefined,
       );
     }
   }
@@ -309,7 +354,12 @@ check(
   newMisses.length === 0,
   `sprite(s) drawn while still missing: ${newMisses.map(([key]) => key).join(', ')}`,
 );
-if (environment === 'interior' || environment === 'inn') {
+if (
+  environment === 'interior' ||
+  environment === 'inn' ||
+  environment === 'sewer' ||
+  environment === 'cistern'
+) {
   const heldOutside = new Set<string>(requiredSpriteKeysForLevel(level3.id, level3.spriteGroups));
   const missedIndoors = [...getSpriteMissCounts()].filter(
     ([key, count]) => count > (missesBeforeScene.get(key) ?? 0) && !heldOutside.has(key),

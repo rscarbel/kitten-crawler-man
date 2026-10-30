@@ -1006,7 +1006,7 @@ export class Necromancer extends Mob {
     if (map === null) return true;
     // Room to move as well as walkable: a single-tile gap between trunks is
     // walkable ground he could be sent to and never leave.
-    return map.isWalkableForHostile(tileX, tileY) && hasRoomToMove(map, tileX, tileY);
+    return map.isWalkableForHostile(tileX, tileY, 'walker') && hasRoomToMove(map, tileX, tileY);
   }
 
   /**
@@ -1088,6 +1088,7 @@ export class Necromancer extends Mob {
         here.y,
         anchor.x,
         anchor.y,
+        this.mobility,
         PROCESSION_PATH_SEARCH_TILES,
         true,
       ) ?? [];
@@ -1451,7 +1452,10 @@ export class Necromancer extends Mob {
     const near: SiegeTile[] = [];
     const far: SiegeTile[] = [];
     for (const tile of innerRaiseBandFor(site)) {
-      if (!map.isWalkableForHostile(tile.x, tile.y) || !map.isMobSpawnTile(tile.x, tile.y)) {
+      if (
+        !map.isWalkableForHostile(tile.x, tile.y, 'walker') ||
+        !map.isMobSpawnTile(tile.x, tile.y)
+      ) {
         continue;
       }
       if (!hasRoomToMove(map, tile.x, tile.y)) continue;
@@ -1475,7 +1479,7 @@ export class Necromancer extends Mob {
 
   private isRaiseGround(tileX: number, tileY: number): boolean {
     const map = this.map;
-    if (map !== null && !map.isWalkableForHostile(tileX, tileY)) return false;
+    if (map !== null && !map.isWalkableForHostile(tileX, tileY, 'walker')) return false;
     if (map !== null && !hasRoomToMove(map, tileX, tileY)) return false;
     const field = this.field;
     if (field !== null && !field.isOutsideBy(tileX, tileY, 1)) return false;
@@ -1708,7 +1712,7 @@ export class Necromancer extends Mob {
       for (let distance = NECRO_BLINK_MAX_TILES; distance >= NECRO_BLINK_MIN_TILES; distance--) {
         const tileX = Math.round(here.x + Math.cos(angle) * distance);
         const tileY = Math.round(here.y + Math.sin(angle) * distance);
-        if (map !== null && !map.isWalkableForHostile(tileX, tileY)) continue;
+        if (map !== null && !map.isWalkableForHostile(tileX, tileY, 'walker')) continue;
         if (map !== null && !hasRoomToMove(map, tileX, tileY)) continue;
         if (field !== null && !field.isOutsideBy(tileX, tileY, NECRO_MIN_WALL_DISTANCE_TILES)) {
           continue;

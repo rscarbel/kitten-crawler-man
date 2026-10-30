@@ -134,7 +134,7 @@ const context: SystemContext = {
   human,
   cat,
   active: human,
-  inactive: cat,
+  partner: cat,
   activeIsMoving: false,
   roster,
   gameMap,

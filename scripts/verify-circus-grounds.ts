@@ -180,7 +180,8 @@ function unclaimedOpenTile(site: CircusSite): TilePoint | null {
   for (const tile of site.roadRoute) claimed.add(`${tile.x},${tile.y}`);
   return (
     discTiles(site).find(
-      (tile) => !claimed.has(`${tile.x},${tile.y}`) && site.map.isWalkable(tile.x, tile.y),
+      (tile) =>
+        !claimed.has(`${tile.x},${tile.y}`) && site.map.isWalkable(tile.x, tile.y, 'walker'),
     ) ?? null
   );
 }

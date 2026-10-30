@@ -39,7 +39,19 @@ export interface UnitFrameModel {
   readonly status: readonly StatusPillModel[];
   /** Unspent skill points; a `+N` badge on the level disc while above zero. */
   readonly skillPoints: number;
+  /**
+   * `away` while the party is split and this crawler is on another map: the
+   * card stays in the roster, greyed, with an away tag on the portrait.
+   */
+  readonly presence: CrawlerPresence;
+  /**
+   * Something only this crawler perceives is within their reach: the portrait
+   * wears a breathing sense ring, so the player knows to switch to them.
+   */
+  readonly senseCue: boolean;
 }
+
+export type CrawlerPresence = 'here' | 'away';
 
 export interface CoinModel {
   /** What the pill reads: the party's purse minus coins still in flight to it. */

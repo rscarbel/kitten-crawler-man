@@ -66,8 +66,8 @@ export function blueprintsEvictionBark(
 /**
  * Has the running scene's crawlers remark on this quest's items being
  * evicted. Wired by every scene that forwards evictions onto its bus, as the
- * eviction can come from a quest anywhere — the doomsday crystal is contained
- * in the tower, well away from Briar Hollow. Returns the unsubscribe.
+ * eviction can come from a quest item granted anywhere, well away from Briar
+ * Hollow. Returns the unsubscribe.
  */
 export function barkWhenBlueprintsItemEvicted(
   bus: EventBus,

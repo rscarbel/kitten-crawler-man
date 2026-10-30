@@ -13,9 +13,17 @@ import { getMercenaryTemplate, type MercenaryTemplateId } from './mercenaryTempl
  * There is one contract slot; `active` is a single field rather than a list
  * only because nothing yet lets two hires walk together.
  */
+/**
+ * How a contract was signed: paid for at the desk, or lent free for the
+ * party's way under the tower, which ends when the Warden does.
+ */
+export const MERCENARY_CONTRACT_TERMS = ['paid', 'tower_loan'] as const;
+export type MercenaryContractTerms = (typeof MERCENARY_CONTRACT_TERMS)[number];
+
 export interface HiredMercenary {
   id: MercenaryTemplateId;
   name: string;
+  terms: MercenaryContractTerms;
   /** The floor the contract was signed on. It ends the moment the party is anywhere else. */
   contractLevelId: string;
   /** Set once the hire has said hello, so walking out of a shop does not repeat it. */
@@ -35,6 +43,8 @@ export interface MercenaryRoster {
    * and her reminder that the fee is not coming back.
    */
   lastDeceased: string | null;
+  /** Whether the desk has already lent this run its one tower loan. */
+  towerLoanSigned: boolean;
   /**
    * The floor the party is standing on, stamped by each `DungeonScene` as it is
    * built. Not part of any snapshot: it describes where the roster is being
@@ -54,7 +64,7 @@ export interface MercenaryRoster {
 }
 
 export function createMercenaryRoster(): MercenaryRoster {
-  return { active: null, lastDeceased: null, floorLevelId: null };
+  return { active: null, lastDeceased: null, towerLoanSigned: false, floorLevelId: null };
 }
 
 /**
@@ -68,6 +78,7 @@ export function createMercenaryRoster(): MercenaryRoster {
 export interface MercenaryRosterCheckpoint {
   active: HiredMercenary | null;
   lastDeceased: string | null;
+  towerLoanSigned: boolean;
 }
 
 /**
@@ -87,7 +98,11 @@ function copyHire(hired: HiredMercenary | null): HiredMercenary | null {
 
 /** The hire itself is copied, not shared: one snapshot is restored many times. */
 export function captureMercenaryRoster(roster: MercenaryRoster): MercenaryRosterCheckpoint {
-  return { active: copyHire(roster.active), lastDeceased: roster.lastDeceased };
+  return {
+    active: copyHire(roster.active),
+    lastDeceased: roster.lastDeceased,
+    towerLoanSigned: roster.towerLoanSigned,
+  };
 }
 
 /**
@@ -113,4 +128,5 @@ export function restoreMercenaryRoster(
   const hired = copyHire(snapshot.active);
   roster.active = hired !== null && contractIsCurrent(roster, hired) ? hired : null;
   roster.lastDeceased = snapshot.lastDeceased;
+  roster.towerLoanSigned = snapshot.towerLoanSigned;
 }

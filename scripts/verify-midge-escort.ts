@@ -409,7 +409,8 @@ function openTileAway(map: GameMap, from: TilePoint, tiles: number): TilePoint |
   for (const direction of directions) {
     let clear = true;
     for (let i = 1; i <= Math.ceil(tiles); i++) {
-      if (!map.isWalkable(from.x + direction.x * i, from.y + direction.y * i)) clear = false;
+      if (!map.isWalkable(from.x + direction.x * i, from.y + direction.y * i, 'walker'))
+        clear = false;
     }
     if (clear) {
       return {
@@ -446,7 +447,7 @@ function distanceField(map: GameMap, goal: TilePoint): Int32Array {
       const ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
       const next = ny * size + nx;
-      if (field[next] !== -1 || !map.isWalkable(nx, ny)) continue;
+      if (field[next] !== -1 || !map.isWalkable(nx, ny, 'walker')) continue;
       field[next] = field[index] + 1;
       queue[tail++] = next;
     }
@@ -465,7 +466,7 @@ function stepToward(map: GameMap, body: Player, tx: number, ty: number, speed: n
   const nextY = body.y + (dy / distance) * stepPx;
   const standable = (x: number, y: number): boolean => {
     const tile = tileOf({ x, y });
-    return map.isWalkable(tile.x, tile.y);
+    return map.isWalkable(tile.x, tile.y, 'walker');
   };
   if (standable(nextX, body.y)) body.x = nextX;
   if (standable(body.x, nextY)) body.y = nextY;
@@ -944,7 +945,15 @@ function runEscort(
         furthestSpawnTiles = Math.max(furthestSpawnTiles, tilesBetween(mob, after));
         const from = tileOf(mob);
         const to = tileOf(after);
-        const walk = map.findPath(from.x, from.y, to.x, to.y, SPAWN_WALK_BUDGET_TILES, true);
+        const walk = map.findPath(
+          from.x,
+          from.y,
+          to.x,
+          to.y,
+          'walker',
+          SPAWN_WALK_BUDGET_TILES,
+          true,
+        );
         if (walk.length === 0) spawnsCutOff++;
       }
       spawns++;
@@ -1235,8 +1244,8 @@ function walkOverTile(rig: SiegeRig, from: TilePoint, tiles: number): TilePoint 
       const y = from.y + dy;
       const distance = Math.hypot(dx, dy);
       if (distance < tiles || distance > reach) continue;
-      if (!map.isWalkable(x, y) || inPaddock(x, y)) continue;
-      const walk = map.findPath(from.x, from.y, x, y, tiles * 2);
+      if (!map.isWalkable(x, y, 'walker') || inPaddock(x, y)) continue;
+      const walk = map.findPath(from.x, from.y, x, y, 'walker', tiles * 2);
       if (walk.length > 0 && walk.length <= tiles * 2) return { x, y };
     }
   }

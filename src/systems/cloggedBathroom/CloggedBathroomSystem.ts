@@ -608,7 +608,14 @@ export class CloggedBathroomSystem
   private routeTo(goblin: BathroomGoblin, goal: Point): void {
     const fromX = Math.round(goblin.x / TILE_SIZE);
     const fromY = Math.round(goblin.y / TILE_SIZE);
-    const path = this.deps.gameMap.findPath(fromX, fromY, goal.x, goal.y, GOBLIN_ROUTE_MAX_TILES);
+    const path = this.deps.gameMap.findPath(
+      fromX,
+      fromY,
+      goal.x,
+      goal.y,
+      'walker',
+      GOBLIN_ROUTE_MAX_TILES,
+    );
     if (path.length === 0) {
       this.moveGoblin(goblin, () => goblin.placeAtTile(goal));
       return;

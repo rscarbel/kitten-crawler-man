@@ -114,6 +114,11 @@ export function buildRustyAnvilLayout(
   const slackTubCol = forgeCol + FORGE_WIDTH;
   const toolWallCol = slackTubCol + 1;
   const eastWindowCol = toolWallCol + TOOL_WALL_WIDTH;
+  const windowRow = northRow - 1;
+  // The corner under the west window is walled in by the bar stock and the
+  // stock barrels, so it holds the shop broom rather than a floor tile
+  // nobody can reach.
+  const cornerBroomCol = westCol;
 
   // ── The working triangle ─────────────────────────────────────────────────
   // The quench trough sits against the forge's east flank on the hearth
@@ -151,13 +156,14 @@ export function buildRustyAnvilLayout(
   );
 
   entries.push(
-    prop(westCol, northRow, 'window_dressing'),
+    prop(westCol, windowRow, 'window_dressing'),
+    prop(cornerBroomCol, northRow, 'broom'),
     prop(barStockCol, northRow, 'bar_stock'),
     prop(bellowsCol, northRow, 'smith_bellows', 0, contractTarget(CONTRACT_SITE, 'bellows')),
     prop(forgeCol, northRow, 'forge', 0, contractTarget(CONTRACT_SITE, 'forge')),
     statefulProp(slackTubCol, northRow, 'slack_tub', 'slack_tub'),
     prop(toolWallCol, northRow, 'smith_tool_wall', 0, contractTarget(CONTRACT_SITE, 'tool_wall')),
-    prop(eastWindowCol, northRow, 'window_dressing'),
+    prop(eastWindowCol, windowRow, 'window_dressing'),
     prop(coalHeapCol, coalHeapRow, 'coal_heap'),
     prop(quenchCol, quenchRow, 'quench_trough', 0, contractTarget(CONTRACT_SITE, 'quench')),
     prop(anvilCol, anvilRow, 'anvil'),

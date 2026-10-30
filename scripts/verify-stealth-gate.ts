@@ -184,7 +184,7 @@ function reachableTiles(
   const key = (point: Point): number => tileIndex(point.x, point.y, size);
   const solidKeys = new Set(solid.map(key));
   const isOpen = (point: Point): boolean =>
-    gameMap.isWalkable(point.x, point.y) &&
+    gameMap.isWalkable(point.x, point.y, 'walker') &&
     !solidKeys.has(key(point)) &&
     !closed.some((rect) => rectContains(rect, point));
   const seen = new Set<number>();
@@ -297,7 +297,7 @@ function verifyRoomShape(gameMap: GameMap, room: StealthGateRoomData, label: str
         ? { x: bounds.x - 1, y: bounds.y }
         : spot;
     check(
-      rectContains(bounds, tile) && gameMap.isWalkable(tile.x, tile.y),
+      rectContains(bounds, tile) && gameMap.isWalkable(tile.x, tile.y, 'walker'),
       `${label}: ${name}'s waiting spot (${tile.x},${tile.y}) is not open floor in the room`,
     );
   }
@@ -320,7 +320,10 @@ function roomsJoinedTo(gameMap: GameMap, bounds: Rect): Rect[] {
     for (const tile of doorway.tiles) {
       for (const step of STEPS) {
         const next = { x: tile.x + step.x, y: tile.y + step.y };
-        if (rectContains(bounds, next) || !gameMap.isWalkableIgnoringPuzzleChokes(next.x, next.y))
+        if (
+          rectContains(bounds, next) ||
+          !gameMap.isWalkableIgnoringPuzzleChokes(next.x, next.y, 'walker')
+        )
           continue;
         queue.push(next);
       }
@@ -339,7 +342,10 @@ function roomsJoinedTo(gameMap: GameMap, bounds: Rect): Rect[] {
     }
     for (const step of STEPS) {
       const next = { x: tile.x + step.x, y: tile.y + step.y };
-      if (rectContains(bounds, next) || !gameMap.isWalkableIgnoringPuzzleChokes(next.x, next.y))
+      if (
+        rectContains(bounds, next) ||
+        !gameMap.isWalkableIgnoringPuzzleChokes(next.x, next.y, 'walker')
+      )
         continue;
       queue.push(next);
     }
@@ -378,8 +384,8 @@ function verifyDoorAndSign(
   const columnsTo = door.x0 + PRISON_DOOR_WIDTH_TILES - 1 + PRISON_DOOR_SIDE_FACE_TILES;
   for (let x = columnsFrom; x <= columnsTo; x++) {
     check(
-      !gameMap.isWalkable(x, bounds.y - 1) &&
-        !gameMap.isWalkable(x, bounds.y - 2) &&
+      !gameMap.isWalkable(x, bounds.y - 1, 'walker') &&
+        !gameMap.isWalkable(x, bounds.y - 2, 'walker') &&
         x >= bounds.x &&
         x < bounds.x + bounds.w,
       `${label}: column ${x} of the door's wall is not plain north wall face`,
@@ -387,7 +393,9 @@ function verifyDoorAndSign(
   }
   for (const tile of door.approachTiles) {
     check(
-      tile.y === bounds.y && rectContains(bounds, tile) && gameMap.isWalkable(tile.x, tile.y),
+      tile.y === bounds.y &&
+        rectContains(bounds, tile) &&
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
       `${label}: the door approach (${tile.x},${tile.y}) is not open floor on the room's top row`,
     );
     const clearance = Math.min(...doorwayTiles.map((other) => chebyshev(tile, other)));
@@ -414,7 +422,7 @@ function verifyDoorAndSign(
     sign.y === bounds.y - 1 &&
     (sign.x === door.x0 - 1 || sign.x === door.x0 + PRISON_DOOR_WIDTH_TILES);
   check(
-    sign !== undefined && besideDoor && !gameMap.isWalkable(sign.x, sign.y),
+    sign !== undefined && besideDoor && !gameMap.isWalkable(sign.x, sign.y, 'walker'),
     `${label}: the sign is not on the wall face beside the door`,
   );
   check(
@@ -462,7 +470,7 @@ function verifyPastSafeRoomIgnoresGate(gameMap: GameMap, label: string): void {
       ? new Proxy(gameMap, {
           get(target, property) {
             if (property === 'isWalkableIgnoringPuzzleChokes') {
-              return (x: number, y: number): boolean => target.isWalkable(x, y);
+              return (x: number, y: number): boolean => target.isWalkable(x, y, 'walker');
             }
             return Reflect.get(target, property, target);
           },
@@ -538,7 +546,7 @@ function verifyFloor(run: number): void {
   );
   for (const tile of room.gateTiles) {
     check(
-      !gameMap.isWalkable(tile.x, tile.y),
+      !gameMap.isWalkable(tile.x, tile.y, 'walker'),
       `${label}: gate tile (${tile.x},${tile.y}) is walkable while locked`,
     );
     check(
@@ -561,7 +569,7 @@ function verifyFloor(run: number): void {
   setGate(gameMap, 'open');
   for (const tile of room.gateTiles) {
     check(
-      gameMap.isWalkable(tile.x, tile.y),
+      gameMap.isWalkable(tile.x, tile.y, 'walker'),
       `${label}: gate tile (${tile.x},${tile.y}) stayed shut once open`,
     );
     check(
@@ -583,7 +591,7 @@ function verifyFloor(run: number): void {
   gameMap.restoreCheckpoint(openSnapshot);
   check(
     gameMap.stealthGateState() === 'open' &&
-      room.gateTiles.every((tile) => gameMap.isWalkable(tile.x, tile.y)),
+      room.gateTiles.every((tile) => gameMap.isWalkable(tile.x, tile.y, 'walker')),
     `${label}: restoring a checkpoint taken after the gate opened shut it again`,
   );
   gameMap.restoreCheckpoint(lockedSnapshot);

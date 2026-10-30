@@ -679,7 +679,13 @@ function findHallwayEscortTile(
       map.regionAt(tileX, tileY) === segment &&
       !inStartMargin(tileX, tileY) &&
       !keepClear.some((tile) => tile.x === tileX && tile.y === tileY) &&
-      map.hasWalkableLine(tileCentre(x), tileCentre(y), tileCentre(tileX), tileCentre(tileY)),
+      map.hasWalkableLine(
+        tileCentre(x),
+        tileCentre(y),
+        tileCentre(tileX),
+        tileCentre(tileY),
+        'walker',
+      ),
     random,
   );
 }
@@ -705,7 +711,13 @@ function findOverworldEscortTile(
       map.isMobSpawnTile(tileX, tileY) &&
       isOverworldSpawnTileAllowed(map, tileX, tileY) &&
       (terrain === undefined || map.isSpawnTerrainTile(tileX, tileY, terrain)) &&
-      map.hasWalkableLine(tileCentre(x), tileCentre(y), tileCentre(tileX), tileCentre(tileY)),
+      map.hasWalkableLine(
+        tileCentre(x),
+        tileCentre(y),
+        tileCentre(tileX),
+        tileCentre(tileY),
+        'walker',
+      ),
     random,
   );
 }

@@ -42,7 +42,7 @@ export function floodDungeonTile(cell: TileContent, depth: number): void {
     cell.waterDepth = depth;
     return;
   }
-  if (cell.type === FloorTypeValue.water || !isWalkableTileType(cell)) {
+  if (cell.type === FloorTypeValue.water || !isWalkableTileType(cell, 'walker')) {
     throw new Error(`cannot flood tile ${cell.tileId}: it is not dry walkable floor`);
   }
   cell.drainsTo = { type: cell.type, groundType: cell.groundType };

@@ -3,7 +3,7 @@
  *
  * One mutable object created by the overworld `DungeonScene` and threaded by
  * reference through every scene reconstruction, for the same reason
- * `BountyProgress` and `MurderQuestProgress` are. Entering a building replaces
+ * `BountyProgress` and `AnchorQuestProgress` are. Entering a building replaces
  * the scene outright and the exit callback builds a fresh one, so anything held
  * on the scene alone is re-created empty on the way back out — which would
  * quietly unpin whatever they were following every time they left a shop.

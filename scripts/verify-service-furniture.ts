@@ -162,7 +162,9 @@ function rigFor(tileType: number): Rig {
 }
 
 function footprintOpen(rig: Rig): boolean {
-  return rig.footprint.every((tile) => isWalkableTileType(rig.gameMap.structure[tile.y][tile.x]));
+  return rig.footprint.every((tile) =>
+    isWalkableTileType(rig.gameMap.structure[tile.y][tile.x], 'walker'),
+  );
 }
 
 function breakWithBlows(rig: Rig, hp: number): void {
@@ -302,7 +304,7 @@ function blastDamageAt(tilesAway: number): number {
     human: players.human,
     cat: players.cat,
     active: players.active(),
-    inactive: players.inactive(),
+    partner: players.presentPartner(),
     activeIsMoving: false,
     roster,
     gameMap,

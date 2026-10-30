@@ -352,7 +352,7 @@ function workableSpots(types: ReadonlySet<number>, limit: number): Spot[] {
       for (const [dx, dy] of NEIGHBOURS) {
         const sx = tx + dx;
         const sy = ty + dy;
-        if (!gameMap.isWalkable(sx, sy) || used.has(`${sx},${sy}`)) continue;
+        if (!gameMap.isWalkable(sx, sy, 'walker') || used.has(`${sx},${sy}`)) continue;
         // Keep every stand clear of any other node, so a crawler there can only mean this one.
         const crowded = NEIGHBOURS.some(
           ([ox, oy]) =>
@@ -507,7 +507,7 @@ function isSolidInTheWay(point: GlidePoint, from: TileRef, to: TileRef): boolean
   const tileY = Math.floor(point.y / TILE_SIZE + TILE_CENTRE);
   const isEnd =
     (tileX === from.tileX && tileY === from.tileY) || (tileX === to.tileX && tileY === to.tileY);
-  return !isEnd && !gameMap.isWalkable(tileX, tileY);
+  return !isEnd && !gameMap.isWalkable(tileX, tileY, 'walker');
 }
 
 /**
@@ -595,7 +595,7 @@ function contextFor(rig: Rig, active: HumanPlayer | CatPlayer): SystemContext {
     human: rig.human,
     cat: rig.cat,
     active,
-    inactive,
+    partner: inactive,
     activeIsMoving: false,
     roster: rig.roster,
     gameMap,
@@ -825,7 +825,7 @@ section('Depletion rewrites the tiles');
   rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL, BASE_HARVEST_WORK);
   check(
     harvestKindAt(gameMap, rock.tileX, rock.tileY) === null &&
-      gameMap.isWalkable(rock.tileX, rock.tileY),
+      gameMap.isWalkable(rock.tileX, rock.tileY, 'walker'),
     `a rock worked ${rockCapacity} times crumbles to walkable ground`,
   );
   rig.ledger.restoreCheckpoint(checkpoint);
@@ -1221,7 +1221,7 @@ function barrenSpot(kind: HarvestKind): { x: number; y: number } | null {
   const structure = gameMap.structure;
   for (let ty = RADIUS; ty < structure.length - RADIUS; ty += 3) {
     for (let tx = RADIUS; tx < structure[ty].length - RADIUS; tx += 3) {
-      if (!gameMap.isWalkable(tx, ty)) continue;
+      if (!gameMap.isWalkable(tx, ty, 'walker')) continue;
       let any = false;
       for (let dy = -RADIUS; dy <= RADIUS && !any; dy++) {
         for (let dx = -RADIUS; dx <= RADIUS && !any; dx++) {
@@ -1442,7 +1442,7 @@ section("Concurrent harvesting: The human starting his own never stops the cat's
       const sx = spot.tileX + dx;
       const sy = spot.tileY + dy;
       if (sx === spot.standX && sy === spot.standY) continue;
-      if (!gameMap.isWalkable(sx, sy)) continue;
+      if (!gameMap.isWalkable(sx, sy, 'walker')) continue;
       if (!onlyNodeNear(sx, sy, spot.tileX, spot.tileY)) continue;
       return { x: sx, y: sy };
     }

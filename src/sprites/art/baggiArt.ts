@@ -11,9 +11,6 @@
  * composition from the solved skeleton so they follow the pose and share its
  * silhouette outline (see `wendellAttachments.ts` for why a garment laid over
  * the finished figure reads as a sticker). `baggiFigure.ts` composes them.
- *
- * The corpse in `baggiCorpseArt.ts` quotes this palette, so the body found in
- * the alley is visibly the same woman.
  */
 
 import type { BipedAttachments } from './biped/figure';

@@ -20,6 +20,7 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import type { QuestRewardSpec } from '../src/ui/questReward/types.js';
 import type { Density } from '../src/ui/theme/tokens.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem.js';
 
 useDevPlayerIdentity();
 
@@ -70,7 +71,7 @@ const VIEWPORTS: readonly Viewport[] = [
  * the real one; the cat's is lower as if she were further along her XP curve.
  */
 const SAMPLE_ANCHOR_XP = { human: 600, cat: 540 } as const;
-const SAMPLE_MURDER_XP = { human: 800, cat: 800 } as const;
+const SAMPLE_XP_ONLY = { human: 800, cat: 800 } as const;
 const SAMPLE_DEFEND_XP = { human: 500, cat: 450 } as const;
 const SAMPLE_PLEA_XP = { human: 2000, cat: 1934 } as const;
 const SAMPLE_POTION_COUNT = 3;
@@ -103,7 +104,7 @@ function anchorEveryDestinationSpec(): QuestRewardSpec {
 const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSpec }> = [
   {
     name: 'a-xp-only',
-    spec: { questTitle: 'The Krasue Murders', sections: partyXpSections(SAMPLE_MURDER_XP) },
+    spec: { questTitle: SPIDER_QUEST_NAME, sections: partyXpSections(SAMPLE_XP_ONLY) },
   },
   {
     name: 'b-xp-coins-items',

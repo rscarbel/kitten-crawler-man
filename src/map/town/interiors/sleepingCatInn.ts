@@ -160,6 +160,7 @@ export function buildSleepingCatInnLayout(
   const quietRoomWindowCol = quietRoomWestCol + 2;
   const quietRoomShelfCol = quietRoomWindowCol + 1;
   const quietRoomRugCol = quietRoomWestCol + 1;
+  const guestWindowRow = northRow - 1;
 
   // ── Landing ─────────────────────────────────────────────────────────────
   const landingRugStartCol = 2;
@@ -182,6 +183,8 @@ export function buildSleepingCatInnLayout(
     catStoolRow,
   } = innHearthSide();
   const archwayCols = [archwayWestCol, archwayEastCol];
+  // Hung on the taproom's north wall face, over the cat's stool.
+  const catSignRow = taproomNorthRow - 1;
   const hearthRugRow = taproomNorthRow + 2;
   /** Coats by the foot of the stairs, where a guest coming down takes theirs off. */
   const coatHookRow = taproomNorthRow + 2;
@@ -259,7 +262,7 @@ export function buildSleepingCatInnLayout(
   }
   entries.push(
     statefulProp(cotRoomWashstandCol, northRow, 'washstand', 'washstand_1'),
-    prop(cotRoomWindowCol, northRow, 'window_dressing'),
+    prop(cotRoomWindowCol, guestWindowRow, 'window_dressing'),
     statefulProp(cotRoomChestCol, northRow, 'chest', 'chest_1'),
     prop(cotRoomRugCol, guestRugRow, 'rag_runner'),
   );
@@ -269,7 +272,7 @@ export function buildSleepingCatInnLayout(
     statefulProp(bestRoomWestCol, northRow, 'drawer_unit', 'drawer_unit'),
     prop(bestRoomHearthCol, northRow, 'hearth_wide', 0, contractTarget(CONTRACT_SITE, 'best_fire')),
     prop(bestRoomWestCol + 1, northRow + 1, 'rag_rug_small'),
-    prop(bestRoomWindowCol, northRow, 'window_dressing'),
+    prop(bestRoomWindowCol, guestWindowRow, 'window_dressing'),
     prop(
       bestRoomBedCol,
       northRow,
@@ -285,7 +288,7 @@ export function buildSleepingCatInnLayout(
   // The quiet room: patchwork bed, books, the brazier.
   entries.push(
     prop(quietRoomWestCol, northRow, 'inn_guest_bed', PATCHWORK_QUILT),
-    prop(quietRoomWindowCol, northRow, 'window_dressing'),
+    prop(quietRoomWindowCol, guestWindowRow, 'window_dressing'),
     statefulProp(quietRoomShelfCol, northRow, 'shelving_unit', 'shelving_unit_1', 1),
     statefulProp(quietRoomShelfCol + 1, northRow, 'shelving_unit', 'shelving_unit_2', 2),
     statefulProp(eastCol, northRow, 'forge_brazier', 'forge_brazier'),
@@ -315,7 +318,7 @@ export function buildSleepingCatInnLayout(
       0,
     ),
     statefulProp(westCol, coatHookRow, 'coat_hook', 'coat_hook'),
-    prop(catSignCol, taproomNorthRow, 'cat_portrait'),
+    prop(catSignCol, catSignRow, 'cat_portrait'),
     statefulProp(logBasketCol, taproomNorthRow, 'log_basket', 'log_basket'),
     prop(catSignCol, catStoolRow, 'cat_stool'),
     prop(

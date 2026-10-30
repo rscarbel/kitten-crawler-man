@@ -29,6 +29,8 @@ import type { ResidentId } from '../core/state/residentIds';
 import type { CrowdSpecies, TownSpecies } from './townSpecies';
 import type { OccupantService } from './townServices';
 import type { OccupantRoutine } from './occupantRoutines';
+import type { TownDialogContext } from './townDialog';
+import { lodgeCellarHeld } from '../core/quests/missingCatsProgress';
 
 /** What a posted occupant is doing — drives how far they drift by default and how long they linger. */
 export type StationedActivity =
@@ -129,9 +131,22 @@ interface OccupantSpecBase {
   readonly territory?: OccupantTerritory;
   readonly routine?: OccupantRoutine;
   readonly service?: OccupantService;
+  /**
+   * Whether the story has put them in the room yet, read each time the room is
+   * built. Absent, they are always there.
+   */
+  readonly presentWhen?: (town: TownDialogContext) => boolean;
 }
 
 export type OccupantSpec = OccupantSpecBase & OccupantIdentity;
+
+/** The part of a roster the story has put in the room, in roster order. */
+export function presentOccupants(
+  roster: ReadonlyArray<OccupantSpec>,
+  town: TownDialogContext,
+): ReadonlyArray<OccupantSpec> {
+  return roster.filter((spec) => spec.presentWhen?.(town) ?? true);
+}
 
 /**
  * Sydney stands over the east half of her desk, so the west half of the row
@@ -297,6 +312,12 @@ export const BUILDING_OCCUPANTS = mapByBuildingId<ReadonlyArray<OccupantSpec>>({
       placement: { kind: 'anchor', anchor: 'counter', post: 'back', activity: 'tend_counter' },
       residentId: 'apothecary_fen',
       service: { surface: 'menu', counter: 'apothecary', verb: 'Buy' },
+    },
+    {
+      role: 'laborer',
+      placement: { kind: 'prop', prop: 'sorting_table', side: 'south', activity: 'idle' },
+      territory: { kind: 'rect', west: 1, east: 1, north: 0, south: 0 },
+      residentId: 'taloncrest_apothecary_assistant',
     },
     {
       role: 'priest',
@@ -523,6 +544,13 @@ export const BUILDING_OCCUPANTS = mapByBuildingId<ReadonlyArray<OccupantSpec>>({
       role: 'guard',
       placement: { kind: 'anchor', anchor: 'crate', activity: 'wander' },
       species: 'human',
+    },
+    // Up from the cellar for good once the lid has held, standing over it.
+    {
+      role: 'commoner',
+      placement: { kind: 'prop', prop: 'cellar_trapdoor', side: 'east', activity: 'idle' },
+      residentId: 'taloncrest_lodge_cellar_elf',
+      presentWhen: (town) => lodgeCellarHeld(town.missingCats),
     },
   ],
   // The club's host, greeting the door from behind his stand. His territory

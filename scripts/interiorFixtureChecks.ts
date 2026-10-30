@@ -91,7 +91,7 @@ function guardedChestChecks(map: GameMap, room: RoomRect, check: Check): void {
   kit.bind(chests);
   const placer = chestPlacer(chests, map);
   const chest = placer.heldByBand(chestTile, CHEST_LOOT);
-  check(!map.isWalkable(chestTile.x, chestTile.y), 'a placed chest blocks its own tile');
+  check(!map.isWalkable(chestTile.x, chestTile.y, 'walker'), 'a placed chest blocks its own tile');
 
   const roster = new MobRoster(map, new SpellSystem());
   chests.update(roster.mobs);
@@ -157,7 +157,7 @@ function exitFixtureChecks(map: GameMap, check: Check): void {
   let exitsRun = 0;
   const asked: { leave: (() => void) | null } = { leave: null };
   const exits = new InteriorExitFixtureSystem({
-    confirm: (leave) => {
+    confirm: (_destination, leave) => {
       asked.leave = leave;
     },
     exit: () => {
@@ -231,12 +231,15 @@ function sceneWiringChecks(check: Check): void {
   );
   const fixtureHost = callArgs(interior, 'new InteriorExitFixtureSystem(');
   check(
-    fixtureHost.includes('exit: () => this.doExit()') &&
+    fixtureHost.includes('exit: (destination) => this.leaveFor(destination)') &&
+      /case 'door':\s*this\.doExit\(\);/.test(interior) &&
       interior.includes('this.openExitMenu(() => this.doExit())'),
     "an exit fixture ends in the room's own exit, the one the door mat takes out to the building's door",
   );
   check(
-    fixtureHost.includes('confirm: (leave) => this.openExitMenu(leave)') &&
+    fixtureHost.includes(
+      'confirm: (destination, leave) => this.openExitMenu(leave, destination)',
+    ) &&
       callArgs(interior, 'exitBuildingPromptSurface(').includes(
         'exit: () => this.leaveByExitMenu()',
       ),

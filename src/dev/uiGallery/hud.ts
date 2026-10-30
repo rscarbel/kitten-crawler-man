@@ -14,8 +14,6 @@ import {
   type InventoryItem,
   type ItemId,
 } from '../../core/items/defs/ItemDefs';
-import { DOOMSDAY_CONTAIN_OBJECTIVE } from '../../core/quests/DoomsdayProgress';
-import { CONTAINMENT_LABEL, doomsdayCountdownEntry } from '../../systems/DoomsdayEscapeSystem';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
 import { AIChatFeed } from '../../ai/AIChatFeed';
@@ -24,6 +22,7 @@ import { aiPanelSurface } from '../../ui/hud/aiPanel';
 import { aiChallengeBandEntry } from '../../ui/hud/aiChallengeBand';
 import { HudSurface } from '../../ui/hud/HudSurface';
 import type {
+  CrawlerPresence,
   DockButtonModel,
   HotbarSlotModel,
   HudModel,
@@ -82,7 +81,6 @@ const BOSS_ACCENT = palette.meter.boss;
 const BOSS_MIDLINE = 0.5;
 /** Four minutes left on a floor's Nightmare time limit, in frames: its red tier. */
 const LATE_TIMER_FRAMES = 14_400;
-const DOOMSDAY_MS_LEFT = 200_000;
 /** Most of an hour left on the Nightmare time limit, in frames: its calm tier. */
 const EARLY_TIMER_FRAMES = 212_520;
 const REVIVE_SECONDS_LEFT = 49;
@@ -160,6 +158,8 @@ function crawlers(
   status: readonly StatusPillModel[],
   skillPoints: number,
   companionStatus: readonly StatusPillModel[],
+  companionPresence: CrawlerPresence,
+  companionSenseCue: boolean,
 ): [UnitFrameModel, UnitFrameModel] {
   return [
     {
@@ -173,6 +173,8 @@ function crawlers(
       xpMax: 520,
       status,
       skillPoints,
+      presence: 'here',
+      senseCue: false,
     },
     {
       id: 'cat',
@@ -185,6 +187,8 @@ function crawlers(
       xpMax: 610,
       status: companionStatus,
       skillPoints: 0,
+      presence: companionPresence,
+      senseCue: companionSenseCue,
     },
   ];
 }
@@ -347,6 +351,10 @@ interface HudFixtureSpec {
   readonly name: string;
   readonly status: readonly StatusPillModel[];
   readonly companionStatus?: readonly StatusPillModel[];
+  /** Whether the companion's card shows it on another map, as a split party does. */
+  readonly companionAway?: boolean;
+  /** Whether something only the companion perceives is in their reach. */
+  readonly companionSenseCue?: boolean;
   readonly skillPoints: number;
   readonly dockExtras: readonly DockButtonModel['id'][];
   readonly topBand: () => TopBandEntry[];
@@ -411,7 +419,13 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         captions.update();
       }
       const model = (): HudModel => ({
-        crawlers: crawlers(spec.status, spec.skillPoints, spec.companionStatus ?? []),
+        crawlers: crawlers(
+          spec.status,
+          spec.skillPoints,
+          spec.companionStatus ?? [],
+          spec.companionAway === true ? 'away' : 'here',
+          spec.companionSenseCue === true,
+        ),
         activeCrawler: 'human',
         coins: {
           shown: 1240,
@@ -805,6 +819,26 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     expanded: false,
   }),
   hudFixture({
+    name: 'cat-senses',
+    status: [],
+    companionSenseCue: true,
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    toasts: 'none',
+    expanded: false,
+  }),
+  hudFixture({
+    name: 'split-party',
+    status: [],
+    companionAway: true,
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    toasts: 'none',
+    expanded: false,
+  }),
+  hudFixture({
     name: 'quiet',
     status: [],
     skillPoints: 2,
@@ -827,16 +861,7 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     status: FIGHT_STATUS,
     skillPoints: 0,
     dockExtras: ['build'],
-    topBand: () => [
-      bossEntry(),
-      encounterEntry(),
-      doomsdayCountdownEntry({
-        id: 'doomsday',
-        label: CONTAINMENT_LABEL,
-        deadlineAt: Date.now() + DOOMSDAY_MS_LEFT,
-        objective: DOOMSDAY_CONTAIN_OBJECTIVE,
-      }),
-    ],
+    topBand: () => [bossEntry(), encounterEntry()],
     levelTimerFrames: LATE_TIMER_FRAMES,
     toasts: 'none',
     expanded: false,
@@ -860,8 +885,8 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     topBand: () => {
       const banner = questBannerEntry({
         id: 'quest-banner',
-        title: 'THE MAGISTRACY IS EMPTY',
-        subtitle: 'The murders are over. Return to the streets below.',
+        title: 'THE ANCHOR IS WHOLE',
+        subtitle: 'Madame Voss has welded the shards. The square is a step away.',
         framesLeft: QUEST_BANNER_FRAMES,
         tone: 'success',
       });
@@ -907,8 +932,8 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     topBand: () => {
       const banner = questBannerEntry({
         id: 'quest-banner',
-        title: 'THE MAGISTRACY IS EMPTY',
-        subtitle: 'The murders are over. Return to the streets below.',
+        title: 'THE ANCHOR IS WHOLE',
+        subtitle: 'Madame Voss has welded the shards. The square is a step away.',
         framesLeft: QUEST_BANNER_FRAMES,
         tone: 'success',
       });

@@ -298,7 +298,7 @@ for (const [type, contract] of TILE_CONTRACTS) {
   const gameMap = testMap(type);
   const tile = gameMap.structure[TEST_TILE][TEST_TILE];
   check(
-    isWalkableTileType(tile) === contract.walkable,
+    isWalkableTileType(tile, 'walker') === contract.walkable,
     scope,
     `walkable is ${!contract.walkable}, should be ${contract.walkable}`,
   );
@@ -491,13 +491,15 @@ function gateRoomOnFloor(harness: BossRoomHarness, found: FoundRoom): void {
     if (first !== undefined) gameMap.blockTilePermanently(first.x, first.y);
   }
 
-  const blockedApproach = invariants.approach.filter((t) => !gameMap.isWalkable(t.x, t.y));
+  const blockedApproach = invariants.approach.filter(
+    (t) => !gameMap.isWalkable(t.x, t.y, 'walker'),
+  );
   layoutCheck(
     blockedApproach.length === 0,
     scope,
     `doorway approach blocked at ${blockedApproach.map(tileKey).join(' ')}`,
   );
-  const blockedSpawn = invariants.spawnDisc.filter((t) => !gameMap.isWalkable(t.x, t.y));
+  const blockedSpawn = invariants.spawnDisc.filter((t) => !gameMap.isWalkable(t.x, t.y, 'walker'));
   layoutCheck(
     blockedSpawn.length === 0,
     scope,
@@ -505,7 +507,7 @@ function gateRoomOnFloor(harness: BossRoomHarness, found: FoundRoom): void {
   );
 
   const interiorKeys = new Set(room.interior.map(tileKey));
-  const open = room.interior.filter((t) => gameMap.isWalkable(t.x, t.y));
+  const open = room.interior.filter((t) => gameMap.isWalkable(t.x, t.y, 'walker'));
   const openShare = open.length / room.interior.length;
   layoutCheck(
     openShare >= harness.minOpenFloorShare,
@@ -518,7 +520,7 @@ function gateRoomOnFloor(harness: BossRoomHarness, found: FoundRoom): void {
   const frontier: TilePoint[] = [];
   for (const doorway of room.doorways) {
     for (const tile of doorway.tiles) {
-      if (!gameMap.isWalkable(tile.x, tile.y) || reached.has(tileKey(tile))) continue;
+      if (!gameMap.isWalkable(tile.x, tile.y, 'walker') || reached.has(tileKey(tile))) continue;
       reached.add(tileKey(tile));
       frontier.push(tile);
     }
@@ -534,7 +536,7 @@ function gateRoomOnFloor(harness: BossRoomHarness, found: FoundRoom): void {
       const neighbour = { x: next.x + dx, y: next.y + dy };
       const key = tileKey(neighbour);
       if (reached.has(key) || !interiorKeys.has(key)) continue;
-      if (!gameMap.isWalkable(neighbour.x, neighbour.y)) continue;
+      if (!gameMap.isWalkable(neighbour.x, neighbour.y, 'walker')) continue;
       reached.add(key);
       frontier.push(neighbour);
     }

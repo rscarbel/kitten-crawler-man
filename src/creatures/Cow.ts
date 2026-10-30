@@ -900,7 +900,7 @@ export class Cow extends Mob {
     const map = this.map;
     if (map === null) return false;
     const here = this.tile;
-    return !map.isWalkable(here.x, here.y);
+    return !map.isWalkable(here.x, here.y, 'walker');
   }
 
   /**
@@ -920,7 +920,8 @@ export class Cow extends Mob {
     let bestScore = Infinity;
     for (const step of ESCAPE_STEPS) {
       const tile = { x: here.x + step.x, y: here.y + step.y };
-      if (!map.isWalkable(tile.x, tile.y) || map.isStairwellTile(tile.x, tile.y)) continue;
+      if (!map.isWalkable(tile.x, tile.y, 'walker') || map.isStairwellTile(tile.x, tile.y))
+        continue;
       const onPen = pen?.isPassable(tile.x, tile.y) === true;
       const score =
         (onPen ? 0 : ESCAPE_OFF_PEN_PENALTY) + Math.hypot(tile.x - entry.x, tile.y - entry.y);
@@ -1355,7 +1356,7 @@ export class Cow extends Mob {
    */
   private wayBackTo(entry: TilePoint): TilePoint[] {
     const here = this.tile;
-    const path = this.map?.findMobPath(here.x, here.y, entry.x, entry.y) ?? [];
+    const path = this.map?.findMobPath(here.x, here.y, entry.x, entry.y, this.mobility) ?? [];
     return path.length > 1 ? path.slice(1) : [entry];
   }
 

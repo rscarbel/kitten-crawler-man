@@ -21,7 +21,7 @@ function isTrashJunk(gameMap: GameMap, tileX: number, tileY: number): boolean {
 
 /** Whether a bolus flying into this tile ends there: anything solid that is not the lair's junk. */
 export function stopsBile(gameMap: GameMap, tileX: number, tileY: number): boolean {
-  return !gameMap.isWalkable(tileX, tileY) && !isTrashJunk(gameMap, tileX, tileY);
+  return !gameMap.isWalkable(tileX, tileY, 'walker') && !isTrashJunk(gameMap, tileX, tileY);
 }
 
 /** How high over its shadow a bolus flies at the start and end of its flight. */

@@ -78,6 +78,10 @@ export function buildHerbAndRemedyLayout(
   // Left bare: the only floor touching the hearth wall, so it is worked from here.
   const stillStepCol = stillCol + stillWidth;
   const eastWindowCol = stillStepCol + 1;
+  // Windows are set into the north wall's face. The floor under the west one
+  // stays bare: the missing-cats tuna dish is left there, by the potting bench.
+  const windowRow = northRow - 1;
+  const herbPotsCol = westCol + 1;
   const harvestRow = northRow + 2;
   const harvestCol = dryingRackCol + 1;
   const sortingTableCol = harvestCol + 1;
@@ -115,8 +119,8 @@ export function buildHerbAndRemedyLayout(
     statefulProp(fuelBarrelCol, harvestRow, 'barrel', 'still_fuel_barrel'),
   );
   entries.push(
-    prop(westCol, northRow, 'window_dressing'),
-    statefulProp(westCol, northRow + 1, 'live_herb_pots', 'live_herb_pots_1'),
+    prop(westCol, windowRow, 'window_dressing'),
+    statefulProp(herbPotsCol, dryingLastRow, 'live_herb_pots', 'live_herb_pots_1'),
     statefulProp(
       pottingBenchCol,
       northRow,
@@ -132,7 +136,7 @@ export function buildHerbAndRemedyLayout(
       contractTarget(CONTRACT_SITE, 'drying_rack'),
     ),
     prop(stillCol, northRow, 'still', 0, contractTarget(CONTRACT_SITE, 'still')),
-    prop(eastWindowCol, northRow, 'window_dressing'),
+    prop(eastWindowCol, windowRow, 'window_dressing'),
     statefulProp(eastCol, northRow, 'live_herb_pots', 'live_herb_pots_2', 1),
     // The day's cut, brought in and waiting to be bunched.
     statefulProp(harvestCol, harvestRow, 'basket', 'basket_1'),

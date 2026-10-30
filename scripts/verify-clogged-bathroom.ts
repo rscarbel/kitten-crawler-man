@@ -135,7 +135,7 @@ function reachableTiles(
   const key = (point: Point): number => tileIndex(point.x, point.y, size);
   const solidKeys = new Set(solid.map(key));
   const isOpen = (point: Point): boolean =>
-    gameMap.isWalkable(point.x, point.y) &&
+    gameMap.isWalkable(point.x, point.y, 'walker') &&
     !solidKeys.has(key(point)) &&
     !closed.some((rect) => rectContains(rect, point));
   const seen = new Set<number>();
@@ -212,11 +212,11 @@ function verifyEveryFlagHasAGoblin(room: BathroomRoomData, label: string): void 
 function verifyRoomShape(gameMap: GameMap, room: BathroomRoomData, label: string): void {
   const { bounds } = room;
   check(
-    gameMap.isWalkable(room.entranceTile.x, room.entranceTile.y),
+    gameMap.isWalkable(room.entranceTile.x, room.entranceTile.y, 'walker'),
     `${label}: the entrance is blocked while the plumbing is broken`,
   );
   check(
-    !gameMap.isWalkable(room.pipeWallTile.x, room.pipeWallTile.y) &&
+    !gameMap.isWalkable(room.pipeWallTile.x, room.pipeWallTile.y, 'walker') &&
       room.pipeWallTile.y === bounds.y - 1,
     `${label}: the pipe wall is not a north wall-face tile`,
   );
@@ -232,8 +232,8 @@ function verifyRoomShape(gameMap: GameMap, room: BathroomRoomData, label: string
   for (const stall of room.stallDoorTiles) {
     check(stall.y === bounds.y, `${label}: a stall door is off the north row`);
     check(
-      !gameMap.isWalkable(stall.x, stall.y - 1) &&
-        !gameMap.isWalkable(stall.x + STALL_WIDTH_TILES - 1, stall.y - 1),
+      !gameMap.isWalkable(stall.x, stall.y - 1, 'walker') &&
+        !gameMap.isWalkable(stall.x + STALL_WIDTH_TILES - 1, stall.y - 1, 'walker'),
       `${label}: the stall at (${stall.x},${stall.y}) has no wall face behind it`,
     );
   }
@@ -272,7 +272,7 @@ function verifyRoomShape(gameMap: GameMap, room: BathroomRoomData, label: string
   const goblinTiles = blockedTilesOf(room);
   for (const tile of goblinTiles) {
     check(
-      !gameMap.isWalkable(tile.x, tile.y),
+      !gameMap.isWalkable(tile.x, tile.y, 'walker'),
       `${label}: goblin tile (${tile.x},${tile.y}) is walkable while the plumbing is broken`,
     );
   }
@@ -291,7 +291,7 @@ function verifyRoomShape(gameMap: GameMap, room: BathroomRoomData, label: string
   );
   for (const spot of loiterTiles) {
     check(
-      gameMap.isWalkableIgnoringBathroomQueue(spot.x, spot.y),
+      gameMap.isWalkableIgnoringBathroomQueue(spot.x, spot.y, 'walker'),
       `${label}: loiter spot (${spot.x},${spot.y}) is not open floor`,
     );
   }
@@ -350,7 +350,7 @@ function floorUnderTest(): LevelDef {
 function firstWalkableTile(gameMap: GameMap, rect: Rect): Point | null {
   for (let y = rect.y; y < rect.y + rect.h; y++) {
     for (let x = rect.x; x < rect.x + rect.w; x++) {
-      if (gameMap.isWalkable(x, y)) return { x, y };
+      if (gameMap.isWalkable(x, y, 'walker')) return { x, y };
     }
   }
   return null;
@@ -555,7 +555,7 @@ function verifyFloor(run: number): void {
   for (const [index, room] of rooms.entries()) {
     for (const tile of blockedTilesOf(room)) {
       check(
-        gameMap.isWalkable(tile.x, tile.y),
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
         `${label}: bathroom ${index}'s tile (${tile.x},${tile.y}) stayed blocked after the fix`,
       );
     }
@@ -577,7 +577,9 @@ function verifyFloor(run: number): void {
     `${label}: restoring a checkpoint taken after the fix put the plumbing back broken`,
   );
   check(
-    rooms.every((room) => blockedTilesOf(room).every((tile) => gameMap.isWalkable(tile.x, tile.y))),
+    rooms.every((room) =>
+      blockedTilesOf(room).every((tile) => gameMap.isWalkable(tile.x, tile.y, 'walker')),
+    ),
     `${label}: restoring a checkpoint taken after the fix re-blocked the line`,
   );
   gameMap.restoreCheckpoint(brokenSnapshot);

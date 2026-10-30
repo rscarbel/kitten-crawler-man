@@ -1,4 +1,5 @@
 import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
+import type { DungeonFloorThemeId } from './dungeon/floorTheme';
 import { CELLAR_OVERLAY_TILE_TYPES } from './cellarProps';
 import {
   MAZE_CAT_SPAWN_CHAR,
@@ -89,8 +90,11 @@ import {
   isLobBlockingTileType,
   isSightTransparentTileType,
   isWalkableTileType,
+  tileFooting,
 } from './walkability';
 import type { Rect } from './roomDoorways';
+import { type Footing, MOBILITY_CLASSES, type MobilityClass, type PassableBy } from './mobility';
+import type { KnockOffPlacement } from './interiorMechanisms';
 import { RegionMap, type RegionKind } from './regionMap';
 import { RegionCharacters } from './dungeon/regionCharacters';
 import { buildFloorSurface, FloorSurface, registerFloorSurface } from './dungeon/floorSurface';
@@ -178,10 +182,17 @@ import {
   placedInteriorPropId,
   type TownInteriorLayoutEntry,
 } from './town/interiors/types';
+import { wallFaceMisplacements } from './town/interiors/wallFaceProps';
 import {
-  buildTownCenterTowerLayout,
-  type TowerStairOrigins,
+  buildTowerStorey,
+  towerConditionsFor,
+  towerStoreyAt,
+  towerStoreyIndex,
+  TOWER_STOREY_IDS,
+  type TowerConditions,
+  type TowerTile,
 } from './town/interiors/townCenterTower';
+import { createMissingCatsProgress } from '../core/quests/missingCatsProgress';
 import { setTownInteriorWallMaterial } from './town/interiorWallMaterial';
 import { setStarlightTentDecorPlan } from './starlightTentMazeDecor';
 import {
@@ -190,6 +201,7 @@ import {
   type PrisonPlan,
   type PrisonTileCode,
 } from './goblinPrisonPlan';
+import { SEWER_TILE, sewerTileAt, type SewerPlan, type SewerTileCode } from './sewer/sewerPlan';
 import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorPropId,
@@ -231,10 +243,9 @@ const STORE_INTERIOR_H = 12;
 const HOUSE_INTERIOR_W = 18;
 const HOUSE_INTERIOR_H = 14;
 /**
- * Which shape an interior is built in.
- *
- * Only the Starlight Tent has more than one, and only for the length of the circus
- * questline's final act — every other room is `'default'` forever.
+ * Which shape an interior is built in: `'default'` for a room built from its
+ * building's own layout, or one of the scripted places that is built from a
+ * plan of its own instead.
  */
 export type InteriorVariant =
   | 'default'
@@ -247,7 +258,39 @@ export type InteriorVariant =
       readonly kind: 'goblin_prison';
       /** The authored layout this world's seed picked, parsed. */
       readonly plan: PrisonPlan;
+    }
+  | {
+      readonly kind: 'sewer';
+      /** Every authored section of the sewer, parsed; each storey of the interior is one section. */
+      readonly plan: SewerPlan;
+    }
+  | {
+      readonly kind: 'tower';
+      /** What the questline has done to the tower, which every storey is built to show. */
+      readonly conditions: TowerConditions;
     };
+
+/**
+ * The tile type each sewer grid code is built as. Every channel is built as
+ * its dry bed: the section's own system floods it to the level its valves
+ * leave it at, because a map's water is never saved.
+ */
+function sewerTileTypeFor(code: SewerTileCode): number {
+  switch (code) {
+    case SEWER_TILE.wall:
+      return FloorTypeValue.wall;
+    case SEWER_TILE.walkway:
+      return FloorTypeValue.concrete;
+    case SEWER_TILE.mainChannel:
+    case SEWER_TILE.spillway:
+    case SEWER_TILE.nestBasin:
+      return FloorTypeValue.tile_floor;
+    default: {
+      const unhandled: never = code;
+      throw new Error(`unhandled sewer tile ${String(unhandled)}`);
+    }
+  }
+}
 
 /** The tile type each prison grid code is built as. */
 function prisonTileTypeFor(code: PrisonTileCode): number {
@@ -319,6 +362,8 @@ export interface PlacedTownInteriorProp {
   readonly id: string;
   /** Resolved per-instance override of the prop def's own `destructible.dropsLootByDefault`. */
   readonly dropsLoot: boolean | undefined;
+  /** Where it falls and what its landing does, for a prop a cat can knock off; null for any other. */
+  readonly knockOff: KnockOffPlacement | null;
 }
 
 /** Interior shell per building kind. Exhaustive, so a new kind cannot ship unsized. */
@@ -369,8 +414,7 @@ const INTERIOR_BY_BUILDING: ReadonlyMap<BuildingId, InteriorShell> = new Map([
   // flagstone in `buildMillersFarmLayout`.
   ['taloncrest_mill_farm', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
   ['taloncrest_builder_farm', { w: 14, h: 10, floorType: INTERIOR_BOARD_FLOOR }],
-  // Sixteen wide: a bunk rank down each side wall and the hall between them
-  // still wide enough for the cult-hideout fight around the room's centre.
+  // Sixteen wide: a bunk rank down each side wall and open hall between them.
   ['taloncrest_garrison_lodge', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
   [
     'taloncrest_general_store',
@@ -406,21 +450,24 @@ const SAFE_ROOM_BOUNDS_BY_BUILDING: ReadonlyMap<
   ],
 ]);
 
-// ── Tower stair placement ─────────────────────────────────────────────────────
-/** X offset from the east wall for the "stairs up" tile in tower floors. */
-const TOWER_STAIR_UP_X_OFFSET = 5;
-/** Y row for both stair tiles (near the north wall). */
-const TOWER_STAIR_ROW = 2;
-/** X column for the "stairs down" tile (near the west wall). */
-const TOWER_STAIR_DOWN_COL = 3;
-/** Maximum tower floor index — floors 0..3, so the cap is 3. */
-const TOWER_TOP_FLOOR = 3;
+// ── Tower storeys ─────────────────────────────────────────────────────────────
 /**
- * How many storeys a tower generates. Stated here beside the top-floor index it
- * is derived from, so a scene building the floors and a gate walking them cannot
- * disagree about how many there are.
+ * How many storeys a tower generates, read from the storey list itself, so a
+ * scene building the floors and a gate walking them cannot disagree about how
+ * many there are.
  */
-export const TOWER_FLOOR_COUNT = TOWER_TOP_FLOOR + 1;
+export const TOWER_FLOOR_COUNT = TOWER_STOREY_IDS.length;
+/** The highest storey's index. */
+export const TOWER_TOP_FLOOR = TOWER_FLOOR_COUNT - 1;
+/** The storey a party coming in at the tower's front door arrives on: the gatehouse. */
+export const TOWER_ENTRANCE_STOREY = towerStoreyIndex('gatehouse');
+/** The storey the sewer's cistern culvert opens onto: the cistern under the tower. */
+export const TOWER_CISTERN_STOREY = towerStoreyIndex('cistern');
+/**
+ * The tower as it stands before the questline touches it, for a room built
+ * with no quest behind it (a harness, a review render).
+ */
+const TOWER_CONDITIONS_AT_START: TowerConditions = towerConditionsFor(createMissingCatsProgress());
 
 // ── Decoration overlay index ──────────────────────────────────────────────────
 /** A decoration tile drawn in the Y-sorted overlay pass. */
@@ -573,6 +620,16 @@ const BLOCK_STEALTH_GATE = 256;
  * as it would at a wall.
  */
 const BLOCK_BODY = 512;
+/**
+ * Tile is under a placed prop that one mobility class may stand on and
+ * another may not — a shelf top a cat walks along and a human walks round.
+ * One flag per class the prop turns away, so the test for a mover is one
+ * bit of her own class.
+ */
+const BLOCK_MOBILITY: Readonly<Record<MobilityClass, number>> = {
+  walker: 1024,
+  climber: 2048,
+};
 
 /**
  * The floor tiles at the foot of the prison door's and sign's faces. They are
@@ -608,6 +665,15 @@ function questExitDoorTileType(state: QuestExitDoorState, generatedType: number)
   if (state === 'smashed') return QUEST_EXIT_DOOR_OPEN;
   return generatedType;
 }
+/** Who an A* search walks for: the mover's class and side, and whether her feet refuse stairwells. */
+interface PathMover {
+  readonly mobility: MobilityClass;
+  readonly forHostile: boolean;
+  readonly avoidStairwells: boolean;
+}
+
+type TileBlocker = (tileX: number, tileY: number) => boolean;
+
 /** Bits that block movement regardless of game state. */
 const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT | BLOCK_STRUCTURE;
 
@@ -843,7 +909,7 @@ export class GameMap {
           tiles.push({
             x: placed.tile.x + dx,
             y: placed.tile.y + dy,
-            blocksMovement: !propDef.walkable,
+            blocksMovement: !propDef.passableBy.has('walker'),
           });
     }
     return tiles;
@@ -858,8 +924,6 @@ export class GameMap {
   fountainCentre: { x: number; y: number } | undefined = undefined;
   /** Centre of the circus, in tile coords. Undefined on non-overworld maps. */
   circusCentre: { x: number; y: number } | undefined = undefined;
-  /** Where the town's escape route out appears once the Doomsday finale's escape phase begins. Undefined on non-overworld maps. */
-  doomsdayEscapeTile: { x: number; y: number } | undefined = undefined;
   /** Radius (tiles) of the circus grounds around `circusCentre`. Undefined on non-overworld maps. */
   circusRadiusTiles: number | undefined = undefined;
   /** What the circus grounds' layout stamped on this map, and where. Null off the overworld. */
@@ -1067,6 +1131,13 @@ export class GameMap {
    */
   private readonly structureSolidRects = new Map<number, PixelRect>();
   private readonly hostileOnlyBlockedSet = new Set<number>();
+  /** Footprint tiles of placed props each class may not stand on (see `BLOCK_MOBILITY`). */
+  private readonly mobilityBlockedSets: Readonly<Record<MobilityClass, Set<number>>> = {
+    walker: new Set<number>(),
+    climber: new Set<number>(),
+  };
+  /** Each climber-only prop footprint tile's base row; see {@link ledgeBaseRow}. */
+  private readonly ledgeBaseRows = new Map<number, number>();
 
   /**
    * Per-tile block flags (`BLOCK_*`) for the current structure, indexed
@@ -1207,7 +1278,6 @@ export class GameMap {
     this.briarHollowPalisadeKeys = new Set(
       data.briarHollow.palisadePath.map((tile) => tileCoordKey(tile.x, tile.y)),
     );
-    this.doomsdayEscapeTile = data.doomsdayEscapeTile;
     // Recorded now and applied by `rebuildBlockedMasks` once the grid is
     // installed: the gate never changes, so it belongs to the map itself and
     // holds even where no village system is running.
@@ -1320,6 +1390,24 @@ export class GameMap {
     }
   }
 
+  /**
+   * Rewrites the ground under `tiles` as `tileType` and repaints it: a plank
+   * fallen across a gap, laid as floor. Base tiles are baked into chunks, so
+   * each changed tile is marked dirty.
+   */
+  retypeTiles(
+    tiles: ReadonlyArray<{ readonly x: number; readonly y: number }>,
+    tileType: number,
+  ): void {
+    for (const { x, y } of tiles) {
+      if (!this.isInsideGrid(x, y)) continue;
+      const tile = this.structure[y][x];
+      if (tile.type === tileType) continue;
+      tile.type = tileType;
+      this.markTileDirty(x, y);
+    }
+  }
+
   /** Whether a tile is spanned by the stealth gate, locked or open. */
   isStealthGateTile(tileX: number, tileY: number): boolean {
     return this.stealthGateBlockedSet.has(tileCoordKey(tileX, tileY));
@@ -1381,9 +1469,7 @@ export class GameMap {
 
   /**
    * Applies one town interior layout file's entries to a freshly carved
-   * grid: a 'tile' entry writes a tile type directly (via `placeProp` when
-   * `smashable`, which records the floor underneath so a break can restore
-   * it); a 'prop' entry registers a placed prop instance and
+   * grid: a 'tile' entry writes a tile type directly; a 'prop' entry registers a placed prop instance and
    * blocks its footprint, mirroring how the Cloak & Dagger's furniture
    * blocks the tiles `CLUB_FURNITURE_TILES` names.
    */
@@ -1393,8 +1479,7 @@ export class GameMap {
   ): void {
     for (const entry of entries) {
       if (entry.kind === 'tile') {
-        if (entry.smashable === true) placeProp(grid[entry.y][entry.x], entry.tileType);
-        else grid[entry.y][entry.x].type = entry.tileType;
+        grid[entry.y][entry.x].type = entry.tileType;
         continue;
       }
       const propDef = TOWN_INTERIOR_PROPS[entry.propId];
@@ -1412,12 +1497,21 @@ export class GameMap {
         tile: { x: entry.x, y: entry.y },
         id,
         dropsLoot: entry.dropsLoot,
+        knockOff: 'knockOff' in entry ? entry.knockOff : null,
       });
-      if (!propDef.walkable) {
-        for (let dy = 0; dy < propDef.footprint.h; dy++)
-          for (let dx = 0; dx < propDef.footprint.w; dx++)
-            this.blockTilePermanently(entry.x + dx, entry.y + dy);
-      }
+      for (let dy = 0; dy < propDef.footprint.h; dy++)
+        for (let dx = 0; dx < propDef.footprint.w; dx++)
+          this.blockFootprintTile(
+            entry.x + dx,
+            entry.y + dy,
+            propDef.passableBy,
+            entry.y + propDef.footprint.h - 1,
+          );
+    }
+    const placedProps = entries.flatMap((entry) => (entry.kind === 'prop' ? [entry] : []));
+    const offTheFace = wallFaceMisplacements(grid, placedProps);
+    if (offTheFace.length > 0) {
+      throw new Error(`Wall-face props off any wall face: ${offTheFace.join(', ')}`);
     }
   }
 
@@ -1435,11 +1529,29 @@ export class GameMap {
     setTownInteriorWallMaterial(buildingId);
     setStarlightTentDecorPlan(null);
     if (variant !== 'default') {
-      if (variant.kind === 'starlight_tent_maze') this.generateStarlightTentMaze(variant.plan);
-      else this.generateGoblinPrison(variant.plan);
+      switch (variant.kind) {
+        case 'starlight_tent_maze':
+          this.generateStarlightTentMaze(variant.plan);
+          return;
+        case 'goblin_prison':
+          this.generateGoblinPrison(variant.plan);
+          return;
+        case 'sewer':
+          this.generateSewer(variant.plan, towerFloor);
+          return;
+        case 'tower':
+          this.generateTowerStorey(towerFloor, variant.conditions);
+          return;
+        default: {
+          const unhandled: never = variant;
+          throw new Error(`unhandled interior variant ${JSON.stringify(unhandled)}`);
+        }
+      }
+    }
+    if (buildingType === 'tower') {
+      this.generateTowerStorey(towerFloor, TOWER_CONDITIONS_AT_START);
       return;
     }
-    const isTower = buildingType === 'tower';
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
@@ -1554,66 +1666,12 @@ export class GameMap {
     this.bossRooms = [];
     this.mobSpawnPoints = [];
     this.hallwaySpawnPoints = [];
-    // Only ground floor (towerFloor 0) or non-tower buildings have exit doors
-    if (isTower && towerFloor > 0) {
-      // Upper floors: wall off the door gap (no exit)
-      grid[h - 1][doorX].type = INTERIOR_WALL;
-      grid[h - 1][doorX + 1].type = INTERIOR_WALL;
-      this._interiorExitTiles = [];
-    } else {
-      this._interiorExitTiles = [
-        { x: doorX, y: h - 1 },
-        { x: doorX + 1, y: h - 1 },
-      ];
-    }
-
-    // Tower stair placement per floor
+    this._interiorExitTiles = [
+      { x: doorX, y: h - 1 },
+      { x: doorX + 1, y: h - 1 },
+    ];
     this._interiorStairUpTiles = [];
     this._interiorStairDownTiles = [];
-    if (isTower) {
-      // Stairs up: upper-right area; stairs down: upper-left. Each is a square
-      // block of TOWER_STAIR_SPAN tiles a side, which is what the spiral art needs
-      // to read as a staircase rather than a step pattern on a floor tile.
-      const upX = w - TOWER_STAIR_UP_X_OFFSET;
-      const dnX = TOWER_STAIR_DOWN_COL;
-      const stairRow = TOWER_STAIR_ROW;
-
-      const fillStairBlock = (
-        originX: number,
-        originY: number,
-        type: number,
-      ): Array<{ x: number; y: number }> => {
-        const tiles: Array<{ x: number; y: number }> = [];
-        for (let dy = 0; dy < TOWER_STAIR_SPAN; dy++) {
-          for (let dx = 0; dx < TOWER_STAIR_SPAN; dx++) {
-            // `placeProp`, not a bare type write: it records the floor the stair
-            // replaced, and the stair is drawn as an overlay over that floor.
-            placeProp(grid[originY + dy][originX + dx], type);
-            tiles.push({ x: originX + dx, y: originY + dy });
-          }
-        }
-        return tiles;
-      };
-
-      const hasUp = towerFloor < TOWER_TOP_FLOOR;
-      const hasDown = towerFloor > 0;
-      const stairs: TowerStairOrigins = {
-        up: hasUp ? { x: upX, y: stairRow } : null,
-        down: hasDown ? { x: dnX, y: stairRow } : null,
-        span: TOWER_STAIR_SPAN,
-      };
-
-      // Before the stairs, so each stair block records the storey's own floor
-      // material as the floor it stands on.
-      this.applyTownInteriorLayout(grid, buildTownCenterTowerLayout(towerFloor, w, h, stairs));
-
-      if (stairs.up !== null) {
-        this._interiorStairUpTiles = fillStairBlock(stairs.up.x, stairs.up.y, STAIRS_UP);
-      }
-      if (stairs.down !== null) {
-        this._interiorStairDownTiles = fillStairBlock(stairs.down.x, stairs.down.y, STAIRS_DOWN);
-      }
-    }
 
     if (hasSafeRoom) {
       const wholeInterior = { x: 1, y: 1, w: w - 2, h: h - 2 };
@@ -1632,6 +1690,73 @@ export class GameMap {
     } else {
       this.safeRooms = [];
     }
+  }
+
+  /**
+   * One storey of the Town Center Tower as `conditions` leave it, from the
+   * storey's plan in `townCenterTower.ts`: its walls and floor, its props,
+   * its stairs, its front door if it has one, and its water flooded to the
+   * depth the quest leaves it at (a map's water is never saved). Sets the
+   * dungeon theme a storey of dungeon tiles is drawn in, since one tower can
+   * hold both kinds and the party walks between them.
+   */
+  private generateTowerStorey(storeyIndex: number, conditions: TowerConditions): void {
+    const storey = towerStoreyAt(storeyIndex);
+    if (storey === null) throw new Error(`the tower has no storey ${storeyIndex}`);
+    const build = buildTowerStorey(storey, conditions);
+    const { plan } = build;
+    this.towerStoreyTheme = plan.theme;
+    const grid: TileContent[][] = Array.from({ length: plan.height }, (_, y) =>
+      Array.from({ length: plan.width }, (_, x) => ({
+        tileId: `${x}#${y}`,
+        type: INTERIOR_WALL,
+      })),
+    );
+    for (const door of plan.door) grid[door.y][door.x].type = FloorTypeValue.road;
+    this.structure = grid;
+    this.rebuildBlockedMasks();
+    this.startTile = { x: plan.arrival.x, y: plan.arrival.y };
+    this.setStairwellTiles([]);
+    this.buildingEntries = [];
+    this.bossRooms = [];
+    this.mobSpawnPoints = [];
+    this.hallwaySpawnPoints = [];
+    this.safeRooms = [];
+    this._interiorExitTiles = plan.door.map((door) => ({ x: door.x, y: door.y }));
+    // Before the stairs, so each stair block records the storey's own floor
+    // material as the floor it stands on.
+    this.applyTownInteriorLayout(grid, build.entries);
+    this._interiorStairUpTiles =
+      plan.stairUp === null ? [] : this.fillTowerStairBlock(grid, plan.stairUp, STAIRS_UP);
+    this._interiorStairDownTiles =
+      plan.stairDown === null ? [] : this.fillTowerStairBlock(grid, plan.stairDown, STAIRS_DOWN);
+    for (const run of build.water) {
+      this.floodWater(run.tiles, run.depth);
+      if (!run.unwadeable) continue;
+      for (const tile of run.tiles) this.blockTilePermanently(tile.x, tile.y);
+    }
+  }
+
+  /**
+   * A square stair block of {@link TOWER_STAIR_SPAN} tiles a side, which is
+   * what the spiral art needs to read as a staircase rather than a step
+   * pattern on a floor tile.
+   */
+  private fillTowerStairBlock(
+    grid: TileContent[][],
+    origin: TowerTile,
+    type: number,
+  ): Array<{ x: number; y: number }> {
+    const tiles: Array<{ x: number; y: number }> = [];
+    for (let dy = 0; dy < TOWER_STAIR_SPAN; dy++) {
+      for (let dx = 0; dx < TOWER_STAIR_SPAN; dx++) {
+        // `placeProp`, not a bare type write: it records the floor the stair
+        // replaced, and the stair is drawn as an overlay over that floor.
+        placeProp(grid[origin.y + dy][origin.x + dx], type);
+        tiles.push({ x: origin.x + dx, y: origin.y + dy });
+      }
+    }
+    return tiles;
   }
 
   /**
@@ -1710,6 +1835,48 @@ export class GameMap {
     this._interiorStairDownTiles = [];
   }
 
+  /**
+   * One section of the sewer, the `sectionIndex`-th of `plan.sections`, built
+   * tile for tile from its parse: brick walls, stone walkways and every
+   * channel as its dry bed. The section's system floods the channels.
+   *
+   * Arrival is the foot of the street grate's ladder. A section has no exit
+   * tile: every way out is a connection the section's system stands up as an
+   * exit fixture.
+   */
+  generateSewer(plan: SewerPlan, sectionIndex: number): void {
+    if (sectionIndex < 0 || sectionIndex >= plan.sections.length) {
+      throw new Error(`the sewer has no section ${sectionIndex}`);
+    }
+    const section = plan.sections[sectionIndex];
+    const { grid: sewerGrid } = section;
+    const grid: TileContent[][] = Array.from({ length: sewerGrid.height }, (_row, y) =>
+      Array.from({ length: sewerGrid.width }, (_column, x) => ({
+        tileId: `${x}#${y}`,
+        type: sewerTileTypeFor(sewerTileAt(sewerGrid, x, y)),
+      })),
+    );
+    this.structure = grid;
+    this.rebuildBlockedMasks();
+    this.startTile = { x: section.ladder.x, y: section.ladder.y };
+    this.setStairwellTiles([]);
+    this.buildingEntries = [];
+    this.bossRooms = [];
+    this.mobSpawnPoints = [];
+    this.hallwaySpawnPoints = [];
+    this.safeRooms = [];
+    this._interiorExitTiles = [];
+    this._interiorStairUpTiles = [];
+    this._interiorStairDownTiles = [];
+  }
+
+  /**
+   * The dungeon theme a tower storey is drawn under, which the scene sets as
+   * the storey becomes the one on show: the tower builds every storey at the
+   * door, and the cistern is drawn in the sewer's materials while the rest
+   * are not. Null on every map that is not a tower storey.
+   */
+  towerStoreyTheme: DungeonFloorThemeId | null = null;
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */
   _interiorExitTiles: Array<{ x: number; y: number }> = [];
   /** Interior stair-up tile positions (tower floors). */
@@ -1728,10 +1895,18 @@ export class GameMap {
     startY: number,
     goalX: number,
     goalY: number,
+    mobility: MobilityClass,
     maxDistanceTiles = MOB_MAX_PATH_DISTANCE_TILES,
     forHostile = false,
   ): Array<{ x: number; y: number }> {
-    return this.searchPath(startX, startY, goalX, goalY, maxDistanceTiles, forHostile, false);
+    return this.searchPath(
+      startX,
+      startY,
+      goalX,
+      goalY,
+      { mobility, forHostile, avoidStairwells: false },
+      maxDistanceTiles,
+    );
   }
 
   /**
@@ -1745,10 +1920,18 @@ export class GameMap {
     startY: number,
     goalX: number,
     goalY: number,
+    mobility: MobilityClass,
     maxDistanceTiles = MOB_MAX_PATH_DISTANCE_TILES,
     forHostile = false,
   ): Array<{ x: number; y: number }> {
-    return this.searchPath(startX, startY, goalX, goalY, maxDistanceTiles, forHostile, true);
+    return this.searchPath(
+      startX,
+      startY,
+      goalX,
+      goalY,
+      { mobility, forHostile, avoidStairwells: true },
+      maxDistanceTiles,
+    );
   }
 
   /**
@@ -1762,9 +1945,9 @@ export class GameMap {
     goalY: number,
     startX: number,
     startY: number,
-    forHostile: boolean,
+    mover: PathMover,
   ): { x: number; y: number } | null {
-    if (this.passableStructureRect(goalX, goalY) === null) return null;
+    if (this.passableStructureRect(goalX, goalY, mover.mobility) === null) return null;
     for (let ring = 1; ring <= STRUCTURE_STAND_IN_MAX_RING; ring++) {
       let best: { x: number; y: number } | null = null;
       let bestDistanceSq = Infinity;
@@ -1773,7 +1956,7 @@ export class GameMap {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
           const x = goalX + dx;
           const y = goalY + dy;
-          if (!this.isWalkableFor(x, y, forHostile)) continue;
+          if (!this.isWalkableFor(x, y, mover.forHostile, mover.mobility)) continue;
           const distanceSq = (x - startX) ** 2 + (y - startY) ** 2;
           if (distanceSq >= bestDistanceSq) continue;
           best = { x, y };
@@ -1790,27 +1973,19 @@ export class GameMap {
     startY: number,
     goalX: number,
     goalY: number,
+    mover: PathMover,
     maxDistanceTiles: number,
-    forHostile: boolean,
-    avoidStairwells: boolean,
   ): Array<{ x: number; y: number }> {
-    if (!this.isWalkableFor(goalX, goalY, forHostile)) {
+    const { mobility, forHostile, avoidStairwells } = mover;
+    if (!this.isWalkableFor(goalX, goalY, forHostile, mobility)) {
       // A crawler may stand on a structure's bare edge, a tile nothing else can
       // enter; closing on the tile beside it keeps the edge from being a refuge.
-      const standIn = this.structureEdgeStandIn(goalX, goalY, startX, startY, forHostile);
+      const standIn = this.structureEdgeStandIn(goalX, goalY, startX, startY, mover);
       if (standIn === null) return [];
-      return this.searchPath(
-        startX,
-        startY,
-        standIn.x,
-        standIn.y,
-        maxDistanceTiles,
-        forHostile,
-        avoidStairwells,
-      );
+      return this.searchPath(startX, startY, standIn.x, standIn.y, mover, maxDistanceTiles);
     }
     const isStep = (tileX: number, tileY: number): boolean => {
-      if (!this.isWalkableFor(tileX, tileY, forHostile)) return false;
+      if (!this.isWalkableFor(tileX, tileY, forHostile, mobility)) return false;
       if (!avoidStairwells) return true;
       const isGoal = tileX === goalX && tileY === goalY;
       return isGoal || !this.isStairwellTile(tileX, tileY);
@@ -1879,6 +2054,8 @@ export class GameMap {
         const nx = cx + diagonal.dx;
         const ny = cy + diagonal.dy;
         if (!isStep(nx, ny)) continue;
+        // A hop or a squeeze is made square to the edge it crosses.
+        if (this.footingAt(nx, ny) !== this.footingAt(cx, cy)) continue;
         this.relaxNeighbor(
           nx,
           ny,
@@ -1988,6 +2165,9 @@ export class GameMap {
     this.applyBlockKeySet(this.bathroomBlockedSet, BLOCK_BATHROOM);
     this.applyBlockKeySet(this.stealthGateBlockedSet, BLOCK_STEALTH_GATE);
     this.applyBlockKeySet(this.bodyBlockedSet, BLOCK_BODY);
+    for (const mobility of MOBILITY_CLASSES) {
+      this.applyBlockKeySet(this.mobilityBlockedSets[mobility], BLOCK_MOBILITY[mobility]);
+    }
   }
 
   private applyBlockKeySet(keys: Iterable<number>, flag: number): void {
@@ -2042,10 +2222,10 @@ export class GameMap {
    * or null when the point is not refused by one: open ground, a wall, a house,
    * or a structure tile with no rectangle all answer null.
    */
-  structureRectAt(worldX: number, worldY: number): PixelRect | null {
+  structureRectAt(worldX: number, worldY: number, mobility: MobilityClass): PixelRect | null {
     const tileX = Math.floor(worldX / TILE_SIZE);
     const tileY = Math.floor(worldY / TILE_SIZE);
-    const rect = this.passableStructureRect(tileX, tileY);
+    const rect = this.passableStructureRect(tileX, tileY, mobility);
     if (rect === null || !pixelRectContains(rect, worldX, worldY)) return null;
     return rect;
   }
@@ -2055,11 +2235,11 @@ export class GameMap {
    * on the bare ground inside a structure's footprint around its solid frame.
    * Identical to `isWalkable` everywhere no structure rectangle is recorded.
    */
-  isCrawlerWalkableAt(worldX: number, worldY: number): boolean {
+  isCrawlerWalkableAt(worldX: number, worldY: number, mobility: MobilityClass): boolean {
     const tileX = Math.floor(worldX / TILE_SIZE);
     const tileY = Math.floor(worldY / TILE_SIZE);
-    if (this.isWalkable(tileX, tileY)) return true;
-    const rect = this.passableStructureRect(tileX, tileY);
+    if (this.isWalkable(tileX, tileY, mobility)) return true;
+    const rect = this.passableStructureRect(tileX, tileY, mobility);
     return rect !== null && !pixelRectContains(rect, worldX, worldY);
   }
 
@@ -2067,12 +2247,16 @@ export class GameMap {
    * A tile's recorded structure rectangle, when the structure is the only
    * thing blocking the tile; null otherwise.
    */
-  private passableStructureRect(tileX: number, tileY: number): PixelRect | null {
+  private passableStructureRect(
+    tileX: number,
+    tileY: number,
+    mobility: MobilityClass,
+  ): PixelRect | null {
     if (!this.isInsideGrid(tileX, tileY)) return null;
     const rect = this.structureSolidRects.get(tileCoordKey(tileX, tileY));
     if (rect === undefined) return null;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
-    return this.passableUnderFlags(tileX, tileY, flags & ~BLOCK_STRUCTURE) ? rect : null;
+    return this.passableUnderFlags(tileX, tileY, flags & ~BLOCK_STRUCTURE, mobility) ? rect : null;
   }
 
   /** Whether a structure's footprint reserves this tile. */
@@ -2119,14 +2303,51 @@ export class GameMap {
   }
 
   /**
+   * Blocks a placed prop's footprint tile for every class `passableBy` leaves
+   * out: solid for everyone when it admits nobody, a ledge when only climbers
+   * may stand on it. `baseRow` is the footprint's bottom row, which a body
+   * standing on the prop sorts below.
+   */
+  blockFootprintTile(tileX: number, tileY: number, passableBy: PassableBy, baseRow: number): void {
+    if (passableBy.size === 0) {
+      this.blockTilePermanently(tileX, tileY);
+      return;
+    }
+    const key = tileCoordKey(tileX, tileY);
+    let limited = false;
+    for (const mobility of MOBILITY_CLASSES) {
+      if (passableBy.has(mobility)) continue;
+      limited = true;
+      this.mobilityBlockedSets[mobility].add(key);
+      this.addBlockFlag(tileX, tileY, BLOCK_MOBILITY[mobility]);
+    }
+    if (limited) this.ledgeBaseRows.set(key, baseRow);
+  }
+
+  /**
+   * The bottom row of the placed prop a climber stands on at a tile, or null
+   * where she stands on no prop: a body on top of furniture sorts below its
+   * base, so it is drawn over the furniture it stands on.
+   */
+  ledgeBaseRow(tileX: number, tileY: number): number | null {
+    return this.ledgeBaseRows.get(tileCoordKey(tileX, tileY)) ?? null;
+  }
+
+  /**
    * Inverse of {@link blockTilePermanently}, for a placed town interior prop
    * a swing has just broken: the tile has no tile-type identity to reset (it
    * was floor the whole time), so walkability comes back the moment this
    * flag lifts rather than through `breakProp`'s tile-type rewrite.
    */
   unblockTilePermanently(tileX: number, tileY: number): void {
-    this.permanentBlockedTiles.delete(tileCoordKey(tileX, tileY));
+    const key = tileCoordKey(tileX, tileY);
+    this.permanentBlockedTiles.delete(key);
     this.removeBlockFlag(tileX, tileY, BLOCK_PERMANENT);
+    for (const mobility of MOBILITY_CLASSES) {
+      this.mobilityBlockedSets[mobility].delete(key);
+      this.removeBlockFlag(tileX, tileY, BLOCK_MOBILITY[mobility]);
+    }
+    this.ledgeBaseRows.delete(key);
   }
 
   /**
@@ -2536,23 +2757,45 @@ export class GameMap {
     this.markWaterChanged(changed);
   }
 
-  isWalkable(tileX: number, tileY: number): boolean {
+  /**
+   * Whether a mover of class `mobility` may stand on a tile. There is no
+   * query without a class: a walker and a climber disagree about every ledge
+   * and gap, and the mover's own class is the only right answer.
+   */
+  isWalkable(tileX: number, tileY: number, mobility: MobilityClass): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     return this.passableUnderFlags(
       tileX,
       tileY,
       this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)],
+      mobility,
     );
   }
 
   /** {@link isWalkable} for an in-grid tile, given the block flags to judge it by. */
-  private passableUnderFlags(tileX: number, tileY: number, flags: number): boolean {
-    if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
+  private passableUnderFlags(
+    tileX: number,
+    tileY: number,
+    flags: number,
+    mobility: MobilityClass,
+  ): boolean {
+    if ((flags & (BLOCK_UNCONDITIONAL | BLOCK_MOBILITY[mobility])) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     if (this.stealthGate !== 'open' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
     if ((flags & BLOCK_BODY) !== 0) return false;
     if (this.bathroomPlumbing !== 'fixed' && (flags & BLOCK_BATHROOM) !== 0) return false;
-    return isWalkableTileType(this.structure[tileY][tileX]);
+    return isWalkableTileType(this.structure[tileY][tileX], mobility);
+  }
+
+  /**
+   * What a climber stands on at a tile: a ledge, a gap, or the floor — which
+   * is also the answer for any tile no climber stands on.
+   */
+  footingAt(tileX: number, tileY: number): Footing {
+    if (!this.isInsideGrid(tileX, tileY)) return 'floor';
+    const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
+    if ((flags & BLOCK_MOBILITY.walker) !== 0) return 'ledge';
+    return tileFooting(this.structure[tileY][tileX]);
   }
 
   /**
@@ -2560,8 +2803,8 @@ export class GameMap {
    * shots in flight, which meet the queue's goblins as bodies rather than as a
    * wall. The stealth gate still stops them: it is iron, not a crowd.
    */
-  isWalkableIgnoringBathroomQueue(tileX: number, tileY: number): boolean {
-    if (!this.isWalkableIgnoringPuzzleChokes(tileX, tileY)) return false;
+  isWalkableIgnoringBathroomQueue(tileX: number, tileY: number, mobility: MobilityClass): boolean {
+    if (!this.isWalkableIgnoringPuzzleChokes(tileX, tileY, mobility)) return false;
     if (this.stealthGate === 'open') return true;
     return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_STEALTH_GATE) === 0;
   }
@@ -2571,12 +2814,12 @@ export class GameMap {
    * gate open. For questions about the route as built, such as which rooms lie
    * past a safe room, whose answer must not change when a puzzle is solved.
    */
-  isWalkableIgnoringPuzzleChokes(tileX: number, tileY: number): boolean {
+  isWalkableIgnoringPuzzleChokes(tileX: number, tileY: number, mobility: MobilityClass): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
-    if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
+    if ((flags & (BLOCK_UNCONDITIONAL | BLOCK_MOBILITY[mobility])) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
-    return isWalkableTileType(this.structure[tileY][tileX]);
+    return isWalkableTileType(this.structure[tileY][tileX], mobility);
   }
 
   /**
@@ -2584,14 +2827,21 @@ export class GameMap {
    * hostiles are turned away from (the village gate). Every hostile step and
    * hostile A* search goes through this; line of sight and spawn checks do not.
    */
-  isWalkableForHostile(tileX: number, tileY: number): boolean {
-    if (!this.isWalkable(tileX, tileY)) return false;
+  isWalkableForHostile(tileX: number, tileY: number, mobility: MobilityClass): boolean {
+    if (!this.isWalkable(tileX, tileY, mobility)) return false;
     return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_HOSTILE_ONLY) === 0;
   }
 
   /** {@link isWalkableForHostile} or {@link isWalkable}, whichever the mover's side calls for. */
-  isWalkableFor(tileX: number, tileY: number, forHostile: boolean): boolean {
-    return forHostile ? this.isWalkableForHostile(tileX, tileY) : this.isWalkable(tileX, tileY);
+  isWalkableFor(
+    tileX: number,
+    tileY: number,
+    forHostile: boolean,
+    mobility: MobilityClass,
+  ): boolean {
+    return forHostile
+      ? this.isWalkableForHostile(tileX, tileY, mobility)
+      : this.isWalkable(tileX, tileY, mobility);
   }
 
   /**
@@ -2619,14 +2869,14 @@ export class GameMap {
    * permanent block would otherwise make placement drift to — and leak — a
    * fresh blocked tile on every pass. Ignoring it keeps re-placement idempotent.
    */
-  isWalkableIgnoringPermanent(tileX: number, tileY: number): boolean {
+  isWalkableIgnoringPermanent(tileX: number, tileY: number, mobility: MobilityClass): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
-    if ((flags & BLOCK_EXTRA) !== 0) return false;
+    if ((flags & (BLOCK_EXTRA | BLOCK_MOBILITY[mobility])) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     if (this.bathroomPlumbing === 'broken' && (flags & BLOCK_BATHROOM) !== 0) return false;
     if (this.stealthGate === 'locked' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
-    return isWalkableTileType(this.structure[tileY][tileX]);
+    return isWalkableTileType(this.structure[tileY][tileX], mobility);
   }
 
   isStairwellTile(tileX: number, tileY: number): boolean {
@@ -2640,7 +2890,7 @@ export class GameMap {
    * on one starts inside ground its movement refuses.
    */
   isMobSpawnTile(tileX: number, tileY: number): boolean {
-    return this.isWalkable(tileX, tileY) && !this.isStairwellTile(tileX, tileY);
+    return this.isWalkable(tileX, tileY, 'walker') && !this.isStairwellTile(tileX, tileY);
   }
 
   /**
@@ -2711,22 +2961,38 @@ export class GameMap {
    *
    * Same traversal and endpoint rule as `hasLineOfSight`.
    */
-  hasWalkableLine(x1: number, y1: number, x2: number, y2: number): boolean {
-    return this.lineClearOf(x1, y1, x2, y2, this.walkBlocker);
+  hasWalkableLine(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    mobility: MobilityClass,
+  ): boolean {
+    return this.lineClearOf(x1, y1, x2, y2, this.walkBlockers[mobility]);
   }
 
   /** {@link hasWalkableLine} for a hostile mob, which the village gate also stops. */
-  hasHostileWalkableLine(x1: number, y1: number, x2: number, y2: number): boolean {
-    return this.lineClearOf(x1, y1, x2, y2, this.hostileWalkBlocker);
+  hasHostileWalkableLine(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    mobility: MobilityClass,
+  ): boolean {
+    return this.lineClearOf(x1, y1, x2, y2, this.hostileWalkBlockers[mobility]);
   }
 
   // Held as fields so the hot sight query allocates no closure per call.
   private readonly sightBlocker = (tileX: number, tileY: number): boolean =>
     this.blocksSight(tileX, tileY);
-  private readonly walkBlocker = (tileX: number, tileY: number): boolean =>
-    !this.isWalkable(tileX, tileY);
-  private readonly hostileWalkBlocker = (tileX: number, tileY: number): boolean =>
-    !this.isWalkableForHostile(tileX, tileY);
+  private readonly walkBlockers: Readonly<Record<MobilityClass, TileBlocker>> = {
+    walker: (tileX, tileY) => !this.isWalkable(tileX, tileY, 'walker'),
+    climber: (tileX, tileY) => !this.isWalkable(tileX, tileY, 'climber'),
+  };
+  private readonly hostileWalkBlockers: Readonly<Record<MobilityClass, TileBlocker>> = {
+    walker: (tileX, tileY) => !this.isWalkableForHostile(tileX, tileY, 'walker'),
+    climber: (tileX, tileY) => !this.isWalkableForHostile(tileX, tileY, 'climber'),
+  };
 
   /**
    * Amanatides–Woo walk from one point to another, false as soon as a crossed
@@ -2805,7 +3071,7 @@ export class GameMap {
     const ts = this.tileHeight;
     let tileX = Math.floor(fromX / ts);
     let tileY = Math.floor(fromY / ts);
-    if (!this.isWalkable(tileX, tileY)) return origin;
+    if (!this.isWalkable(tileX, tileY, 'walker')) return origin;
     const endTileX = Math.floor(toX / ts);
     const endTileY = Math.floor(toY / ts);
     const drawnPoint = { x: toX, y: toY };
@@ -2834,7 +3100,7 @@ export class GameMap {
         tileY += stepY;
         tNextY += tPerTileY;
       }
-      if (!this.isWalkable(tileX, tileY)) {
+      if (!this.isWalkable(tileX, tileY, 'walker')) {
         const tClear = Math.max(0, tCrossing - LAUNCH_POINT_WALL_CLEARANCE_PX / length);
         return { x: fromX + dx * tClear, y: fromY + dy * tClear };
       }
@@ -2860,7 +3126,7 @@ export class GameMap {
    * enough to see over (`isSightTransparentTileType`).
    */
   blocksSight(tileX: number, tileY: number): boolean {
-    if (this.isWalkable(tileX, tileY)) return false;
+    if (this.isWalkable(tileX, tileY, 'walker')) return false;
     if (!this.isInsideGrid(tileX, tileY)) return true;
     return !isSightTransparentTileType(this.structure[tileY][tileX]);
   }

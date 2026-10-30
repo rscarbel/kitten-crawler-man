@@ -331,6 +331,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     const walkable = this.gameMap.isWalkable(
       Math.floor(ball.toX / TILE_SIZE),
       Math.floor(ball.toY / TILE_SIZE),
+      'walker',
     );
     const x = walkable ? ball.toX : ball.fromX;
     const y = walkable ? ball.toY : ball.fromY;

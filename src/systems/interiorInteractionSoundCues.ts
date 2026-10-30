@@ -17,7 +17,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import type {
   TownInteriorExamineId,
-  TownInteriorInteraction,
+  TownInteriorDialogInteraction,
   TownInteriorSearchId,
   TownInteriorUseId,
 } from '../sprites/art/townInterior/townInteriorProps';
@@ -97,7 +97,6 @@ const EXAMINE_CUES: Partial<Record<TownInteriorExamineId, InteriorCue>> = {
   merc_desk: 'pageTurn',
   field_log: 'pageTurn',
   lectern: 'pageTurn',
-  petition_counter: 'pageTurn',
   lodge_duty_board: 'noticeUnfold',
   lodge_map_table: 'noticeUnfold',
   writ_board: 'noticeUnfold',
@@ -134,7 +133,7 @@ const SEARCH_CLOSE_CUES: Partial<Record<TownInteriorSearchId, InteriorCue>> = {
  * earlier search is not opened again — only its emptiness is heard.
  */
 export function interiorInteractionCues(
-  interaction: TownInteriorInteraction,
+  interaction: TownInteriorDialogInteraction,
   outcome: InteriorInteractionOutcome,
 ): readonly InteriorCue[] {
   switch (interaction.kind) {
@@ -152,7 +151,7 @@ export function interiorInteractionCues(
 
 /** The cue to play when the interaction's line is put away, or null when nothing closes. */
 export function interiorInteractionClosingCue(
-  interaction: TownInteriorInteraction,
+  interaction: TownInteriorDialogInteraction,
   outcome: InteriorInteractionOutcome,
 ): InteriorCue | null {
   if (interaction.kind !== 'search' || outcome === 'already_searched') return null;

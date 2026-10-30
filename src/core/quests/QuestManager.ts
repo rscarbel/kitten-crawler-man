@@ -6,7 +6,6 @@
 /** Every quest's id, one spelling shared by the quest's system and anything keyed on the quest. */
 export const QUEST_IDS = [
   'anchor_shards',
-  'krasue_murders',
   'grotesque_spider',
   'defend_goblin_mother',
   'borrowed_blueprints',
@@ -14,6 +13,7 @@ export const QUEST_IDS = [
   'stealth_key_snatch',
   'construction_contract',
   'clogged_bathroom',
+  'taloncrest_missing_cats',
 ] as const;
 export type QuestId = (typeof QUEST_IDS)[number];
 

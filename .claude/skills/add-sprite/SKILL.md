@@ -117,7 +117,7 @@ Creatures are not sheets at all: each is a `FigureDef` (`src/sprites/figure/figu
 - **Per-figure budget.** Every figure's cells are held to a 24 MB default under a global ceiling (`CACHE_BUDGET_MEGABYTES`, 80 MB, sized for level 3's arrival warming the crowd, the fairies and both crawlers at once, 53.1 MB of stored ink crops). `FigureDef.budgetMegabytes` replaces the default for one figure, and is legitimate only for a figure on screen almost every frame whose rows that must stay warm _together_ (locomotion, idle, whatever it is doing now) outgrow the default on their own. It never raises the global ceiling, so the room comes out of every other figure's share. Anything that checks a figure's bytes — admission, gates — goes through `figureByteBudgetFor(def)`, never `FIGURE_BYTE_BUDGET`, which only the cache's own gates read. The human figure declares one (`HUMAN_FIGURE_BUDGET_MEGABYTES` in `humanFigure.ts`, 28 MB), and so do the cat's (`CAT_FIGURE_BUDGET_MEGABYTES` in `catFigure.ts`, 28 MB) and the Necromancer's. Bytes are what the cache stores: each frame cropped to its padded ink box, at the density it is drawn (see `docs/asset-management.md`). The human's is gated by G9b per motion set in his hand, baked through the cache and measured as stored (`male_light`: bare 11.4 MB, 13.7 carrying; light one-hander 16.4 / 17.1; heavy 12.2 / 12.9; two-hander 9.9 / 10.6; Dave fully geared peaks at 22.0 carrying the light set): the light one-hander's blow family is the largest working set he has, and it sized the number. The cat's and the Necromancer's, and the 24 MB default, were sized from whole cells and are loose upper bounds.
 - **`skipSupersample`.** Cells are normally painted at twice the density and downsampled. A figure that composes itself on a scratch surface at whatever density it is painted at, with whole-pixel effects (a one-pixel outline, a two-pixel cast shadow), sets this: its edges are already antialiased, and supersampling would compose four times the pixels only to smear those effects into half-pixel blurs.
 - **Two-layer cells (`FigureDef.heldLayers`).** A frame that holds a runtime-chosen item is painted in one pass into the whole cell and a front layer (what lies in front of the item), and the cache stores the front cropped to its ink beside the cell; `drawFigureCached(..., between)` draws cell, the item, then the front. The crop is charged to the row's bytes. Measured cost: a front crop is usually a fist's worth of pixels (the human's largest is 58×104 px); over the human's whole working set the crops add 1.7–2.1 MB (about 3–4%), over the cat's tool rows about 0.1 MB. A scripted prop (hammer, dynamite, crate…) is baked between the two layers at bake time through the same `compositeHeldItem` (`src/sprites/held/heldComposite.ts`) the runtime uses, so a cell with a prop painted into it needs no front layer at draw time. The human's front crops and his carrying working set are measured by G9b (see `bipedal-figure/references/gates.md`).
-- **Outfit variants and `releaseFigure`.** A cell is keyed on `(figure, state, frame)` and shared by every draw, so a closed set of looks is a set of figures, each with its own id and the same rows. Only the variant on screen should be resident: `releaseFigure(def)` drops every cell and queued prewarm of a replaced figure at once, instead of waiting out `IDLE_FRAMES_BEFORE_RELEASE` with two working sets side by side. `setOutfit` (`src/sprites/outfits.ts`) releases a crawler's old outfit and prewarms the new one; anything that queued rows for the old outfit must ask again.
+- **Outfit variants and `releaseFigure`.** A cell is keyed on `(figure, state, frame)` and shared by every draw, so a closed set of looks is a set of figures, each with its own id and the same rows. Only the variant on screen should be resident: `releaseFigure(def)` drops every cell and queued prewarm of a replaced figure at once, instead of waiting out `IDLE_FRAMES_BEFORE_RELEASE` with two working sets side by side. `setHumanOutfit` (`src/sprites/humanSprite.ts`) and a cat's `CatAppearance.setOutfit` / `dress` release the old outfit and prewarm the new one; anything that queued rows for the old outfit must ask again.
 - **Attachments on the human rig.** A humanoid built on the human rig grows extra anatomy or clothing (wings, a tail, horns, trousers) through `BipedAttachments` (`biped/figure.ts`, passed as `BipedComposeOptions.attachments`), so the parts share his silhouette outline and cast shadows instead of reading as stickers. The Demon Liaison (`demonLiaisonArt.ts`, `demonLiaisonFigure.ts`) is the worked example; see the `bipedal-figure` skill.
 - **An effect laid out of figure cells.** The teleport (`drawTeleport` in `src/sprites/teleportEffect.ts`) builds every frame of the column of light, the band-by-band resolve and the edge flash from three pictures a `TeleportFigure` supplies (the figure, the figure in the light's colour, and its ring), indexed by frame alone, so it stores no frames of its own. Dave's pictures are three cells of the shared cache (`drawDaveSprite` in `src/sprites/daveSprite.ts`); a crawler brought into a safe room has no fixed cell, so `TeleportSnapshot` (`src/sprites/teleportSnapshot.ts`) paints its body once and cuts the light pictures from that. Colours come from `worldInk.teleport` (`src/ui/theme/worldInk.ts`). Reach for this before painting a one-off effect sheet for a figure; `npm run render:dave-teleport` reviews every frame at the 32 px tile.
 - **`prewarmFigureState(def, state, frameLimit?)`.** `frameLimit` warms only a row's first frames — a blow's wind-up up to its impact frame — so the rest can bake while those play. Repeated requests for the same row merge to the larger limit.
@@ -291,6 +291,46 @@ shipped: eight walk and idle rows in the toward and away views each way, 64
 cells, 6.25 MB; all of her rows warm would have been 25 MB, over the 24 MB
 default.
 
+## Cat appearances and row tiers
+
+There is no "the cat". Every cat drawn — the crawler (`CatPlayer.appearance`),
+a companion (`CatAlly`), each town cat (`TownCat`), a preview or an explainer
+page (`EXPLAINER_CAT`) — owns a `CatAppearance` (`src/sprites/catSprite.ts`):
+
+- `new CatAppearance(tier, look, outfit?)`: her look, her outfit (bare by
+  default), the `FigureDef` from `catFigureFor(look, outfit)` (memoised per
+  pair in `catFigure.ts`, so two cats in one look share cells) and her own
+  `ResidentRows`. `setOutfit` / `dress(garments)` / `setLook` refigure her and
+  release the old figure; `release()` drops her cells when she leaves.
+- Every draw, socket and prewarm takes the appearance:
+  `drawCatSprite(ctx, appearance, sx, sy, s, cell, state?, held?, stowed?)`,
+  `prewarmCatHold(appearance, hold, facing, moving)` (crawler tier only),
+  `catMouthSocketInTile(appearance, cell)`, `catMouthOf(look, cell)`, and
+  `new CatAnimator(appearance)`.
+- **Row tiers.** `CatRowTier` is `'crawler' | 'companion' | 'ambient'`, and
+  `CAT_ROW_TIERS` lists each tier's rows (`crawler` must list every `CatState`,
+  enforced by `everyCatRow`). `CatTierState<T>` types a tier's rows, so
+  `drawCatSprite` with a `CatCell` outside the appearance's tier, or
+  `prewarmRow` of one, is a compile error. A cell chosen at runtime goes
+  through `appearance.cellFor(state)` / `narrow(cell)`, which throws in a dev
+  build and in scripts and draws `idle` otherwise. `TIER_PREWARM` is what each
+  tier warms on arrival, `TIER_CUED_ROWS` what it warms on its owner's cue
+  (`prewarmCued`), and `TIER_RESIDENCY` what it holds warm on every draw (the
+  crawler's turning rows and swings, the companion's walk and idle in every
+  view, nothing for an ambient cat). `WARMED_CAT_ROWS` is their union, and
+  `gates-cat` (G8) fails any row of the figure outside it.
+- **Adding a row** (a traversal verb, say): paint it in `catFigure.ts`, add it
+  to `CatState` and `FRAME_COUNT`, list it in each tier that may play it in
+  `CAT_ROW_TIERS` and in a warm list, and give `catCellFor` the state field
+  that selects it. `CatPreviewScene`'s `ROW_DRIVES` then refuses to compile
+  until the preview can reach it.
+- **Town cat looks** are built by `townCatLook` (`looks/cats/townCatLook.ts`)
+  from a compact spec, one file per cat, listed in `TOWN_CAT_LOOKS`
+  (`looks/cats/townCatLooks.ts`). `npm run render:cat -- --look=<id>` and
+  `?cat&look=<id>` show any of them. The world side (name, home building,
+  caged / freed / at-home behaviour) is `TOWN_CATS` and `TownCats` in
+  `src/systems/critters/TownCats.ts`.
+
 ## The cat's garments
 
 Everything the cat wears is a `GarmentDef` (`src/sprites/garments/cat/`): her
@@ -299,7 +339,7 @@ whatever she puts on over it, registered as a `CatWornGarmentId` (none is
 painted yet, so that union is empty). Her anatomy (`catArt.ts`) never
 paints fur itself: it hands each piece to a `CatDressing` with a part frame
 (`catParts.ts`), and every garment covering that part paints there, so later
-pieces cover it like fur. `setOutfit('cat', garments)` (`src/sprites/outfits.ts`)
+pieces cover it like fur. `CatAppearance.dress(garments)` (`src/sprites/catSprite.ts`)
 dresses her sprite; the figure id is `cat:<look id>` bare, else `cat:<look id>:<sorted garment ids>`.
 An item's `look` in `ItemDefs.ts` names the garment. Gate:
 `npm run gates:equipment -- --item=<item or garment id>` (E5, the envelope).

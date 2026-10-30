@@ -212,7 +212,13 @@ export class RockThrowSystem implements GameSystem {
       // rather than inside the tile it would have entered.
       const nextX = rock.x + rock.vx;
       const nextY = rock.y + rock.vy;
-      if (!this.gameMap.isWalkable(Math.floor(nextX / TILE_SIZE), Math.floor(nextY / TILE_SIZE))) {
+      if (
+        !this.gameMap.isWalkable(
+          Math.floor(nextX / TILE_SIZE),
+          Math.floor(nextY / TILE_SIZE),
+          'walker',
+        )
+      ) {
         this.land(rock, this.targetsFor(ctx, rock));
         continue;
       }

@@ -133,15 +133,18 @@ function innerTileAt(gameMap: GameMap, site: BriarHollowSite, ringIndex: number)
   );
   return (
     neighbours.find(
-      (tile) => rectContains(site.interior, tile.x, tile.y) && gameMap.isWalkable(tile.x, tile.y),
+      (tile) =>
+        rectContains(site.interior, tile.x, tile.y) && gameMap.isWalkable(tile.x, tile.y, 'walker'),
     ) ?? null
   );
 }
 
 /** Whether a soldier can walk from one tile to another, by the friendly A* it really walks by. */
 export function canWalkBetween(gameMap: GameMap, from: TilePoint, to: TilePoint): boolean {
-  if (from.x === to.x && from.y === to.y) return gameMap.isWalkable(to.x, to.y);
-  return gameMap.findPath(from.x, from.y, to.x, to.y, ROUTE_LEG_BUDGET_TILES, false).length > 0;
+  if (from.x === to.x && from.y === to.y) return gameMap.isWalkable(to.x, to.y, 'walker');
+  return (
+    gameMap.findPath(from.x, from.y, to.x, to.y, 'walker', ROUTE_LEG_BUDGET_TILES, false).length > 0
+  );
 }
 
 /** Whether every leg of a looping route, including the last back to the first, can be walked. */
@@ -149,7 +152,7 @@ export function routeIsWalkable(gameMap: GameMap, route: readonly TilePoint[]): 
   if (route.length < MIN_ROUTE_WAYPOINTS) return false;
   return route.every(
     (tile, index) =>
-      gameMap.isWalkable(tile.x, tile.y) &&
+      gameMap.isWalkable(tile.x, tile.y, 'walker') &&
       canWalkBetween(gameMap, tile, route[(index + 1) % route.length]),
   );
 }

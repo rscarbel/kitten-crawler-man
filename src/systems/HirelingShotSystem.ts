@@ -176,7 +176,11 @@ export class HirelingShotSystem implements GameSystem {
       const nextX = flight.x + flight.vx;
       const nextY = flight.y + flight.vy;
       const blocked =
-        !this.gameMap.isWalkable(Math.floor(nextX / TILE_SIZE), Math.floor(nextY / TILE_SIZE)) ||
+        !this.gameMap.isWalkable(
+          Math.floor(nextX / TILE_SIZE),
+          Math.floor(nextY / TILE_SIZE),
+          'walker',
+        ) ||
         this.isInSafeRoom({
           x: nextX - TILE_SIZE * CENTER_OFFSET,
           y: nextY - TILE_SIZE * CENTER_OFFSET,

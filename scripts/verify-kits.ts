@@ -19,8 +19,10 @@
  * of these checks is that the props the *generator* emits are the props the kit
  * breaks, so a layout change that stops emitting them has to fail here.
  *
- * Also covered: `interiorHostiles`, which is content rather than a kit but is
- * the proof that a room gains a fight from a table entry alone.
+ * Also covered: `distinctSpawnTiles`, the placement every interior spawn goes
+ * through, and the cutscene director's general steps (`kitsCutsceneChecks`),
+ * each with a fault that must turn the run red:
+ * `npx tsx scripts/verify-kits.ts --fault=<name>`.
  *
  * What this does **not** cover, so a green run is not read as more than it is:
  *
@@ -61,16 +63,7 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster, type SceneWorld } from '../src/systems/kits/SceneWorld';
 import { CombatKit } from '../src/systems/kits/CombatKit';
 import { DestructionKit } from '../src/systems/kits/DestructionKit';
-import {
-  distinctSpawnTiles,
-  interiorHostilesFor,
-  noteRoomCleared,
-  STAIR_GUARD_OFFSETS,
-  type InteriorHostileContext,
-} from '../src/systems/interiorHostiles';
-import { CULT_HIDEOUT_ELF_LEVEL } from '../src/systems/CultHideoutSystem';
-import { createTownMemory } from '../src/core/state/TownMemory';
-import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
+import { distinctSpawnTiles } from '../src/systems/interiorSpawnTiles';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
@@ -85,7 +78,27 @@ import { ITEM_DEF, isItemId, wearerAllows, type ItemId } from '../src/core/items
 import type { CrawlerKind } from '../src/core/skills/SkillManager';
 import type { GearTraitKind } from '../src/gear/traits';
 import type { Player } from '../src/Player';
-import type { BuildingId } from '../src/map/buildingIds';
+import {
+  CUTSCENE_STEP_FAULTS,
+  runCutsceneStepChecks,
+  type CutsceneStepFault,
+} from './kitsCutsceneChecks';
+
+const FAULT_FLAG = '--fault=';
+
+function parseFault(): CutsceneStepFault | null {
+  const flag = process.argv.find((arg) => arg.startsWith(FAULT_FLAG));
+  if (flag === undefined) return null;
+  const name = flag.slice(FAULT_FLAG.length);
+  const fault = CUTSCENE_STEP_FAULTS.find((candidate) => candidate === name);
+  if (fault === undefined) {
+    console.error(`unknown fault "${name}"; known: ${CUTSCENE_STEP_FAULTS.join(', ')}`);
+    process.exit(2);
+  }
+  return fault;
+}
+
+const fault = parseFault();
 
 /** The level the kit's militia are raised at; nothing here fights them. */
 const MILITIA_LEVEL = 1;
@@ -135,42 +148,15 @@ const PACK_STANDOFF_TILES = 40;
 const PACK_ALERT_RADIUS_TILES = 3;
 const PACK_ALERT_RADIUS_PX = TILE_SIZE * PACK_ALERT_RADIUS_TILES;
 
-const TOWER_ID = 'taloncrest_tower' satisfies BuildingId;
 /**
  * Where the party is parked in a check that does not care where they stand —
  * the first interior tile inside the north-west corner.
  */
 const PARKED_TILE = 1;
-/** The nudge radius `interiorHostiles` uses, mirrored so the contract is tested at its own scale. */
+/** A nudge radius at the scale interior spawns use. */
 const SPAWN_SEARCH_RADIUS = 4;
-/** Three, strung back along the crossing the party has to make. */
-const EXPECTED_STAIR_GUARDS = 3;
-/**
- * The party these gates place their guards for. Low enough that the quest's own
- * authored level wins, so what is measured stays placement rather than tuning.
- */
-const GATE_PARTY_LEVEL = 1;
-/** The storeys the cult holds — mirrored from the content table under test. */
-const FIRST_GUARDED_TOWER_FLOOR = 1;
-const SECOND_GUARDED_TOWER_FLOOR = 2;
-const GUARDED_TOWER_FLOORS = [FIRST_GUARDED_TOWER_FLOOR, SECOND_GUARDED_TOWER_FLOOR] as const;
-/** Quill's own confrontation owns the top of the tower. */
-const TOP_TOWER_FLOOR = 3;
-/** How far off the arrival tile the nearest guard must stand to be seen coming. */
-const MIN_GUARD_STANDOFF_TILES = 3;
-/** How much of the run between the two stairs the guard line has to span. */
-const MIN_LINE_SPREAD_FRACTION = 0.5;
-/** How far south of the stair row a guard may stand and still be on the crossing. */
-const MAX_GUARD_BAND_TILES = 5;
-
-/**
- * Where `changeFloor` puts a party down at a stair: one tile south of it, so the
- * step they just used does not immediately re-trigger. Climbing lands them at
- * the stair *down*; retreating lands them at the stair up.
- */
-function arrivalBelow(stair: { x: number; y: number }): { x: number; y: number } {
-  return { x: stair.x, y: stair.y + 1 };
-}
+/** A tower storey above the ground floor. */
+const UPPER_TOWER_FLOOR = 1;
 
 let failures = 0;
 
@@ -257,7 +243,7 @@ function makeContext(stage: Stage): SystemContext {
     human: stage.pm.human,
     cat: stage.pm.cat,
     active: stage.pm.active(),
-    inactive: stage.pm.inactive(),
+    partner: stage.pm.presentPartner(),
     activeIsMoving: false,
     roster: stage.roster,
     gameMap: stage.map,
@@ -274,7 +260,7 @@ function findFloorPairEastward(map: GameMap): TilePos | null {
   for (let y = 0; y < map.structure.length; y++) {
     const row = map.structure[y];
     for (let x = 0; x < row.length - 1; x++) {
-      if (map.isWalkable(x, y) && map.isWalkable(x + 1, y)) return { x, y };
+      if (map.isWalkable(x, y, 'walker') && map.isWalkable(x + 1, y, 'walker')) return { x, y };
     }
   }
   return null;
@@ -298,7 +284,7 @@ function findSmashableStorage(map: GameMap): PlacedTownInteriorProp[] {
     const kind = def.destructible?.kind;
     if (kind === undefined || !SMASHABLE_STORAGE_KINDS.has(kind)) return false;
     const isSingleTile = def.footprint.w === 1 && def.footprint.h === 1;
-    return isSingleTile && map.isWalkable(placed.tile.x - 1, placed.tile.y);
+    return isSingleTile && map.isWalkable(placed.tile.x - 1, placed.tile.y, 'walker');
   });
 }
 
@@ -504,7 +490,7 @@ console.log('\nFloor loot survives the door');
       human,
     );
 
-    destruction.loot.sweepUncollected(stage.pm.players());
+    destruction.loot.sweepUncollected(stage.pm.wholeParty());
 
     check(human.coins === coinsBefore + SWEPT_COINS, "the pile's coins reach the owner's purse");
     check(
@@ -519,7 +505,7 @@ console.log('\nFloor loot survives the door');
     // that cannot be done.
     const droppedBefore = human.inventory.countOf('health_potion');
     destruction.loot.addPlayerDrop(human.x, human.y, 'health_potion', 1, human);
-    destruction.loot.sweepUncollected(stage.pm.players());
+    destruction.loot.sweepUncollected(stage.pm.wholeParty());
     check(
       human.inventory.countOf('health_potion') === droppedBefore,
       'and an item the player dropped on purpose stays dropped',
@@ -536,7 +522,7 @@ console.log('\nFloor loot survives the door');
       { coins: RESWEPT_COINS, items: [] },
       human,
     );
-    destruction.loot.sweepUncollected(stage.pm.players());
+    destruction.loot.sweepUncollected(stage.pm.wholeParty());
     check(
       human.coins === coinsBefore + SWEPT_COINS + RESWEPT_COINS &&
         human.inventory.countOf('health_potion') === potionsBefore + SWEPT_POTIONS,
@@ -568,7 +554,7 @@ console.log('\nDestructibles exist indoors and break');
 
     const { x: targetX, y: targetY } = target.tile;
     standWestFacing(stage, targetX * TILE_SIZE + HALF_TILE, targetY * TILE_SIZE + HALF_TILE);
-    check(!map.isWalkable(targetX, targetY), 'the standing prop blocks its tile');
+    check(!map.isWalkable(targetX, targetY, 'walker'), 'the standing prop blocks its tile');
 
     let swingsThatConnected = 0;
     stage.bus.on('humanMeleeSwing', (event) => {
@@ -586,7 +572,7 @@ console.log('\nDestructibles exist indoors and break');
 
     check(swingsThatConnected > 0, 'a swing through the kit connects with the prop');
     check(interiorProps.broken.has(target.id), `enough hits break it (${frames} frames)`);
-    check(map.isWalkable(targetX, targetY), 'and the tile it stood on opens up');
+    check(map.isWalkable(targetX, targetY, 'walker'), 'and the tile it stood on opens up');
 
     // The count, not merely "some": one barrel is one cue, and the scene plays
     // a cue per break reported — a prop double-counted here is a smash that
@@ -696,9 +682,9 @@ console.log('\nSpawn placement never stacks two bodies on one tile');
 {
   const map = makeInterior();
   const start = map.startTile;
-  // Three requests for the *same* tile. Nothing on the shipped tower layout ever
-  // collides, so asking the real placement helper for a collision is the only
-  // way to exercise the guard that keeps two guards off one square.
+  // Three requests for the *same* tile: asking the real placement helper for a
+  // collision is the only way to exercise the guard that keeps two bodies off
+  // one square.
   const crowded = [start, start, start];
   const placed = distinctSpawnTiles(map, crowded, SPAWN_SEARCH_RADIUS);
   check(placed.length === crowded.length, `every crowded request is placed (${placed.length}/3)`);
@@ -715,7 +701,7 @@ console.log('\nSpawn placement never stacks two bodies on one tile');
   const nudged = distinctSpawnTiles(map, inWall, SPAWN_SEARCH_RADIUS);
   check(nudged.length === 1, 'a request aimed into the masonry still finds a tile');
   check(
-    nudged.every((tile) => map.isWalkable(tile.x, tile.y)),
+    nudged.every((tile) => map.isWalkable(tile.x, tile.y, 'walker')),
     'and that tile is open floor rather than the wall it was aimed at',
   );
 }
@@ -726,181 +712,13 @@ console.log('\nRoom to move is measured on both axes');
   // alone calls every column past 15 out of bounds, which walls off the eastern
   // strip — where the stair up and the counters are — to the flood fill.
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, null);
+  map.generateInterior('tower', UPPER_TOWER_FLOOR, null);
   const rows = map.structure.length;
   const columns = map.structure[0].length;
   check(columns > rows, `the storey is wider than it is tall (${columns}x${rows})`);
   const eastern = { x: columns - 2, y: 2 };
-  check(map.isWalkable(eastern.x, eastern.y), 'and its eastern strip is open floor');
+  check(map.isWalkable(eastern.x, eastern.y, 'walker'), 'and its eastern strip is open floor');
   check(hasRoomToMove(map, eastern.x, eastern.y), 'which the room-to-move test can see');
-}
-
-console.log('\nA room with hostiles in it is content, not wiring');
-{
-  const memory = createTownMemory();
-  const quiet = createMurderQuestProgress();
-  const confronting = { ...quiet, stage: 'confrontation' as const };
-
-  // Every guarded storey, not one of them: each tower floor lays out its own
-  // furniture, so an offset that clears the library can still land in the
-  // quarters, and a gate that measures one floor would ship the other broken.
-  for (const floor of GUARDED_TOWER_FLOORS) {
-    const towerFloor = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-    towerFloor.generateInterior('tower', floor, null);
-    const base: InteriorHostileContext = {
-      buildingId: TOWER_ID,
-      buildingType: 'tower',
-      floor,
-      map: towerFloor,
-      memory,
-      murderQuest: quiet,
-      partyLevel: GATE_PARTY_LEVEL,
-    };
-    const held: InteriorHostileContext = { ...base, murderQuest: confronting };
-
-    check(
-      interiorHostilesFor(base).length === 0,
-      `floor ${floor} is empty until the questline gives the cult a reason to hold it`,
-    );
-
-    const guards = interiorHostilesFor(held);
-    const fullGarrison = guards.length === EXPECTED_STAIR_GUARDS;
-    check(
-      fullGarrison,
-      `floor ${floor} posts every stair guard (${guards.length}/${EXPECTED_STAIR_GUARDS})`,
-    );
-    // Gated on the count: `every` over a short list is vacuously true, so a
-    // dropped guard would otherwise be one FAIL wearing three false greens.
-    if (fullGarrison) {
-      check(
-        guards.every((guard) => guard.mobLevel === CULT_HIDEOUT_ELF_LEVEL),
-        `floor ${floor}'s guards match the congregation the party already fought`,
-      );
-      check(
-        guards.every((guard) => guard.forceAggro),
-        `floor ${floor}'s guards wake on arrival rather than waiting to be walked up to`,
-      );
-      const tiles = guards.map((guard) => ({
-        x: Math.floor(guard.x / TILE_SIZE),
-        y: Math.floor(guard.y / TILE_SIZE),
-      }));
-      check(
-        new Set(tiles.map((tile) => `${tile.x},${tile.y}`)).size === tiles.length,
-        `floor ${floor}'s guards each stand on a tile of their own`,
-      );
-
-      // The tiles the table *asks* for, not the tiles the search settled on:
-      // `findNearbyWalkableTile` rescues an offset that lands in furniture, so
-      // asserting the result is walkable only re-states what the search did.
-      const anchor = towerFloor._interiorStairUpTiles[0];
-      const intended = STAIR_GUARD_OFFSETS.map((offset) => ({
-        x: anchor.x + offset.dx,
-        y: anchor.y + offset.dy,
-      }));
-      // Both halves of what the nudger's *first* pass accepts. `isWalkable` is
-      // what catches an offset aimed at furniture; `hasRoomToMove` is the half
-      // that would catch one aimed at a pocket, which this map has none of —
-      // carried anyway, because the map is the thing most likely to change.
-      check(
-        intended.every(
-          (tile) =>
-            towerFloor.isWalkable(tile.x, tile.y) && hasRoomToMove(towerFloor, tile.x, tile.y),
-        ),
-        `floor ${floor}'s offsets name open floor rather than relying on the nudge`,
-      );
-
-      // Spread across the crossing rather than huddled at one end of it, so the
-      // party meets the line instead of walking past it.
-      const stairUp = towerFloor._interiorStairUpTiles[0];
-      const stairDown = towerFloor._interiorStairDownTiles[0];
-      const spread = Math.max(...tiles.map((t) => t.x)) - Math.min(...tiles.map((t) => t.x));
-      const crossing = Math.abs(stairUp.x - stairDown.x);
-      check(
-        spread >= crossing * MIN_LINE_SPREAD_FRACTION,
-        `floor ${floor}'s line spans the crossing (${spread}/${crossing} tiles)`,
-      );
-
-      // And inside the band the crossing runs through, rather than off in a
-      // corner of the room the party has no reason to walk into. `forceAggro`
-      // means a guard anywhere would eventually arrive; being *met* on the way
-      // is what makes it a picket line rather than a chase.
-      check(
-        tiles.every((tile) => tile.y - stairUp.y <= MAX_GUARD_BAND_TILES),
-        `floor ${floor}'s guards stay in the band the crossing runs through`,
-      );
-
-      // Far enough off *both* landings that the party sees them before they are
-      // being cast at — a party can arrive at either stair, climbing or
-      // retreating, and a caster spawned underfoot is an ambush nobody can read.
-      const landings = [arrivalBelow(stairDown), arrivalBelow(stairUp)];
-      const closest = Math.min(
-        ...landings.flatMap((landing) =>
-          tiles.map((tile) => Math.hypot(tile.x - landing.x, tile.y - landing.y)),
-        ),
-      );
-      check(
-        closest >= MIN_GUARD_STANDOFF_TILES,
-        `floor ${floor} keeps its nearest guard off either landing (${closest.toFixed(1)} tiles)`,
-      );
-    }
-  }
-
-  // One storey's clearing is its own; the roster and the memory are per room.
-  const cleared = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  cleared.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, null);
-  const clearedContext: InteriorHostileContext = {
-    buildingId: TOWER_ID,
-    buildingType: 'tower',
-    floor: FIRST_GUARDED_TOWER_FLOOR,
-    map: cleared,
-    memory,
-    murderQuest: confronting,
-    partyLevel: GATE_PARTY_LEVEL,
-  };
-  const stage = makeStage(cleared, PARKED_TILE, PARKED_TILE);
-  const guards = interiorHostilesFor(clearedContext);
-  // Through the roster the storey already had: the whole claim of the kit
-  // architecture is that this is all a new fight costs.
-  for (const guard of guards) stage.roster.add(guard);
-  const anyGuard = guards[0];
-  const hasGuard = guards.length > 0;
-  check(
-    hasGuard && stage.roster.mobs.includes(anyGuard),
-    'they join through the roster the storey already had',
-  );
-  check(
-    hasGuard &&
-      stage.roster.grid.queryCircle(anyGuard.x, anyGuard.y, PINPOINT_QUERY_RADIUS).has(anyGuard),
-    'so they are in its spatial index and can be hit',
-  );
-
-  noteRoomCleared(memory, TOWER_ID, FIRST_GUARDED_TOWER_FLOOR);
-  check(
-    interiorHostilesFor(clearedContext).length === 0,
-    'a cleared room stays cleared, so walking back in is not a farm',
-  );
-  check(
-    interiorHostilesFor({ ...clearedContext, floor: SECOND_GUARDED_TOWER_FLOOR }).length > 0,
-    'and clearing one storey does not clear the next',
-  );
-  // Built from an *uncleared* room, or the cleared-rooms guard answers first and
-  // the branch under test is never reached.
-  const uncleared: InteriorHostileContext = {
-    ...clearedContext,
-    memory: createTownMemory(),
-  };
-  check(
-    interiorHostilesFor({ ...uncleared, floor: GROUND_FLOOR }).length === 0,
-    'the ground floor stays walkable, so the party can get in and back out',
-  );
-  check(
-    interiorHostilesFor({ ...uncleared, floor: TOP_TOWER_FLOOR }).length === 0,
-    "and the top floor is left to Quill's own confrontation",
-  );
-  check(
-    interiorHostilesFor({ ...uncleared, buildingType: 'store' }).length === 0,
-    'and no other building type is garrisoned',
-  );
 }
 
 console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
@@ -1108,6 +926,14 @@ console.log('\nWorn gear traits fire through the kit, one per hook family');
   }
 }
 
+console.log('\nCutscene steps: walks, glides, holds, hiding, the fade, cue clocks, world actions');
+{
+  const map = makeInterior();
+  const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
+  runCutsceneStepChecks(map, stage.pm.human, fault, check);
+}
+
+if (fault !== null) console.log(`fault injected: ${fault}`);
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);
   process.exit(1);

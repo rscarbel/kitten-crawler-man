@@ -19,6 +19,7 @@ import {
   GRASSY_WEED,
   LANE_STREET,
   PLAZA_STONE,
+  STORM_DRAIN_GRATE,
   VERGE_GRASS,
   YARD_GRAVEL,
   HIGHLAND_GRASS,
@@ -292,6 +293,7 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
     case COBBLE_STREET:
       return 'cobble';
     case PLAZA_STONE:
+    case STORM_DRAIN_GRATE:
       return 'plaza';
     // A threshold is the doorway's board run, so the floor carries on through
     // it: the fringe then sees one plank surface from the room out to the wall

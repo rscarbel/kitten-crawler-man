@@ -36,6 +36,7 @@ import {
  * - `death`: last words.
  * - `talk`: the player walked up and pressed interact.
  * - `floor_end`: the floor is won and the contract with it.
+ * - `loan_end`: the Warden is gone, and the desk's tower loan with him.
  */
 export type MercenaryBarkTrigger =
   | 'hired'
@@ -51,7 +52,8 @@ export type MercenaryBarkTrigger =
   | 'potion'
   | 'death'
   | 'talk'
-  | 'floor_end';
+  | 'floor_end'
+  | 'loan_end';
 
 /** The two stone noises a golem can make; see `playMobAudioCues` for which cue each is. */
 export type MercenaryGrunt = 'grunt' | 'frustrated';
@@ -108,6 +110,8 @@ export function linesFor(
       return bag.talk;
     case 'floor_end':
       return bag.floorEnd;
+    case 'loan_end':
+      return bag.loanEnd;
   }
 }
 
@@ -131,6 +135,7 @@ const POTION_BARK_COOLDOWN_FRAMES = HIRELING_POTION_COOLDOWN_FRAMES * 2;
 const DEATH_BARK_COOLDOWN_FRAMES = 0;
 const TALK_BARK_COOLDOWN_FRAMES = 0;
 const FLOOR_END_BARK_COOLDOWN_FRAMES = 0;
+const LOAN_END_BARK_COOLDOWN_FRAMES = 0;
 
 /** Frames before the same trigger can fire again for the same hireling. */
 export const BARK_COOLDOWN_FRAMES: Readonly<Record<MercenaryBarkTrigger, number>> = {
@@ -148,6 +153,7 @@ export const BARK_COOLDOWN_FRAMES: Readonly<Record<MercenaryBarkTrigger, number>
   death: DEATH_BARK_COOLDOWN_FRAMES,
   talk: TALK_BARK_COOLDOWN_FRAMES,
   floor_end: FLOOR_END_BARK_COOLDOWN_FRAMES,
+  loan_end: LOAN_END_BARK_COOLDOWN_FRAMES,
 };
 
 /**
@@ -184,6 +190,7 @@ const TUMBLEDOWN_GRUNTS: Partial<Record<MercenaryBarkTrigger, MercenaryGrunt>> =
   potion: 'grunt',
   death: 'frustrated',
   floor_end: 'grunt',
+  loan_end: 'grunt',
 };
 
 export const MERCENARY_VOICES: Readonly<Record<MercenaryVoiceId, MercenaryVoice>> = {

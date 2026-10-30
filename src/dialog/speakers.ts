@@ -18,7 +18,7 @@ import { motion } from '../ui/theme/tokens';
 import type { CarolineSpeakerRef } from './caroline';
 
 /** How a speaker's text is cased when it's drawn — a written-in rule instead of an author convention to remember. */
-export type TextCase = 'as-written' | 'upper';
+export type TextCase = 'as-written' | 'upper' | 'lower';
 
 /**
  * The face a speaker's words are set in: the UI face, or a terminal face for a
@@ -201,6 +201,20 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
+  /**
+   * Pumpkin, Dave's lost cat: unhurried, unbothered, and interested in food
+   * and doors and nothing else. Short sentences; no line of hers is excited.
+   * Lowercased by rule, so a line written with a capital still reads as hers.
+   */
+  pumpkin: {
+    name: 'Pumpkin',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'lower',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+
   dave: {
     name: 'Dave',
     portrait: null,
@@ -219,32 +233,6 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  // The Krasue Murders.
-  baggi: {
-    name: 'Baggi',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  quill: {
-    name: 'Miss Quill',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  /** The Lich before its reveal in the Murders questline — the same character as {@link SPEAKERS.lich}, credited under the name the plot hides it behind. */
-  mysteriousVoice: {
-    name: 'A voice from everywhere',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
   lich: {
     name: 'The Lich',
     portrait: null,
@@ -352,6 +340,16 @@ export const SPEAKERS = {
     name: 'Dr. Ignatius Moult',
     portrait: null,
     voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+
+  // The Town Center Tower's door and gatehouse.
+  towerGuard: {
+    name: 'Tower Guard',
+    portrait: null,
+    voice: { kind: 'clips', sounds: HUMAN_MASCULINE_VOICE_SOUNDS },
     reveal: 'sentence',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,

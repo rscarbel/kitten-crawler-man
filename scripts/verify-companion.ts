@@ -297,7 +297,7 @@ function makeContext(party: Party, bossRoom?: BossRoomSystem): SystemContext {
     human: party.human,
     cat: party.cat,
     active,
-    inactive,
+    partner: inactive,
     activeIsMoving: false,
     roster: party.roster,
     gameMap: party.map,
@@ -354,7 +354,7 @@ function findOpenGround(map: GameMap): { x: number; y: number } | null {
       let clear = true;
       for (let dy = -OPEN_GROUND_RADIUS_TILES; dy <= OPEN_GROUND_RADIUS_TILES && clear; dy++) {
         for (let dx = -OPEN_GROUND_RADIUS_TILES; dx <= OPEN_GROUND_RADIUS_TILES && clear; dx++) {
-          if (!map.isWalkable(x + dx, y + dy)) clear = false;
+          if (!map.isWalkable(x + dx, y + dy, 'walker')) clear = false;
         }
       }
       if (clear) return { x, y };
@@ -416,7 +416,7 @@ function nearbyWalkable(
       for (let dx = -radius; dx <= radius; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
         const tile = { x: from.x + dx, y: from.y + dy };
-        if (!map.isWalkable(tile.x, tile.y)) continue;
+        if (!map.isWalkable(tile.x, tile.y, 'walker')) continue;
         if (
           !map.hasLineOfSight(
             from.x * TILE_SIZE + centre,
@@ -494,13 +494,13 @@ console.log('\nAn ownerless damage-over-time still kills, just anonymously');
 console.log('\nA damage-over-time tick cannot walk through a boss shield');
 {
   /**
-   * Stands in for Miss Quill behind her capacitor: she refuses damage while
-   * the thing guarding her lives.
+   * Stands in for a boss behind a shield: it refuses damage while the thing
+   * guarding it lives.
    *
-   * The shield used to live only on the swung route, so one poison proc — which
-   * lands even on a blow the shield swallowed — dissolved the whole "kill the
-   * adds first" mechanic, and after the attribution work it would have been
-   * paid the kill credit, the XP and the boss chest for doing it.
+   * A shield held only on the swung route would let one poison proc, which
+   * lands even on a blow the shield swallowed, dissolve the whole "kill the
+   * adds first" mechanic and be paid the kill credit, the XP and the boss
+   * chest for doing it.
    */
   class ShieldedDummy extends Mob {
     readonly xpValue = 0;
@@ -1834,7 +1834,10 @@ console.log('\nA directive nobody can walk to is still a directive nobody is stu
   runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
   const catTileX = Math.floor((party.cat.x + TILE_SIZE / 2) / TILE_SIZE);
   const catTileY = Math.floor((party.cat.y + TILE_SIZE / 2) / TILE_SIZE);
-  check(map.isWalkable(catTileX, catTileY), 'an unwalkable order does not walk her into the wall');
+  check(
+    map.isWalkable(catTileX, catTileY, 'walker'),
+    'an unwalkable order does not walk her into the wall',
+  );
 
   companion.clearDirective();
   party.human.x = (PARTITION_CAT_TILE.x - DIRECTIVE_TILES_AWAY) * TILE_SIZE;
@@ -1977,7 +1980,7 @@ console.log('\nWalking up to a way out of an unlooted room warns once per approa
     let interior: { x: number; y: number } | undefined;
     for (let y = room.bounds.y + 1; y < room.bounds.y + room.bounds.h - 1 && !interior; y++) {
       for (let x = room.bounds.x + 1; x < room.bounds.x + room.bounds.w - 1 && !interior; x++) {
-        if (farFromEveryDoor({ x, y }) && map.isWalkable(x, y)) interior = { x, y };
+        if (farFromEveryDoor({ x, y }) && map.isWalkable(x, y, 'walker')) interior = { x, y };
       }
     }
 

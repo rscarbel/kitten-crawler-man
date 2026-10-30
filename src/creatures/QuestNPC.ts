@@ -1,4 +1,5 @@
 import { Player, HP_BAR_Y_OFFSET } from '../Player';
+import type { MobilityClass } from '../map/mobility';
 import { TILE_SIZE } from '../core/constants';
 import {
   drawQuestNPCSprite,
@@ -34,6 +35,10 @@ export type NPCMarkerType = QuestMarkerState;
 export class QuestNPC extends Player {
   /** Flag for Fuzzy Nightmares to identify her as the defend target. */
   readonly isDefendTarget = true;
+
+  get mobility(): MobilityClass {
+    return 'walker';
+  }
   /** Current overhead marker — drives minimap and overhead icon. */
   markerType: NPCMarkerType = 'exclamation';
   /** Which quest this NPC belongs to. */

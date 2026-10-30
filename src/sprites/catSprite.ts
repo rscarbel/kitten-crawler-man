@@ -32,10 +32,11 @@ import {
   DANCE_FRAMES,
   IDLE_FRAMES,
   KO_FRAMES,
-  PLAYER_CAT_LOOK,
+  TALK_FRAMES,
   TILE_SCALE,
   TILE_X,
   TILE_Y,
+  TRAVERSAL_FRAMES,
   WALK_FRAMES,
   WORK_IMPACT_FRAME,
 } from './art/catFigure';
@@ -48,7 +49,8 @@ import { getMagicMissileVisualTier, type MagicMissileVisualTier } from '../abili
 import { missileOpacity, type KaleidoscopeCopy } from '../abilities/kaleidoscopeSpecs';
 import { DEFAULT_FACING_SELECTION, type FacingSelection } from './facingView';
 import { catRowViewOf, type CatRowView } from './catViews';
-import { BARE_CAT_OUTFIT } from './garments/cat/catDressing';
+import { bareCatOutfit } from './garments/cat/catDressing';
+import type { WornGarmentDef } from './garments/garmentDef';
 import { outfitOf, sameOutfit, type Outfit } from './garments/outfit';
 import type { CatLook, CatOutline } from './looks/catLook';
 
@@ -86,9 +88,12 @@ export type CatState =
   | 'idle_side'
   | 'idle_side_west'
   | 'idle_away'
+  | 'sit'
   | 'look_around'
   | 'groom_paw'
   | 'groom_flank'
+  | 'scamper_side'
+  | 'scamper_side_west'
   | 'swipe'
   | 'swipe_side'
   | 'swipe_side_west'
@@ -119,7 +124,27 @@ export type CatState =
   | 'throw'
   | 'throw_side'
   | 'throw_side_west'
-  | 'throw_away';
+  | 'throw_away'
+  | 'hop_up'
+  | 'hop_up_side'
+  | 'hop_up_side_west'
+  | 'hop_up_away'
+  | 'hop_down'
+  | 'hop_down_side'
+  | 'hop_down_side_west'
+  | 'hop_down_away'
+  | 'squeeze'
+  | 'squeeze_side'
+  | 'squeeze_side_west'
+  | 'squeeze_away'
+  | 'talk'
+  | 'talk_side'
+  | 'talk_side_west'
+  | 'talk_away'
+  | 'paw_bat'
+  | 'sniff'
+  | 'latch_paw'
+  | 'channel';
 
 /** Animations that play once and then hand control back to walk/idle. */
 export type CatOneShot =
@@ -131,7 +156,19 @@ export type CatOneShot =
   | 'groom_flank'
   | 'chop'
   | 'mine'
-  | 'throw';
+  | 'throw'
+  | CatTraversal
+  | CatVerb;
+
+/** Her moves between the floor and somewhere only a climber goes: the step waits on the row. */
+export type CatTraversal = 'hop_up' | 'hop_down' | 'squeeze';
+
+/**
+ * What she does with her paws and nose at a thing in the world: bat it off a
+ * ledge, sniff at a scent, reach up and work a latch, or strain at something
+ * for as long as a channel lasts (replayed each cycle until it ends).
+ */
+export type CatVerb = 'paw_bat' | 'sniff' | 'latch_paw' | 'channel';
 
 /** Her work swings: a two-paw chop at wood and a two-paw pick at stone. */
 export type CatWorkSwing = Extract<CatOneShot, 'chop' | 'mine'>;
@@ -152,6 +189,20 @@ const CAT_DANCE_FRAMES = 96;
 const CAT_LOOK_AROUND_FRAMES = 90;
 const CAT_GROOM_FRAMES = 110;
 const CAT_THROW_TICKS = ACTION_FRAMES * CAT_THROW_TICKS_PER_FRAME;
+/**
+ * Ticks each traversal and verb plays for. A hop is quick enough not to stall
+ * a move but long enough that its crouch reads; a sniff is a held beat.
+ */
+export const CAT_TRAVERSAL_TICKS: Readonly<Record<CatTraversal, number>> = {
+  hop_up: 22,
+  hop_down: 20,
+  squeeze: 30,
+};
+const CAT_PAW_BAT_TICKS = 24;
+const CAT_SNIFF_TICKS = 60;
+const CAT_LATCH_PAW_TICKS = 36;
+/** One cycle of her channel strain; a channel replays it until it ends. */
+const CAT_CHANNEL_CYCLE_TICKS = 48;
 /** Ticks from the start of her throw to the tick the thing leaves her jaws. */
 export const CAT_THROW_RELEASE_TICKS = CAT_THROW_RELEASE_FRAME * CAT_THROW_TICKS_PER_FRAME;
 
@@ -170,6 +221,11 @@ const ONE_SHOT_DURATION: Record<CatOneShot, number> = {
   groom_paw: CAT_GROOM_FRAMES,
   groom_flank: CAT_GROOM_FRAMES,
   throw: CAT_THROW_TICKS,
+  ...CAT_TRAVERSAL_TICKS,
+  paw_bat: CAT_PAW_BAT_TICKS,
+  sniff: CAT_SNIFF_TICKS,
+  latch_paw: CAT_LATCH_PAW_TICKS,
+  channel: CAT_CHANNEL_CYCLE_TICKS,
 };
 
 /** Ticks her work swing plays for, start to finish. */
@@ -188,7 +244,13 @@ const IDLE_BREAKS: readonly CatOneShot[] = ['look_around', 'groom_paw', 'groom_f
  * the floor in a dance pose looks broken. A throw is flung with her front paws
  * planted, so a step ends it as a step ends the human's.
  */
-const INTERRUPTED_BY_MOVEMENT: readonly CatOneShot[] = [...IDLE_BREAKS, 'dance', 'throw'];
+const INTERRUPTED_BY_MOVEMENT: readonly CatOneShot[] = [
+  ...IDLE_BREAKS,
+  'dance',
+  'throw',
+  'sniff',
+  'channel',
+];
 
 /**
  * Frames an animation is guaranteed before movement can cut it short. Without
@@ -224,9 +286,12 @@ const FRAME_COUNT: Record<CatState, number> = {
   idle_side: IDLE_FRAMES,
   idle_side_west: IDLE_FRAMES,
   idle_away: IDLE_FRAMES,
+  sit: IDLE_FRAMES,
   look_around: BREAK_FRAMES,
   groom_paw: BREAK_FRAMES,
   groom_flank: BREAK_FRAMES,
+  scamper_side: WALK_FRAMES,
+  scamper_side_west: WALK_FRAMES,
   swipe: ACTION_FRAMES,
   swipe_side: ACTION_FRAMES,
   swipe_side_west: ACTION_FRAMES,
@@ -258,7 +323,117 @@ const FRAME_COUNT: Record<CatState, number> = {
   throw_side: ACTION_FRAMES,
   throw_side_west: ACTION_FRAMES,
   throw_away: ACTION_FRAMES,
+  hop_up: TRAVERSAL_FRAMES,
+  hop_up_side: TRAVERSAL_FRAMES,
+  hop_up_side_west: TRAVERSAL_FRAMES,
+  hop_up_away: TRAVERSAL_FRAMES,
+  hop_down: TRAVERSAL_FRAMES,
+  hop_down_side: TRAVERSAL_FRAMES,
+  hop_down_side_west: TRAVERSAL_FRAMES,
+  hop_down_away: TRAVERSAL_FRAMES,
+  squeeze: TRAVERSAL_FRAMES,
+  squeeze_side: TRAVERSAL_FRAMES,
+  squeeze_side_west: TRAVERSAL_FRAMES,
+  squeeze_away: TRAVERSAL_FRAMES,
+  talk: TALK_FRAMES,
+  talk_side: TALK_FRAMES,
+  talk_side_west: TALK_FRAMES,
+  talk_away: TALK_FRAMES,
+  paw_bat: ACTION_FRAMES,
+  sniff: BREAK_FRAMES,
+  latch_paw: ACTION_FRAMES,
+  channel: ACTION_FRAMES,
 };
+
+const STANDING_ROWS = [
+  'idle',
+  'idle_side',
+  'idle_side_west',
+  'idle_away',
+] as const satisfies readonly CatState[];
+const WALKING_ROWS = [
+  'walk',
+  'walk_side',
+  'walk_side_west',
+  'walk_away',
+] as const satisfies readonly CatState[];
+const SWIPE_ROWS = [
+  'swipe',
+  'swipe_side',
+  'swipe_side_west',
+  'swipe_away',
+] as const satisfies readonly CatState[];
+const CAST_ROWS = [
+  'cast',
+  'cast_side',
+  'cast_side_west',
+  'cast_away',
+] as const satisfies readonly CatState[];
+const KNOCKED_OUT_ROWS = ['knocked_out', 'knocked_out_west'] as const satisfies readonly CatState[];
+const IDLE_BREAK_ROWS = [
+  'look_around',
+  'groom_paw',
+  'groom_flank',
+] as const satisfies readonly CatState[];
+const SCAMPER_ROWS = ['scamper_side', 'scamper_side_west'] as const satisfies readonly CatState[];
+const CHOP_ROWS = [
+  'chop',
+  'chop_side',
+  'chop_side_west',
+  'chop_away',
+] as const satisfies readonly CatState[];
+const MINE_ROWS = [
+  'mine',
+  'mine_side',
+  'mine_side_west',
+  'mine_away',
+] as const satisfies readonly CatState[];
+const CARRY_ROWS = [
+  'carry_walk',
+  'carry_walk_side',
+  'carry_walk_side_west',
+  'carry_walk_away',
+  'carry_idle',
+  'carry_idle_side',
+  'carry_idle_side_west',
+  'carry_idle_away',
+] as const satisfies readonly CatState[];
+const THROW_ROWS = [
+  'throw',
+  'throw_side',
+  'throw_side_west',
+  'throw_away',
+] as const satisfies readonly CatState[];
+
+/** Her hops and squeeze in every view, warmed as she nears a footing edge. */
+export const CAT_TRAVERSAL_ROWS = [
+  'hop_up',
+  'hop_up_side',
+  'hop_up_side_west',
+  'hop_up_away',
+  'hop_down',
+  'hop_down_side',
+  'hop_down_side_west',
+  'hop_down_away',
+  'squeeze',
+  'squeeze_side',
+  'squeeze_side_west',
+  'squeeze_away',
+] as const satisfies readonly CatState[];
+const TRAVERSAL_ROWS = CAT_TRAVERSAL_ROWS;
+/** Her talking in every view, warmed as a conversation opens. */
+const TALK_ROWS = [
+  'talk',
+  'talk_side',
+  'talk_side_west',
+  'talk_away',
+] as const satisfies readonly CatState[];
+const VERB_ROWS = [
+  'paw_bat',
+  'sniff',
+  'latch_paw',
+  'channel',
+] as const satisfies readonly CatState[];
 
 /**
  * Every row she can be drawn in without holding anything, standing and
@@ -274,30 +449,15 @@ const FRAME_COUNT: Record<CatState, number> = {
  * drawn in continuously are ready first and the ones she reaches for on a swipe,
  * a cast or a knockout follow behind them.
  */
-const PREWARMED_ROWS: ReadonlyArray<CatState> = [
-  'idle',
-  'idle_side',
-  'idle_side_west',
-  'idle_away',
-  'walk',
-  'walk_side',
-  'walk_side_west',
-  'walk_away',
-  'swipe',
-  'swipe_side',
-  'swipe_side_west',
-  'swipe_away',
-  'cast',
-  'cast_side',
-  'cast_side_west',
-  'cast_away',
-  'knocked_out',
-  'knocked_out_west',
+const CRAWLER_PREWARMED_ROWS = [
+  ...STANDING_ROWS,
+  ...WALKING_ROWS,
+  ...SWIPE_ROWS,
+  ...CAST_ROWS,
+  ...KNOCKED_OUT_ROWS,
   'dance',
-  'look_around',
-  'groom_paw',
-  'groom_flank',
-];
+  ...IDLE_BREAK_ROWS,
+] as const satisfies readonly CatState[];
 
 /**
  * The rows she plays only while holding something, by what she holds: a
@@ -307,108 +467,133 @@ const PREWARMED_ROWS: ReadonlyArray<CatState> = [
  * never holds two of these at once.
  */
 const HELD_ROWS: Readonly<Record<CatHold, readonly CatState[]>> = {
-  chop: ['chop', 'chop_side', 'chop_side_west', 'chop_away'],
-  mine: ['mine', 'mine_side', 'mine_side_west', 'mine_away'],
-  carry: [
-    'carry_walk',
-    'carry_walk_side',
-    'carry_walk_side_west',
-    'carry_walk_away',
-    'carry_idle',
-    'carry_idle_side',
-    'carry_idle_side_west',
-    'carry_idle_away',
-  ],
-  throw: [
-    'throw',
-    'throw_side',
-    'throw_side_west',
-    'throw_away',
-    'carry_walk',
-    'carry_walk_side',
-    'carry_walk_side_west',
-    'carry_walk_away',
-    'carry_idle',
-    'carry_idle_side',
-    'carry_idle_side_west',
-    'carry_idle_away',
-  ],
+  chop: CHOP_ROWS,
+  mine: MINE_ROWS,
+  carry: CARRY_ROWS,
+  throw: [...THROW_ROWS, ...CARRY_ROWS],
 };
 
-let activeLook: CatLook = PLAYER_CAT_LOOK;
-let activeOutfit: Outfit<'cat'> = BARE_CAT_OUTFIT;
-let activeFigure: FigureDef = catFigureFor(activeLook, BARE_CAT_OUTFIT);
-
-/** Who the cat crawler is painted as: the player's cat, unless a preview has asked for another. */
-export function activeCatLook(): CatLook {
-  return activeLook;
-}
-
 /**
- * Paints the cat crawler as `look` from now on, in the garments she has on.
- * The old look's cells are released at once: only one cat look is ever
- * resident.
- */
-export function setCatLook(look: CatLook): void {
-  if (look === activeLook) return;
-  releaseFigure(activeFigure);
-  activeLook = look;
-  activeOutfit = outfitOf(look, activeOutfit.worn);
-  activeFigure = catFigureFor(look, activeOutfit);
-  prewarmCatSprite();
-}
-
-/** The figure every draw and prewarm of the cat crawler goes through. */
-export function activeCatFigure(): FigureDef {
-  return activeFigure;
-}
-
-/**
- * Dresses the cat crawler's sprite in `outfit`. On a change the old look's cells are
- * released at once and the new one's rows queued: she is the most expensive
- * painter in the game, so two complete looks resident side by side is budget
- * nothing else gets back. Cheap when nothing that shows changed.
+ * Which rows a cat may ever bake, by the part she plays. Each cat's look is
+ * its own figure, and her fur makes every row of hers dear, so what bounds a
+ * scene's cats in memory is the rows each may reach for, not how many cats
+ * there are.
  *
- * Returns whether the look changed.
+ * - `crawler`: every row; only a playable crawler.
+ * - `companion`: a cat who walks and fights beside a crawler.
+ * - `ambient`: a cat who lives in the world around the party: she stands,
+ *   sits, grooms, looks about, walks and bolts.
  */
-export function setCatOutfit(outfit: Outfit<'cat'>): boolean {
-  if (sameOutfit(outfit, activeOutfit)) return false;
-  releaseFigure(activeFigure);
-  activeOutfit = outfit;
-  activeFigure = catFigureFor(activeLook, outfit);
-  prewarmCatSprite();
-  return true;
-}
-
-/** Queues every row the cat crawler can be drawn in empty-handed for baking. Call once per scene. */
-export function prewarmCatSprite(): void {
-  for (const state of PREWARMED_ROWS) prewarmFigureState(activeFigure, state);
-}
+export type CatRowTier = 'crawler' | 'companion' | 'ambient';
 
 /**
- * Queues the rows she plays holding `hold`, the ones of the view she faces
- * first: those are drawn next, and a swing's layered cells bake two layers
- * each. With something in her jaws, the faced row she is drawn in on the very
- * next frame — her carrying walk if `moving`, else her carrying idle — goes
- * ahead of the other: the idle loop's frame is picked by the clock, so while
- * it waits behind a whole walk row every frame the clock reaches is cold.
+ * `rows` back, as long as it names every row of hers; otherwise the call
+ * wants a second argument, and the compile error names the missing row.
  */
-export function prewarmCatHold(hold: CatHold, facing: FacingSelection, moving: boolean): void {
-  const view = catRowViewOf(facing.view);
-  const faced = (state: CatState): boolean =>
-    catRowView(state) === view && catRowFacesWest(state) === (view === 'side' && facing.flipX);
-  const inJaws = hold === 'carry' || hold === 'throw';
-  const drawnNext = inJaws ? directionalState(moving ? 'carry_walk' : 'carry_idle', facing) : null;
-  const rows = HELD_ROWS[hold];
-  const facedFirst = [...rows.filter(faced), ...rows.filter((row) => !faced(row))];
-  const ordered =
-    drawnNext === null ? facedFirst : [drawnNext, ...facedFirst.filter((row) => row !== drawnNext)];
-  for (const state of ordered) prewarmFigureState(activeFigure, state);
+function everyCatRow<const R extends readonly CatState[]>(
+  rows: R,
+  ..._complete: [Exclude<CatState, R[number]>] extends [never]
+    ? []
+    : [missingRow: Exclude<CatState, R[number]>]
+): R {
+  return rows;
 }
+
+const CRAWLER_ROWS = everyCatRow([
+  ...CRAWLER_PREWARMED_ROWS,
+  'sit',
+  ...SCAMPER_ROWS,
+  ...CHOP_ROWS,
+  ...MINE_ROWS,
+  ...CARRY_ROWS,
+  ...THROW_ROWS,
+  ...TRAVERSAL_ROWS,
+  ...VERB_ROWS,
+  ...TALK_ROWS,
+]);
+
+/** Every row each tier may bake. A tier gains a row by listing it here. */
+export const CAT_ROW_TIERS = {
+  crawler: CRAWLER_ROWS,
+  companion: [
+    ...STANDING_ROWS,
+    ...WALKING_ROWS,
+    ...SWIPE_ROWS,
+    ...KNOCKED_OUT_ROWS,
+    ...IDLE_BREAK_ROWS,
+    ...TRAVERSAL_ROWS,
+    ...VERB_ROWS,
+    ...TALK_ROWS,
+  ],
+  ambient: [
+    ...STANDING_ROWS,
+    ...WALKING_ROWS,
+    'sit',
+    ...IDLE_BREAK_ROWS,
+    ...SCAMPER_ROWS,
+    ...TALK_ROWS,
+  ],
+} as const satisfies Readonly<Record<CatRowTier, readonly CatState[]>>;
+
+/** The rows a cat of tier `T` may be drawn or warmed in. */
+export type CatTierState<T extends CatRowTier> = (typeof CAT_ROW_TIERS)[T][number];
+
+const TIER_ROW_SETS: Readonly<Record<CatRowTier, ReadonlySet<CatState>>> = {
+  crawler: new Set<CatState>(CAT_ROW_TIERS.crawler),
+  companion: new Set<CatState>(CAT_ROW_TIERS.companion),
+  ambient: new Set<CatState>(CAT_ROW_TIERS.ambient),
+};
+
+/**
+ * The rows each tier queues for baking as she arrives, in the order the
+ * queue drains. An ambient cat warms only what she is placed in: a room can
+ * hold several of them at once, and her other rows bake as she reaches them.
+ */
+const TIER_PREWARM: { readonly [K in CatRowTier]: readonly CatTierState<K>[] } = {
+  crawler: CRAWLER_PREWARMED_ROWS,
+  companion: [...STANDING_ROWS, ...WALKING_ROWS, ...SWIPE_ROWS, ...KNOCKED_OUT_ROWS],
+  ambient: ['idle', 'sit'],
+};
+
+/**
+ * Rows a tier warms only when her owner cues them, ahead of the moment she
+ * plays them: an ambient cat warms her bolt as she is let out, not while she
+ * sits waiting.
+ */
+const TIER_CUED_ROWS: { readonly [K in CatRowTier]: readonly CatTierState<K>[] } = {
+  crawler: [...TRAVERSAL_ROWS, ...VERB_ROWS, ...TALK_ROWS],
+  companion: [...TRAVERSAL_ROWS, ...VERB_ROWS, ...TALK_ROWS],
+  ambient: SCAMPER_ROWS,
+};
+
+/**
+ * Every row something warms before it is drawn: on a cat's arrival, on her
+ * owner's cue, or as a hold begins. Her painter is far too slow to bake a row
+ * on the frame she first needs it, so the art gates hold every row of the
+ * figure to this set.
+ */
+export const WARMED_CAT_ROWS: ReadonlySet<CatState> = new Set<CatState>([
+  ...Object.values(TIER_PREWARM).flat(),
+  ...Object.values(TIER_CUED_ROWS).flat(),
+  ...Object.values(HELD_ROWS).flat(),
+]);
+
+/** A row every tier has: what an out-of-tier cell is drawn as outside a dev build. */
+const TIER_FALLBACK_ROW: { readonly [K in CatRowTier]: CatTierState<K> } = {
+  crawler: 'idle',
+  companion: 'idle',
+  ambient: 'idle',
+};
+
+declare const __DEV_BUILD__: boolean | undefined;
+/** Scripts run with no build flags at all, and are held to the tiers as a dev build is. */
+const CHECKS_ROW_TIERS = typeof __DEV_BUILD__ === 'undefined' || __DEV_BUILD__;
 
 /** Loop speeds for the animations that are driven by the clock, not by a timer. */
 const IDLE_FPS = 6;
 const KNOCKED_OUT_FPS = 4;
+/** Two syllables a loop: a little under three a second, an unhurried mew. */
+const TALK_FPS = 11;
 
 /** A one-shot in flight, as the renderer needs to see it. */
 export interface CatOneShotState {
@@ -429,7 +614,7 @@ function randomBreak(): CatOneShot {
 }
 
 /**
- * Owns the cat crawler's animation timers: the one-shot currently playing and how long
+ * Owns one cat's animation timers: the one-shot currently playing and how long
  * she has been standing around doing nothing, which is what triggers the idle
  * breaks (a look around, a paw wash, a flank wash).
  */
@@ -440,6 +625,8 @@ export class CatAnimator {
   private idleFrames = 0;
   private nextBreakDelay = IDLE_BREAK_MIN_DELAY;
   private nextBreak: CatOneShot = FIRST_IDLE_BREAK;
+
+  constructor(private readonly appearance: CatAppearance) {}
 
   /** Starts an animation, replacing whatever was playing. */
   play(action: CatOneShot): void {
@@ -490,7 +677,8 @@ export class CatAnimator {
     // ahead of the queue, since standing still also queues the swings of the
     // view she faces, and a break behind them would play cold.
     if (this.idleFrames >= this.nextBreakDelay - IDLE_BREAK_PREWARM_LEAD) {
-      prewarmFigureState(activeFigure, this.nextBreak, undefined, true);
+      const row = this.appearance.tierRow(this.nextBreak);
+      if (row !== null) this.appearance.prewarmRow(row, true);
     }
     if (this.idleFrames < this.nextBreakDelay) return;
     this.nextBreakDelay =
@@ -523,6 +711,12 @@ export interface CatSpriteState {
   readonly cockedToThrow?: boolean;
   /** Catnip has her pupils blown wide: painted over her eyes, so no second set of cells is baked. */
   readonly pupilsDilated?: boolean;
+  /** Standing still, she sits back on her haunches rather than stands. */
+  readonly sitting?: boolean;
+  /** Moving, she bolts rather than walks. */
+  readonly scampering?: boolean;
+  /** Standing still, she is talking to someone. */
+  readonly talking?: boolean;
 }
 
 /** Her row for one view, facing east and facing west. A head-on row is the same both ways. */
@@ -536,7 +730,18 @@ function bothWays(state: CatState): ViewRows {
 }
 
 type DirectionalBase =
-  'walk' | 'idle' | 'swipe' | 'cast' | 'chop' | 'mine' | 'carry_walk' | 'carry_idle' | 'throw';
+  | 'walk'
+  | 'idle'
+  | 'scamper'
+  | 'swipe'
+  | 'cast'
+  | 'chop'
+  | 'mine'
+  | 'carry_walk'
+  | 'carry_idle'
+  | 'throw'
+  | 'talk'
+  | CatTraversal;
 
 /**
  * Her rows that have a version per view, by view. No row is ever mirrored at
@@ -553,6 +758,13 @@ const OWN_ROWS: Readonly<Record<DirectionalBase, Readonly<Record<CatRowView, Vie
     front: bothWays('idle'),
     side: { east: 'idle_side', west: 'idle_side_west' },
     back: bothWays('idle_away'),
+  },
+  // Bolting toward or away from the camera her legs are hidden by her body,
+  // and her walk reads the same.
+  scamper: {
+    front: bothWays('walk'),
+    side: { east: 'scamper_side', west: 'scamper_side_west' },
+    back: bothWays('walk_away'),
   },
   swipe: {
     front: bothWays('swipe'),
@@ -589,6 +801,26 @@ const OWN_ROWS: Readonly<Record<DirectionalBase, Readonly<Record<CatRowView, Vie
     side: { east: 'throw_side', west: 'throw_side_west' },
     back: bothWays('throw_away'),
   },
+  talk: {
+    front: bothWays('talk'),
+    side: { east: 'talk_side', west: 'talk_side_west' },
+    back: bothWays('talk_away'),
+  },
+  hop_up: {
+    front: bothWays('hop_up'),
+    side: { east: 'hop_up_side', west: 'hop_up_side_west' },
+    back: bothWays('hop_up_away'),
+  },
+  hop_down: {
+    front: bothWays('hop_down'),
+    side: { east: 'hop_down_side', west: 'hop_down_side_west' },
+    back: bothWays('hop_down_away'),
+  },
+  squeeze: {
+    front: bothWays('squeeze'),
+    side: { east: 'squeeze_side', west: 'squeeze_side_west' },
+    back: bothWays('squeeze_away'),
+  },
 };
 
 /** The rows she turns in empty-handed. */
@@ -610,13 +842,20 @@ function directionalState(base: DirectionalBase, facing: FacingSelection): CatSt
 }
 
 /**
- * Her rows a turn changes, in every view she is drawn in, held warm for as
- * long as she is on screen. Every view rather than the one she faces and its
- * neighbours: a keyboard turns her a quarter or a half turn in one tick, her
- * fur makes her the dearest painter in the game, and a row of hers that is
- * cold when she turns into it is painted directly on the frame she turns.
+ * The crawler's rows a turn changes, in every view she is drawn in, held warm
+ * for as long as she is on screen. Every view rather than the one she faces
+ * and its neighbours: a keyboard turns her a quarter or a half turn in one
+ * tick, her fur makes her the dearest painter in the game, and a row of hers
+ * that is cold when she turns into it is painted directly on the frame she
+ * turns.
  */
 export const RESIDENT_VIEW_ROWS: readonly CatState[] = viewRowsOf(TURNING_BASES);
+
+/**
+ * A companion turns as often as the crawler she follows, but has no spell to
+ * cast; her claws come out rarely enough to bake when they do.
+ */
+const COMPANION_TURNING_BASES: readonly DirectionalBase[] = ['walk', 'idle'];
 
 /**
  * Her turning rows while she holds something: with a tool out her swing in
@@ -649,47 +888,248 @@ function spansOf(rows: readonly CatState[]): ResidentSpan[] {
   return rows.map((row) => ({ row, frames: FRAME_COUNT[row] }));
 }
 
-/** Holds her turning rows warm from every draw of her, menus and flushes included. */
-const RESIDENT_VIEWS = new ResidentRows([...spansOf(RESIDENT_VIEW_ROWS), ...READY_SPANS]);
+type Way = 'east' | 'west';
+
+/** What one cat keeps warm on every draw of her, menus and flushes included. */
+interface CatResidency {
+  hold(figure: FigureDef, facing: FacingSelection, holding: CatHold | null): void;
+}
+
+/** Nothing beyond the cell drawn, which the cache keeps warm on its own while she is on screen. */
+const NO_RESIDENCY: CatResidency = { hold: () => undefined };
+
+class TurningResidency implements CatResidency {
+  private readonly rows: ResidentRows;
+
+  constructor(bases: readonly DirectionalBase[]) {
+    this.rows = new ResidentRows(spansOf(viewRowsOf(bases)));
+  }
+
+  hold(figure: FigureDef): void {
+    this.rows.hold(figure);
+  }
+}
 
 /**
- * Both swings whole in the view she faces, held warm while her paws are
- * empty: she faces a tree or rock as she starts on it, and her first swing
- * comes a beat after the tool does — sooner than a swing's layered cells,
- * two layers each, bake from cold on a slow device.
+ * The crawler's: her turning rows and the opening frame of every swing, and
+ * with her paws empty both swings whole in the view she faces, since she
+ * faces a tree or rock as she starts on it and her first swing comes a beat
+ * after the tool does — sooner than a swing's layered cells, two layers each,
+ * bake from cold on a slow device.
  */
-const FACED_SWINGS: Readonly<Record<CatRowView, Readonly<Record<'east' | 'west', ResidentRows>>>> =
-  {
-    front: facedSwings('front'),
-    side: facedSwings('side'),
-    back: facedSwings('back'),
+class CrawlerResidency implements CatResidency {
+  private readonly views = new ResidentRows([...spansOf(RESIDENT_VIEW_ROWS), ...READY_SPANS]);
+  private readonly facedSwings: Readonly<Record<CatRowView, Readonly<Record<Way, ResidentRows>>>> =
+    {
+      front: CrawlerResidency.swingsFacing('front'),
+      side: CrawlerResidency.swingsFacing('side'),
+      back: CrawlerResidency.swingsFacing('back'),
+    };
+  private readonly holding: Readonly<Record<CatHold, ResidentRows>> = {
+    chop: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.chop)),
+    mine: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.mine)),
+    carry: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.carry)),
+    throw: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.throw)),
   };
 
-function facedSwings(view: CatRowView): Readonly<Record<'east' | 'west', ResidentRows>> {
-  const swings = (way: 'east' | 'west'): ResidentRows =>
-    new ResidentRows(spansOf([OWN_ROWS.chop[view][way], OWN_ROWS.mine[view][way]]));
-  return { east: swings('east'), west: swings('west') };
+  private static swingsFacing(view: CatRowView): Readonly<Record<Way, ResidentRows>> {
+    const swings = (way: Way): ResidentRows =>
+      new ResidentRows(spansOf([OWN_ROWS.chop[view][way], OWN_ROWS.mine[view][way]]));
+    return { east: swings('east'), west: swings('west') };
+  }
+
+  hold(figure: FigureDef, facing: FacingSelection, holding: CatHold | null): void {
+    if (holding !== null) {
+      this.holding[holding].hold(figure);
+      return;
+    }
+    this.views.hold(figure);
+    this.facedSwings[catRowViewOf(facing.view)][facing.flipX ? 'west' : 'east'].hold(figure);
+  }
 }
 
-function facedSwingsFor(facing: FacingSelection): ResidentRows {
-  return FACED_SWINGS[catRowViewOf(facing.view)][facing.flipX ? 'west' : 'east'];
-}
-const RESIDENT_VIEWS_HOLDING: Readonly<Record<CatHold, ResidentRows>> = {
-  chop: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.chop)),
-  mine: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.mine)),
-  carry: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.carry)),
-  throw: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.throw)),
+const TIER_RESIDENCY: Readonly<Record<CatRowTier, () => CatResidency>> = {
+  crawler: () => new CrawlerResidency(),
+  companion: () => new TurningResidency(COMPANION_TURNING_BASES),
+  ambient: () => NO_RESIDENCY,
 };
 
-/** One cell of the cat crawler's figure: which row, which frame, and whether it is mirrored. */
-export interface CatCell {
-  readonly state: CatState;
+/**
+ * One cat as she is drawn: her look, what she has on, the figure those two
+ * paint, which rows her tier lets her bake and the rows she keeps warm.
+ *
+ * Every cat drawn owns one — the crawler, a companion, each cat in the
+ * world, a preview — so any number of cats can be on screen at once, each
+ * through her own figure on the shared cache.
+ */
+export class CatAppearance<T extends CatRowTier = CatRowTier> {
+  private currentLook: CatLook;
+  private currentOutfit: Outfit<'cat'>;
+  private currentFigure: FigureDef;
+  private readonly residency: CatResidency;
+
+  constructor(
+    readonly tier: T,
+    look: CatLook,
+    outfit: Outfit<'cat'> = bareCatOutfit(look),
+  ) {
+    this.currentLook = look;
+    this.currentOutfit = outfit;
+    this.currentFigure = catFigureFor(look, outfit);
+    this.residency = TIER_RESIDENCY[tier]();
+  }
+
+  /** Whether `value` is a cat's appearance, of any tier. */
+  static isAppearance(value: unknown): value is CatAppearance {
+    return value instanceof CatAppearance;
+  }
+
+  get look(): CatLook {
+    return this.currentLook;
+  }
+
+  get outfit(): Outfit<'cat'> {
+    return this.currentOutfit;
+  }
+
+  /** The figure every draw and prewarm of her goes through. */
+  get figure(): FigureDef {
+    return this.currentFigure;
+  }
+
+  /** Whether her tier lets her be drawn in `state`. */
+  allows(state: CatState): state is CatTierState<T> {
+    return TIER_ROW_SETS[this.tier].has(state);
+  }
+
+  /**
+   * `state` as one of her tier's rows, or null for a row outside it — which
+   * throws in a dev build and in scripts, since a cat asked for a row her tier
+   * does not hold is a caller choosing the wrong tier.
+   */
+  tierRow(state: CatState): CatTierState<T> | null {
+    if (this.allows(state)) return state;
+    if (CHECKS_ROW_TIERS) {
+      throw new Error(`a ${this.tier} cat (${this.currentLook.id}) has no "${state}" row`);
+    }
+    return null;
+  }
+
+  /** `cell`, held to her tier's rows the way {@link tierRow} holds a state. */
+  narrow(cell: CatCell): CatCell<CatTierState<T>> {
+    const state = this.tierRow(cell.state);
+    if (state === null) return { state: TIER_FALLBACK_ROW[this.tier], frame: 0, flipX: false };
+    return { state, frame: cell.frame, flipX: cell.flipX };
+  }
+
+  /** The cell {@link catCellFor} picks for `state`, held to her tier. */
+  cellFor(state: CatSpriteState = {}): CatCell<CatTierState<T>> {
+    return this.narrow(catCellFor(state));
+  }
+
+  /** Queues the rows her tier warms on arrival. Call once per scene she is drawn in. */
+  prewarm(): void {
+    for (const state of TIER_PREWARM[this.tier]) prewarmFigureState(this.currentFigure, state);
+  }
+
+  /** Queues the rows her tier warms on a cue, ahead of the moment she plays them. */
+  prewarmCued(): void {
+    for (const state of TIER_CUED_ROWS[this.tier]) prewarmFigureState(this.currentFigure, state);
+  }
+
+  /** Queues one row of hers; `urgent` puts it ahead of the queue. */
+  prewarmRow(state: CatTierState<T>, urgent = false): void {
+    prewarmFigureState(this.currentFigure, state, undefined, urgent);
+  }
+
+  /** Paints her as `look` from now on, in the garments she has on. */
+  setLook(look: CatLook): void {
+    if (look === this.currentLook) return;
+    this.refigure(look, outfitOf(look, this.currentOutfit.worn));
+  }
+
+  /**
+   * Dresses her in `outfit`. On a change her old figure's cells are released
+   * at once and the new one's rows queued: two of her figures resident side by
+   * side is budget nothing else gets back. Cheap when nothing that shows
+   * changed. Returns whether the look changed.
+   */
+  setOutfit(outfit: Outfit<'cat'>): boolean {
+    if (sameOutfit(outfit, this.currentOutfit)) return false;
+    this.refigure(this.currentLook, outfit);
+    return true;
+  }
+
+  /** Dresses her in `garments` over her look's own. Returns whether the look changed. */
+  dress(garments: readonly WornGarmentDef<'cat'>[]): boolean {
+    return this.setOutfit(outfitOf(this.currentLook, garments));
+  }
+
+  /** Drops every cell of hers from the cache, for a cat leaving the scene for good. */
+  release(): void {
+    releaseFigure(this.currentFigure);
+  }
+
+  /** Holds what she keeps warm for a draw facing `facing` with `holding` in her paws or jaws. */
+  holdResident(facing: FacingSelection, holding: CatHold | null): void {
+    this.residency.hold(this.currentFigure, facing, holding);
+  }
+
+  private refigure(look: CatLook, outfit: Outfit<'cat'>): void {
+    releaseFigure(this.currentFigure);
+    this.currentLook = look;
+    this.currentOutfit = outfit;
+    this.currentFigure = catFigureFor(look, outfit);
+    this.prewarm();
+  }
+}
+
+/**
+ * Queues the rows the crawler plays holding `hold`, the ones of the view she
+ * faces first: those are drawn next, and a swing's layered cells bake two
+ * layers each. With something in her jaws, the faced row she is drawn in on
+ * the very next frame — her carrying walk if `moving`, else her carrying idle
+ * — goes ahead of the other: the idle loop's frame is picked by the clock, so
+ * while it waits behind a whole walk row every frame the clock reaches is cold.
+ */
+export function prewarmCatHold(
+  appearance: CatAppearance<'crawler'>,
+  hold: CatHold,
+  facing: FacingSelection,
+  moving: boolean,
+): void {
+  const view = catRowViewOf(facing.view);
+  const faced = (state: CatState): boolean =>
+    catRowView(state) === view && catRowFacesWest(state) === (view === 'side' && facing.flipX);
+  const inJaws = hold === 'carry' || hold === 'throw';
+  const drawnNext = inJaws ? directionalState(moving ? 'carry_walk' : 'carry_idle', facing) : null;
+  const rows = HELD_ROWS[hold];
+  const facedFirst = [...rows.filter(faced), ...rows.filter((row) => !faced(row))];
+  const ordered =
+    drawnNext === null ? facedFirst : [drawnNext, ...facedFirst.filter((row) => row !== drawnNext)];
+  for (const state of ordered) appearance.prewarmRow(state);
+}
+
+/**
+ * Queues her talking rows, the one for `facing` first and ahead of the queue:
+ * a conversation opens with her drawn in it on the very next frame.
+ */
+export function prewarmCatTalk(appearance: CatAppearance, facing: FacingSelection): void {
+  const facedRow = directionalState('talk', facing);
+  const faced = TALK_ROWS.find((row) => row === facedRow) ?? 'talk';
+  appearance.prewarmRow(faced, true);
+  for (const row of TALK_ROWS) if (row !== faced) appearance.prewarmRow(row);
+}
+
+/** One cell of a cat's figure: which row, which frame, and whether it is mirrored. */
+export interface CatCell<S extends CatState = CatState> {
+  readonly state: S;
   readonly frame: number;
   readonly flipX: boolean;
 }
 
 /**
- * The cell the cat player body shows for `state` right now.
+ * The cell a cat shows for `state` right now.
  *
  * Priority runs downed → combat action → idle break → walk → idle, so a swipe
  * or a cast always wins over whatever she was doing to pass the time.
@@ -713,8 +1153,9 @@ export function catCellFor(state: CatSpriteState = {}): CatCell {
   }
 
   if (oneShot !== null) {
-    // The idle breaks and the level-up dance are only drawn head-on; the combat
-    // actions and the work swings have a pose per viewpoint.
+    // The idle breaks, the verbs and the level-up dance are only drawn
+    // head-on; the combat actions, the work swings and the crossings have a
+    // pose per viewpoint.
     const action = oneShot.action;
     const key: CatState = isDirectional(action) ? directionalState(action, facing) : action;
     return {
@@ -725,7 +1166,9 @@ export function catCellFor(state: CatSpriteState = {}): CatCell {
   }
 
   if (isMoving) {
-    const key = directionalState(state.carrying === true ? 'carry_walk' : 'walk', facing);
+    const gait: DirectionalBase =
+      state.carrying === true ? 'carry_walk' : state.scampering === true ? 'scamper' : 'walk';
+    const key = directionalState(gait, facing);
     return { state: key, frame: walkFrameIndex(walkFrame, FRAME_COUNT[key]), flipX: false };
   }
 
@@ -742,7 +1185,20 @@ export function catCellFor(state: CatSpriteState = {}): CatCell {
     };
   }
 
-  const key = directionalState(state.carrying === true ? 'carry_idle' : 'idle', facing);
+  if (state.talking === true) {
+    const key = directionalState('talk', facing);
+    return {
+      state: key,
+      frame: timeFrameIndex(nowSeconds, TALK_FPS, FRAME_COUNT[key]),
+      flipX: false,
+    };
+  }
+
+  // Sat down she faces the camera whichever way she last walked.
+  const key: CatState =
+    state.sitting === true
+      ? 'sit'
+      : directionalState(state.carrying === true ? 'carry_idle' : 'idle', facing);
   return {
     state: key,
     frame: timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
@@ -756,6 +1212,9 @@ const DIRECTIONAL_ONE_SHOTS = [
   'chop',
   'mine',
   'throw',
+  'hop_up',
+  'hop_down',
+  'squeeze',
 ] as const satisfies readonly (CatOneShot | DirectionalBase)[];
 
 function isDirectional(action: CatOneShot): action is (typeof DIRECTIONAL_ONE_SHOTS)[number] {
@@ -770,38 +1229,35 @@ export interface CatHeldDraw {
 }
 
 /**
- * Draw the cat player body: the cell {@link catCellFor} picks, or `cell` when
- * the caller already has it, with `held` composited at its socket between
- * the cell's two layers, and `stowed` riding on her back: behind all of her
+ * Draws `appearance` in `cell` — one of her tier's rows, so a cell outside it
+ * is a compile error — with `held` composited at its socket between the
+ * cell's two layers, and `stowed` riding on her back: behind all of her
  * head-on, over her back in profile and from behind.
  */
-export function drawCatSprite(
+export function drawCatSprite<T extends CatRowTier>(
   ctx: CanvasRenderingContext2D,
+  appearance: CatAppearance<T>,
   sx: number,
   sy: number,
   s: number,
+  cell: CatCell<CatTierState<T>>,
   state: CatSpriteState = {},
-  cell: CatCell = catCellFor(state),
   held: CatHeldDraw | null = null,
   stowed: HeldVisualDef | null = null,
 ): void {
-  if (held === null) {
-    RESIDENT_VIEWS.hold(activeFigure);
-    facedSwingsFor(state.facing ?? DEFAULT_FACING_SELECTION).hold(activeFigure);
-  } else {
-    RESIDENT_VIEWS_HOLDING[held.hold].hold(activeFigure);
-  }
-  const between = held === null ? undefined : catHeldBetween(held, cell);
-  const resting = stowed === null ? null : catStowedAt(stowed, cell);
+  appearance.holdResident(state.facing ?? DEFAULT_FACING_SELECTION, held?.hold ?? null);
+  const { figure, look } = appearance;
+  const between = held === null ? undefined : catHeldBetween(look, held, cell);
+  const resting = stowed === null ? null : catStowedAt(look, stowed, cell);
   const opts = { flipX: cell.flipX };
   const drawResting = (): void => {
     if (resting === null) return;
-    withFigureCellPlacement(ctx, activeFigure, sx, sy, s, opts, resting.draw);
+    withFigureCellPlacement(ctx, figure, sx, sy, s, opts, resting.draw);
   };
   if (resting?.behind === true) drawResting();
-  drawFigureCached(ctx, activeFigure, cell.state, cell.frame, sx, sy, s, opts, between);
+  drawFigureCached(ctx, figure, cell.state, cell.frame, sx, sy, s, opts, between);
   if (resting?.behind === false) drawResting();
-  if (state.pupilsDilated === true) drawDilatedPupils(ctx, cell, sx, sy, s, opts);
+  if (state.pupilsDilated === true) drawDilatedPupils(ctx, appearance, cell, sx, sy, s, opts);
 }
 
 /** A blown pupil's catchlight: small, high and toward the light, so the eye still reads wet. */
@@ -811,16 +1267,18 @@ const DILATED_GLINT_ALPHA = 0.85;
 
 function drawDilatedPupils(
   ctx: CanvasRenderingContext2D,
+  appearance: CatAppearance,
   cell: CatCell,
   sx: number,
   sy: number,
   s: number,
   opts: { readonly flipX: boolean },
 ): void {
-  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+  const { look, figure } = appearance;
+  const frames = catSocketsAt(look, cell.state, cell.frame);
   if (frames === null || frames.dilatedPupils.length === 0) return;
-  const { pupil, glint } = activeLook.face;
-  withFigureCellPlacement(ctx, activeFigure, sx, sy, s, opts, (target, place) => {
+  const { pupil, glint } = look.face;
+  withFigureCellPlacement(ctx, figure, sx, sy, s, opts, (target, place) => {
     for (const spot of frames.dilatedPupils) {
       const cx = place.x + spot.centre.x * place.scale;
       const cy = place.y + spot.centre.y * place.scale;
@@ -857,10 +1315,11 @@ const STOWED_BEHIND_CENTRING = 0;
 
 /** Where her stowed tool is drawn on the cell being drawn, and whether it is behind her. */
 function catStowedAt(
+  catLook: CatLook,
   look: HeldVisualDef,
   cell: CatCell,
 ): { readonly draw: FigureBetween; readonly behind: boolean } | null {
-  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+  const frames = catSocketsAt(catLook, cell.state, cell.frame);
   if (frames === null) return null;
   const socket = frames.sockets.back;
   const pxPerUnit = catHeldPxPerUnit(look);
@@ -883,16 +1342,20 @@ function catStowedAt(
  * Where her mouth socket is on `cell`, in tile fractions from her sprite's tile
  * origin: what she carries in her jaws leaves from there when she flings it.
  */
-export function catMouthSocketInTile(cell: CatCell): Pt | null {
-  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+export function catMouthSocketInTile(appearance: CatAppearance, cell: CatCell): Pt | null {
+  const frames = catSocketsAt(appearance.look, cell.state, cell.frame);
   if (frames === null) return null;
   const { centre } = frames.sockets.mouth;
   return { x: (centre.x - TILE_X) / TILE_SCALE, y: (centre.y - TILE_Y) / TILE_SCALE };
 }
 
 /** Composites `held` at its socket on the cell being drawn, or nothing where the cell does not hold it. */
-function catHeldBetween(held: CatHeldDraw, cell: CatCell): FigureBetween | undefined {
-  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+function catHeldBetween(
+  catLook: CatLook,
+  held: CatHeldDraw,
+  cell: CatCell,
+): FigureBetween | undefined {
+  const frames = catSocketsAt(catLook, cell.state, cell.frame);
   if (frames === null) return undefined;
   const socket = catHeldSocketOf(held.look, frames);
   if (socket === null) return undefined;
@@ -906,7 +1369,7 @@ function catHeldBetween(held: CatHeldDraw, cell: CatCell): FigureBetween | undef
       place.scale * catHeldPxPerUnit(held.look),
       held.phase,
     );
-    const outline = activeLook.outline;
+    const outline = catLook.outline;
     if (outline !== null && catHeldOutlined(held.look)) {
       drawHeldOutline(ctx, outline, outline.widthPx * place.scale, () =>
         compositeHeldItem(ctx, held.look, transform, 'cached'),

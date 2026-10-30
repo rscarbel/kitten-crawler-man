@@ -9,6 +9,7 @@
  * real `Conversation` whose own handles run his choices.
  */
 
+import { createMissingCatsProgress } from '../../src/core/quests/missingCatsProgress';
 import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import {
   createBriarHollowState,
@@ -78,7 +79,11 @@ function wendellRig(): WendellRig | null {
     conversation,
     worldSeed: WENDELL_SEED,
     world: () =>
-      buildContractWorld({ murderQuest: undefined, anchorQuest: anchor, briarHollow: state }),
+      buildContractWorld({
+        anchorQuest: anchor,
+        briarHollow: state,
+        missingCats: createMissingCatsProgress(),
+      }),
     openHayloft: () => undefined,
     chatLine: () => speakerLines('wendell').line('Fine weather for joinery.'),
   });
@@ -124,9 +129,9 @@ function verifyWendell(check: Check): void {
       worldSeed: WENDELL_SEED,
       world: () =>
         buildContractWorld({
-          murderQuest: undefined,
           anchorQuest: createAnchorQuestProgress(),
           briarHollow: rig.state,
+          missingCats: createMissingCatsProgress(),
         }),
       openHayloft: () => undefined,
       chatLine: () => speakerLines('wendell').line('—'),

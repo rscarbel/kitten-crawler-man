@@ -242,7 +242,7 @@ function seatSign(
     crawlerSignFootprint(anchor).every(
       (tile) =>
         isStrictlyInside(room, tile.x, tile.y) &&
-        isWalkableTileType(grid[tile.y][tile.x]) &&
+        isWalkableTileType(grid[tile.y][tile.x], 'walker') &&
         !input.claimedTiles.has(tileCoordKey(tile.x, tile.y)) &&
         !taken.has(tileCoordKey(tile.x, tile.y)) &&
         clearOfDoorways(tile),
@@ -263,7 +263,7 @@ function seatSign(
       const footprint = crawlerSignFootprint(anchor);
       const footprintKeys = new Set(footprint.map((tile) => tileCoordKey(tile.x, tile.y)));
       const walkableWithSign = (x: number, y: number): boolean =>
-        isWalkableTileType(grid[y][x]) && !footprintKeys.has(tileCoordKey(x, y));
+        isWalkableTileType(grid[y][x], 'walker') && !footprintKeys.has(tileCoordKey(x, y));
       if (blockingWouldSplitRoom(grid, room, footprint)) return false;
       return footprint.every((tile) =>
         ROOM_WALL_OUTWARD.every((side) => {
@@ -510,7 +510,7 @@ function walkableTileKeys(input: CrawlerSignInput, room: Rect): Set<number> {
   for (let y = room.y; y < room.y + room.h; y++) {
     for (let x = room.x; x < room.x + room.w; x++) {
       const tile = tileAt(input.grid, x, y);
-      if (tile !== undefined && isWalkableTileType(tile)) keys.add(tileCoordKey(x, y));
+      if (tile !== undefined && isWalkableTileType(tile, 'walker')) keys.add(tileCoordKey(x, y));
     }
   }
   return keys;
@@ -598,7 +598,9 @@ function planAroundSigns(
     walkable: (x: number, y: number): boolean => {
       const tile = tileAt(grid, x, y);
       return (
-        tile !== undefined && isWalkableTileType(tile) && !assumedSigns.has(tileCoordKey(x, y))
+        tile !== undefined &&
+        isWalkableTileType(tile, 'walker') &&
+        !assumedSigns.has(tileCoordKey(x, y))
       );
     },
     roomAt,

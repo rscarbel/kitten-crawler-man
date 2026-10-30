@@ -128,7 +128,7 @@ function layoutGates(room: TrashGremlinRoomSystem, gameMap: GameMap, report: Gat
     for (let dx = 0; dx < NEST_TILES_WIDE; dx++) {
       const x = layout.nest.x + dx;
       const y = layout.nest.y + dy;
-      if (!gameMap.isWalkable(x, y))
+      if (!gameMap.isWalkable(x, y, 'walker'))
         report.fail(`the mattress lies over solid ground at ${x},${y}`);
     }
   }
@@ -175,7 +175,7 @@ function frameFor(gameMap: GameMap, human: HumanPlayer, cat: CatPlayer): SystemC
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: new MobRoster(gameMap, new SpellSystem()),
     gameMap,
@@ -525,6 +525,7 @@ function bileHitRate(
         !fight.frame.gameMap.isWalkable(
           Math.floor(pool.x / TILE_SIZE),
           Math.floor(pool.y / TILE_SIZE),
+          'walker',
         ),
     ).length;
   return { rate: target.reached / BILE_SHOTS, poolsOffFloor: offFloor };
@@ -550,8 +551,12 @@ function bileGates(report: GateReport): void {
       const reach = toIsland + HIDE_BEHIND_TILES * TILE_SIZE;
       const behind = { x: from.x + ux * reach, y: from.y + uy * reach };
       if (
-        !gameMap.isWalkable(Math.floor(behind.x / TILE_SIZE), Math.floor(behind.y / TILE_SIZE)) ||
-        gameMap.hasWalkableLine(from.x, from.y, behind.x, behind.y)
+        !gameMap.isWalkable(
+          Math.floor(behind.x / TILE_SIZE),
+          Math.floor(behind.y / TILE_SIZE),
+          'walker',
+        ) ||
+        gameMap.hasWalkableLine(from.x, from.y, behind.x, behind.y, 'walker')
       ) {
         report.note(`bile ${side} island ${index}: no hiding spot behind it, skipped`);
         return;
@@ -567,8 +572,9 @@ function bileGates(report: GateReport): void {
           gameMap.isWalkable(
             Math.floor(candidate.x / TILE_SIZE),
             Math.floor(candidate.y / TILE_SIZE),
+            'walker',
           ) &&
-          gameMap.hasWalkableLine(from.x, from.y, candidate.x, candidate.y)
+          gameMap.hasWalkableLine(from.x, from.y, candidate.x, candidate.y, 'walker')
         ) {
           open = candidate;
         }
@@ -627,7 +633,7 @@ function firstOpenPast(
     const y = from.y + uy * (toIsland + t * TILE_SIZE);
     const tx = Math.floor(x / TILE_SIZE);
     const ty = Math.floor(y / TILE_SIZE);
-    if (!gameMap.isWalkable(tx, ty)) {
+    if (!gameMap.isWalkable(tx, ty, 'walker')) {
       passedJunk = true;
       continue;
     }
@@ -767,7 +773,7 @@ function capGates(report: GateReport): void {
       { x: perch.x - 1, y: perch.y },
       { x: perch.x, y: perch.y + 1 },
       { x: perch.x, y: perch.y - 1 },
-    ].find((t) => gameMap.isWalkable(t.x, t.y)) ?? room.layout.spawn;
+    ].find((t) => gameMap.isWalkable(t.x, t.y, 'walker')) ?? room.layout.spawn;
   fight.crawler.x = standAt.x * TILE_SIZE;
   fight.crawler.y = standAt.y * TILE_SIZE;
   const trashGremlin = fight.trashGremlin;
@@ -862,7 +868,7 @@ function strayHatchReason(
 ): string | null {
   if (tile.x === gremlinTile.x && tile.y === gremlinTile.y)
     return `a roach appeared at ${tileKey(tile)}, on the gremlin itself`;
-  if (!gameMap.isWalkable(tile.x, tile.y))
+  if (!gameMap.isWalkable(tile.x, tile.y, 'walker'))
     return `a roach appeared at ${tileKey(tile)}, which is not open floor`;
   if (bagTiles.has(tileKey(tile))) return null;
   const besideJunk = NEIGHBOUR_STEPS.some((step) => {

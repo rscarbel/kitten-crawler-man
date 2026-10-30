@@ -1182,7 +1182,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
               const prevTy = Math.floor(
                 (prev.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE,
               );
-              if (this.gameMap.isWalkable(prevTx, prevTy)) {
+              if (this.gameMap.isWalkable(prevTx, prevTy, 'walker')) {
                 player.x = prev.x;
                 player.y = prev.y;
               }
@@ -1448,7 +1448,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         tileX < bounds.x + bounds.w &&
         tileY >= bounds.y &&
         tileY < bounds.y + bounds.h;
-      if (!insideRoom || !this.gameMap.isWalkable(tileX, tileY)) continue;
+      if (!insideRoom || !this.gameMap.isWalkable(tileX, tileY, 'walker')) continue;
       downed.x = tileX * TILE_SIZE;
       downed.y = tileY * TILE_SIZE;
       return;
@@ -1604,7 +1604,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const tileX = Math.floor(newX / TILE_SIZE);
       const tileY = Math.floor(newY / TILE_SIZE);
       const hitWall = stopsBile(this.gameMap, tileX, tileY);
-      const overOpenFloor = this.gameMap.isWalkable(tileX, tileY);
+      const overOpenFloor = this.gameMap.isWalkable(tileX, tileY, 'walker');
       const humanDist = Math.hypot(
         newX - (human.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
         newY - (human.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
@@ -1682,6 +1682,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const underVictim = this.gameMap.isWalkable(
         Math.floor(centreX / TILE_SIZE),
         Math.floor(centreY / TILE_SIZE),
+        'walker',
       );
       if (underVictim) return { x: centreX, y: centreY };
     }

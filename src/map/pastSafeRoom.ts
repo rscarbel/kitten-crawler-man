@@ -42,7 +42,7 @@ export function pastSafeRoomTest(
   const start = map.startTile;
   const queue: { x: number; y: number }[] = [];
   if (
-    map.isWalkableIgnoringPuzzleChokes(start.x, start.y) &&
+    map.isWalkableIgnoringPuzzleChokes(start.x, start.y, 'walker') &&
     !isInRect(start.x, start.y, safeRoom.bounds)
   ) {
     reached[start.y * columns + start.x] = 1;
@@ -56,7 +56,8 @@ export function pastSafeRoomTest(
       if (x < 0 || y < 0 || x >= columns || y >= rows) continue;
       const index = y * columns + x;
       if (reached[index] === 1) continue;
-      if (!map.isWalkableIgnoringPuzzleChokes(x, y) || isInRect(x, y, safeRoom.bounds)) continue;
+      if (!map.isWalkableIgnoringPuzzleChokes(x, y, 'walker') || isInRect(x, y, safeRoom.bounds))
+        continue;
       reached[index] = 1;
       queue.push({ x, y });
     }

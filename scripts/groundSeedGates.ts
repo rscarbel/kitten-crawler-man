@@ -37,6 +37,7 @@ import { OVERWORLD_GROUND } from '../src/map/town/groundMaterials.js';
 import { DUNGEON_GROUND } from '../src/map/dungeon/groundMaterials.js';
 import { FLOOR1_GROUND, FLOOR1_WALL_MATERIAL } from '../src/map/dungeon/floor1Materials.js';
 import { FLOOR2_GROUND, FLOOR2_WALL_MATERIAL } from '../src/map/dungeon/floor2Materials.js';
+import { SEWER_GROUND, SEWER_WALL_MATERIAL } from '../src/map/dungeon/sewerMaterials.js';
 import { INTERIOR_WALL_MATERIAL, TOWN_INTERIOR_GROUND } from '../src/map/town/interiorMaterials.js';
 import { faceMeanLuminance } from '../src/sprites/art/dungeonWallArt.js';
 
@@ -128,6 +129,12 @@ const THEMES: ReadonlyArray<ThemeSeparation> = [
     wall: FLOOR2_WALL_MATERIAL,
     floors: floorsOf(FLOOR2_GROUND.blendOrder, FLOOR2_WALL_MATERIAL),
     faceLuminance: faceMeanLuminance('service_level'),
+  },
+  {
+    name: 'sewer',
+    wall: SEWER_WALL_MATERIAL,
+    floors: floorsOf(SEWER_GROUND.blendOrder, SEWER_WALL_MATERIAL),
+    faceLuminance: faceMeanLuminance('sewer'),
   },
   {
     name: 'town_interior',
@@ -222,6 +229,7 @@ for (const palette of [
   FLOOR1_GROUND,
   FLOOR2_GROUND,
   TOWN_INTERIOR_GROUND,
+  SEWER_GROUND,
   OVERWORLD_GROUND,
   DUNGEON_GROUND,
 ]) {

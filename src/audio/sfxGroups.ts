@@ -20,6 +20,16 @@ import { BOMBER_GOBLIN_CUES } from '../systems/bomberGoblinSoundCues';
 import { ELECTRIC_GOBLIN_CUES } from '../systems/bossSoundCues';
 import { GENERATOR_RIG_HUM_LOOP } from './loopLevels';
 import { FLOODED_PUMP_ROOM_CUES } from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomSoundCues';
+import { SEWER_CUES } from '../systems/sewer/sewerSoundCues';
+import { CAT_SENSE_CUE } from '../systems/senses/catSenseSoundCues';
+import { TOWER_CUES } from '../systems/tower/towerSoundCues';
+import {
+  CAPTURE_CUE,
+  MISSING_CATS_CUES,
+  REUNION_CUE,
+  THIEF_GLIDE_LOOP,
+} from '../systems/missingCats/missingCatsSoundCues';
+import { STORM_DRAIN_ID, TOWN_TOWER_ID } from '../map/buildingIds';
 import { SCRIPTED_DEATH_CUES } from '../systems/scriptedDeath/scriptedDeathCues';
 import { starlightTentCueSoundIds } from '../systems/starlightTent/starlightTentSoundCues';
 import { MUSIC_STEM_SETS } from './music/stemSets';
@@ -57,12 +67,20 @@ export type SfxGroup =
   | 'constructionContracts'
   | 'cloggedBathroom'
   | 'stealthKeySnatch'
+  | 'stormDrain'
+  | 'towerStoreys'
   | 'spiderQuest'
   | 'bounty'
   | 'starlightTent'
+  | 'lichBattle'
+  | 'missingCats'
+  | 'missingCatsStakeout'
+  | 'missingCatsCapture'
+  | 'missingCatsReunion'
   | 'floodedPumpRoomMusic'
   | 'trashGremlinMusic'
-  | 'murderMysteryQuest'
+  | 'wardenRitualMusic'
+  | 'towerSplitMusic'
   | 'deinonychusMercenary'
   | 'interiorDoctor'
   | 'dwarfCook'
@@ -310,6 +328,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   universal: [
     // Electrified can come from gear on any floor, not only the Current Goblin.
     ...ELECTRIFIED_JOLT_SOUNDS,
+    // Any map can lay a sense only the cat perceives.
+    ...CAT_SENSE_CUE.takes,
     'ability_level_up',
     'achievement_awarded',
     // Deinonychus's own three cues. `DungeonScene` constructs `DeinonychusSystem` for every
@@ -745,8 +765,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   /**
    * The floor-3 overworld/town itself: Hawkfolk, Krasue, Giant Wasps and the
    * Lizardman camps' venom in the wilderness,
-   * Deinonychus/mercenary escorts, the Dark Knight's rumble (shared with
-   * `murderMysteryQuest`'s tower confrontation), and the paper of the notice
+   * Deinonychus/mercenary escorts, the Dark Knight's rumble, and the paper of the notice
    * boards in the square and in Briar Hollow.
    */
   level3: [
@@ -986,6 +1005,21 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   stealthKeySnatch: decodedCueIds(PRISON_CUES),
 
   /**
+   * Every sound behind the storm drain (`SEWER_CUES`): the sewer's sluices
+   * and its rats. Only the drain's grate opens onto it, so only its interior
+   * loads this group.
+   */
+  stormDrain: decodedCueIds(SEWER_CUES),
+
+  /**
+   * Every sound behind the tower's storey works (`TOWER_CUES`), and the
+   * cistern's sluice, which is worked like the sewer's (`SEWER_CUES`). The
+   * tower is entered at its door or up the sewer's culvert, so only its
+   * interior loads this group.
+   */
+  towerStoreys: [...decodedCueIds(TOWER_CUES), ...decodedCueIds(SEWER_CUES)],
+
+  /**
    * Every sound behind Pest Control (`SPIDER_QUEST_CUES`): Dr. Moult's calls,
    * Dave's message and the lab hallway's small sounds, all on floor 2.
    */
@@ -1068,6 +1102,21 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    */
   trashGremlinMusic: ['king_of_the_heap'],
   /**
+   * The Warden's fight music at the top of the Town Center Tower. Its two
+   * stems change over at one point in the loop, which only a decoded buffer
+   * does, so they are held only from the storey below the cattery up, while
+   * the ritual is still ahead.
+   */
+  wardenRitualMusic: [...MUSIC_STEM_SETS.warden_ritual],
+  /**
+   * The tower's music while the party is split and climbing back up: one
+   * stem for Belle's side, one for the human's, and the full mix once they
+   * are together. The stems change over at one point in the loop, which only
+   * a decoded buffer does, so they are held only inside the tower, from
+   * Belle waking in her cage until the Warden is gone.
+   */
+  towerSplitMusic: [...MUSIC_STEM_SETS.tower_split],
+  /**
    * The Starlight Tent maze's cues (`STARLIGHT_TENT_CUES`), the grounds' high striker, the
    * voices of the clowns guarding the finale ring's chest, and the rope ladder out of that
    * ring (`INTERIOR_EXIT_FIXTURES`). Floor 3 holds this group near the circus grounds; the
@@ -1084,26 +1133,16 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * `MurderMysteryQuestSystem`, `CultHideoutSystem` and the tower's
-   * `QuillConfrontationSystem` — including every cue the systems of the finale
-   * play directly.
+   * `LichBattleSystem`'s cues at the top of the tower, and the Lich's cast
+   * wind-up and death, which it shares with the Skeleton Lord.
    *
-   * Listed here even where a cue also lives in `bounty` or `starlightTent`, which
-   * floor 3 happens to load as well: leaning on that makes this fight's audio
-   * correct only for as long as an unrelated group keeps a sound it borrowed,
-   * and `AudioManager.play` returns silently on a buffer that never loaded, so
-   * the failure is a beat that simply does not happen. Two of these were silent
-   * on floor 3 for exactly that reason, one of them the cue that announces the
-   * strike window.
-   *
-   * The Lich's *creature* cues — its damage grunt, its death, its cast wind-up,
-   * and its raised skeletons' swings — are played by the shared mob-audio drain
-   * rather than from here; its death and wind-up are listed here, the rest are
-   * in `level3`, because the tower is entered with `bounty` let go. `verify:lich`
-   * checks what these systems play; it does not reach that drain.
+   * Listed here even where a cue also lives in `bounty` or `starlightTent`,
+   * which floor 3 happens to load as well: `AudioManager.play` returns silently
+   * on a buffer that never loaded, so a cue borrowed from an unrelated group is
+   * a beat that silently stops happening the day that group drops it.
+   * `verify:lich` checks every cue the fight plays is loaded on its floor.
    */
-  murderMysteryQuest: [
-    'krasue_attack',
+  lichBattle: [
     'rumble',
     'skeleton_lord_chant',
     'dead_hand_wave',
@@ -1113,12 +1152,29 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'deep_rumbling',
     'powering_off',
     'charging_up_1',
-    // The Lich's cast wind-up and death, shared with the Skeleton Lord.
     'prepare_for_magic_strike',
     'skeleton_lord_death',
-    // Miss Quill's and the Lich's hard-mode healers.
-    ...FAIRY_SFX_IDS,
   ],
+
+  /** "A Cat Always Comes Back"'s cues in town and in its rooms (`MISSING_CATS_CUES`). */
+  missingCats: [...decodedCueIds(MISSING_CATS_CUES), THIEF_GLIDE_LOOP.id],
+  /**
+   * The stakeout and the rooftop chase's music. Its two stems change over at
+   * one point in the loop, which only a decoded buffer does, so they are held
+   * only near the General Store or while the stakeout or the chase is on.
+   */
+  missingCatsStakeout: [...MUSIC_STEM_SETS.rooftop_chase],
+  /**
+   * The capture at the fountain's jingle, which its cutscene's steps are
+   * timed to and so must be decoded before Belle sits down: held anywhere
+   * from the moment the bait is agreed until she is taken.
+   */
+  missingCatsCapture: [CAPTURE_CUE],
+  /**
+   * The jingle of a lost cat coming back: held near the Sleeping Cat Inn and
+   * inside it once the cats are walking home, where Pumpkin walks in on Dave.
+   */
+  missingCatsReunion: [REUNION_CUE],
 
   /**
    * `MercenarySystem`/`MercenaryGuildSystem` escorts, who are hired in town and
@@ -1259,7 +1315,8 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'level3',
   'briarHollow',
   'constructionContracts',
-  'murderMysteryQuest',
+  'lichBattle',
+  'missingCats',
   'deinonychusMercenary',
 ];
 
@@ -1273,6 +1330,11 @@ export const GATED_SFX_GROUPS = [
   'starlightTent',
   'floodedPumpRoomMusic',
   'trashGremlinMusic',
+  'missingCatsStakeout',
+  'missingCatsCapture',
+  'missingCatsReunion',
+  'wardenRitualMusic',
+  'towerSplitMusic',
 ] as const satisfies readonly SfxGroup[];
 
 export type GatedSfxGroup = (typeof GATED_SFX_GROUPS)[number];
@@ -1350,6 +1412,8 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
     ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
     ...(sellsSomething ? (['interiorCommerce'] as const) : []),
     ...(entry.type === 'prison' ? (['stealthKeySnatch'] as const) : []),
+    ...(entry.id === STORM_DRAIN_ID ? (['stormDrain'] as const) : []),
+    ...(entry.id === TOWN_TOWER_ID ? (['towerStoreys'] as const) : []),
   ];
   return groups.flatMap((group) => SFX_GROUPS[group]);
 }

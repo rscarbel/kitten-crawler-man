@@ -26,7 +26,6 @@ import {
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
 import { createTownMemory } from '../src/core/state/TownMemory';
 import { ANCHOR_SHARD_IDS } from '../src/core/items/defs/ItemDefs';
-import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
 import { transientSpeaker } from '../src/dialog/line';
 import { Conversation } from '../src/dialog/Conversation';
 import { crawlerName } from '../src/characters/characters';
@@ -37,7 +36,6 @@ import {
   CloggedBathroomSystem,
 } from '../src/systems/cloggedBathroom/CloggedBathroomSystem';
 import { DefendQuestSystem } from '../src/systems/DefendQuestSystem';
-import { MurderMysteryQuestSystem } from '../src/systems/MurderMysteryQuestSystem';
 import { SpiderQuestSystem } from '../src/systems/SpiderQuestSystem';
 import type { QuestRewardScreen } from '../src/ui/questReward/QuestRewardScreen';
 import type { QuestRewardSpec, RewardUnlockCard } from '../src/ui/questReward/types';
@@ -50,6 +48,9 @@ import {
   type SiegeRig,
 } from './villageSiegeHarness';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { missingCatsProgressAt } from '../src/core/quests/missingCatsProgress';
+import { MISSING_CATS_QUEST_ID } from '../src/systems/missingCats/missingCatsPhase';
+import { completeMissingCats } from '../src/systems/missingCats/missingCatsRewards';
 
 useDevPlayerIdentity();
 
@@ -204,22 +205,6 @@ const QUEST_CASES: readonly QuestCase[] = [
     },
   },
   {
-    questId: 'krasue_murders',
-    paysXp: true,
-    complete: ({ rig, conversation }) => {
-      const quest = new MurderMysteryQuestSystem(
-        rig.map,
-        rig.bus,
-        () => undefined,
-        createMurderQuestProgress(),
-        null,
-        null,
-        conversation,
-      );
-      callCompletion(quest, 'finishQuest', [{ human: rig.human, cat: rig.cat, active: rig.human }]);
-    },
-  },
-  {
     questId: 'anchor_shards',
     paysXp: true,
     complete: ({ rig, conversation }) => {
@@ -284,6 +269,14 @@ const QUEST_CASES: readonly QuestCase[] = [
       // The plumber's thanks pays out only once the pipes are fixed.
       quest.restoreCheckpoint({ phase: 'solved', explainerSeen: true });
       callCompletion(quest, 'completeQuest', [{ human: rig.human, cat: rig.cat }]);
+    },
+  },
+  {
+    questId: MISSING_CATS_QUEST_ID,
+    paysXp: true,
+    complete: ({ rig }) => {
+      const progress = missingCatsProgressAt('aftermath');
+      completeMissingCats(progress, { human: rig.human, cat: rig.cat }, rig.bus);
     },
   },
   {
@@ -358,7 +351,7 @@ function verifyEachQuestOpensOneScreen(): void {
 function verifyScreenBehaviour(): void {
   console.log('\nThe screen holds the world and takes two presses');
   const setup = rewardRig();
-  completeQuest('krasue_murders', setup);
+  completeQuest('anchor_shards', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   const { screen } = setup;
   const surface = questRewardSurface(setup.rig);
@@ -384,7 +377,7 @@ function verifyScreenBehaviour(): void {
 function verifyEscape(): void {
   console.log('\nEscape finishes the reveal, then dismisses');
   const setup = rewardRig();
-  completeQuest('krasue_murders', setup);
+  completeQuest('anchor_shards', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   const { screen } = setup;
   renderScreen(setup);
@@ -440,7 +433,7 @@ function verifyWaitsForConversation(): void {
     anchor: null,
     locksKeyboard: true,
   });
-  completeQuest('krasue_murders', setup);
+  completeQuest('anchor_shards', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   check(setup.requested.length === 1, 'the quest asks for its screen while the conversation is up');
   check(!setup.screen.isOpen, 'but the screen waits while the conversation is open');
@@ -454,7 +447,7 @@ function verifyQueue(): void {
   console.log('\nTwo completions in one frame queue up');
   const setup = rewardRig();
   completeQuest('defend_goblin_mother', setup);
-  completeQuest('krasue_murders', setup);
+  completeQuest('anchor_shards', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   const first = setup.screen.showing;
   check(setup.screen.isOpen && setup.screen.queuedCount === 1, 'one shows and one waits');

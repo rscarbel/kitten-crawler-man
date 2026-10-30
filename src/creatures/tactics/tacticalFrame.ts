@@ -139,7 +139,13 @@ export function hasWalkableLine(
 ): boolean {
   if (map === null) return true;
   const half = tileSize / 2;
-  return map.hasHostileWalkableLine(from.x + half, from.y + half, to.x + half, to.y + half);
+  return map.hasHostileWalkableLine(
+    from.x + half,
+    from.y + half,
+    to.x + half,
+    to.y + half,
+    'walker',
+  );
 }
 
 /**
@@ -153,7 +159,7 @@ export function isStandable(map: GameMap | null, tileSize: number, point: Tactic
   if (map === null) return true;
   const tileX = Math.floor((point.x + tileSize / 2) / tileSize);
   const tileY = Math.floor((point.y + tileSize / 2) / tileSize);
-  return map.isWalkableForHostile(tileX, tileY) && !map.isStairwellTile(tileX, tileY);
+  return map.isWalkableForHostile(tileX, tileY, 'walker') && !map.isStairwellTile(tileX, tileY);
 }
 
 /**

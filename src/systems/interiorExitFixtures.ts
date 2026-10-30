@@ -1,14 +1,15 @@
 /**
  * Ways out of a building that are a thing in the room rather than a tile in
- * its floor: a ladder up a pole, a trapdoor, a window to climb through.
+ * its floor: a ladder up a pole, a trapdoor, a window to climb through, a
+ * culvert into the next building.
  *
  * Each kind is one entry in {@link INTERIOR_EXIT_FIXTURES} — its prompt, how
  * the party leaves (on the press, or under a short fade) and what it sounds
  * like — and each placement is a tile handed to an
- * {@link InteriorExitFixtureSystem}. Using one ends in the scene's own exit,
- * the same one the door mat takes, after the same leave question the mat
- * asks, so the party comes out at the building's door with everything the
- * door does for them.
+ * {@link InteriorExitFixtureSystem}, with where it leads. Using one ends in
+ * the scene's own exit after the same leave question the door mat asks: out
+ * of the building's door, with everything the door does for the party, or
+ * straight into another interior.
  */
 
 import type { SoundId } from '../audio/sounds';
@@ -18,8 +19,9 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { TilePoint } from '../map/town/townPlan';
 import type { Player } from '../Player';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { OUT_THROUGH_THE_DOOR, type InteriorExitDestination } from './interiorTransfer';
 
-export type InteriorExitFixtureId = 'rope_ladder';
+export type InteriorExitFixtureId = 'rope_ladder' | 'sewer_ladder' | 'tower_culvert';
 
 /** How the party is taken out once the fixture is used. */
 export type InteriorExitDeparture =
@@ -38,12 +40,24 @@ export interface InteriorExitFixtureSpec {
 
 /** Long enough to read as a climb rather than a cut, short enough not to be a wait. */
 const LADDER_CLIMB_FADE_FRAMES = 36;
+/** A stoop into a pipe and a few steps through it: a little longer than a climb. */
+const CULVERT_CRAWL_FADE_FRAMES = 48;
 
 export const INTERIOR_EXIT_FIXTURES = {
   rope_ladder: {
     prompt: 'Climb out',
     departure: { kind: 'fade', frames: LADDER_CLIMB_FADE_FRAMES },
     sound: 'rope_ladder_climb',
+  },
+  sewer_ladder: {
+    prompt: 'Climb up to the street',
+    departure: { kind: 'fade', frames: LADDER_CLIMB_FADE_FRAMES },
+    sound: null,
+  },
+  tower_culvert: {
+    prompt: 'Go through the culvert',
+    departure: { kind: 'fade', frames: CULVERT_CRAWL_FADE_FRAMES },
+    sound: null,
   },
 } as const satisfies Record<InteriorExitFixtureId, InteriorExitFixtureSpec>;
 
@@ -56,14 +70,19 @@ export interface PlacedExitFixture {
    * down a pole two tiles wide hangs on the seam between them.
    */
   readonly at: TilePoint;
+  readonly destination: InteriorExitDestination;
 }
 
 /** Half a tile: from the middle of a tile-sized square to its edge. */
 const TILE_MIDDLE = 0.5;
 
-/** A fixture used from the whole floor tile `tile`. */
-export function exitFixtureOnTile(id: InteriorExitFixtureId, tile: TilePoint): PlacedExitFixture {
-  return { id, at: { x: tile.x + TILE_MIDDLE, y: tile.y + TILE_MIDDLE } };
+/** A fixture used from the whole floor tile `tile`, leading to `destination`. */
+export function exitFixtureOnTile(
+  id: InteriorExitFixtureId,
+  tile: TilePoint,
+  destination: InteriorExitDestination = OUT_THROUGH_THE_DOOR,
+): PlacedExitFixture {
+  return { id, at: { x: tile.x + TILE_MIDDLE, y: tile.y + TILE_MIDDLE }, destination };
 }
 
 /** How near a fixture, measured from a crawler's middle to the fixture's, they can use it. */
@@ -83,18 +102,19 @@ const FADE_COMPLETE = 1;
 
 interface Departure {
   readonly spec: InteriorExitFixtureSpec;
+  readonly destination: InteriorExitDestination;
   framesElapsed: number;
 }
 
 export interface InteriorExitFixtureHost {
   /**
-   * Asks the party whether to leave, with the same menu (and the same warning
-   * about a downed hire left behind) the door mat raises, and runs `leave` if
-   * they say yes.
+   * Asks the party whether to leave for `destination`, with the same menu
+   * (and the same warning about a downed hire left behind) the door mat
+   * raises, and runs `leave` if they say yes.
    */
-  readonly confirm: (leave: () => void) => void;
-  /** The scene's standard exit, the one its door mat takes. */
-  readonly exit: () => void;
+  readonly confirm: (destination: InteriorExitDestination, leave: () => void) => void;
+  /** The scene's exit to `destination`: its door mat's for the door. */
+  readonly exit: (destination: InteriorExitDestination) => void;
   readonly playSound: (id: SoundId) => void;
 }
 
@@ -143,19 +163,19 @@ export class InteriorExitFixtureSystem {
     const fixture = this.nearest(player);
     if (fixture === null) return false;
     const spec: InteriorExitFixtureSpec = INTERIOR_EXIT_FIXTURES[fixture.id];
-    this.host.confirm(() => this.depart(spec));
+    this.host.confirm(fixture.destination, () => this.depart(spec, fixture.destination));
     return true;
   }
 
-  private depart(spec: InteriorExitFixtureSpec): void {
+  private depart(spec: InteriorExitFixtureSpec, destination: InteriorExitDestination): void {
     if (this.isDeparting) return;
     if (spec.sound !== null) this.host.playSound(spec.sound);
     switch (spec.departure.kind) {
       case 'immediate':
-        this.host.exit();
+        this.host.exit(destination);
         return;
       case 'fade':
-        this.departure = { spec, framesElapsed: 0 };
+        this.departure = { spec, destination, framesElapsed: 0 };
         return;
       default: {
         const unhandled: never = spec.departure;
@@ -171,7 +191,7 @@ export class InteriorExitFixtureSystem {
     departure.framesElapsed++;
     if (this.fadeAlpha < FADE_COMPLETE) return;
     this.departure = null;
-    this.host.exit();
+    this.host.exit(departure.destination);
   }
 
   /**

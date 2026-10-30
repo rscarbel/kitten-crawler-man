@@ -58,8 +58,8 @@ function findPalisadeCrossing(map: GameMap): Crossing | null {
         let clear = true;
         for (let step = 1; step <= STANDOFF_TILES && clear; step++) {
           clear =
-            map.isWalkable(x + dx * step, y + dy * step) &&
-            map.isWalkable(x - dx * step, y - dy * step);
+            map.isWalkable(x + dx * step, y + dy * step, 'walker') &&
+            map.isWalkable(x - dx * step, y - dy * step, 'walker');
         }
         if (!clear) continue;
         const near = { x: x - dx * STANDOFF_TILES, y: y - dy * STANDOFF_TILES };
@@ -80,7 +80,8 @@ function findOpenRun(map: GameMap): Crossing | null {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x + span < size; x++) {
       let clear = true;
-      for (let step = 0; step <= span && clear; step++) clear = map.isWalkable(x + step, y);
+      for (let step = 0; step <= span && clear; step++)
+        clear = map.isWalkable(x + step, y, 'walker');
       if (!clear) continue;
       return { archerTile: { x, y }, crawlerTile: { x: x + span, y } };
     }
@@ -128,7 +129,7 @@ function runDuel(map: GameMap, crossing: Crossing, bowman: Bowman): Outcome {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,

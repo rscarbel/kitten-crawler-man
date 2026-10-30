@@ -82,7 +82,9 @@ export function spawnCandidateNear(
       // Room to move, not just walkable: a gap between trunks is walkable
       // ground a body comes up in and never leaves.
       (x, y) =>
-        gameMap.isWalkableForHostile(x, y) && hasRoomToMove(gameMap, x, y) && rules.accepts(x, y),
+        gameMap.isWalkableForHostile(x, y, 'walker') &&
+        hasRoomToMove(gameMap, x, y) &&
+        rules.accepts(x, y),
     );
     if (tile === null) continue;
     const away = nearestCrawlerTiles(tile);

@@ -73,7 +73,8 @@ function reachableTiles(gameMap: GameMap, start: Point, closed?: Rect): Set<numb
   const size = gameMap.gridSize;
   const key = (point: Point): number => tileIndex(point.x, point.y, size);
   const isOpen = (point: Point): boolean =>
-    gameMap.isWalkable(point.x, point.y) && !(closed !== undefined && rectContains(closed, point));
+    gameMap.isWalkable(point.x, point.y, 'walker') &&
+    !(closed !== undefined && rectContains(closed, point));
   const seen = new Set<number>();
   if (!isOpen(start)) return seen;
   seen.add(key(start));
@@ -167,7 +168,7 @@ function verifyFloor(levelDef: LevelDef): void {
     // two door states.
     for (const tile of room.exitDoorTiles) {
       check(
-        gameMap.isWalkable(tile.x, tile.y),
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
         `the onward doorway at (${tile.x},${tile.y}) is blocked before any encounter started`,
       );
       const doorType = gameMap.structure[tile.y][tile.x].type;
@@ -178,7 +179,7 @@ function verifyFloor(levelDef: LevelDef): void {
     }
 
     check(
-      gameMap.isWalkable(room.entranceTile.x, room.entranceTile.y),
+      gameMap.isWalkable(room.entranceTile.x, room.entranceTile.y, 'walker'),
       'the quest room’s entrance is blocked',
     );
     const openReach = reachableTiles(gameMap, gameMap.startTile);
@@ -247,7 +248,7 @@ function verifyFloor(levelDef: LevelDef): void {
     gameMap.setQuestExitDoorState('barred');
     for (const tile of room.exitDoorTiles) {
       check(
-        !gameMap.isWalkable(tile.x, tile.y),
+        !gameMap.isWalkable(tile.x, tile.y, 'walker'),
         `barred doorway tile (${tile.x},${tile.y}) is still walkable`,
       );
       check(
@@ -270,7 +271,7 @@ function verifyFloor(levelDef: LevelDef): void {
     gameMap.setQuestExitDoorState('clear');
     for (const tile of room.exitDoorTiles) {
       check(
-        gameMap.isWalkable(tile.x, tile.y),
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
         `doorway tile (${tile.x},${tile.y}) stayed blocked after the encounter was abandoned`,
       );
     }
@@ -278,7 +279,7 @@ function verifyFloor(levelDef: LevelDef): void {
     gameMap.setQuestExitDoorState('smashed');
     for (const tile of room.exitDoorTiles) {
       check(
-        gameMap.isWalkable(tile.x, tile.y),
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
         `doorway tile (${tile.x},${tile.y}) is still blocked after the encounter resolved`,
       );
       check(
@@ -295,7 +296,7 @@ function verifyFloor(levelDef: LevelDef): void {
     gameMap.restoreCheckpoint(resolvedSnapshot);
     for (const tile of room.exitDoorTiles) {
       check(
-        gameMap.isWalkable(tile.x, tile.y),
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
         `restoring a post-encounter checkpoint re-sealed (${tile.x},${tile.y})`,
       );
     }

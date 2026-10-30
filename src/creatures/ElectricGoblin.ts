@@ -791,7 +791,7 @@ export class ElectricGoblin extends Mob {
     for (let attempt = 0; attempt < RANDOM_LANDING_ATTEMPTS; attempt++) {
       const tx = bounds.x + Math.floor(worldRandom() * bounds.w);
       const ty = bounds.y + Math.floor(worldRandom() * bounds.h);
-      if (this.map !== null && !this.map.isWalkable(tx, ty)) continue;
+      if (this.map !== null && !this.map.isWalkable(tx, ty, this.mobility)) continue;
       const point = { x: (tx + HALF) * this.tileSize, y: (ty + HALF) * this.tileSize };
       if (taken.some((t) => Math.hypot(t.x - point.x, t.y - point.y) < separationPx)) continue;
       return point;
@@ -1130,6 +1130,7 @@ export class ElectricGoblin extends Mob {
         !this.map.isWalkable(
           Math.floor(frontX / this.tileSize),
           Math.floor(frontY / this.tileSize),
+          this.mobility,
         );
       if (blocked || wave.travelled >= wave.rangePx) {
         this.waves.splice(i, 1);
@@ -1240,7 +1241,7 @@ export class ElectricGoblin extends Mob {
         const cx = tx + dx;
         const cy = ty + dy;
         const dry = { x: (cx + HALF) * this.tileSize, y: (cy + HALF) * this.tileSize };
-        if (this.isIn(puddle, dry) || !gameMap.isWalkable(cx, cy)) continue;
+        if (this.isIn(puddle, dry) || !gameMap.isWalkable(cx, cy, 'walker')) continue;
         const distance = Math.hypot(dry.x - body.x, dry.y - body.y);
         if (distance >= bestDistance || distance === 0) continue;
         best = { dx: (dry.x - body.x) / distance, dy: (dry.y - body.y) / distance };
@@ -1278,7 +1279,7 @@ export class ElectricGoblin extends Mob {
     let bestDepth = -1;
     let bestDistance = Infinity;
     for (const tile of puddle.tiles) {
-      if (this.map !== null && !this.map.isWalkable(tile.x, tile.y)) continue;
+      if (this.map !== null && !this.map.isWalkable(tile.x, tile.y, this.mobility)) continue;
       const tileDepth = depth.get(labTileKey(tile.x, tile.y)) ?? 0;
       const distance = Math.hypot(tile.x - middle.x, tile.y - middle.y);
       const deeper = tileDepth > bestDepth;

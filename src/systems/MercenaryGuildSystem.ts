@@ -18,6 +18,7 @@ import {
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { activeRunStats } from '../core/progression/GameStats';
 import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
+import { SYDNEY_TOWER_LOAN } from '../dialog/scripts/scenes/missingCats';
 import type { Rect } from '../ui/core/geom';
 
 /** The largest a portrait tile is drawn: a short hire stops growing before it turns to mush. */
@@ -65,6 +66,8 @@ type Purse = Pick<Player, 'coins'>;
 /** One line of the desk's list, as the desk screen draws it. */
 export interface MercenaryDeskEntry {
   readonly template: MercenaryTemplate;
+  /** What signing this hire costs right now: the file's price, or nothing on a loan. */
+  readonly fee: number;
   readonly underContract: boolean;
   /** Sydney's reason not to sign this hire now, or null when she will. */
   readonly hireRefusal: string | null;
@@ -95,6 +98,10 @@ export interface MercenaryDeskView {
  *
  * A row never spends coins, whoever presses it. Dismissing asks first, in
  * {@link MercenaryGuildSystem.dismissConfirm}, whose default answer keeps them.
+ *
+ * While a party is going under the tower without a hire, the desk lends one
+ * for it at no fee (`towerLoan`), once a run. The loan is signed with
+ * `tower_loan` terms, and ends when the Warden does.
  */
 export class MercenaryGuildSystem {
   open = false;
@@ -111,6 +118,8 @@ export class MercenaryGuildSystem {
   constructor(
     private readonly roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
+    /** Whether the desk lends this party a hire for the tower at no fee. */
+    private readonly towerLoan: () => boolean,
   ) {
     this.dismissConfirm = new ConfirmDialog(audio);
     prewarmSydney();
@@ -127,7 +136,12 @@ export class MercenaryGuildSystem {
     // checkpoint captures, so only rewinding to before this visit repeats it.
     const deceased = this.roster.lastDeceased;
     this.roster.lastDeceased = null;
-    this.managerLine = deceased === null ? GREETING : condolences(deceased);
+    this.managerLine =
+      deceased !== null
+        ? condolences(deceased)
+        : this.loanStands()
+          ? SYDNEY_TOWER_LOAN.greeting
+          : GREETING;
     this.audio?.play('typing_click');
   }
 
@@ -140,13 +154,22 @@ export class MercenaryGuildSystem {
     this.managerLine = line;
   }
 
+  /** A loan is offered once, and only to a party with no contract running. */
+  private loanStands(): boolean {
+    return this.roster.active === null && !this.roster.towerLoanSigned && this.towerLoan();
+  }
+
+  private feeFor(template: MercenaryTemplate): number {
+    return this.loanStands() ? 0 : template.price;
+  }
+
   /** Sydney's reason not to sign `template` right now, or null when she will. */
   private hireRefusal(template: MercenaryTemplate, player: Purse, companion: Purse): string | null {
     // Only a harness builds the desk with no floor under it; a contract with
     // no floor to run to would never end.
     if (this.roster.floorLevelId === null) return NO_FLOOR;
     if (this.roster.active !== null) return CONTRACT_ACTIVE;
-    if (!canAffordCoins(player, companion, template.price)) return NOT_ENOUGH_COINS;
+    if (!canAffordCoins(player, companion, this.feeFor(template))) return NOT_ENOUGH_COINS;
     return null;
   }
 
@@ -159,19 +182,22 @@ export class MercenaryGuildSystem {
       this.audio?.play('error');
       return;
     }
-    spendPartyCoins(player, companion, template.price, player);
+    const loaned = this.loanStands();
+    spendPartyCoins(player, companion, this.feeFor(template), player);
     activeRunStats()?.recordMercenaryHired();
     // Warmed on the signature rather than on the first frame the hire is
     // drawn: it steps away from the desk already moving.
     MERCENARY_ART[template.art].prewarm();
+    if (loaned) this.roster.towerLoanSigned = true;
     this.roster.active = {
       id: template.id,
       name: template.name,
+      terms: loaned ? 'tower_loan' : 'paid',
       contractLevelId,
       introduced: false,
     };
     this.hirePending = true;
-    this.say(hireSuccess(template.name));
+    this.say(loaned ? SYDNEY_TOWER_LOAN.signed(template.name) : hireSuccess(template.name));
     this.audio?.play('purchase_success');
   }
 
@@ -208,6 +234,7 @@ export class MercenaryGuildSystem {
     const entries = MERCENARY_TEMPLATES.map((template): MercenaryDeskEntry => ({
       template,
       underContract: active?.id === template.id,
+      fee: this.feeFor(template),
       hireRefusal: this.hireRefusal(template, player, companion),
       hireNote: this.hireNote(template, player, companion),
     }));
@@ -288,8 +315,9 @@ export class MercenaryGuildSystem {
     if (active !== null && active.id !== template.id) {
       return `${active.name} holds your contract. Dismiss them first.`;
     }
-    if (active === null && !canAffordCoins(player, companion, template.price)) {
-      return `You're ${template.price - partyCoins(player, companion)} coins short.`;
+    const fee = this.feeFor(template);
+    if (active === null && !canAffordCoins(player, companion, fee)) {
+      return `You're ${fee - partyCoins(player, companion)} coins short.`;
     }
     return null;
   }

@@ -192,6 +192,7 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
     null,
     travelState,
     (caster) => rig.menu?.open(caster),
+    () => null,
   );
   const menu = new TravelMenu(map, travelState, (caster, destination) =>
     recall.beginChannelTo(caster, destination),
@@ -223,7 +224,7 @@ function step(rig: Rig, frames: number): void {
     human: rig.human,
     cat: rig.cat,
     active: rig.human,
-    inactive: rig.cat,
+    partner: rig.cat,
     activeIsMoving: false,
     roster: rig.roster,
     gameMap: rig.map,
@@ -376,7 +377,10 @@ function travelTo(rig: Rig, wild: { x: number; y: number }, id: TravelDestinatio
   const landed = [rig.human, rig.cat].every((crawler) => {
     const tile = tileOf(crawler);
     const centre = centreOf(crawler);
-    return rig.map.isWalkable(tile.x, tile.y) && destination.contains(rig.map, centre.x, centre.y);
+    return (
+      rig.map.isWalkable(tile.x, tile.y, 'walker') &&
+      destination.contains(rig.map, centre.x, centre.y)
+    );
   });
   check(landed, `both crawlers stand on walkable ground inside ${destination.label}`);
   check(

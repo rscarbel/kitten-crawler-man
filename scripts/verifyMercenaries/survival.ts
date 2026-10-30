@@ -144,7 +144,13 @@ interface Scene {
 }
 
 function hireOf(id: MercenaryTemplateId): HiredMercenary {
-  return { id, name: getMercenaryTemplate(id).name, contractLevelId: FLOOR, introduced: true };
+  return {
+    id,
+    name: getMercenaryTemplate(id).name,
+    terms: 'paid',
+    contractLevelId: FLOOR,
+    introduced: true,
+  };
 }
 
 function buildScene(hire: HiredMercenary | null): Scene {
@@ -167,7 +173,7 @@ function buildScene(hire: HiredMercenary | null): Scene {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
@@ -1202,7 +1208,11 @@ function hpSurvivesSave(id: MercenaryTemplateId, parse: HireParser): boolean {
 
 /** Spawns the hire a saved roster names and reports its HP. */
 function hpFromSavedHire(savedHire: unknown): number | null {
-  const parsed = parseMercenaryRosterCheckpoint({ active: savedHire, lastDeceased: null });
+  const parsed = parseMercenaryRosterCheckpoint({
+    active: savedHire,
+    lastDeceased: null,
+    towerLoanSigned: false,
+  });
   if (parsed?.active === null || parsed === undefined) return null;
   const roster = createMercenaryRoster();
   roster.floorLevelId = FLOOR;
@@ -1249,13 +1259,19 @@ function checkPersistence(r: SurvivalGateReporter): void {
   );
   // A live hire is only ever written with health left, so anything else is not a save the game wrote.
   r.check(
-    parseMercenaryRosterCheckpoint({ active: { ...base, hp: 'lots' }, lastDeceased: null }) ===
-      undefined,
+    parseMercenaryRosterCheckpoint({
+      active: { ...base, hp: 'lots' },
+      lastDeceased: null,
+      towerLoanSigned: false,
+    }) === undefined,
     'an unreadable HP rejects the roster',
   );
   r.check(
-    parseMercenaryRosterCheckpoint({ active: { ...base, hp: 0 }, lastDeceased: null }) ===
-      undefined,
+    parseMercenaryRosterCheckpoint({
+      active: { ...base, hp: 0 },
+      lastDeceased: null,
+      towerLoanSigned: false,
+    }) === undefined,
     'a zero HP rejects the roster',
   );
 }

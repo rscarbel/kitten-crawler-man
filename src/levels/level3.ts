@@ -196,7 +196,7 @@ export const level3: LevelDef = {
     { minPlayerLevel: FLOOR3_XP_QUARTER_LEVEL, multiplier: FLOOR3_XP_QUARTER_MULTIPLIER },
     { minPlayerLevel: FLOOR3_XP_TENTH_LEVEL, multiplier: FLOOR3_XP_TENTH_MULTIPLIER },
   ],
-  // Deliberately does NOT include the bounty/circus/quill/murder-mystery
+  // Deliberately does NOT include the bounty/circus/questline
   // groups: none of those systems is named anywhere in this def (they key off
   // map features like `gameMap.circusCentre`, not `LevelDef`), so a naive
   // "union every group named in this level's own fields" pass would silently

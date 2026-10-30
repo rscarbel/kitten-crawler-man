@@ -39,10 +39,26 @@ export function findNearestTownsperson(
   y: number,
   maxDist: number,
 ): Townsperson | null {
+  return findTownspersonInReach(people, x, y, () => maxDist);
+}
+
+/**
+ * {@link findNearestTownsperson} for people who are not all equally far to
+ * reach: each is a candidate only within `reachOf(person)` pixels of `(x, y)`.
+ */
+export function findTownspersonInReach(
+  people: Iterable<Townsperson>,
+  x: number,
+  y: number,
+  reachOf: (person: Townsperson) => number,
+): Townsperson | null {
   return pickByTalkPriority(
     people,
     talkTierOf,
-    (person) => Math.hypot(person.x - x, person.y - y),
-    maxDist,
+    (person) => {
+      const distance = Math.hypot(person.x - x, person.y - y);
+      return distance <= reachOf(person) ? distance : Number.POSITIVE_INFINITY;
+    },
+    Number.MAX_VALUE,
   );
 }

@@ -189,7 +189,8 @@ console.log(`\nBuilding one encounter per registered bounty type…`);
       // placing minions at fixed offsets lands one inside a tree often enough to
       // see. A blocked spawn tile is a blocked A* origin.
       const stuck = all.filter(
-        (mob) => !map.isWalkable(Math.floor(mob.x / TILE_SIZE), Math.floor(mob.y / TILE_SIZE)),
+        (mob) =>
+          !map.isWalkable(Math.floor(mob.x / TILE_SIZE), Math.floor(mob.y / TILE_SIZE), 'walker'),
       );
       check(
         stuck.length === 0,
@@ -280,7 +281,7 @@ console.log('\nStaging every def at every site of several maps…');
           staged++;
           const tx = Math.floor(mob.x / TILE_SIZE);
           const ty = Math.floor(mob.y / TILE_SIZE);
-          if (!map.isWalkable(tx, ty)) embedded++;
+          if (!map.isWalkable(tx, ty, 'walker')) embedded++;
           if (!mob.hasMap) noMap++;
           tiles.add(`${tx},${ty}`);
         }
@@ -419,7 +420,7 @@ function makeContext(human: HumanPlayer, cat: CatPlayer, map: GameMap): SystemCo
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: new MobRoster(map, new SpellSystem()),
     gameMap: map,

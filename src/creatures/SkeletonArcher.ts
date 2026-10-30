@@ -214,7 +214,7 @@ export class SkeletonArcher extends RisingSkeleton {
     // palisade and loose into the stakes every cooldown, for as long as the
     // party stood on the far side.
     const arrowWouldArrive = this.map
-      ? this.map.hasWalkableLine(bow.x, bow.y, targetCx, targetCy)
+      ? this.map.hasWalkableLine(bow.x, bow.y, targetCx, targetCy, this.mobility)
       : true;
     const hasClearShot = hasLineOfSight && arrowWouldArrive;
 

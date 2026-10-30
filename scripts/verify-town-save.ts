@@ -493,9 +493,9 @@ const KNOWN_VISITED_PLACE = 'circus_grounds' as const satisfies VisitedPlaceId;
 function checkUnknownVisitedPlace(): void {
   const memory = {
     residentTalks: [],
-    clearedRooms: [],
     clearedCamps: [],
     paidOutInteriorProps: [],
+    settledSewerWorks: [],
   };
   check(
     parseTownMemoryCheckpoint({ ...memory, visitedPlaces: [KNOWN_VISITED_PLACE] }) !== undefined,

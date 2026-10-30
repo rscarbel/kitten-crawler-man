@@ -1,13 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for Baggi, the murder mystery's victim: the living orc on
- * the biped rig and the body found in the alley. Runs the gates first, then
- * writes review sheets:
+ * Review harness for Baggi, the apothecary's orc assistant on the biped rig.
+ * Runs the gates first, then writes a review sheet:
  *
  *   preview/baggi/figure.png   every row she paints, enlarged, plus the idle
  *                               at true in-game size beside a street citizen
- *   preview/baggi/corpse.png   the alley body enlarged, and at true in-game
- *                               size on an alley floor beside her living self
  *
  *   npm run render:baggi
  */
@@ -19,9 +16,8 @@ import { bakeFigureCell, figureStateNames } from './figureSheet.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { townCastOutfitFigure, townCastStateName } from '../src/sprites/art/townCastFigure.js';
 import { townCastLook } from '../src/sprites/person/townCastLooks.js';
-import { BAGGI_FIGURE } from '../src/sprites/art/baggiFigure.js';
-import { BAGGI_CORPSE_FIGURE, BAGGI_CORPSE_STATE } from '../src/sprites/art/baggiCorpseArt.js';
-import { BAGGI_DRAW_SCALE, BAGGI_STANDING_STATE } from '../src/sprites/baggiSprite.js';
+import { BAGGI_FIGURE, baggiStateName } from '../src/sprites/art/baggiFigure.js';
+import { BAGGI_DRAW_SCALE } from '../src/sprites/baggiSprite.js';
 import { baggiGateFailures } from './gates-baggi.js';
 import { reportFigureGates } from './figureGates.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
@@ -32,7 +28,6 @@ const PADDING = 12;
 const LABEL_HEIGHT = 16;
 const BACKDROP = '#3b3b40';
 const STREET_GROUND = '#6f675d';
-const ALLEY_GROUND = '#4c4842';
 const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '12px sans-serif';
 /** Women of the street cast, to calibrate her read against at true size. */
@@ -47,7 +42,7 @@ const GRID_LINE = 'rgba(0,0,0,0.12)';
 const HALF_PIXEL = 0.5;
 /** Tile columns the in-game strips stand their figures on. */
 const SUBJECT_COLUMN = 2;
-const NEIGHBOUR_COLUMN = 4;
+const BAGGI_STANDING_STATE = baggiStateName('idle', 'front');
 
 function label(ctx: NodeCtx, text: string, x: number, y: number): void {
   ctx.fillStyle = LABEL_COLOR;
@@ -142,7 +137,7 @@ function stack(parts: readonly Canvas[]): Canvas {
   return canvas;
 }
 
-/** Her living sprite box at `tileSize`, matching `Baggi.drawSelf`. */
+/** Her sprite box at `tileSize`, matching `drawBaggiSprite`. */
 function baggiBoxSize(tileSize: number): number {
   return tileSize * BAGGI_DRAW_SCALE;
 }
@@ -178,37 +173,9 @@ function renderFigureSheet(): Canvas {
   return stack([rows, strip]);
 }
 
-function renderCorpseSheet(): Canvas {
-  const corpse = BAGGI_CORPSE_FIGURE;
-  const living = BAGGI_FIGURE;
-  const big = sheetOfStates(corpse, figureStateNames(corpse));
-  const strip = inGameStrip(ALLEY_GROUND, (ctx) => {
-    drawAtTile(
-      ctx,
-      corpse,
-      bakeFigureCell(corpse, BAGGI_CORPSE_STATE, 0),
-      TILE_SIZE * SUBJECT_COLUMN,
-      TILE_SIZE,
-      TILE_SIZE,
-    );
-    const size = baggiBoxSize(TILE_SIZE);
-    const grow = size - TILE_SIZE;
-    drawAtTile(
-      ctx,
-      living,
-      bakeFigureCell(living, BAGGI_STANDING_STATE, 0),
-      TILE_SIZE * NEIGHBOUR_COLUMN - grow / 2,
-      TILE_SIZE - grow,
-      size,
-    );
-  });
-  return stack([big, strip]);
-}
-
 function main(): void {
   const ok = reportFigureGates('baggi', baggiGateFailures());
   writePreviewPng(`${OUT_DIR}/figure.png`, renderFigureSheet().toBuffer('image/png'));
-  writePreviewPng(`${OUT_DIR}/corpse.png`, renderCorpseSheet().toBuffer('image/png'));
   if (!ok) process.exitCode = 1;
 }
 

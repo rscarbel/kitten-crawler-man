@@ -14,11 +14,18 @@ const ADVICE_OBJECTIVE_IDS = [
   'spider_lab',
   'spider_lab_started',
   'spider_lab_station',
-  'krasue_murders',
   'shady_bounties',
   'anchor_offer',
   'anchor_stone',
   'speed_fizz_tip',
+  'missing_cats_notices',
+  'missing_cats_owners',
+  'missing_cats_cellar',
+  'missing_cats_stakeout',
+  'missing_cats_temple',
+  'missing_cats_bait',
+  'missing_cats_tower_door',
+  'missing_cats_drain',
 ] as const;
 
 /** Every objective Dave has tactics for and Caroline has intel about. */

@@ -487,7 +487,7 @@ export function buildFloorSurface(input: FloorSurfaceInput): FloorSurface {
       const index = y * width + x;
       const region = regionMap.regionAt(x, y);
       regionIds[index] = region;
-      walkable[index] = isWalkableTileType(grid[y][x]) ? 1 : 0;
+      walkable[index] = isWalkableTileType(grid[y][x], 'walker') ? 1 : 0;
       // A prop standing in a room or hallway still has floor under it.
       open[index] = walkable[index] === 1 || region !== NO_REGION ? 1 : 0;
       const room = regionMap.room(region);

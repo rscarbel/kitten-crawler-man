@@ -70,6 +70,8 @@ export const palette = {
     ghost: 'rgba(255, 255, 255, 0.35)',
   },
   crawler: { human: '#7FB2FF', cat: '#FF9F45' },
+  /** A crawler's card glowing while something only they perceive is near: the scent's warm cream. */
+  sense: { cue: '#FFE7B8' },
   category: {
     weapon: '#FF7A6B',
     armor: '#7FB2FF',

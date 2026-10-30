@@ -48,6 +48,7 @@ import type { TilePoint } from '../../../map/town/townPlan';
 import { worldBar } from '../../../ui/world/worldShapes';
 import type { CowPen } from '../cowPen';
 import { EscortAmbushSystem } from '../EscortAmbushSystem';
+import { presentCrawlers } from '../../GameSystem';
 import { IN_VIEW_TILES, MIDGE_COAT, MIDGE_COW_NAME, ROUTINE_WARM_TILES } from '../LivestockSystem';
 import type { BlueprintsQuestContext } from './blueprintsContext';
 import { garrisonGreen, isInGarrisonGreen, type GarrisonGreen } from './garrisonGreen';
@@ -169,7 +170,7 @@ export class MidgeEscort {
   private scaredLineHandle: ConversationHandle | null = null;
 
   constructor(protected readonly ctx: BlueprintsQuestContext) {
-    const crawlers = (): readonly Player[] => [ctx.human, ctx.cat];
+    const crawlers = (): readonly Player[] => presentCrawlers(ctx);
     this.ambush = new EscortAmbushSystem({
       gameMap: ctx.gameMap,
       site: ctx.site,

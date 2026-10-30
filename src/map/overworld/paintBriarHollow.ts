@@ -453,7 +453,7 @@ export function paveRoadToTown(
     if (grid.isSolid(x, y)) return null;
     if (grid.isPaved(x, y)) return COST_PAVED;
     if (CLEARABLE_TYPES.has(type)) return COST_CLEARABLE;
-    if (!isWalkableTileType(grid.cells[y][x])) return null;
+    if (!isWalkableTileType(grid.cells[y][x], 'walker')) return null;
     return COST_OPEN;
   };
 
@@ -505,7 +505,7 @@ export function paveRoadToTown(
         // cross: a torch or a camp's crate beside the centre line stays put.
         const type = grid.typeAt(x, y);
         const clearable = type !== undefined && CLEARABLE_TYPES.has(type);
-        if (!clearable && !isWalkableTileType(grid.cells[y][x])) continue;
+        if (!clearable && !isWalkableTileType(grid.cells[y][x], 'walker')) continue;
         grid.setPaved(x, y, FloorTypeValue.road);
       }
     }

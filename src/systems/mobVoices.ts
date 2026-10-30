@@ -175,7 +175,6 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   merc_medic: { ...SILENT_VOICE, attack: { takes: ['human_punch_weak'] } },
   // The same soul-fire as the Lich's bolts: the room's second half is meant to
   // sound like a continuation of its first.
-  miss_quill: { ...SILENT_VOICE, projectile: SOUL_BOLT_LAUNCH },
   // The pounce lands on the claw cue: a dedicated pounce screech is unsourced,
   // and the pounce ends in a raking swipe anyway.
   deinonychus: {

@@ -1,5 +1,5 @@
 import { drawHumanSprite } from '../sprites/humanSprite';
-import { drawCatSprite } from '../sprites/catSprite';
+import { catCellFor, drawCatSprite, type CatAppearance } from '../sprites/catSprite';
 import { drawRoosterSprite, prewarmRoosterRow } from '../sprites/roosterSprite';
 import {
   BIG_ROOSTER_FIGURE,
@@ -359,7 +359,8 @@ export class BossIntroSystem implements GameSystem {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
+  /** `cat` is the cat crawler as she is dressed, drawn on the party's panel. */
+  render(ctx: CanvasRenderingContext2D, cat: CatAppearance<'crawler'>): void {
     if (!this.state) return;
     const intro = this.state;
     const CX = viewportWidth() / 2;
@@ -474,9 +475,11 @@ export class BossIntroSystem implements GameSystem {
       ctx.save();
       drawCatSprite(
         ctx,
+        cat,
         leftX + panelW * CAT_SPRITE_X_FRACTION,
         panelY + CAT_SPRITE_Y_OFFSET,
         CAT_SPRITE_SIZE,
+        catCellFor(),
       );
       ctx.restore();
 

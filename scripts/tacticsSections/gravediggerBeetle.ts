@@ -97,7 +97,7 @@ function checkAdultActsOnNothing(map: GameMap, harness: TacticsHarness): void {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,

@@ -218,7 +218,8 @@ function ringAround(
   for (let dy = -RING_RADIUS_TILES; dy <= RING_RADIUS_TILES; dy++) {
     for (let dx = -RING_RADIUS_TILES; dx <= RING_RADIUS_TILES; dx++) {
       const neighbour = { x: tile.x + dx, y: tile.y + dy };
-      if (family.has(tileKey(neighbour)) || !map.isWalkable(neighbour.x, neighbour.y)) continue;
+      if (family.has(tileKey(neighbour)) || !map.isWalkable(neighbour.x, neighbour.y, 'walker'))
+        continue;
       if (tileLuminance(frame, neighbour) === null) continue;
       ring.push(neighbour);
     }
@@ -345,7 +346,7 @@ export function measureFloorInRows(
   for (let y = rows.y0; y <= rows.y1; y++) {
     const row = map.structure[y] ?? [];
     row.forEach((tile, x) => {
-      if (tile.type !== floorType || !map.isWalkable(x, y)) return;
+      if (tile.type !== floorType || !map.isWalkable(x, y, 'walker')) return;
       const luminance = tileLuminance(frame, { x, y });
       if (luminance !== null) floor.push(luminance);
     });
@@ -367,7 +368,7 @@ export function measureTentLuminance(
     row.forEach((_, x) => {
       const luminance = tileLuminance(frame, { x, y });
       if (luminance === null) return;
-      (map.isWalkable(x, y) ? floor : solid).push(luminance);
+      (map.isWalkable(x, y, 'walker') ? floor : solid).push(luminance);
     });
   });
   return { floor: spreadOf(floor), solid: spreadOf(solid) };

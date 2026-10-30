@@ -236,7 +236,7 @@ const SLEEPING_CAT_INN: BuildingSpec = {
   },
 };
 
-/** Blackwood Lodge — the cult hideout at the end of a dead-end alley. */
+/** Blackwood Lodge — the garrison's watch post at the end of a dead-end alley. */
 const BLACKWOOD_LODGE: BuildingSpec = {
   key: 'blackwood_lodge',
   file: 'blackwood_lodge.png',

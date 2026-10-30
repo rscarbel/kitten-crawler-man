@@ -123,7 +123,7 @@ function gateLabLayout({ env, report }: RoomGateContext): void {
       );
     }
     // A puddle is ground a crawler crosses: every tile walkable and off the doorway approaches.
-    const blocked = puddle.tiles.filter((t) => !gameMap.isWalkable(t.x, t.y));
+    const blocked = puddle.tiles.filter((t) => !gameMap.isWalkable(t.x, t.y, 'walker'));
     if (blocked.length > 0) report.fail(`puddle ${index} has ${blocked.length} unwalkable tiles`);
     const onApproach = puddle.tiles.filter((t) => lab.approach.has(labTileKey(t.x, t.y)));
     if (onApproach.length > 0) {

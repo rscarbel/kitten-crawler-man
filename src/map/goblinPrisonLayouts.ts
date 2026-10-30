@@ -93,11 +93,15 @@ export type PrisonTier = 0 | 1 | 2;
  *  fN fE fS fW  turn to face north, east, south or west
  * ```
  */
-export interface PrisonGuardDef {
+export interface StealthGuardDef {
   readonly id: string;
-  readonly section: PrisonSectionId;
   readonly tier: PrisonTier;
   readonly script: string;
+}
+
+/** A prison patrol guard: a {@link StealthGuardDef} that keeps to one section. */
+export interface PrisonGuardDef extends StealthGuardDef {
+  readonly section: PrisonSectionId;
 }
 
 /**
@@ -117,22 +121,36 @@ export type PrisonSpotlightTrack =
       readonly toDeg: number;
     };
 
-export interface PrisonSpotlightDef {
+export interface StealthSpotlightDef {
   readonly id: string;
-  readonly section: PrisonSectionId;
   /** The tower anchor glyph (1–9) the beam is drawn from. */
   readonly anchor: string;
   readonly tier: PrisonTier;
   readonly track: PrisonSpotlightTrack;
 }
 
-export interface PrisonLayout {
+/** A prison spotlight: a {@link StealthSpotlightDef} that shines on one section. */
+export interface PrisonSpotlightDef extends StealthSpotlightDef {
+  readonly section: PrisonSectionId;
+}
+
+/**
+ * The patrols and lights of any floor crossed by stealth, as the patrol
+ * compiler and the headless solver read them: the prison's layouts, and any
+ * other floor that reuses its guards.
+ */
+export interface StealthLayout {
   readonly id: string;
+  /** Every patrol and track period divides this, so the whole floor repeats on it. */
+  readonly cycleFrames: number;
+  readonly guards: ReadonlyArray<StealthGuardDef>;
+  readonly spotlights: ReadonlyArray<StealthSpotlightDef>;
+}
+
+export interface PrisonLayout extends StealthLayout {
   readonly name: string;
   readonly rows: ReadonlyArray<string>;
   readonly sections: ReadonlyArray<PrisonSection>;
-  /** Every patrol and track period divides this, so the whole prison repeats on it. */
-  readonly cycleFrames: number;
   readonly guards: ReadonlyArray<PrisonGuardDef>;
   readonly spotlights: ReadonlyArray<PrisonSpotlightDef>;
 }

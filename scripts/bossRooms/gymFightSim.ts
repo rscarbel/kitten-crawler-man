@@ -132,7 +132,7 @@ function firstStepToward(gameMap: GameMap, from: TilePoint, goal: TilePoint): Ti
       const next = { x: at.x + dx, y: at.y + dy };
       if (cameFrom.has(key(next))) continue;
       const isGoal = next.x === goal.x && next.y === goal.y;
-      if (!isGoal && !gameMap.isWalkable(next.x, next.y)) continue;
+      if (!isGoal && !gameMap.isWalkable(next.x, next.y, 'walker')) continue;
       cameFrom.set(key(next), at);
       queue.push(next);
     }
@@ -218,7 +218,7 @@ function fight(found: FoundRoom, setup: GymFightSetup): GymFightMetrics {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,

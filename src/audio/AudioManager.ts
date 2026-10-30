@@ -2353,12 +2353,6 @@ export class AudioManager {
       }
     });
 
-    bus.on('questStarted', (e) => {
-      if (e.questId === 'krasue_murders') {
-        this.play('menu_open');
-      }
-    });
-
     // No `questCompleted` fanfare: `quest_complete` plays when the
     // quest-complete screen goes up, which can be a while after the quest completes.
 

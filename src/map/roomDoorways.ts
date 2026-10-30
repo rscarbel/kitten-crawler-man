@@ -41,7 +41,7 @@ function isOpenFloor(grid: TileContent[][], x: number, y: number): boolean {
   if (y < 0 || y >= grid.length) return false;
   const row = grid[y];
   if (x < 0 || x >= row.length) return false;
-  return isWalkableTileType(row[x]);
+  return isWalkableTileType(row[x], 'walker');
 }
 
 /** Assembles one doorway from the run of perimeter tiles that make it up. */

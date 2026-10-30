@@ -52,3 +52,14 @@ interface LandmarkEntry extends BuildingEntryBase {
 }
 
 export type BuildingEntry = PlannedBuildingEntry | LandmarkEntry;
+
+/**
+ * Rows south of a building's door that its front step sits: outside, and off
+ * the door tile, so stepping out never re-triggers the "Enter building?" prompt.
+ */
+const DOORSTEP_ROWS_SOUTH = 1;
+
+/** The street tile in front of a building's door, where a party leaving it stands. */
+export function doorstepOf(entry: Pick<BuildingEntry, 'doorTile'>): TilePoint {
+  return { x: entry.doorTile.x, y: entry.doorTile.y + DOORSTEP_ROWS_SOUTH };
+}

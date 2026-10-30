@@ -222,14 +222,14 @@ export class GroundPickupSystem {
   private walkableLanding(x: number, y: number): { x: number; y: number } | null {
     const tileX = Math.floor(x / TILE_SIZE);
     const tileY = Math.floor(y / TILE_SIZE);
-    if (this.gameMap.isWalkable(tileX, tileY)) return { x, y };
+    if (this.gameMap.isWalkable(tileX, tileY, 'walker')) return { x, y };
     for (let r = 1; r <= LANDING_SEARCH_RADIUS_TILES; r++) {
       let best: { x: number; y: number } | null = null;
       let bestDist = Infinity;
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          if (!this.gameMap.isWalkable(tileX + dx, tileY + dy)) continue;
+          if (!this.gameMap.isWalkable(tileX + dx, tileY + dy, 'walker')) continue;
           const centreX = (tileX + dx + HALF) * TILE_SIZE;
           const centreY = (tileY + dy + HALF) * TILE_SIZE;
           const dist = Math.hypot(centreX - x, centreY - y);

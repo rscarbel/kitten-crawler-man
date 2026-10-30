@@ -150,6 +150,8 @@ const HOLD_STILL_PX = 20;
 const RIG_BUILDER_LEVEL = 1;
 /** Trebuchets' and snares' worth of materials a placement check hands over, so a refusal is never a shortage. */
 const PLENTY_OF_TRAPS = 4;
+/** Columns either side of the gate a test wall segment keeps clear of, so the gate's own tiles never stand in for it. */
+const GATE_CLEARANCE_TILES = 6;
 /** The request's spikes: 150 health on walls, trebuchets and defense-quest grates alike. */
 const EXPECTED_SPIKES_HP = 150;
 
@@ -346,8 +348,10 @@ function southWallSegment(): { id: string; tile: { x: number; y: number } } {
     const tile = segment.tiles[1] ?? segment.tiles[0];
     const allSouth = segment.tiles.every((t) => t.y === bottom);
     if (!allSouth) continue;
-    if (!gameMap.isWalkable(tile.x, tile.y - 1)) continue;
-    const nearGate = site.gate.tiles.some((gate) => Math.abs(gate.x - tile.x) < 6);
+    if (!gameMap.isWalkable(tile.x, tile.y - 1, 'walker')) continue;
+    const nearGate = site.gate.tiles.some(
+      (gate) => Math.abs(gate.x - tile.x) < GATE_CLEARANCE_TILES,
+    );
     if (nearGate) continue;
     return { id: segment.id, tile };
   }
@@ -541,7 +545,7 @@ section('Segments');
     tiles.every(
       (tile) =>
         gameMap.structure[tile.y][tile.x].type === HOLLOW_PALISADE_GAP &&
-        gameMap.isWalkable(tile.x, tile.y),
+        gameMap.isWalkable(tile.x, tile.y, 'walker'),
     ),
     'a breach is walkable rubble',
   );
@@ -558,7 +562,7 @@ section('Segments');
     'repair stands the wooden wall back up at full health',
   );
   check(
-    tiles.every((tile) => !gameMap.isWalkable(tile.x, tile.y)),
+    tiles.every((tile) => !gameMap.isWalkable(tile.x, tile.y, 'walker')),
     'a repaired wall blocks again',
   );
 
@@ -593,11 +597,13 @@ function northWallSegment(clearRows: number): { id: string; tile: { x: number; y
       if (segTile.y !== top) continue;
       let clear = true;
       for (let dy = 1; dy <= clearRows && clear; dy++) {
-        if (!gameMap.isWalkable(segTile.x, segTile.y + dy)) clear = false;
-        if (!gameMap.isWalkable(segTile.x, segTile.y - dy)) clear = false;
+        if (!gameMap.isWalkable(segTile.x, segTile.y + dy, 'walker')) clear = false;
+        if (!gameMap.isWalkable(segTile.x, segTile.y - dy, 'walker')) clear = false;
       }
       if (!clear) continue;
-      const nearGate = site.gate.tiles.some((gate) => Math.abs(gate.x - segTile.x) < 6);
+      const nearGate = site.gate.tiles.some(
+        (gate) => Math.abs(gate.x - segTile.x) < GATE_CLEARANCE_TILES,
+      );
       if (nearGate) continue;
       return { id: segment.id, tile: segTile };
     }
@@ -734,19 +740,37 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
 // ── The gate ──────────────────────────────────────────────────────────────
 
 section('The gate');
+/** A* search reach for the walk through the gate: far longer than the few tiles across it. */
+const GATE_PATH_MAX_TILES = 40;
 {
   check(
-    site.gate.tiles.every((tile) => gameMap.isWalkable(tile.x, tile.y)),
+    site.gate.tiles.every((tile) => gameMap.isWalkable(tile.x, tile.y, 'walker')),
     'the gate is walkable',
   );
   check(
-    site.gate.tiles.every((tile) => !gameMap.isWalkableForHostile(tile.x, tile.y)),
+    site.gate.tiles.every((tile) => !gameMap.isWalkableForHostile(tile.x, tile.y, 'walker')),
     'the gate turns hostiles away',
   );
   const outside = site.gate.outside;
   const inside = site.gate.inside;
-  const friendlyPath = gameMap.findPath(outside.x, outside.y, inside.x, inside.y, 40, false);
-  const hostilePath = gameMap.findPath(outside.x, outside.y, inside.x, inside.y, 40, true);
+  const friendlyPath = gameMap.findPath(
+    outside.x,
+    outside.y,
+    inside.x,
+    inside.y,
+    'walker',
+    GATE_PATH_MAX_TILES,
+    false,
+  );
+  const hostilePath = gameMap.findPath(
+    outside.x,
+    outside.y,
+    inside.x,
+    inside.y,
+    'walker',
+    GATE_PATH_MAX_TILES,
+    true,
+  );
   check(friendlyPath.length > 0, 'A* for a friendly goes through the gate');
   check(hostilePath.length === 0, 'A* for a hostile finds no way through the gate');
 
@@ -759,7 +783,7 @@ section('The gate');
     human: rig.human,
     cat: rig.cat,
     active: rig.human,
-    inactive: rig.cat,
+    partner: rig.cat,
     activeIsMoving: false,
     roster: rig.roster,
     gameMap,
@@ -867,6 +891,7 @@ function openPatch(): { x: number; y: number } {
     gameMap.isWalkable(
       Math.floor((body.x + TILE_SIZE / 2) / TILE_SIZE),
       Math.floor((body.y + TILE_SIZE / 2) / TILE_SIZE),
+      'walker',
     );
   check(started, 'a trebuchet starts over a hostile, a cow and the companion');
   check(!inside(rat) && onGround(rat), 'the hostile is pushed clear onto open ground');
@@ -876,12 +901,12 @@ function openPatch(): { x: number; y: number } {
     'the companion is pushed clear onto open ground',
   );
   check(
-    !gameMap.isWalkable(footprint.x, footprint.y),
+    !gameMap.isWalkable(footprint.x, footprint.y, 'walker'),
     'the footprint is reserved while it goes up',
   );
   rig.construction.cancelJob();
   check(
-    gameMap.isWalkable(footprint.x, footprint.y),
+    gameMap.isWalkable(footprint.x, footprint.y, 'walker'),
     'a cancelled trebuchet releases its footprint',
   );
   for (const mob of [rat, cow, deinonychus]) {
@@ -1098,6 +1123,8 @@ const SQUEEZE_MISALIGN_TILES = 0.2;
 const SQUEEZE_MAX_FRAMES = UPDATES_PER_SECOND * 6;
 /** Rows of footprint between the seam's middle row and open ground. */
 const SQUEEZE_CHASE_RING_TILES = 2;
+/** Columns west of the west trebuchet's footprint the chase starts from: open ground beyond its frame. */
+const SQUEEZE_CHASE_START_TILES_WEST = 2;
 
 /** Walks the active crawler south from above the footprints; true once its centre is past them. */
 function walkSouthPast(rig: Rig, centreColumnPx: number, footprintTop: number): boolean {
@@ -1121,7 +1148,8 @@ function walkSouthPast(rig: Rig, centreColumnPx: number, footprintTop: number): 
   const east = rig.defense.placeTrebuchet(patch.x, top, 'human');
   const seamPx = patch.x * TILE_SIZE;
   check(
-    !gameMap.isWalkable(patch.x - 1, top + 1) && !gameMap.isWalkable(patch.x, top + 1),
+    !gameMap.isWalkable(patch.x - 1, top + 1, 'walker') &&
+      !gameMap.isWalkable(patch.x, top + 1, 'walker'),
     'every footprint tile stays solid for mobs and A*',
   );
   check(
@@ -1140,11 +1168,17 @@ function walkSouthPast(rig: Rig, centreColumnPx: number, footprintTop: number): 
   // The seam's middle row: every tile around it is footprint, so a chase must
   // close from the nearest ring that has open ground.
   const stripTile = { x: patch.x - 1, y: top + 1 };
-  const route = gameMap.findPath(westX - 2, stripTile.y, stripTile.x, stripTile.y);
+  const route = gameMap.findPath(
+    westX - SQUEEZE_CHASE_START_TILES_WEST,
+    stripTile.y,
+    stripTile.x,
+    stripTile.y,
+    'walker',
+  );
   const routeEnd = route[route.length - 1];
   check(
     routeEnd !== undefined &&
-      gameMap.isWalkable(routeEnd.x, routeEnd.y) &&
+      gameMap.isWalkable(routeEnd.x, routeEnd.y, 'walker') &&
       Math.max(Math.abs(routeEnd.x - stripTile.x), Math.abs(routeEnd.y - stripTile.y)) <=
         SQUEEZE_CHASE_RING_TILES,
     'a chase aimed at a crawler on the edge strip ends just beside the frames',
@@ -1675,7 +1709,7 @@ section('Defend-quest grate spikes');
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: dungeon,

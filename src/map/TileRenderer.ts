@@ -58,6 +58,8 @@ import {
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawBossRoomTile } from './tiles/bossRoomTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
+import { drawClimberTile } from './tiles/climberTiles';
+import { drawFloorDropTile } from './tiles/floorDropTiles';
 import { drawBuildingTile, RUINED_WALL_OVERHEAD_PX, townWallArtKey } from './tiles/buildingTiles';
 import {
   drawDecorationTile,
@@ -566,6 +568,8 @@ function drawTile(
   // Try each category renderer in turn — first match wins
   if (drawTerrainTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
   if (drawSpecialFloorTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
+  if (drawClimberTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
+  if (drawFloorDropTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
   if (drawBuildingTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
   if (drawDecorationTile(ctx, structure, type, sx, sy, ts, tx, ty, false)) return;
   if (drawInteriorTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;

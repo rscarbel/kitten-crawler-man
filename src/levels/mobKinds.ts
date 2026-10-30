@@ -47,8 +47,6 @@ import { Lion } from '../creatures/Lion';
 import { MassiveClown } from '../creatures/MassiveClown';
 import { DireBear } from '../creatures/DireBear';
 import { Elf } from '../creatures/Elf';
-import { MissQuill } from '../creatures/MissQuill';
-import { Remex } from '../creatures/Remex';
 import { TheLich } from '../creatures/TheLich';
 import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
@@ -669,21 +667,6 @@ const MOB_KIND_DEFS = {
     },
     prewarm: null,
   }),
-  miss_quill: kind<MissQuill, { readonly addMob: (mob: Mob) => void }>({
-    create: (tile, _look, _random, options) =>
-      new MissQuill(tile.x, tile.y, TILE_SIZE, options.addMob),
-    threat: 320,
-    role: 'caster',
-    protected: 'boss',
-    prewarm: null,
-  }),
-  remex: kind({
-    create: (tile) => new Remex(tile.x, tile.y, TILE_SIZE),
-    threat: 0,
-    role: 'support',
-    protected: 'quest-critical',
-    prewarm: null,
-  }),
   skeleton_sword: kind({
     create: (tile) => new SkeletonWarrior(tile.x, tile.y, TILE_SIZE),
     threat: 6,
@@ -826,7 +809,6 @@ const KINDS_NEEDING_OPTIONS: Readonly<Record<Exclude<MobKind, StandaloneMobKind>
   tutorial_goblin: true,
   kraken_tentacle: true,
   spider_hatchling: true,
-  miss_quill: true,
 };
 
 const STANDALONE_MOB_KINDS: readonly StandaloneMobKind[] =

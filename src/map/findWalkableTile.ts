@@ -39,7 +39,14 @@ export function hasRoomToMove(
   // walled off to the flood fill.
   const rows = map.structure.length;
   const columns = map.structure[0]?.length ?? rows;
-  return hasOpenRegion((x, y) => map.isWalkable(x, y), columns, rows, tileX, tileY, minOpenTiles);
+  return hasOpenRegion(
+    (x, y) => map.isWalkable(x, y, 'walker'),
+    columns,
+    rows,
+    tileX,
+    tileY,
+    minOpenTiles,
+  );
 }
 
 /**
@@ -285,7 +292,7 @@ function walkableRegionNear(
   boundTiles: number,
 ): Set<number> {
   const region = new Set<number>();
-  if (!map.isWalkable(from.x, from.y)) return region;
+  if (!map.isWalkable(from.x, from.y, 'walker')) return region;
   const withinBound = (x: number, y: number): boolean =>
     Math.abs(x - from.x) <= boundTiles && Math.abs(y - from.y) <= boundTiles;
   region.add(tileKeyIn(map, from.x, from.y));
@@ -295,7 +302,7 @@ function walkableRegionNear(
     for (const [dx, dy] of NEIGHBOUR_OFFSETS) {
       const x = tile.x + dx;
       const y = tile.y + dy;
-      if (!withinBound(x, y) || !map.isWalkable(x, y)) continue;
+      if (!withinBound(x, y) || !map.isWalkable(x, y, 'walker')) continue;
       const key = tileKeyIn(map, x, y);
       if (region.has(key)) continue;
       region.add(key);

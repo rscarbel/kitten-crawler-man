@@ -17,6 +17,10 @@
  * - **Noise**: dynamite going off in a guard's light is an alarm; going off
  *   where the guard only hears it sends the guard to the spot and back onto its
  *   loop.
+ * - **The tower's gatehouse**, which reuses the prison's guards on its own
+ *   floor: from the cellar stair's landing to the stair up unseen at every
+ *   difficulty, the shortest walk caught from normal up, and the same noise
+ *   answers.
  *
  *   npx tsx scripts/verify-prison-stealth.ts [--fault=<name>]
  *
@@ -35,9 +39,9 @@ import {
   isPrisonGuardWalkable,
   parsePrisonLayout,
   PRISON_TILE,
-  type ParsedPrisonLayout,
   type PrisonGrid,
   type PrisonTile,
+  type StealthFloor,
 } from '../src/map/goblinPrisonPlan.js';
 import {
   guardCone,
@@ -46,7 +50,20 @@ import {
   tileCentrePx,
   type CompiledGuard,
   type CompiledPrison,
+  type CompiledStealth,
 } from '../src/systems/stealthKeySnatch/prisonPatrols.js';
+import {
+  compileGatehouseWatch,
+  gatehouseCellarLanding,
+  gatehouseStairUpLanding,
+  GATEHOUSE_TUNING,
+} from '../src/systems/tower/gatehouseWatch.js';
+import {
+  everyTowerConditions,
+  towerConditionsKey,
+  towerStoreyStateKey,
+} from '../src/map/town/interiors/townCenterTower.js';
+import { MISSING_CATS_PHASES } from '../src/core/quests/missingCatsProgress.js';
 import {
   bodyTouchesGuard,
   lightCoversPoint,
@@ -133,6 +150,8 @@ const REJOIN_POSITION_TOLERANCE_PX = 1;
 const REJOIN_FACING_TOLERANCE_RAD = 0.01;
 const FAULT_TINY_TILES = 0.01;
 const FAULT_FLOOD_TILES = 200;
+/** A cone that sees all the way round. */
+const FAULT_FLOOD_HALF_ANGLE_DEG = 180;
 const ANY_COVERAGE_WEIGHT = 1;
 /**
  * Where the corner check stands its crawler, in tiles from the guard's tile
@@ -185,7 +204,7 @@ function layoutFor(layout: PrisonLayout): PrisonLayout {
 }
 
 function responseFor(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   guard: CompiledGuard,
   frame: number,
   noise: PrisonNoise,
@@ -240,11 +259,7 @@ function checkStealth(compiled: CompiledPrison, label: string): void {
   }
 }
 
-function floorTilesNear(
-  parsed: ParsedPrisonLayout,
-  centre: PrisonTile,
-  radius: number,
-): PrisonTile[] {
+function floorTilesNear(parsed: StealthFloor, centre: PrisonTile, radius: number): PrisonTile[] {
   const tiles: PrisonTile[] = [];
   for (let y = centre.y - radius; y <= centre.y + radius; y++) {
     for (let x = centre.x - radius; x <= centre.x + radius; x++) {
@@ -259,7 +274,7 @@ function floorTilesNear(
  * flashlight could be stopped by, not even a corner the line grazes.
  */
 function straightLineIsOpenFloor(
-  parsed: ParsedPrisonLayout,
+  parsed: StealthFloor,
   from: PrisonPoint,
   to: PrisonPoint,
 ): boolean {
@@ -320,7 +335,7 @@ function checkTouchCorners(): void {
   );
 }
 
-function checkNoise(compiled: CompiledPrison, label: string): void {
+function checkNoise(compiled: CompiledStealth, label: string): void {
   const { parsed } = compiled;
   const blastRadiusTiles = PRISON_NOISE_RADIUS_TILES.explosion;
   for (const guard of compiled.guards) {
@@ -411,6 +426,65 @@ for (const layout of PRISON_LAYOUTS) {
     const label = `${layout.id} ${difficulty}`;
     const compiled = compilePrisonWithTuning(parsed, difficulty, tuningFor(difficulty));
     checkStealth(compiled, label);
+    checkNoise(compiled, label);
+  }
+}
+
+/** Difficulties on which walking straight across the gatehouse must be caught; easy forgives it. */
+const GATEHOUSE_STRAIGHT_CAUGHT_FROM: ReadonlyArray<Difficulty> = ['normal', 'hard'];
+
+function gatehouseTuningFor(difficulty: Difficulty): PrisonDifficultyTuning {
+  const tuning = GATEHOUSE_TUNING[difficulty];
+  if (fault !== 'floodlit') return tuning;
+  return {
+    ...tuning,
+    cone: {
+      ...tuning.cone,
+      rangeTiles: FAULT_FLOOD_TILES,
+      halfAngleDeg: FAULT_FLOOD_HALF_ANGLE_DEG,
+    },
+  };
+}
+
+function checkGatehouse(
+  compiled: CompiledStealth,
+  start: PrisonTile,
+  goals: ReadonlyArray<PrisonTile>,
+  label: string,
+): void {
+  const timeline = buildTimeline(compiled);
+  const lit = buildLitTables(timeline);
+  const across = solve(compiled, lit, [startState(compiled, lit, start)], goals);
+  check(across.found, `${label}: no unseen route from the cellar stair to the stair up`);
+  if (across.found) console.log(`    ${label}: unseen across in ${across.frames} frames`);
+  if (!GATEHOUSE_STRAIGHT_CAUGHT_FROM.includes(compiled.difficulty)) return;
+  const straight = goals.length === 0 ? null : shortestWalk(compiled, start, goals[0]);
+  check(straight !== null, `${label}: the stair up cannot be walked to at all`);
+  if (straight === null) return;
+  const escapes: number[] = [];
+  for (let frame = 0; frame < compiled.cycleFrames; frame += NAIVE_START_STEP_FRAMES) {
+    if (!walkPathWithSuspicion(timeline, straight, frame).caught) escapes.push(frame);
+  }
+  check(
+    escapes.length === 0,
+    `${label}: walking straight across escapes capture when setting off at frame(s) ${escapes.slice(0, REPORTED_ESCAPES).join(', ')}`,
+  );
+}
+
+const gatehouseStates = new Map(
+  everyTowerConditions(MISSING_CATS_PHASES).map((conditions) => [
+    towerStoreyStateKey('gatehouse', conditions),
+    conditions,
+  ]),
+);
+for (const conditions of gatehouseStates.values()) {
+  const start = gatehouseCellarLanding(conditions);
+  const goals = gatehouseStairUpLanding(conditions);
+  for (const difficulty of DIFFICULTIES) {
+    const label = `gatehouse ${towerConditionsKey(conditions)} ${difficulty}`;
+    const watch = compileGatehouseWatch(conditions, difficulty, gatehouseTuningFor(difficulty));
+    const compiled = fault === 'empty-prison' ? { ...watch, guards: [] } : watch;
+    checkGatehouse(compiled, start, goals, label);
     checkNoise(compiled, label);
   }
 }

@@ -96,7 +96,7 @@ function checkRoomDensity(name: BuildingId, kind: BuildingKind): void {
   const width = map.structure[0].length;
 
   const isEmpty = (x: number, y: number): boolean => {
-    if (!map.isWalkable(x, y)) return false;
+    if (!map.isWalkable(x, y, 'walker')) return false;
     if (furnished.has(`${x},${y}`)) return false;
     const dx = Math.abs(x - start.x);
     const dy = Math.abs(y - start.y);

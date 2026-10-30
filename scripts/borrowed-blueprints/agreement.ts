@@ -373,7 +373,7 @@ export function verifyUpgradeKeepsTheCalloutClear(check: Check): void {
     x,
     y + h + AWAY_FROM_SAW_TILES,
     AWAY_SEARCH_TILES,
-    (tileX, tileY) => rig.map.isWalkable(tileX, tileY + 1),
+    (tileX, tileY) => rig.map.isWalkable(tileX, tileY + 1, 'walker'),
   );
   if (elsewhere === null) {
     check(false, 'open ground away from the saw to stand on');

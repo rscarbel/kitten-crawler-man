@@ -22,6 +22,7 @@ import { Conversation } from '../../src/dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../../src/dialog/request';
 import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
 import { InteriorOccupantSystem } from '../../src/systems/InteriorOccupantSystem';
+import { createMissingCatsProgress } from '../../src/core/quests/missingCatsProgress';
 import type { InteriorStoryState } from '../../src/systems/interiorStoryOwnership';
 import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import {
@@ -228,7 +229,7 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
   human.isActive = true;
   stockUp(human, PLENTY_OF_EACH_MATERIAL);
   const anchor = createAnchorQuestProgress();
-  const story = (): InteriorStoryState => ({ murderStage: undefined, anchor });
+  const story = (): InteriorStoryState => ({ anchor, missingCats: createMissingCatsProgress() });
   const toasts: string[] = [];
   const interior = ContractInteriorSite.forBuilding(site.buildingId, 0, {
     state,
@@ -264,7 +265,13 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
   check(active.spotsDone.every(Boolean), `${site.name}: every spot marked done`);
   interior.dispose();
 
-  const occupants = InteriorOccupantSystem.forBuilding(map, entry.type, entry.id, () => human);
+  const occupants = InteriorOccupantSystem.forBuilding(
+    map,
+    entry.type,
+    entry.id,
+    { missingCats: createMissingCatsProgress() },
+    () => human,
+  );
   const contact = occupants?.people.find((person) => person.residentId === site.contact);
   check(contact !== undefined, `${site.name}: ${site.contact} stands in the room to pay`);
   const conversation = new Conversation(null);

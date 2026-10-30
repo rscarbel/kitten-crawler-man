@@ -96,7 +96,7 @@ function isGateAt(structure: TileContent[][], x: number, y: number): boolean {
 /** Off the grid counts as solid: nothing can be walked to out there. */
 function isSolidAt(structure: TileContent[][], x: number, y: number): boolean {
   const tile = tileAt(structure, x, y);
-  return tile === null || !isWalkableTileType(tile);
+  return tile === null || !isWalkableTileType(tile, 'walker');
 }
 
 /** The four ways out of a room, each with the step along the wall it leaves through. */

@@ -119,7 +119,7 @@ function checkTileRegions(map: GameMap, totals: SweepTotals | null): Map<number,
       // A prop the generator stood in a hallway after the regions were drawn
       // keeps its segment's id, just as a prop in a room keeps the room's.
       const hallwayProp = DRESSING_TILE_TYPES.has(tile.type) && tile.groundType !== undefined;
-      if (isWalkableTileType(tile) || hallwayProp) {
+      if (isWalkableTileType(tile, 'walker') || hallwayProp) {
         check(id !== NO_REGION, `walkable tile (${x}, ${y}) belongs to no region`);
         check(
           id >= HALLWAY_REGION_BASE && map.regionKind(id) === 'hallway',

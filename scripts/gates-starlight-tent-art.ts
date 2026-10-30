@@ -359,7 +359,7 @@ function floorTilesInRows(map: GameMap, y0: number, y1: number): Array<{ x: numb
   const floor: Array<{ x: number; y: number }> = [];
   for (let y = y0; y <= y1; y++) {
     (map.structure[y] ?? []).forEach((tile, x) => {
-      if (tile.type === SAWDUST_FLOOR && map.isWalkable(x, y)) floor.push({ x, y });
+      if (tile.type === SAWDUST_FLOOR && map.isWalkable(x, y, 'walker')) floor.push({ x, y });
     });
   }
   return floor;

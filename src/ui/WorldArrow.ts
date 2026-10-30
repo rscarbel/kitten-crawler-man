@@ -51,9 +51,8 @@ export const ARROW_PRIORITY = {
   PINNED_OBJECTIVE: 3,
   ROOM_OBJECTIVE: 4,
   BOUNTY: 5,
-  SOUL_CRYSTAL: 6,
-  /** Indoors, the way out toward a pinned objective elsewhere: behind the soul crystal's climb. */
-  PINNED_EXIT: 7,
+  /** Indoors, the way out toward a pinned objective elsewhere: behind every arrow for this room. */
+  PINNED_EXIT: 6,
 } as const;
 
 /**

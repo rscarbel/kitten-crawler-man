@@ -60,6 +60,8 @@ export interface PlacedReadable {
   readonly readable: Readable;
   readonly x: number;
   readonly y: number;
+  /** The world-pixel top of the furniture's art, which anything hung over the piece clears. */
+  readonly artTopY: number;
 }
 
 /**
@@ -88,7 +90,7 @@ export class InteriorReadableSystem {
   }
 
   private constructor(
-    map: GameMap,
+    private readonly map: GameMap,
     buildingId: BuildingId,
     readables: ReadonlyArray<Readable>,
     occupiedFurniture: ReadonlySet<string>,
@@ -130,8 +132,18 @@ export class InteriorReadableSystem {
     const tile = pickTile(readable.anchor, buildingId, furniture, union(blocked, this.usedTiles));
     if (tile === null) return false;
     this.usedTiles.add(tileKey(tile.x, tile.y));
-    this.placed.push({ readable, x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE });
+    this.placed.push({
+      readable,
+      x: tile.x * TILE_SIZE,
+      y: tile.y * TILE_SIZE,
+      artTopY: furnitureArtTopY(this.map, tile),
+    });
     return true;
+  }
+
+  /** Where the readable with this id sits in the room, or null when it found no furniture here. */
+  placedById(readableId: string): PlacedReadable | null {
+    return this.placed.find((candidate) => candidate.readable.id === readableId) ?? null;
   }
 
   /** How many of this room's authored readables actually found furniture. */
@@ -151,6 +163,18 @@ export class InteriorReadableSystem {
     }
     return best;
   }
+}
+
+/**
+ * The top of whatever is drawn on `tile`: a placed prop's art rises above its
+ * footprint, while a furniture tile painted with the floor stays within its own row.
+ */
+function furnitureArtTopY(map: GameMap, tile: TileXY): number {
+  const prop = map.placedInteriorProps.find(
+    (placed) => placed.tile.x === tile.x && placed.tile.y === tile.y,
+  );
+  const riseTiles = prop === undefined ? 0 : TOWN_INTERIOR_PROPS[prop.propId].artHeightTiles;
+  return (tile.y - riseTiles) * TILE_SIZE;
 }
 
 /** A prop's anchor kind, narrowed to the ones a readable can actually sit on — never a hearth, forge or seat. */

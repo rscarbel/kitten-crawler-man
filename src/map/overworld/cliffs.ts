@@ -504,7 +504,7 @@ function rampStepCost(
   tx: number,
   ty: number,
 ): number | undefined {
-  if (isWalkableTileType(grid.cells[ty][tx])) return 0;
+  if (isWalkableTileType(grid.cells[ty][tx], 'walker')) return 0;
   if (!mayCut(tx, ty)) return undefined;
   const type = grid.typeAt(tx, ty);
   if (type === CLIFF || type === BOULDER_SMALL || type === BOULDER_LARGE) {
@@ -569,7 +569,7 @@ function blockersBack(grid: TileGrid, parent: Int32Array, key: number): TilePoin
   for (let at = key; at !== NO_PARENT; at = parent[at]) {
     const tx = at % grid.size;
     const ty = Math.floor(at / grid.size);
-    if (!isWalkableTileType(grid.cells[ty][tx])) blockers.push({ x: tx, y: ty });
+    if (!isWalkableTileType(grid.cells[ty][tx], 'walker')) blockers.push({ x: tx, y: ty });
   }
   return blockers;
 }

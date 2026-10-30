@@ -23,9 +23,14 @@ import {
   SCREE,
   BOULDER_SMALL,
   BOULDER_LARGE,
+  STORM_DRAIN_GRATE,
 } from './tileTypes';
 import { randomInt } from '../utils';
 import { TileGrid } from './town/tileGrid';
+import { STORM_DRAIN_ID } from './buildingIds';
+import { doorwayKeepClearTiles } from '../systems/doorwayKeepClear';
+import { tileKey } from '../systems/tileKey';
+import { STORM_DRAIN_GRATE_WIDTH_TILES } from './tiles/stormDrainGrateTile';
 import type { BuildingEntry } from './buildingEntry';
 import {
   createTownPlan,
@@ -128,9 +133,8 @@ export interface OverworldData {
    * Handed back rather than kept private because the town's *systems* need its
    * geometry too — which streets are streets, where the yards and gates are —
    * and every one that has re-derived a coordinate instead has eventually
-   * drifted from it: the murder quest anchored a body four tiles west of a door
-   * that later stood against the west wall, and the notice board sat due south
-   * of centre on a rationale about a tower that had moved. The `TownPlan` is
+   * drifted from it: the notice board sat due south of centre on a rationale
+   * about a tower that had moved. The `TownPlan` is
    * pure data and already the single source of truth for the layout; a second
    * copy of a coordinate is a second thing to keep in step.
    */
@@ -143,8 +147,6 @@ export interface OverworldData {
   hallwaySpawnPoints: HallwaySpawnPoint[];
   stairwellTiles: TilePoint[];
   mainTowerAnchor: TilePoint;
-  /** Tile where the town's escape route out appears once the Doomsday finale's escape phase begins. */
-  doomsdayEscapeTile: TilePoint;
   /** Tiles from map centre inside which the town is safe — no hostile spawns, mobs deaggro. */
   townSafeRadiusTiles: number;
   /** Centre of the town square, in tile coordinates. */
@@ -295,6 +297,8 @@ const FOREST_EDGE_SKIP_CHANCE = 0.45;
  * (e.g. `scripts/verify-interiors.ts`) reads it from here.
  */
 export const STARLIGHT_TENT_ENTRY_KIND: BuildingKind = 'house';
+/** The storm drain is entered like a house; what lies below is decided by its id. */
+const STORM_DRAIN_ENTRY_KIND: BuildingKind = 'house';
 
 /**
  * Generates the third-floor overworld: a town laid out from a declarative
@@ -514,8 +518,9 @@ export function generateOverworld(size: number): OverworldData {
   // inside the walls, and `paintTownProps` is the only writer of the wells and
   // the fountain — a check that ran before either of them would never see the
   // prop branches it exists to guard.
+  placeStormDrainGrate(grid, plan, buildingEntries);
+  assertTowerGuardPostsAreClear(grid, plan, buildingEntries);
   assertTownInteriorIsIntact(grid, plan, tracksInTownBefore);
-  assertDoomsdayEscapeTileIsClear(grid, plan);
 
   const townSquareCentre: TilePoint = {
     x: plan.plaza.x + Math.floor(plan.plaza.w / 2),
@@ -572,7 +577,6 @@ export function generateOverworld(size: number): OverworldData {
     })),
     stairwellTiles: [],
     mainTowerAnchor,
-    doomsdayEscapeTile: plan.doomsdayEscapeTile,
     townSafeRadiusTiles: plan.safeRadiusTiles,
     townSquareCentre,
     fountainCentre: fountainCentre(plan),
@@ -823,51 +827,124 @@ function assertTownPlanIsSane(plan: TownPlan): void {
   }
 }
 
+/** How far south of the tower door its approach runs, which nothing may stand on. */
+const TOWER_DOOR_APPROACH_ROWS = 6;
+/** The grate keeps at least this many tiles, in every direction, from a torch. */
+const STORM_DRAIN_TORCH_CLEARANCE_TILES = 2;
+
+/** The tiles the storm-drain grate covers, west to east. */
+function stormDrainGrateTiles(plan: TownPlan): TilePoint[] {
+  const { x, y } = plan.stormDrainGrate;
+  return Array.from({ length: STORM_DRAIN_GRATE_WIDTH_TILES }, (_unused, dx) => ({ x: x + dx, y }));
+}
+
 /**
- * Fails generation if the Doomsday finale's escape stairwell would appear on a
- * tile the player cannot stand on.
+ * Lays the storm-drain grate into the Civic Terrace and registers it as the
+ * door down into the sewer.
  *
- * The tile is not painted — the `TownPlan` puts it on the civic terrace, which is
- * already flagstone, and forcing it to the packed-earth road type (as this did
- * while the tile sat on a road slab) would leave one dirt tile in the middle of
- * the terrace. All it has to be is walkable, and it is not added to
- * `stairwellTiles`: that array feeds StairwellSystem and MiniMapSystem, which
- * would expose and pathing-block the tile floor-wide before the finale starts.
- * `DoomsdayEscapeSystem` reads the dedicated `doomsdayEscapeTile` field instead.
- *
- * `isSolid` alone is not enough. A torch, a well and a fountain are none of them a
- * solid *tile type* as far as `TileGrid` is concerned, yet all three block the
- * player, and the tower's anchor is walkable while its art covers the tile — so
- * this has to run after `paintTownProps`, which is the only pass that writes them.
- * The tower's base is tested as a rectangle for the same reason: only its anchor
- * carries the `MAIN_TOWER` type, while the two rows above it block through
- * `GameMap.extraBlockedTiles`. What this still cannot see is a *sprite* building's
- * base beyond its anchor, which blocks the same way from a set that does not exist
- * yet at generation time.
+ * Laid after every pass that writes town ground, so nothing paves over it,
+ * and checked first: it must stand on the terrace's own flagstone, off the
+ * tower's base, clear of the tower door's approach and of every torch, and
+ * off every other door and the tiles it is entered from.
  */
-function assertDoomsdayEscapeTileIsClear(grid: TileGrid, plan: TownPlan): void {
-  const { x, y } = plan.doomsdayEscapeTile;
-  const type = grid.typeAt(x, y);
+function placeStormDrainGrate(
+  grid: TileGrid,
+  plan: TownPlan,
+  buildingEntries: BuildingEntry[],
+): void {
+  const tiles = stormDrainGrateTiles(plan);
+  assertStormDrainGrateIsClear(grid, plan, tiles, doorwayKeepClearTiles(buildingEntries));
+  for (const tile of tiles) grid.set(tile.x, tile.y, STORM_DRAIN_GRATE);
+  buildingEntries.push({
+    doorTile: plan.stormDrainGrate,
+    id: STORM_DRAIN_ID,
+    type: STORM_DRAIN_ENTRY_KIND,
+    doorway: { x0: plan.stormDrainGrate.x, width: STORM_DRAIN_GRATE_WIDTH_TILES },
+  });
+}
+
+function assertStormDrainGrateIsClear(
+  grid: TileGrid,
+  plan: TownPlan,
+  tiles: ReadonlyArray<TilePoint>,
+  keepClear: ReadonlySet<string>,
+): void {
+  for (const tile of tiles) {
+    const problem = terraceStandProblem(
+      grid,
+      plan,
+      keepClear,
+      tile,
+      STORM_DRAIN_TORCH_CLEARANCE_TILES,
+    );
+    if (problem !== null)
+      throw new Error(`The storm-drain grate at ${tile.x},${tile.y} ${problem}`);
+  }
+}
+
+/** A guard stands at least this many tiles, in every direction, from a torch, so his figure never stands in its flame. */
+const TOWER_GUARD_TORCH_CLEARANCE_TILES = 2;
+
+/**
+ * The tower's door guards stand for the whole floor, so their posts must be
+ * terrace flagstone off the tower's base, clear of the door's approach, of
+ * every doorway and the tiles it is entered from, of every torch, and off the
+ * storm-drain grate. Run after the grate is laid, so a post on it fails as
+ * not standing on flagstone.
+ */
+function assertTowerGuardPostsAreClear(
+  grid: TileGrid,
+  plan: TownPlan,
+  buildingEntries: ReadonlyArray<BuildingEntry>,
+): void {
+  const keepClear = doorwayKeepClearTiles(buildingEntries);
+  const grate = new Set(stormDrainGrateTiles(plan).map((tile) => tileKey(tile.x, tile.y)));
+  const { west, east } = plan.towerGuardPosts;
+  for (const post of [west, east]) {
+    const problem = grate.has(tileKey(post.x, post.y))
+      ? 'stands on the storm-drain grate'
+      : terraceStandProblem(grid, plan, keepClear, post, TOWER_GUARD_TORCH_CLEARANCE_TILES);
+    if (problem !== null) throw new Error(`The tower guard post at ${post.x},${post.y} ${problem}`);
+  }
+}
+
+/**
+ * Why `tile` cannot hold something set on the Civic Terrace in front of the
+ * tower, or null when it can: it must be the terrace's own flagstone, off the
+ * tower's base, off the tower door's approach, off every doorway and the
+ * tiles it is entered from, and `torchClearance` tiles from every torch.
+ */
+function terraceStandProblem(
+  grid: TileGrid,
+  plan: TownPlan,
+  keepClear: ReadonlySet<string>,
+  { x, y }: TilePoint,
+  torchClearance: number,
+): string | null {
   const towerBase = towerBasePlot(plan);
-  const underTower =
+  const towerDoor = towerDoorTile(plan);
+  const towerSpan = towerDoorwaySpan(plan);
+  const torches = plan.props.flatMap((prop) => (prop.kind === 'torch' ? [prop.tile] : []));
+  if (grid.typeAt(x, y) !== PLAZA_STONE) {
+    return `stands on tile type ${String(grid.typeAt(x, y))}, not the terrace's flagstone`;
+  }
+  const onTowerBase =
     x >= towerBase.x &&
     x < towerBase.x + towerBase.w &&
     y >= towerBase.y &&
     y < towerBase.y + towerBase.h;
-  const blocked =
-    type === undefined ||
-    grid.isSolid(x, y) ||
-    type === TORCH ||
-    type === WELL ||
-    type === FOUNTAIN ||
-    type === MAIN_TOWER ||
-    underTower;
-  if (blocked) {
-    throw new Error(
-      `Doomsday escape tile at ${x},${y} is blocked (tile type ${type}` +
-        `${underTower ? ', under the tower base' : ''})`,
-    );
-  }
+  if (onTowerBase) return 'stands on the tower base';
+  const onTowerApproach =
+    x >= towerSpan.x0 &&
+    x < towerSpan.x0 + towerSpan.width &&
+    y > towerDoor.y &&
+    y <= towerDoor.y + TOWER_DOOR_APPROACH_ROWS;
+  if (onTowerApproach) return "stands on the tower door's approach";
+  if (keepClear.has(tileKey(x, y))) return 'stands in a doorway or on the tile it is entered from';
+  const besideTorch = torches.some(
+    (torch) => Math.max(Math.abs(torch.x - x), Math.abs(torch.y - y)) < torchClearance,
+  );
+  return besideTorch ? 'stands beside a torch' : null;
 }
 
 /**
@@ -897,6 +974,7 @@ const TOWN_INTERIOR_TILE_TYPES: ReadonlySet<number> = new Set<number>([
   FENCE,
   GARDEN_PLANTING,
   PASTURE_GRASS,
+  STORM_DRAIN_GRATE,
 ]);
 
 /** How many packed-earth track tiles stand inside the wall, worn patches included. */

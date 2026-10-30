@@ -15,6 +15,7 @@
  * the space it routes in, and a new map starts it afresh.
  */
 
+import type { MobilityClass } from '../../map/mobility';
 import { TILE_SIZE } from '../../core/constants';
 import type { GameMap } from '../../map/GameMap';
 import { tileCoordKey, tileIndex } from '../../map/tileIndex';
@@ -97,25 +98,32 @@ function tileCentrePx(tile: TilePoint): PixelPoint {
   return { x: (tile.x + TILE_CENTRE) * TILE_SIZE, y: (tile.y + TILE_CENTRE) * TILE_SIZE };
 }
 
-function targetDestination(gameMap: GameMap, target: TrackerTarget): Destination {
+function targetDestination(
+  gameMap: GameMap,
+  target: TrackerTarget,
+  mobility: MobilityClass,
+): Destination {
   const width = target.widthTiles ?? 1;
   return {
-    key: `${target.x},${target.y},${width}`,
+    key: `${mobility}:${target.x},${target.y},${width}`,
     tile: { x: target.x, y: target.y },
     moves: target.wearsOwnMarker === true,
     centrePx: {
       x: (target.x + width * TILE_CENTRE) * TILE_SIZE,
       y: (target.y + TILE_CENTRE) * TILE_SIZE,
     },
-    goals: () => goalTilesForTarget(gameMap, target),
+    goals: () => goalTilesForTarget(gameMap, target, mobility),
   };
 }
 
-function tilesDestination(goals: readonly TilePoint[]): Destination | null {
+function tilesDestination(
+  goals: readonly TilePoint[],
+  mobility: MobilityClass,
+): Destination | null {
   if (goals.length === 0) return null;
   const middle = goals[Math.floor(goals.length * TILE_CENTRE)];
   return {
-    key: goals.map((tile) => tileCoordKey(tile.x, tile.y)).join(','),
+    key: `${mobility}:${goals.map((tile) => tileCoordKey(tile.x, tile.y)).join(',')}`,
     tile: middle,
     moves: false,
     centrePx: tileCentrePx(middle),
@@ -137,20 +145,29 @@ export class QuestRouteGuide {
   private cachedAim: PixelPoint | null = null;
   private cachedTrail: readonly TilePoint[] = [];
   private readonly shaper = new TrailShaper();
+  private mobility: MobilityClass = 'walker';
 
   /**
-   * Once per update tick on the overworld or a dungeon floor: routes toward
-   * `target` on `gameMap`, or lets everything go when `target` is null.
+   * Once per update tick on the overworld or a dungeon floor: routes a mover
+   * of class `mobility` toward `target` on `gameMap`, or lets everything go
+   * when `target` is null. A route is the steered crawler's own: a cat's
+   * runs along ledges a human's goes round.
    */
-  update(gameMap: GameMap, ground: GroundPoint, target: TrackerTarget | null): void {
+  update(
+    gameMap: GameMap,
+    ground: GroundPoint,
+    target: TrackerTarget | null,
+    mobility: MobilityClass,
+  ): void {
     if (target === null) {
       this.release();
       return;
     }
+    this.mobility = mobility;
     this.advance(
       gameMap,
       ground,
-      targetDestination(gameMap, target),
+      targetDestination(gameMap, target, mobility),
       QUEST_ROUTE_EXPANSIONS_PER_FRAME,
     );
   }
@@ -160,12 +177,18 @@ export class QuestRouteGuide {
    * built whole on the tick it is needed: for a room small enough that a
    * field costs nothing, where the way out is the destination.
    */
-  updateToTiles(gameMap: GameMap, ground: GroundPoint, goals: readonly TilePoint[]): void {
-    const destination = tilesDestination(goals);
+  updateToTiles(
+    gameMap: GameMap,
+    ground: GroundPoint,
+    goals: readonly TilePoint[],
+    mobility: MobilityClass,
+  ): void {
+    const destination = tilesDestination(goals, mobility);
     if (destination === null) {
       this.release();
       return;
     }
+    this.mobility = mobility;
     this.advance(gameMap, ground, destination, Infinity);
   }
 
@@ -195,7 +218,7 @@ export class QuestRouteGuide {
   trailShape(ground: GroundPoint): TrailShape | null {
     const gameMap = this.map;
     if (gameMap === null || this.cachedTrail.length < 2) return null;
-    this.shaper.setWalk(gameMap, this.cachedTrail);
+    this.shaper.setWalk(gameMap, this.cachedTrail, this.mobility);
     return this.shaper.shape(ground);
   }
 
@@ -274,7 +297,7 @@ export class QuestRouteGuide {
     const reuse = this.build?.buffers ?? this.spares.pop() ?? null;
     const buffers = routeFieldBuffers(gameMap, reuse);
     this.build = {
-      builder: new RouteFieldBuilder(gameMap, destination.goals(), buffers),
+      builder: new RouteFieldBuilder(gameMap, destination.goals(), buffers, this.mobility),
       buffers,
       key: destination.key,
       toward: destination.tile,
@@ -329,7 +352,9 @@ export class QuestRouteGuide {
       field === null ? [] : downhillChain(field, gameMap, playerTile, QUEST_ROUTE_CHAIN_MAX_TILES);
     const goalKeys = field?.goalKeys ?? new Set<number>();
     const crossesNewWall = chain.some(
-      (tile) => !goalKeys.has(tileCoordKey(tile.x, tile.y)) && !gameMap.isWalkable(tile.x, tile.y),
+      (tile) =>
+        !goalKeys.has(tileCoordKey(tile.x, tile.y)) &&
+        !gameMap.isWalkable(tile.x, tile.y, this.mobility),
     );
     // Raised only between builds: a walking player sees the blocked tile on
     // every step, and restarting the build each time would never let the
@@ -350,7 +375,13 @@ export class QuestRouteGuide {
     destination: Destination,
   ): boolean {
     const from = tileCentrePx(playerTile);
-    return gameMap.hasWalkableLine(from.x, from.y, destination.centrePx.x, destination.centrePx.y);
+    return gameMap.hasWalkableLine(
+      from.x,
+      from.y,
+      destination.centrePx.x,
+      destination.centrePx.y,
+      this.mobility,
+    );
   }
 }
 

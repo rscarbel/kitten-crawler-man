@@ -178,8 +178,8 @@ const NOTICES: readonly Notice[] = [
   },
   {
     tone: 'active',
-    title: 'Murders at the Krasue',
-    body: 'Two dead in a week. Anyone with word of a feather in black wax, speak to the constable.',
+    title: 'Proclamation from the tower',
+    body: 'Curfew at the second bell. By order of the Warden, in the usual hand.',
   },
   {
     tone: 'available',
@@ -198,8 +198,8 @@ const NOTICES: readonly Notice[] = [
   },
   {
     tone: 'danger',
-    title: 'Doomsday preppers',
-    body: 'Strange noises from the old cellars. The council asks that nobody go poking.',
+    title: 'Noises in the cellars',
+    body: 'Strange noises from the old cellars. The tower guard asks that nobody go poking.',
   },
   workOrderNotice({ kind: 'open' }),
 ];

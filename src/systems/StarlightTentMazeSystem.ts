@@ -906,7 +906,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       for (const [dx, dy] of RESTING_SPOT_NEIGHBOURS) {
         const next = { x: tile.x + dx, y: tile.y + dy };
         const key = tileKeyOf(next.x, next.y);
-        if (seen.has(key) || !this.map.isWalkable(next.x, next.y)) continue;
+        if (seen.has(key) || !this.map.isWalkable(next.x, next.y, 'walker')) continue;
         seen.add(key);
         queue.push(next);
       }
@@ -2465,7 +2465,8 @@ const BLOCK_THING_NAMES: Readonly<Record<MazeBlock['kind'], string>> = {
  * this map walkable, and it only ever writes barriers.
  */
 export function starlightTentWallAt(map: GameMap): (tileX: number, tileY: number) => boolean {
-  return (tileX, tileY) => !map.isWalkable(tileX, tileY) && !isMazeBarrierTile(tileX, tileY);
+  return (tileX, tileY) =>
+    !map.isWalkable(tileX, tileY, 'walker') && !isMazeBarrierTile(tileX, tileY);
 }
 
 /**

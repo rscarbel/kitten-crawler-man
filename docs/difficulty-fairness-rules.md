@@ -122,6 +122,29 @@ Hard rules. Every one of these is asserted by `verify:difficulty`.
   blue, a fire fairy's orange) belongs on the effect drawn over the warning, never on
   the warning itself. A shadow can say where something falls, but it is not the
   warning; a red one is drawn as well.
+- **A sense that can hurt is never invisible to its victim.** Some things only one
+  crawler perceives: the cat smells a scent trail and sees a ward line's glow
+  (`SENSES` in `src/systems/senses/SenseLayer.ts`, each entry's `perceivedBy`). A
+  source that can hurt, a harmful ward, is still drawn for every crawler it can hurt
+  that does not perceive it. The cat sees it at full strength, its warning pulsing with
+  the ward's rhythm; the human sees a faint, steady red warning over the same ground
+  (`WARD_UNPERCEIVED_WARNING_FADE`), which says the floor is dangerous without showing
+  when it is safe. Both are drawn with `dangerTelegraph.ts`, because a harmful ward is a
+  ground warning. A new sense whose sources can hurt says so in its entry's
+  `unperceived` look, which is `warning_when_harmful`, never `hidden`.
+- **A hazard kept to the music is warned in beats, and leaves the way open most of the
+  bar.** The tower's bell storey swings its bells to the clock of the tower stem that is
+  playing (`bellStoreyWorks.ts`). Its warning is counted in beats, not seconds
+  (`WARNING_LEAD_BEATS`, two beats of red on the struck beam, its fill meeting its outline
+  as the bell arrives), and a bell sweeps a beam only for a short window either side of the
+  downbeat (`STRIKE_HALF_WINDOW_BEATS`), so at any tempo the warning leads the strike by the
+  same share of the bar and each beam stands open for most of it. With no stem playing the
+  bells keep the same tempo on the storey's own clock, never stopping and never speeding up.
+  A crawler swept off a beam is set down at the beam's nearer end on the floor, never into the
+  shaft.
+- **A bite puts the bitten back, never further in.** A ward line that bites does a little
+  damage and sets the crawler on the last tile it stood on outside every ward, so a mistimed
+  crossing costs the crossing and some health, never a run of bites.
 
 **Statuses that scale incoming damage.** A status changes the damage its carrier
 takes only through the `incomingDamageScale` of its entry in `STATUS_DEFS`
@@ -367,6 +390,17 @@ the world; they wait until no hostile is fighting a crawler outside a safe room
 (`CutsceneDirector`, `StoryDelivery`). Her verdict when Nightmare's time limit runs out
 does halt it, since the party is about to die where it stands and nothing may reach it
 first.
+
+## A companion sent to work is never sent into a threat
+
+A fight that orders the companion to stand somewhere and work (the cat unbinding the Warden's
+pillars) scores the spot with the same danger field her hazard escape reads, so the order and the
+flee rule agree on what is dangerous. Once the spot has been threatened she is held where her
+escape took her until it has stayed clear for longer than the threat takes to resolve
+(`ChannelReturnGate` in `src/systems/lichBattleRules.ts`): an order re-issued the frame she is
+clear walks her back onto ground the attack lands on next. While she works, the boss leaves her to
+the crawler holding it off for as long as that crawler stands. `verify:lich` holds the Warden's
+fight to both.
 
 ## Fairies
 

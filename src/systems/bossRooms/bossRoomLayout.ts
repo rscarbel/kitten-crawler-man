@@ -160,7 +160,7 @@ export function stampProps(target: StampTarget, placements: ReadonlyArray<PropPl
       placement.x < target.structure[placement.y].length;
     if (!insideGrid) continue;
     const tile = target.structure[placement.y][placement.x];
-    if (!isWalkableTileType(tile)) continue;
+    if (!isWalkableTileType(tile, 'walker')) continue;
     if (placement.type !== undefined) placeProp(tile, placement.type);
     if (placement.block === true) target.blockTilePermanently(placement.x, placement.y);
     target.markTileDirty(placement.x, placement.y);

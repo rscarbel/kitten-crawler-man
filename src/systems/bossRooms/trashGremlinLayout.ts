@@ -471,7 +471,7 @@ function orbitAround(
 export function stampTrashGremlinLayout(gameMap: GameMap, layout: TrashGremlinLayout): number {
   let stamped = 0;
   for (const placement of layout.placements) {
-    if (!gameMap.isWalkable(placement.x, placement.y)) continue;
+    if (!gameMap.isWalkable(placement.x, placement.y, 'walker')) continue;
     const tile = gameMap.structure[placement.y][placement.x];
     if (tile.type !== TRASH_GREMLIN_FLOOR) continue;
     placeProp(tile, TRASH_TYPE_OF[placement.kind]);

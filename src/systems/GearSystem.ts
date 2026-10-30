@@ -444,7 +444,7 @@ export class GearSystem implements GameSystem, GearWorld {
   relicHumPoints(): Array<{ x: number; y: number }> {
     const points: Array<{ x: number; y: number }> = [];
     for (const crawler of [this.human, this.cat]) {
-      if (crawler.concealed || this.relicOf(crawler) === null) continue;
+      if (crawler.concealed || crawler.isAway || this.relicOf(crawler) === null) continue;
       points.push(this.relicPosition(crawler));
     }
     return points;
@@ -574,6 +574,7 @@ export class GearSystem implements GameSystem, GearWorld {
       const blocked = !map.isWalkable(
         Math.floor(wave.x / TILE_SIZE),
         Math.floor(wave.y / TILE_SIZE),
+        'walker',
       );
       if (blocked || wave.travelledPx > wave.rangePx) continue;
       if (!wave.owner.zeroDamage) {
@@ -708,7 +709,7 @@ export class GearSystem implements GameSystem, GearWorld {
     }
     this.drawTether(ctx);
     for (const crawler of [this.human, this.cat]) {
-      if (crawler.concealed) continue;
+      if (crawler.concealed || crawler.isAway) continue;
       this.drawWearerMarks(ctx, crawler);
       this.drawRelic(ctx, crawler);
       this.drawComboPips(ctx, crawler);

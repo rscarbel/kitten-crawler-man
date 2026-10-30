@@ -33,6 +33,8 @@ export const worldPalette = {
   shadow: 'rgba(0,0,0,0.75)',
   /** The colour a fade to or from darkness washes the scene in. */
   shade: '#000000',
+  /** The deep evening blue the town is graded toward while the cat thief is about. */
+  dusk: '#10142e',
   /** The bobbing badge over a Briar Hollow station or a shop, and the glyph frame it shares. */
   glyphBadge: {
     fill: 'rgba(30, 30, 30, 0.78)',
@@ -131,6 +133,10 @@ export const worldPalette = {
     doorArrow: '#fadc50',
     doorName: '#ffffdc',
     mendable: '#fbbf24',
+    /** A thing in a room that a questline wants looked at. */
+    questClue: '#f5d76e',
+    /** Where a watcher overhead is looking: a faint wash, not a warning. */
+    thiefSight: 'rgba(255,236,190,0.14)',
     /** The `!reveal` cheat's arrow toward the spider lab. */
     cheatReveal: '#a855f7',
   },
@@ -180,16 +186,6 @@ export const worldPalette = {
   },
   /** The club's dance floor washes, cycled tile by tile. */
   danceFloorLights: ['#ff2d78', '#2d9bff', '#a94dff', '#4dffb0', '#ffd23d'],
-  /**
-   * A krasue clue's glow and the arrow toward it. Witch-green rather than the
-   * festival yellow every other marker in town uses: a clue is a krasue's
-   * leavings, and should read as the same sickly light the creature trails.
-   */
-  clue: {
-    glow: '#84ce5c',
-    arrow: '#9ade63',
-    arrowOutline: '#16300c',
-  },
   /** The thin ring over a resource node being worked, showing how much it has left. */
   gatherArc: {
     track: 'rgba(0,0,0,0.45)',
@@ -205,8 +201,6 @@ export const worldPalette = {
   escortCaption: '#fde68a',
   /** The nursery's wood pile caption, in the amber of the boards it hands out. */
   woodPileLabel: '#fbbf24',
-  /** The soul crystal's lilac, for the line urging the party to contain it. */
-  soulCrystalInk: '#e9d5ff',
   /** The dark wipe that drains off a control still waiting out its cooldown. */
   cooldownWash: 'rgba(0,0,0,0.75)',
   /** The boss-battle title card: a gold marquee, then the party and the boss squared up. */
@@ -249,6 +243,12 @@ export const worldPalette = {
     lightCatchingRgb: '255,150,40',
     /** A spotlight's bright rim, as `r,g,b`. */
     spotRimRgb: '255,246,214',
+    /** A watcher's look washed over the floor: its opacity with nobody in it, and once it has fully seen someone. */
+    sightWashAlpha: 0.16,
+    sightWashCaughtAlpha: 0.28,
+    /** The stroke round a watcher's look: its opacity with nobody in it, and the least it takes once it has begun to see someone. */
+    sightRimAlpha: 0.45,
+    sightRimCatchingMinAlpha: 0.55,
   },
   /** Minimap marks beyond the shared dots in `MINIMAP_MARKER_COLORS`. */
   minimap: {
@@ -257,7 +257,6 @@ export const worldPalette = {
     /** A tree burnt to charcoal, so a stand the player torched stays findable. */
     charredTree: '#2a221e',
     stairwell: '#ffffff',
-    escape: '#4ade80',
     corpse: '#000000',
     hostile: '#ef4444',
     /** A creature on the map that is not hostile right now: a hireling, a cow, a calm Hawkfolk. */
@@ -301,6 +300,52 @@ export const worldPalette = {
     buildEdge: '#78350f',
     structureHp: '#65a30d',
     structureTrack: 'rgba(0,0,0,0.55)',
+    /** A timed press while the watcher looks away: go. */
+    timingClear: '#a3e635',
+    /** The same press while the watcher looks: hold off. */
+    timingWatched: '#f97316',
+    timingEdge: '#1a2e05',
+    /** A channel being held: a steady violet, so it reads as neither health nor build. */
+    channel: '#c4b5fd',
+    channelEdge: '#4c1d95',
+  },
+  /**
+   * What only some crawlers perceive, painted for the one being steered: a
+   * scent drifting along a trail and a ward line's glow. A ward that hurts is
+   * a ground warning and draws in `groundWarning`'s red instead.
+   */
+  senses: {
+    scentCore: 'rgba(250, 232, 190, 0.9)',
+    scentHaze: 'rgba(232, 204, 150, 0.7)',
+    scentFade: 'rgba(226, 196, 140, 0)',
+    wardCore: '#ede9fe',
+    wardGlow: 'rgba(167, 139, 250, 0.55)',
+    /**
+     * The ring round a crawler's feet while something only they perceive is
+     * in reach: the scent's own warm cream, so it reads as "her nose" and
+     * never as a ground warning.
+     */
+    cueRing: 'rgba(255, 236, 196, 0.95)',
+    cueHalo: 'rgba(250, 214, 150, 0.45)',
+    cueFade: 'rgba(250, 214, 150, 0)',
+  },
+  /**
+   * A town cat held to a pillar of the Warden's circle: the pillar's ward
+   * light pooled round her and drawn out to her collar as a tether, in the
+   * ward's own violet.
+   */
+  binding: {
+    tetherCore: '#ede9fe',
+    tetherGlow: 'rgba(167, 139, 250, 0.6)',
+    haloCore: 'rgba(196, 181, 253, 0.7)',
+    haloFade: 'rgba(167, 139, 250, 0)',
+  },
+  /** Things moved by the room's own works: a conveyor's waiting load and its raised bell. */
+  mechanism: {
+    waitingGlow: 'rgba(253, 230, 138, 0.55)',
+    waitingFade: 'rgba(253, 230, 138, 0)',
+    signalRaised: '#fde68a',
+    signalEdge: 'rgba(0, 0, 0, 0.85)',
   },
   /**
    * The world re-rendering someone as they teleport in or out — Dave, or a
@@ -588,6 +633,29 @@ export const WORLD_BAR = {
     track: worldPalette.bar.structureTrack,
     radius: SMALL_BAR_RADIUS,
   },
+  /** A timed press with the watcher turned away. */
+  timingClear: {
+    fill: worldPalette.bar.timingClear,
+    track: worldPalette.bar.trackDeep,
+    border: worldPalette.bar.timingEdge,
+    borderWidth: 1,
+    radius: SMALL_BAR_RADIUS,
+  },
+  /** A timed press with the watcher looking. */
+  timingWatched: {
+    fill: worldPalette.bar.timingWatched,
+    track: worldPalette.bar.trackDeep,
+    border: worldPalette.bar.timingEdge,
+    borderWidth: 1,
+    radius: SMALL_BAR_RADIUS,
+  },
+  channel: {
+    fill: worldPalette.bar.channel,
+    track: worldPalette.bar.trackDeep,
+    border: worldPalette.bar.channelEdge,
+    borderWidth: 1,
+    radius: SMALL_BAR_RADIUS,
+  },
 } as const satisfies Record<string, WorldBarStyle>;
 
 export type WorldBarStyleId = keyof typeof WORLD_BAR;
@@ -694,3 +762,17 @@ export const WORLD_PLATE = {
 } as const satisfies Record<string, WorldPlateStyle>;
 
 export type WorldPlateStyleId = keyof typeof WORLD_PLATE;
+
+/** A `worldPalette` ink written as `r,g,b`, at an opacity decided at draw time. */
+export function rgbInkAt(rgb: string, alpha: number): string {
+  return `rgba(${rgb},${alpha})`;
+}
+
+/** Two `r,g,b` inks blended channel by channel: `share` 0 is `from`, 1 is `to`. */
+export function rgbInkMix(from: string, to: string, share: number): string {
+  const fromChannels = from.split(',').map(Number);
+  const toChannels = to.split(',').map(Number);
+  return fromChannels
+    .map((value, index) => Math.round(value + ((toChannels[index] ?? value) - value) * share))
+    .join(',');
+}

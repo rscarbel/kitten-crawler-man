@@ -135,8 +135,6 @@ export async function enterPrison(
     undefined,
     undefined,
     undefined,
-    undefined,
-    undefined,
     floor,
   );
   if (!(await settleArrival(scene, ctx))) throw new Error('the prison never finished arriving');

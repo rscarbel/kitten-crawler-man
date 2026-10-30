@@ -29,7 +29,7 @@ import { findPartyArrivalTiles, hasRoomToMove } from '../map/findWalkableTile';
 import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
 import { Townsperson, type TownspersonFigureOptions } from '../creatures/Townsperson';
 import { prewarmTownspersonBody } from '../creatures/townspersonBody';
-import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
+import { CITIZEN_TALK_RADIUS_TILES, findTownspersonInReach } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { Facing } from '../sprites/person/skeleton';
 import {
@@ -51,6 +51,7 @@ import { DEFAULT_TOWN_SPECIES } from './townSpecies';
 import {
   BUILDING_OCCUPANTS,
   TYPE_OCCUPANTS,
+  presentOccupants,
   type OccupantPlacement,
   type OccupantPost,
   type OccupantSpec,
@@ -70,6 +71,7 @@ import { safeRoomAnchorTiles } from './SafeRoomSystem';
 import { anchorCursorForBuilding } from './interiorPlacement';
 import { TOWN_INTERIOR_PROPS } from '../sprites/art/townInterior/townInteriorProps';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
+import type { TownDialogContext } from './townDialog';
 
 /**
  * Every kind of furniture a role can be stationed beside; resolved to concrete
@@ -147,6 +149,14 @@ const ACTIVITY_BEHAVIOR: Record<StationedActivity, ActivityBehavior> = {
 };
 
 const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
+
+/**
+ * How far, in tiles, someone keeping a counter can be talked to from across
+ * it: the customer stands a tile in front, the keeper a tile behind, and
+ * either may have drifted a little along it. Every counter is one tile deep.
+ */
+export const ACROSS_COUNTER_TALK_RADIUS_TILES = 2.5;
+const ACROSS_COUNTER_TALK_RADIUS = TILE_SIZE * ACROSS_COUNTER_TALK_RADIUS_TILES;
 
 /**
  * A roaming occupant stands still while the player is this close. Wider than
@@ -336,6 +346,10 @@ export class InteriorOccupantSystem implements GameSystem {
   /** Furniture tiles an occupant is stationed at, keyed `x,y` by each piece's north-west tile. */
   private readonly claimedFurniture = new Set<string>();
   private readonly reserved: ReadonlySet<string>;
+  /** Every tile of every counter and bar in the room, keyed `x,y`. */
+  private readonly counterTiles: ReadonlySet<string>;
+  /** Everyone stood at a counter, who can be talked to from its far side. */
+  private readonly counterKeepers = new Set<Townsperson>();
 
   /**
    * Builds the occupant system for a building, or returns `null` when the
@@ -343,6 +357,8 @@ export class InteriorOccupantSystem implements GameSystem {
    * type with no authored roster). The scene calls this only when no live quest
    * encounter owns the interior.
    *
+   * @param town - the story as it stands, deciding who on the roster is in the
+   *   room this visit.
    * @param focus - read every update; roaming occupants stand still while it is
    *   within {@link ROAMER_HOLD_RADIUS_TILES} of them.
    * @param bodies - the party's bodies, read by routines that must not act
@@ -354,13 +370,16 @@ export class InteriorOccupantSystem implements GameSystem {
     map: GameMap,
     type: BuildingEntry['type'],
     buildingId: BuildingId,
+    town: TownDialogContext,
     focus: RoamerFocus = () => null,
     bodies: OccupantBodies = () => [],
     playCue: OccupantCuePlayer = () => undefined,
   ): InteriorOccupantSystem | null {
     if (!interiorHoldsOccupants(type, buildingId)) return null;
-    const specs = BUILDING_OCCUPANTS.get(buildingId) ?? TYPE_OCCUPANTS[type];
-    if (specs === undefined || specs.length === 0) return null;
+    const roster = BUILDING_OCCUPANTS.get(buildingId) ?? TYPE_OCCUPANTS[type];
+    if (roster === undefined) return null;
+    const specs = presentOccupants(roster, town);
+    if (specs.length === 0) return null;
     const system = new InteriorOccupantSystem(map, specs, buildingId, focus, bodies, playCue);
     return system.occupants.length > 0 ? system : null;
   }
@@ -374,6 +393,7 @@ export class InteriorOccupantSystem implements GameSystem {
     playCue: OccupantCuePlayer,
   ) {
     const furniture = scanInteriorFurniture(map);
+    this.counterTiles = pieceTiles(furniture.get('counter') ?? []);
     const groupCursors = new Map<AnchorKind, number>();
     const usedStands = new Set<string>();
     this.reserved = this.reservedTiles();
@@ -481,9 +501,42 @@ export class InteriorOccupantSystem implements GameSystem {
     this.serving = null;
   }
 
-  /** The nearest occupant the player (at world origin `x`,`y`) can talk to, or `null`. */
+  /**
+   * The occupant the player (at world origin `x`,`y`) would talk to, or `null`:
+   * anyone within the talk radius, or someone keeping a counter with that
+   * counter between them and the player.
+   */
   findTalkTarget(x: number, y: number): Townsperson | null {
-    return findNearestTownsperson(this.occupants, x, y, TALK_RADIUS);
+    return findTownspersonInReach(this.occupants, x, y, (person) => this.talkReach(person, x, y));
+  }
+
+  /**
+   * How far, in tiles, a conversation with `person` reaches: across a counter
+   * for someone keeping one, so the talk opened from the customer's side is
+   * not closed at once for being out of reach.
+   */
+  talkRangeTilesOf(person: Townsperson): number {
+    return this.counterKeepers.has(person)
+      ? ACROSS_COUNTER_TALK_RADIUS_TILES
+      : CITIZEN_TALK_RADIUS_TILES;
+  }
+
+  private talkReach(person: Townsperson, x: number, y: number): number {
+    if (!this.counterKeepers.has(person)) return TALK_RADIUS;
+    const midwayTileX = Math.floor(((person.x + x) / 2 + TILE_SIZE * HALF) / TILE_SIZE);
+    const midwayTileY = Math.floor(((person.y + y) / 2 + TILE_SIZE * HALF) / TILE_SIZE);
+    const counterBetween = this.counterTiles.has(tileKey(midwayTileX, midwayTileY));
+    return counterBetween ? ACROSS_COUNTER_TALK_RADIUS : TALK_RADIUS;
+  }
+
+  /** Whether `tile` touches a counter, side on or corner to corner. */
+  private besideCounter(tile: TileXY): boolean {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (this.counterTiles.has(tileKey(tile.x + dx, tile.y + dy))) return true;
+      }
+    }
+    return false;
   }
 
   update(): void {
@@ -544,6 +597,7 @@ export class InteriorOccupantSystem implements GameSystem {
       initialPause: Math.floor(Math.random() * MAX_INITIAL_PAUSE),
     });
     this.occupants.push(person);
+    if (this.besideCounter(stand.tile)) this.counterKeepers.add(person);
     if (territory.holdsForPlayer) this.roamers.push(person);
     if (spec.service !== undefined) this.services.set(person, spec.service);
     if (spec.routine !== undefined) {
@@ -589,7 +643,7 @@ export class InteriorOccupantSystem implements GameSystem {
     const doorways: TileXY[] = [];
     for (let y = 1; y < structure.length - 1; y++) {
       for (let x = 1; x < structure[y].length - 1; x++) {
-        if (!this.map.isWalkable(x, y)) continue;
+        if (!this.map.isWalkable(x, y, 'walker')) continue;
         const pinchedVertically =
           structure[y - 1][x].type === INTERIOR_WALL && structure[y + 1][x].type === INTERIOR_WALL;
         const pinchedHorizontally =
@@ -646,7 +700,8 @@ export class InteriorOccupantSystem implements GameSystem {
   private placeAtMark(placement: MarkPlacement, usedStands: ReadonlySet<string>): Stand | null {
     const { x, y } = placement.tile;
     const key = tileKey(x, y);
-    if (!this.map.isWalkable(x, y) || this.reserved.has(key) || usedStands.has(key)) return null;
+    if (!this.map.isWalkable(x, y, 'walker') || this.reserved.has(key) || usedStands.has(key))
+      return null;
     return { tile: { x, y }, furniture: null, facing: FACING_TOWARD[placement.faces] };
   }
 
@@ -730,7 +785,7 @@ export class InteriorOccupantSystem implements GameSystem {
   private isFreeStand(tile: TileXY, usedStands: ReadonlySet<string>): boolean {
     const key = tileKey(tile.x, tile.y);
     if (usedStands.has(key) || this.reserved.has(key)) return false;
-    return this.map.isWalkable(tile.x, tile.y);
+    return this.map.isWalkable(tile.x, tile.y, 'walker');
   }
 
   /**
@@ -1011,7 +1066,7 @@ export class InteriorOccupantSystem implements GameSystem {
    */
   private floorReachableByParty(): TileXY[] {
     const origin = findPartyArrivalTiles(this.map, this.map.startTile).leader;
-    if (!this.map.isWalkable(origin.x, origin.y)) return [];
+    if (!this.map.isWalkable(origin.x, origin.y, 'walker')) return [];
     const seen = new Set<string>([tileKey(origin.x, origin.y)]);
     const reached: TileXY[] = [origin];
     // The iterator re-reads `length`, so tiles pushed below are visited by this
@@ -1021,7 +1076,7 @@ export class InteriorOccupantSystem implements GameSystem {
         const x = tile.x + dx;
         const y = tile.y + dy;
         const key = tileKey(x, y);
-        if (seen.has(key) || !this.map.isWalkable(x, y)) continue;
+        if (seen.has(key) || !this.map.isWalkable(x, y, 'walker')) continue;
         seen.add(key);
         reached.push({ x, y });
       }
@@ -1078,7 +1133,7 @@ export class InteriorOccupantSystem implements GameSystem {
     toY: number,
   ): boolean {
     const onFloor = (tile: TileXY): boolean =>
-      floor.keys.has(tileKey(tile.x, tile.y)) && this.map.isWalkable(tile.x, tile.y);
+      floor.keys.has(tileKey(tile.x, tile.y)) && this.map.isWalkable(tile.x, tile.y, 'walker');
     const centre = tilesAlongSegment(
       fromX + CENTER_OFFSET,
       fromY + CENTER_OFFSET,
@@ -1099,7 +1154,7 @@ export class InteriorOccupantSystem implements GameSystem {
   private isRoamFloor(floor: RoamFloor, worldX: number, worldY: number): boolean {
     const tx = Math.floor((worldX + CENTER_OFFSET) / TILE_SIZE);
     const ty = Math.floor((worldY + CENTER_OFFSET) / TILE_SIZE);
-    return floor.keys.has(tileKey(tx, ty)) && this.map.isWalkable(tx, ty);
+    return floor.keys.has(tileKey(tx, ty)) && this.map.isWalkable(tx, ty, 'walker');
   }
 
   /** The middle of the room's interior, inside its border walls. */
@@ -1143,7 +1198,7 @@ export class InteriorOccupantSystem implements GameSystem {
   private isInteriorWalkable(worldX: number, worldY: number): boolean {
     const tx = Math.floor((worldX + CENTER_OFFSET) / TILE_SIZE);
     const ty = Math.floor((worldY + CENTER_OFFSET) / TILE_SIZE);
-    return this.map.isWalkable(tx, ty);
+    return this.map.isWalkable(tx, ty, 'walker');
   }
 }
 
@@ -1242,6 +1297,17 @@ function occupantFigure(spec: OccupantSpec): TownspersonFigureOptions {
 
 function pieceCentre(piece: FurniturePiece): { x: number; y: number } {
   return { x: piece.x + (piece.w - 1) * HALF, y: piece.y + (piece.h - 1) * HALF };
+}
+
+/** Every tile the pieces cover, keyed `x,y`. */
+function pieceTiles(pieces: ReadonlyArray<FurniturePiece>): ReadonlySet<string> {
+  const tiles = new Set<string>();
+  for (const piece of pieces) {
+    for (let dy = 0; dy < piece.h; dy++) {
+      for (let dx = 0; dx < piece.w; dx++) tiles.add(tileKey(piece.x + dx, piece.y + dy));
+    }
+  }
+  return tiles;
 }
 
 function tileKey(tx: number, ty: number): string {

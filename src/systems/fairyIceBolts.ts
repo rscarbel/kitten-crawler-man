@@ -129,7 +129,7 @@ export class FairyIceBolts {
     const now = boltPoint(bolt, bolt.age);
     const tileX = Math.floor(now.x / TILE_SIZE);
     const tileY = Math.floor(now.y / TILE_SIZE);
-    if (!this.gameMap.isWalkable(tileX, tileY)) {
+    if (!this.gameMap.isWalkable(tileX, tileY, 'walker')) {
       const last = boltPoint(bolt, bolt.age - 1);
       this.shatter(last.x, last.y);
       return 'wall';

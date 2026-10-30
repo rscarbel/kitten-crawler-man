@@ -684,7 +684,8 @@ export class SpiderQuestSystem implements GameSystem {
       // A generated lab stamps the terminal's bench as bench tiles, which are
       // solid already; a hand-built one may only list them.
       for (const tile of this.roomData.computerTableTiles) {
-        if (gameMap.isWalkable(tile.x, tile.y)) gameMap.blockTilePermanently(tile.x, tile.y);
+        if (gameMap.isWalkable(tile.x, tile.y, 'walker'))
+          gameMap.blockTilePermanently(tile.x, tile.y);
       }
     }
   }
@@ -1637,7 +1638,7 @@ export class SpiderQuestSystem implements GameSystem {
         if (prev !== null) {
           const prevTx = Math.floor((prev.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
           const prevTy = Math.floor((prev.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
-          if (this.gameMap.isWalkable(prevTx, prevTy)) {
+          if (this.gameMap.isWalkable(prevTx, prevTy, 'walker')) {
             human.x = prev.x;
             human.y = prev.y;
           }
@@ -1659,7 +1660,7 @@ export class SpiderQuestSystem implements GameSystem {
         if (prev !== null) {
           const prevTx = Math.floor((prev.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
           const prevTy = Math.floor((prev.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
-          if (this.gameMap.isWalkable(prevTx, prevTy)) {
+          if (this.gameMap.isWalkable(prevTx, prevTy, 'walker')) {
             cat.x = prev.x;
             cat.y = prev.y;
           }
@@ -2183,7 +2184,7 @@ export class SpiderQuestSystem implements GameSystem {
     let spawnX = tileX;
     let spawnY = tileY;
     for (const [dx, dy] of offsets) {
-      if (this.gameMap.isWalkable(tileX + dx, tileY + dy)) {
+      if (this.gameMap.isWalkable(tileX + dx, tileY + dy, 'walker')) {
         spawnX = tileX + dx;
         spawnY = tileY + dy;
         break;
@@ -2241,7 +2242,7 @@ export class SpiderQuestSystem implements GameSystem {
     const soleTile = Math.floor(feetY / TILE_SIZE);
     for (let tileY = topTile; tileY <= soleTile; tileY++) {
       for (let tileX = leftTile; tileX <= rightTile; tileX++) {
-        if (!this.gameMap.isWalkable(tileX, tileY)) return false;
+        if (!this.gameMap.isWalkable(tileX, tileY, 'walker')) return false;
       }
     }
     return true;
@@ -2469,7 +2470,7 @@ export class SpiderQuestSystem implements GameSystem {
     };
     const to = room.labPostTile;
     const reachTiles = room.labDoorwayDistance + SCIENTIST_RUN_PATH_SLACK_TILES;
-    const path = this.gameMap.findPath(from.x, from.y, to.x, to.y, reachTiles);
+    const path = this.gameMap.findPath(from.x, from.y, to.x, to.y, 'walker', reachTiles);
     this.runRoute = path;
     this.runRouteIndex = 0;
     if (path.length === 0) {

@@ -266,6 +266,11 @@ export class Conversation {
     return this.request !== null;
   }
 
+  /** Who the line on screen is said by, or null while no conversation is open. */
+  get speaking(): SpeakerRef | null {
+    return this.activeLineRef?.speaker ?? null;
+  }
+
   /** Whether the choice or confirm row is up, rather than a line still being read. */
   get isShowingChoices(): boolean {
     return this.ending.kind !== 'none';

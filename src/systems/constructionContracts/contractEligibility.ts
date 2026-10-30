@@ -10,16 +10,16 @@
  * only ever comes from their room being owned.
  */
 
-import type { AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
-import type { MurderQuestStage } from '../../core/quests/MurderQuestProgress';
 import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/quests/villageQuestPhase';
-import { lorisWreckMended, interiorRoomOwnedByStory } from '../interiorStoryOwnership';
+import {
+  lorisWreckMended,
+  interiorRoomOwnedByStory,
+  type InteriorStoryState,
+} from '../interiorStoryOwnership';
 import type { ContractSiteDef } from './contractCatalog';
 
 /** The world facts eligibility reads; both floor-3 scenes can build one from their threaded state. */
-export interface ContractWorld {
-  readonly murderStage: MurderQuestStage | undefined;
-  readonly anchor: Pick<AnchorQuestProgress, 'temple' | 'loriRepairedTypes'>;
+export interface ContractWorld extends InteriorStoryState {
   readonly villagePhase: VillageQuestPhase;
 }
 

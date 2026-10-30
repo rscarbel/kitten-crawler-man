@@ -238,7 +238,7 @@ async function verifyPaddockPresses(): Promise<void> {
   };
 
   const active = scene.pm.active();
-  const inactive = scene.pm.inactive();
+  const inactive = scene.pm.partnerAnywhere();
   const standAt = (at: Point): void => {
     active.x = at.x;
     active.y = at.y;

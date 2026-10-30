@@ -93,7 +93,7 @@ function layOutHallwayPost(
           y: edge.from.y + facing.y * depth + along.y * edge.sign * sidestep,
         };
         if (!insideRect(host, tile.x, tile.y)) continue;
-        if (!isWalkableTileType(grid[tile.y][tile.x])) continue;
+        if (!isWalkableTileType(grid[tile.y][tile.x], 'walker')) continue;
         const inAnotherDoor = otherDoorTiles.some(
           (door) => chebyshev(door, tile) <= POST_DOORWAY_CLEARANCE_TILES,
         );
@@ -107,7 +107,8 @@ function layOutHallwayPost(
     y: mouthDoorway.tile.y + facing.y * lastDepth,
   };
   const inFrontStands =
-    insideRect(host, inFront.x, inFront.y) && isWalkableTileType(grid[inFront.y][inFront.x]);
+    insideRect(host, inFront.x, inFront.y) &&
+    isWalkableTileType(grid[inFront.y][inFront.x], 'walker');
   return inFrontStands ? { tile: inFront, facing } : null;
 }
 
@@ -175,7 +176,7 @@ export function layOutLabApproach(
     const key = keyOf(x, y);
     if (outerKeys.has(key) || innerKeys.has(key)) return true;
     if (labDoorway.tiles.some((tile) => tile.x === x && tile.y === y)) return true;
-    return insideRect(station, x, y) && isWalkableTileType(grid[y][x]);
+    return insideRect(station, x, y) && isWalkableTileType(grid[y][x], 'walker');
   };
   const distance = new Map<string, number>();
   const queue: Point[] = [];

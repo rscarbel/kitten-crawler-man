@@ -307,7 +307,7 @@ export class SiegeFlowField implements SiegeFlowQuery {
         const i = ly * this.width + lx;
         // The gate is shut to hostiles by its own walkability flag, which is
         // what makes it impassable here too — one rule, read in one place.
-        const open = gameMap.isWalkableForHostile(x, y);
+        const open = gameMap.isWalkableForHostile(x, y, 'walker');
         terrain[i] = open ? OPEN_STEP_COST : UNREACHABLE;
       }
     }
@@ -325,7 +325,9 @@ export class SiegeFlowField implements SiegeFlowQuery {
       for (const tile of segment.tiles) {
         const i = this.indexOf(tile.x, tile.y);
         if (i >= 0)
-          steps[i] = gameMap.isWalkableForHostile(tile.x, tile.y) ? OPEN_STEP_COST : UNREACHABLE;
+          steps[i] = gameMap.isWalkableForHostile(tile.x, tile.y, 'walker')
+            ? OPEN_STEP_COST
+            : UNREACHABLE;
       }
     }
     const price = (ref: StructureRef, tiles: ReadonlyArray<{ x: number; y: number }>): void => {

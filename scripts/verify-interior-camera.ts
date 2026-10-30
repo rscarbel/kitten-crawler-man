@@ -311,7 +311,7 @@ function reachableTiles(map: GameMap, opensDuringVisit: (x: number, y: number) =
       const y = tile.y + dy;
       if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
       const key = y * cols + x;
-      if (seen.has(key) || !(map.isWalkable(x, y) || opensDuringVisit(x, y))) continue;
+      if (seen.has(key) || !(map.isWalkable(x, y, 'walker') || opensDuringVisit(x, y))) continue;
       seen.add(key);
       queue.push({ x, y });
     }

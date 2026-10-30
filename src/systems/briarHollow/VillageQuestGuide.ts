@@ -61,6 +61,7 @@ import {
 import { TREBUCHET_HEIGHT_TILES, TREBUCHET_WIDTH_TILES } from './structureRules';
 import { WorldTrail } from '../../ui/world/worldTrail';
 import { TrailShaper } from '../questRoute/trailShape';
+import { MIDGE_MOBILITY } from './blueprints/escortRoute';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -370,7 +371,7 @@ export class VillageQuestGuide {
 
   /** Walkable and not stood on by either crawler — the only bodies likely to be on a bare work-yard tile. */
   private tileIsClear(tile: TilePoint): boolean {
-    if (!this.deps.gameMap.isWalkable(tile.x, tile.y)) return false;
+    if (!this.deps.gameMap.isWalkable(tile.x, tile.y, 'walker')) return false;
     return !this.crawlerOnTile(this.deps.human, tile) && !this.crawlerOnTile(this.deps.cat, tile);
   }
 
@@ -623,7 +624,7 @@ export class VillageQuestGuide {
     camY: number,
     guidance: Extract<PointedGuidance, { readonly kind: 'escort_waypoint' }>,
   ): void {
-    this.escortTrailShaper.setWalk(this.deps.gameMap, guidance.trail);
+    this.escortTrailShaper.setWalk(this.deps.gameMap, guidance.trail, MIDGE_MOBILITY);
     const shape = this.escortTrailShaper.shape(null);
     this.escortTrail.paint(ctx, shape, camX, camY, performance.now());
     for (const tile of guidance.ahead) {

@@ -10,45 +10,76 @@
  * `src/systems/lichBattleRules.ts` alone, which is why the rules live in a
  * module with no canvas and no creature in it.
  *
+ * The opening binding (the ritual circle shielding the Lich while any pillar
+ * holds a bound cat, the cat unbinding them, the carrier coming in through the
+ * observatory) is checked the same way, as rules and then played on storey 5
+ * of the tower.
+ *
  * Every check below was negative-tested during development by mutating the rule
- * it measures and confirming the gate went red. Where a check depends on a
+ * it measures and confirming the gate went red. The binding's checks carry
+ * their own negative tests: each `--fault=<name>` below breaks one rule from
+ * outside and must turn the gate red. Where a check depends on a
  * lookup — a phase name, a room, a neighbour set — the lookup failing is itself
  * a failure, never a skip: a gate that goes quiet when it cannot find what it
  * measures reports "all passed" while measuring nothing.
  *
  * Run: npx tsx scripts/verify-lich.ts
+ *      npx tsx scripts/verify-lich.ts --fault=<name>   (must fail)
+ *
+ * Faults: unshielded, lich-turns-on-the-worker, carrier-takes-worked-pillar,
+ * no-return-wait, pillar-in-the-fire, channel-spot-in-the-wall,
+ * freed-cats-still-bound, reveal-not-owed.
  */
 
 import { readFileSync } from 'node:fs';
 
+import { isRecord } from '../src/core/util/guards';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { CORE_SFX_IDS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
-import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
+import type { MusicClaims } from '../src/audio/AudioScope';
+import type { MusicClaim, MusicClaimOwner } from '../src/audio/music/MusicDirector';
+import { GameMap } from '../src/map/GameMap';
+import { TOWN_TOWER_ID } from '../src/map/buildingIds';
+import {
+  towerConditionsFor,
+  towerStoreyIndex,
+  type TowerConditions,
+} from '../src/map/town/interiors/townCenterTower';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob } from '../src/creatures/Mob';
+import type { TheLich } from '../src/creatures/TheLich';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
-import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
-import { PUSH_SLIDE_FRAMES, type LichBattleSystem } from '../src/systems/LichBattleSystem';
-
-/** The rows a wave crosses, as `LichBattleSystem` reports them. */
-type LichWaveBand = { readonly firstRow: number; readonly lastRow: number };
+import { TowerRitualSystem } from '../src/systems/tower/TowerRitualSystem';
+import { LichBattleSystem, PUSH_SLIDE_FRAMES } from '../src/systems/LichBattleSystem';
 import {
-  createMurderQuestProgress,
-  type MurderQuestProgress,
-  type MurderQuestStage,
-} from '../src/core/quests/MurderQuestProgress';
-import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
+  missingCatsProgressAt,
+  type MissingCatsPhase,
+  type MissingCatsProgress,
+} from '../src/core/quests/missingCatsProgress';
+import { TOWN_CAT_IDS, type TownCatId } from '../src/core/state/townCatIds';
+import { findNearbyWalkableTile } from '../src/map/findWalkableTile';
 import { partyLevelOf } from '../src/levels/spawner';
 import { makePoison } from '../src/core/combat/StatusEffect';
 import type { SystemContext } from '../src/systems/GameSystem';
 import type { DamageSource } from '../src/Player';
+import { Conversation } from '../src/dialog/Conversation';
+import { wardenReveal } from '../src/dialog/scripts/scenes/towerRitual';
 import {
+  BINDING_CHANNEL_FRAMES,
+  BindingCircle,
+  bindingSparesCrawler,
+  CARRIER_ARRIVAL_FRAMES,
+  CARRIER_FLIGHT_FRAMES,
+  CARRIER_LIFT_FRAMES,
+  CHANNEL_RETURN_CLEAR_FRAMES,
+  ChannelReturnGate,
+  FIREWALL_WAVE_INTERVAL_FRAMES,
   canHoldGap,
   columnBurns,
   DAZE_FRAMES,
@@ -57,7 +88,6 @@ import {
   FIREWALL_GAP_MAX_SHIFT_TILES,
   FIREWALL_GAP_WIDTH_TILES,
   FIREWALL_TRIGGER_HP_FRACTION,
-  FIREWALL_WAVE_INTERVAL_FRAMES,
   FirewallGapPlanner,
   LichPhaseMachine,
   MAX_CONCURRENT_ORB_WARNINGS,
@@ -72,13 +102,93 @@ import {
   type TilePos,
 } from '../src/systems/lichBattleRules';
 import { mulberry32 } from '../src/sprites/person/rng';
-import { Conversation } from '../src/dialog/Conversation';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
 
 useDevPlayerIdentity();
 
-/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
-const LASTING_POISON_TICKS = 999999;
+/**
+ * One rule of the binding broken from outside, to watch the check that
+ * guards it go red. Each names the rule it breaks.
+ */
+const LICH_FAULTS = [
+  'unshielded',
+  'lich-turns-on-the-worker',
+  'carrier-takes-worked-pillar',
+  'no-return-wait',
+  'pillar-in-the-fire',
+  'channel-spot-in-the-wall',
+  'freed-cats-still-bound',
+  'reveal-not-owed',
+] as const;
+type LichFault = (typeof LICH_FAULTS)[number];
+
+const FAULT_FLAG = '--fault=';
+
+function parseFault(): LichFault | null {
+  const flag = process.argv.find((arg) => arg.startsWith(FAULT_FLAG));
+  if (flag === undefined) return null;
+  const name = flag.slice(FAULT_FLAG.length);
+  const fault = LICH_FAULTS.find((candidate) => candidate === name);
+  if (fault === undefined) {
+    console.error(`unknown fault "${name}"; known: ${LICH_FAULTS.join(', ')}`);
+    process.exit(2);
+  }
+  return fault;
+}
+
+const FAULT = parseFault();
+
+/** Replaces a method on a class's prototype, private ones included, for a fault that breaks it. */
+function breakMethod(prototype: object, name: string, replacement: unknown): void {
+  if (typeof Reflect.get(prototype, name) !== 'function') {
+    throw new Error(`no method "${name}" to break`);
+  }
+  if (typeof replacement !== 'function') throw new Error(`no replacement for "${name}"`);
+  Reflect.set(prototype, name, replacement);
+}
+
+/**
+ * The faults that break the fight's own code rather than what the gate feeds
+ * it: the reveal decided after the questline has already moved to the ritual,
+ * the walls of fire born at the Lich's feet, through the circle, and each
+ * pillar worked only from its own stone.
+ */
+function applyCodeFaults(): void {
+  if (FAULT === 'reveal-not-owed') {
+    const arrive: unknown = Reflect.get(TowerRitualSystem.prototype, 'arrive');
+    breakMethod(TowerRitualSystem.prototype, 'arrive', function (this: object) {
+      const deps: unknown = Reflect.get(this, 'deps');
+      if (!isRecord(deps) || !isRecord(deps.progress) || typeof arrive !== 'function') {
+        throw new Error('the ritual has no progress to arrive with');
+      }
+      Reflect.set(deps.progress, 'phase', 'ritual');
+      const arrived: unknown = Reflect.apply(arrive, this, []);
+      return arrived;
+    });
+  }
+  if (FAULT === 'pillar-in-the-fire') {
+    breakMethod(LichBattleSystem.prototype, 'findWaveSpawnRow', function (this: object) {
+      const anchor: unknown = Reflect.get(this, 'firewallAnchorTile');
+      if (!isRecord(anchor) || typeof anchor.row !== 'number') {
+        throw new Error('the fight has no firewall anchor');
+      }
+      return anchor.row + 1;
+    });
+  }
+  if (FAULT === 'channel-spot-in-the-wall') {
+    const pillarWork: unknown = Reflect.get(LichBattleSystem.prototype, 'pillarWork');
+    breakMethod(LichBattleSystem.prototype, 'pillarWork', function (this: object, pillar: unknown) {
+      if (typeof pillarWork !== 'function' || !isRecord(pillar)) {
+        throw new Error('the fight has no pillar to work');
+      }
+      const work: unknown = Reflect.apply(pillarWork, this, [pillar]);
+      if (!isRecord(work)) throw new Error('the pillar gave no work');
+      return { ...work, spots: [pillar.tile] };
+    });
+  }
+}
+
+applyCodeFaults();
 
 const failures: string[] = [];
 
@@ -153,8 +263,8 @@ const ROOM: OrbRainRoom = {
 };
 
 const SEED = 0x5e11c4;
-/** The floor the murder questline and its tower live on. */
-const MURDER_QUEST_LEVEL_ID = 'level3';
+/** The floor the tower and its Lich fight live on. */
+const LICH_FIGHT_LEVEL_ID = 'level3';
 /** Waves sampled for the gap rules. Far past any real fight, which is the point. */
 const WAVES_SAMPLED = 500;
 /** Frames simulated per orb-rain scenario. */
@@ -231,7 +341,7 @@ const PRESSURE_CADENCE_FRAMES = 1;
 
 // ─────────────────────────────────────── 2b: a gap is somewhere you can stand
 //
-// A room is not a rectangle. The magistrate's office has pillars in it and its
+// A room is not a rectangle. The top of the tower has pillars in it and its
 // corners are notched, and a gap placed on masonry is not a gap — it is a safe
 // column the player is shown and cannot walk into, with an unavoidable wall of
 // fire behind it. The planner takes a usability test from the caller; this is
@@ -533,7 +643,13 @@ function simulateOrbRain(
 // ─────────────────────────────────────── 6: phase order is monotonic
 
 {
-  const ORDER: ReadonlyArray<LichBattlePhase> = ['onslaught', 'firewall', 'tantrum', 'reckoning'];
+  const ORDER: ReadonlyArray<LichBattlePhase> = [
+    'binding',
+    'onslaught',
+    'firewall',
+    'tantrum',
+    'reckoning',
+  ];
   const rankOf = (phase: LichBattlePhase): number => {
     const rank = ORDER.indexOf(phase);
     // An unrecognised phase is a rule that grew a state this gate does not know
@@ -543,7 +659,11 @@ function simulateOrbRain(
     return rank;
   };
 
-  const machine = new LichPhaseMachine();
+  check(
+    new LichPhaseMachine().phase === 'onslaught',
+    'a circle with no cat bound in it did not open on the onslaught',
+  );
+  const machine = new LichPhaseMachine(true);
   const seen: LichBattlePhase[] = [machine.phase];
   let rank = rankOf(machine.phase);
   const observe = (): void => {
@@ -555,6 +675,16 @@ function simulateOrbRain(
   };
 
   // Every out-of-order call the fight could plausibly make, refused.
+  check(!machine.isVulnerable, 'the Lich could be hurt inside its binding');
+  check(!machine.observeHealth(0), 'health observation moved the fight out of the binding');
+  check(!machine.registerFirewallStrike(), 'a firewall strike advanced the fight from the binding');
+  check(!machine.registerDazeHit(), 'a daze hit advanced the fight from the binding');
+  check(machine.tickTantrum(false) === 'none', 'the tantrum ticked inside the binding');
+  observe();
+  check(machine.registerBindingBroken(), 'breaking the circle did not open the onslaught');
+  observe();
+  check(!machine.registerBindingBroken(), 'a second break re-entered the onslaught');
+
   check(!machine.registerFirewallStrike(), 'a firewall strike advanced the fight from onslaught');
   check(!machine.registerDazeHit(), 'a daze hit advanced the fight from onslaught');
   check(machine.tickTantrum(false) === 'none', 'the tantrum ticked from onslaught');
@@ -584,6 +714,7 @@ function simulateOrbRain(
   observe();
 
   check(!machine.observeHealth(0), 'health observation moved the fight out of reckoning');
+  check(!machine.registerBindingBroken(), 'a broken circle moved the fight out of reckoning');
   check(!machine.registerFirewallStrike(), 'a strike moved the fight out of reckoning');
   check(machine.tickTantrum(false) === 'none', 'the tantrum ticked during reckoning');
   observe();
@@ -670,6 +801,115 @@ function simulateOrbRain(
   );
 }
 
+// ─────────────────────────────────────── 6c: the binding's rules
+//
+// The circle shields the Lich while any pillar is lit, the carrier comes once
+// and never for the pillar a crawler is working, the Lich leaves the worker
+// alone while somebody else stands, and a companion sent off her pillar by a
+// threat is not sent back until the ground has stayed clear. Each is a rule of
+// `lichBattleRules` alone, so it is pressed here as arithmetic.
+
+{
+  const PILLARS = ['north', 'east', 'south'] as const;
+  type Pillar = (typeof PILLARS)[number];
+  const ORDER: ReadonlyArray<Pillar> = PILLARS;
+
+  const circle = new BindingCircle<Pillar>(PILLARS, ORDER);
+  check(circle.shieldsLich, 'a circle with three lit pillars did not shield the Lich');
+  check(circle.shatter('north'), 'a lit pillar could not be unbound');
+  check(circle.shieldsLich, 'one pillar going dark left the Lich unshielded while two were lit');
+  check(!circle.shatter('north'), 'a pillar already dark shattered a second time');
+
+  // The carrier comes at its time and not a frame before, and never for the
+  // pillar a crawler is working — even when that pillar is the first in its
+  // order. The fault hands the circle no worker, which is the rule removed.
+  const worked: Pillar = 'east';
+  const told = (): Pillar | null => (FAULT === 'carrier-takes-worked-pillar' ? null : worked);
+  let arrivedOn: Pillar | null = null;
+  let arrivedAtFrame = -1;
+  for (let frame = 1; frame <= CARRIER_ARRIVAL_FRAMES; frame++) {
+    const tick = circle.tick(told());
+    if (tick.kind === 'carrier_arrives') {
+      arrivedOn = tick.pillar;
+      arrivedAtFrame = frame;
+    }
+  }
+  check(
+    arrivedAtFrame === CARRIER_ARRIVAL_FRAMES,
+    `the carrier arrived on frame ${arrivedAtFrame}, not ${CARRIER_ARRIVAL_FRAMES}`,
+  );
+  check(arrivedOn !== null, 'the carrier never came, so the pillar it chose was never checked');
+  check(arrivedOn !== worked, 'the carrier went for the pillar a crawler was working');
+  check(
+    arrivedOn === null || !circle.workable(arrivedOn),
+    'a crawler may still work the pillar the carrier is lifting the cat from',
+  );
+
+  let freed = 0;
+  let gone = false;
+  const CARRIER_FRAMES = CARRIER_FLIGHT_FRAMES * 2 + CARRIER_LIFT_FRAMES;
+  for (let frame = 0; frame < CARRIER_FRAMES * 2; frame++) {
+    const tick = circle.tick(worked);
+    if (tick.kind === 'carrier_frees') freed++;
+    if (tick.kind === 'carrier_gone') gone = true;
+    check(tick.kind !== 'carrier_arrives', 'the carrier came a second time');
+  }
+  check(freed === 1, `the carrier freed ${freed} cats, not one`);
+  check(gone, 'the carrier never left through the window');
+  check(circle.bound.size === 1, `${circle.bound.size} pillars are lit, not the one still worked`);
+  check(circle.shatter(worked), 'the last pillar could not be unbound');
+  check(!circle.shieldsLich, 'a circle with every pillar dark still shields the Lich');
+
+  // With only the worked pillar left, the carrier waits rather than taking it.
+  const lastOne = new BindingCircle<Pillar>([worked], ORDER);
+  let tookTheWorkedPillar = false;
+  for (let frame = 0; frame < CARRIER_ARRIVAL_FRAMES * 2; frame++) {
+    if (lastOne.tick(told()).kind === 'carrier_arrives') tookTheWorkedPillar = true;
+  }
+  check(
+    !tookTheWorkedPillar,
+    'the carrier took the only lit pillar out from under the crawler working it',
+  );
+
+  const empty = new BindingCircle<Pillar>([], ORDER);
+  check(!empty.shieldsLich, 'a circle with no cat bound in it shielded the Lich');
+  let emptyCarrierCame = false;
+  for (let frame = 0; frame < CARRIER_ARRIVAL_FRAMES * 2; frame++) {
+    if (empty.tick(null).kind === 'carrier_arrives') emptyCarrierCame = true;
+  }
+  check(!emptyCarrierCame, 'the carrier came to a circle with no cat to carry');
+
+  // The worker is spared only during the binding, only while working, and
+  // only while somebody else stands.
+  check(
+    bindingSparesCrawler('binding', true, true),
+    'the Lich did not spare the crawler working a pillar',
+  );
+  check(
+    !bindingSparesCrawler('binding', true, false),
+    'the Lich spared the worker with nobody else left standing',
+  );
+  check(
+    !bindingSparesCrawler('binding', false, true),
+    'the Lich spared a crawler that was not working',
+  );
+  check(
+    !bindingSparesCrawler('onslaught', true, true),
+    'the Lich kept sparing the worker after the binding',
+  );
+
+  // Threatened ground keeps her off for the whole wait, and lets her go after it.
+  const gate = new ChannelReturnGate(FAULT === 'no-return-wait' ? 0 : CHANNEL_RETURN_CLEAR_FRAMES);
+  check(gate.tick(false), 'a companion was held off a channel spot that was never threatened');
+  check(!gate.tick(true), 'a companion was sent onto threatened ground');
+  let framesHeldAfter = 0;
+  while (!gate.tick(false) && framesHeldAfter <= CHANNEL_RETURN_CLEAR_FRAMES) framesHeldAfter++;
+  check(
+    framesHeldAfter === CHANNEL_RETURN_CLEAR_FRAMES - 1,
+    `a companion went back to her spot ${framesHeldAfter + 1} frame(s) after the threat cleared, not ${CHANNEL_RETURN_CLEAR_FRAMES}`,
+  );
+}
+
 // ─────────────────────────────────────── 7: the health threshold
 
 {
@@ -693,6 +933,85 @@ function simulateOrbRain(
   }
 }
 
+// ─────────────────────────────────────── helpers
+
+function reachTantrum(): LichPhaseMachine {
+  const machine = new LichPhaseMachine();
+  machine.observeHealth(FIREWALL_TRIGGER_HP_FRACTION);
+  machine.registerFirewallStrike();
+  if (machine.phase !== 'tantrum') {
+    failures.push(
+      'the harness could not reach the tantrum, so every check under it measured nothing',
+    );
+  }
+  return machine;
+}
+
+function reachDaze(): LichPhaseMachine {
+  const machine = reachTantrum();
+  for (let frame = 0; frame < DODGE_SURVIVAL_FRAMES; frame++) machine.tickTantrum(false);
+  if (machine.tantrumMode !== 'daze') {
+    failures.push(
+      'the harness could not reach a daze window, so every check under it measured nothing',
+    );
+  }
+  return machine;
+}
+
+/** Walks the simulated player one tile around the room's interior, deterministically. */
+function stepAroundRoom(tile: TilePos, frame: number): TilePos {
+  const STEP_INTERVAL_FRAMES = 7;
+  if (frame % STEP_INTERVAL_FRAMES !== 0) return tile;
+  const width = ROOM.maxCol - ROOM.minCol - 1;
+  const height = ROOM.maxRow - ROOM.minRow - 1;
+  const lap = Math.floor(frame / STEP_INTERVAL_FRAMES);
+  const along = lap % (2 * (width + height));
+  if (along < width) return { col: ROOM.minCol + 1 + along, row: ROOM.minRow + 1 };
+  if (along < width + height) {
+    return { col: ROOM.maxCol - 1, row: ROOM.minRow + 1 + (along - width) };
+  }
+  if (along < 2 * width + height) {
+    return { col: ROOM.maxCol - 1 - (along - width - height), row: ROOM.maxRow - 1 };
+  }
+  return { col: ROOM.minCol + 1, row: ROOM.maxRow - 1 - (along - 2 * width - height) };
+}
+
+// ─────────────────────────────────────── 7b: every cue the fight plays is loaded
+//
+// `AudioManager.play` returns silently on a sound whose buffer never loaded, so
+// a cue missing from the floor's preload bundle is not an error — it is a beat
+// that simply does not happen, and nothing on screen says so. Two of this
+// fight's cues were silent on floor 3 for exactly that reason, one of them the
+// one that announces the three-second strike window.
+//
+// Scanned out of the source rather than listed here, so the check cannot drift
+// away from the code it is checking.
+
+{
+  const FIGHT_SOURCES = ['src/systems/LichBattleSystem.ts'];
+  const PLAY_CALL = /\baudio\??\.play\(\s*'([a-z0-9_]+)'/g;
+  const loadedOnFloorThree = new Set<string>([
+    ...sfxGroupsForLevelId(LICH_FIGHT_LEVEL_ID),
+    ...CORE_SFX_IDS,
+  ]);
+
+  const played = new Set<string>();
+  for (const path of FIGHT_SOURCES) {
+    const text = readFileSync(path, 'utf8');
+    for (const match of text.matchAll(PLAY_CALL)) played.add(match[1]);
+  }
+
+  check(
+    played.size > 0,
+    `no sound cue was found in ${FIGHT_SOURCES.join(' or ')}, so the coverage check below proved nothing`,
+  );
+  const silent = [...played].filter((id) => !loadedOnFloorThree.has(id));
+  check(
+    silent.length === 0,
+    `${silent.join(', ')} played by the tower fight but never preloaded on its own floor — those beats are silent`,
+  );
+}
+
 /**
  * Everything about the fight that a running frame would change.
  *
@@ -701,8 +1020,8 @@ function simulateOrbRain(
  * things that advance *within* a phase — a phase name alone is a constant, and
  * comparing constants is how a probe passes without measuring anything.
  */
-function describeFightState(confrontation: QuillConfrontationSystem): string {
-  const battle = confrontation.lichBattle;
+function describeFightState(ritual: TowerRitualSystem): string {
+  const battle = ritual.lichBattle;
   if (battle === null) return 'no-battle';
   const band = battle.waveBand;
   return [
@@ -713,6 +1032,9 @@ function describeFightState(confrontation: QuillConfrontationSystem): string {
     // ran on underneath a bark.
     battle.liveWaves.map((wave) => `${wave.gapStart}@${wave.row.toFixed(3)}`).join('/'),
     battle.liveOrbThreatCount,
+    [...battle.litPillars].join('+'),
+    battle.carrierStage,
+    battle.channellingPillar ?? 'idle',
     band.firstRow,
     band.lastRow,
   ].join('|');
@@ -751,108 +1073,314 @@ function arrivingWaveFor(
   return arriving;
 }
 
-// ─────────────────────────────────────── helpers
+// ─────────────────────────────────────── 8: storey 5, built from the questline
 
-function reachTantrum(): LichPhaseMachine {
-  const machine = new LichPhaseMachine();
-  machine.observeHealth(FIREWALL_TRIGGER_HP_FRACTION);
-  machine.registerFirewallStrike();
-  if (machine.phase !== 'tantrum') {
-    failures.push(
-      'the harness could not reach the tantrum, so every check under it measured nothing',
-    );
-  }
-  return machine;
+/** The rows a wave crosses, as `LichBattleSystem` reports them. */
+type LichWaveBand = { readonly firstRow: number; readonly lastRow: number };
+
+const CATTERY_STOREY = towerStoreyIndex('cattery');
+/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
+const LASTING_POISON_TICKS = 999999;
+/** How far the harness looks for open floor near a corner it wants to stand in. */
+const STANDING_SEARCH_RADIUS_TILES = 3;
+
+/**
+ * Reads the questline's phase opaquely, through a call, so the compiler does
+ * not narrow it to the literal the harness set and reject a comparison against
+ * the phase the fight is supposed to reach.
+ */
+function phaseOf(progress: MissingCatsProgress): MissingCatsPhase {
+  return progress.phase;
 }
 
-function reachDaze(): LichPhaseMachine {
-  const machine = reachTantrum();
-  for (let frame = 0; frame < DODGE_SURVIVAL_FRAMES; frame++) machine.tickTantrum(false);
-  if (machine.tantrumMode !== 'daze') {
-    failures.push(
-      'the harness could not reach a daze window, so every check under it measured nothing',
-    );
-  }
-  return machine;
+/** Everything one ritual is fought with: the cattery as the questline builds it, the party and the system. */
+interface RitualRig {
+  readonly map: GameMap;
+  readonly human: HumanPlayer;
+  readonly cat: CatPlayer;
+  readonly roster: MobRoster;
+  readonly companion: CompanionSystem;
+  readonly ritual: TowerRitualSystem;
+  readonly progress: MissingCatsProgress;
+  readonly context: SystemContext;
+  /** Where the party came up: the landing below the stair down. */
+  readonly landing: TilePos;
+  readonly claims: readonly MusicClaim[];
+  readonly releases: readonly MusicClaimOwner[];
+  readonly fallenHookRuns: () => number;
 }
 
 /**
- * Reads the questline's stage opaquely.
- *
- * Through a call rather than off the field, because the compiler narrows the
- * field to the literal the harness assigned and then rejects a comparison
- * against the stage the fight is supposed to reach as unreachable — which is
- * exactly the transition under test.
+ * The questline at `from` with `catsFreed` let out of their cages, the
+ * cattery built from it, the party on the landing, and the ritual's first
+ * frame run. From `ritual`, with the reveal already behind the party, that
+ * frame starts the fight; from `ascent` it opens the Warden's reveal.
  */
-function stageOf(progress: MurderQuestProgress): MurderQuestStage {
-  return progress.stage;
+function ritualRig(
+  catsFreed: ReadonlyArray<TownCatId>,
+  from: Extract<MissingCatsPhase, 'ascent' | 'ritual'> = 'ritual',
+): RitualRig {
+  const progress = missingCatsProgressAt(from);
+  const beforeAnyWasFreed: TowerConditions = towerConditionsFor(progress);
+  for (const freed of catsFreed) progress.catsFreed.add(freed);
+  const conditions =
+    FAULT === 'freed-cats-still-bound' ? beforeAnyWasFreed : towerConditionsFor(progress);
+  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  map.generateInterior('tower', CATTERY_STOREY, TOWN_TOWER_ID, false, {
+    kind: 'tower',
+    conditions,
+  });
+
+  // The landing the scene sets an ascending party down on: the row below the
+  // whole stair block, in its leftmost column.
+  const stair = map._interiorStairDownTiles;
+  const first = stair[0] ?? map.startTile;
+  const landing: TilePos = {
+    col: stair.reduce((leftmost, tile) => Math.min(leftmost, tile.x), first.x),
+    row: stair.reduce((lowest, tile) => Math.max(lowest, tile.y), first.y) + 1,
+  };
+  const human = new HumanPlayer(landing.col, landing.row, TILE_SIZE);
+  const cat = new CatPlayer(landing.col + 1, landing.row, TILE_SIZE);
+  human.isActive = true;
+  cat.isActive = false;
+
+  const roster = new MobRoster(map, new SpellSystem());
+  const companion = new CompanionSystem(map, landing.col, landing.row);
+  const claims: MusicClaim[] = [];
+  const releases: MusicClaimOwner[] = [];
+  const music: MusicClaims = {
+    claimMusic: (claim) => {
+      claims.push(claim);
+    },
+    releaseMusic: (owner) => {
+      releases.push(owner);
+    },
+    isMusicClaimed: (owner) => claims.some((claim) => claim.owner === owner),
+  };
+  let fallenHookRuns = 0;
+  const ritual = new TowerRitualSystem({
+    map,
+    bus: new EventBus(),
+    addMob: (mob: Mob) => roster.add(mob),
+    progress,
+    conditions,
+    audio: null,
+    music,
+    companion,
+    conversation: new Conversation(null),
+    partyLevel: () => partyLevelOf(human.level, cat.level),
+    saveBeforeFight: () => undefined,
+    onWardenFallen: () => {
+      fallenHookRuns++;
+    },
+  });
+  const context: SystemContext = {
+    human,
+    cat,
+    active: human,
+    partner: cat,
+    activeIsMoving: false,
+    roster,
+    gameMap: map,
+  };
+  ritual.update(context, CATTERY_STOREY);
+  return {
+    map,
+    human,
+    cat,
+    roster,
+    companion,
+    ritual,
+    progress,
+    context,
+    landing,
+    claims,
+    releases,
+    fallenHookRuns: () => fallenHookRuns,
+  };
 }
 
-/** Walks the simulated player one tile around the room's interior, deterministically. */
-function stepAroundRoom(tile: TilePos, frame: number): TilePos {
-  const STEP_INTERVAL_FRAMES = 7;
-  if (frame % STEP_INTERVAL_FRAMES !== 0) return tile;
-  const width = ROOM.maxCol - ROOM.minCol - 1;
-  const height = ROOM.maxRow - ROOM.minRow - 1;
-  const lap = Math.floor(frame / STEP_INTERVAL_FRAMES);
-  const along = lap % (2 * (width + height));
-  if (along < width) return { col: ROOM.minCol + 1 + along, row: ROOM.minRow + 1 };
-  if (along < width + height) {
-    return { col: ROOM.maxCol - 1, row: ROOM.minRow + 1 + (along - width) };
+/**
+ * Breaks one rule of the binding from outside the fight, for the fault that
+ * names it: the circle stops shielding the Lich, or the Lich stops sparing the
+ * crawler at a pillar.
+ */
+function injectDriverFault(lich: TheLich, battle: LichBattleSystem): void {
+  const driver = lich.battleDriver;
+  if (driver === null) return;
+  if (FAULT === 'unshielded') {
+    lich.battleDriver = {
+      ...driver,
+      blocksDamage: () => (battle.phase === 'binding' ? false : driver.blocksDamage()),
+    };
   }
-  if (along < 2 * width + height) {
-    return { col: ROOM.maxCol - 1 - (along - width - height), row: ROOM.maxRow - 1 };
+  if (FAULT === 'lich-turns-on-the-worker') {
+    lich.battleDriver = { ...driver, spares: () => false };
   }
-  return { col: ROOM.minCol + 1, row: ROOM.maxRow - 1 - (along - 2 * width - height) };
 }
 
-// ─────────────────────────────────────── 7b: every cue the fight plays is loaded
-//
-// `AudioManager.play` returns silently on a sound whose buffer never loaded, so
-// a cue missing from the floor's preload bundle is not an error — it is a beat
-// that simply does not happen, and nothing on screen says so. Two of this
-// fight's cues were silent on floor 3 for exactly that reason, one of them the
-// one that announces the three-second strike window.
-//
-// Scanned out of the source rather than listed here, so the check cannot drift
-// away from the code it is checking.
-
-{
-  const FIGHT_SOURCES = [
-    'src/systems/LichBattleSystem.ts',
-    'src/systems/QuillConfrontationSystem.ts',
-  ];
-  const PLAY_CALL = /\baudio\??\.play\(\s*'([a-z0-9_]+)'/g;
-  const loadedOnFloorThree = new Set<string>([
-    ...sfxGroupsForLevelId(MURDER_QUEST_LEVEL_ID),
-    ...CORE_SFX_IDS,
-  ]);
-
-  const played = new Set<string>();
-  for (const path of FIGHT_SOURCES) {
-    const text = readFileSync(path, 'utf8');
-    for (const match of text.matchAll(PLAY_CALL)) played.add(match[1]);
+/** Every walkable tile reachable from `from` on the storey, as `col,row` keys. */
+function walkableFrom(map: GameMap, from: TilePos): ReadonlySet<string> {
+  const reached = new Set<string>([tileKeyOf(from)]);
+  let frontier: TilePos[] = [from];
+  while (frontier.length > 0) {
+    const next: TilePos[] = [];
+    for (const tile of frontier) {
+      for (const step of ORTHOGONAL_STEPS) {
+        const neighbour = { col: tile.col + step.col, row: tile.row + step.row };
+        const key = tileKeyOf(neighbour);
+        if (reached.has(key) || !map.isWalkable(neighbour.col, neighbour.row, 'walker')) continue;
+        reached.add(key);
+        next.push(neighbour);
+      }
+    }
+    frontier = next;
   }
+  return reached;
+}
 
+const ORTHOGONAL_STEPS: ReadonlyArray<TilePos> = [
+  { col: 1, row: 0 },
+  { col: -1, row: 0 },
+  { col: 0, row: 1 },
+  { col: 0, row: -1 },
+];
+
+function tileKeyOf(tile: TilePos): string {
+  return `${tile.col},${tile.row}`;
+}
+
+/**
+ * 8a. Cats let out of their cages before the ritual are never bound: the
+ * circle has a lit pillar for every cat nobody freed and no more, a circle
+ * with none opens straight onto the onslaught, and the music opens on the
+ * stem without the cat theme only while some cat is bound.
+ */
+function checkRitualOpenings(): void {
+  const SOME_FREED = 3;
+  const FREED_COUNTS = [0, SOME_FREED, TOWN_CAT_IDS.length];
+  for (const freedCount of FREED_COUNTS) {
+    const rig = ritualRig(TOWN_CAT_IDS.slice(0, freedCount));
+    const battle = rig.ritual.lichBattle;
+    const expected = TOWN_CAT_IDS.length - freedCount;
+    check(battle !== null, `with ${freedCount} cats freed the fight never started`);
+    if (battle === null) continue;
+    check(
+      battle.litPillars.size === expected,
+      `with ${freedCount} of ${TOWN_CAT_IDS.length} cats freed in the cattery, ${battle.litPillars.size} pillars are lit, not ${expected}`,
+    );
+    const opening: LichBattlePhase = expected > 0 ? 'binding' : 'onslaught';
+    check(
+      battle.phase === opening,
+      `with ${freedCount} cats freed the fight opened on "${battle.phase}", not "${opening}"`,
+    );
+    const firstClaim = rig.claims.find((claim) => claim.owner === 'tower_finale');
+    const wantedStem = expected > 0 ? 'warden_ritual_battle_bound' : 'warden_ritual_battle';
+    const firstSelection = firstClaim?.selection;
+    const firstStem = firstSelection?.kind === 'stems' ? firstSelection.stem : null;
+    check(
+      firstStem === wantedStem,
+      `with ${freedCount} cats freed the fight opened on ${firstStem ?? 'no stem'}, not ${wantedStem}`,
+    );
+    battle.dispose();
+  }
+}
+
+/**
+ * More presses than any reveal has pages, so a reveal that never closes is a
+ * failure rather than a hang. Headless, with no canvas to lay it out on, the
+ * box pages its text a few words at a time, so the bound is per word.
+ */
+const REVEAL_PRESSES_PER_WORD = 2;
+const REVEAL_MAX_PRESSES =
+  wardenReveal(true)
+    .flatMap((line) => ('paragraphs' in line ? line.paragraphs : []))
+    .join(' ')
+    .split(/\s+/).length * REVEAL_PRESSES_PER_WORD;
+
+/**
+ * 8c. A party whole again at `ascent` comes up onto the cattery to the
+ * Warden's reveal, not the fight: the questline moves to `ritual`, the
+ * Warden stands held in the circle while it speaks, and reading the reveal to
+ * its end is what starts the fight, on its music.
+ */
+function checkRevealPath(): void {
+  const rig = ritualRig([], 'ascent');
+  const { ritual, progress } = rig;
+  const arrivedAt = phaseOf(progress);
   check(
-    played.size > 0,
-    `no sound cue was found in ${FIGHT_SOURCES.join(' or ')}, so the coverage check below proved nothing`,
+    arrivedAt === 'ritual',
+    `arriving at ascent left the questline at "${arrivedAt}", not "ritual"`,
   );
-  const silent = [...played].filter((id) => !loadedOnFloorThree.has(id));
+  check(ritual.isDialogOpen, 'arriving at ascent opened no reveal');
+  check(ritual.lichBattle === null, 'the fight started under the reveal');
+  const warden = ritual.wardenMob;
+  check(warden !== null, 'arriving at ascent raised no Warden');
+  check(warden?.aiHeld === true, 'the Warden was free to act while it spoke');
+  let presses = 0;
+  while (ritual.isDialogOpen && presses < REVEAL_MAX_PRESSES) {
+    ritual.advanceDialog();
+    presses++;
+  }
+  check(!ritual.isDialogOpen, `the reveal was still open after ${presses} presses`);
+  const battle = ritual.lichBattle;
+  check(battle !== null, 'reading the reveal to its end never started the fight');
+  const finaleClaims = rig.claims.filter((claim) => claim.owner === 'tower_finale').length;
   check(
-    silent.length === 0,
-    `${silent.join(', ')} played by the tower fight but never preloaded on its own floor — those beats are silent`,
+    finaleClaims === 1,
+    `the reveal and fight claimed the finale ${finaleClaims} times, not once`,
   );
+  battle?.dispose();
+}
+
+/**
+ * 8b. The circle against the room. The walls of fire are born on the first
+ * row from which every column runs clear to the south wall, so a pillar at or
+ * below it is a hole in a wave nobody can stand in; and every pillar has a
+ * tile beside it to be worked from, on the floor the party arrived on.
+ */
+function checkBindingGeometry(): void {
+  const rig = ritualRig([]);
+  const battle = rig.ritual.lichBattle;
+  check(
+    battle !== null,
+    'the fight never started, so the circle was never measured against the room',
+  );
+  if (battle === null) return;
+  const band = battle.waveBand;
+  const pillars = battle.pillarSpots.map((pillar) => pillar.tile);
+  check(
+    pillars.length === TOWN_CAT_IDS.length,
+    `the circle has ${pillars.length} pillars to measure, not ${TOWN_CAT_IDS.length}`,
+  );
+  const inTheFire = pillars.filter((tile) => tile.row >= band.firstRow);
+  check(
+    inTheFire.length === 0,
+    `${inTheFire.length} binding pillar(s) stand at or below row ${band.firstRow}, where the walls of fire are born`,
+  );
+
+  const reachable = walkableFrom(rig.map, rig.landing);
+  const stranded = battle.pillarSpots.filter((pillar) => {
+    return !pillar.spots.some((spot) => reachable.has(tileKeyOf(spot)));
+  });
+  check(
+    stranded.length === 0,
+    `${stranded.length} pillar(s) have no tile beside them to be worked from that the party can walk to`,
+  );
+  battle.dispose();
 }
 
 // ─────────────────────────────────────── 8: the whole fight, end to end
 //
 // Every check above measures one rule in isolation. This one plays the
-// encounter: a party walks into the magistrate's office, fights the Lich
-// through all four phases under the same gates a real player is held to — the
-// firewall's two-tile strike range, the tantrum's dodge clock, the daze count —
-// and the run is only green if the fight can actually be finished. A phase
-// nobody can leave is the one failure the isolated rules cannot see.
+// encounter: the questline stands at `ritual`, the party comes up onto the
+// cattery with every town cat still bound to its pillar, and fights the
+// Warden through the binding and all four phases after it under the same gates
+// a real player is held to — the circle's shield, the firewall's two-tile
+// strike range, the tantrum's dodge clock, the daze count — and the run is
+// only green if the fight can actually be finished. A phase nobody can leave
+// is the one failure the isolated rules cannot see. The player steers the
+// human; the cat is the companion, and unbinds the pillars on her own.
 //
 // It is played over several streams, because whether the companion is ever
 // caught by the rain turns on where she happens to be standing when an orb
@@ -871,6 +1399,9 @@ const WHOLE_FIGHT_STREAMS = 8;
 const FIRE_PROBE_ROWS_AHEAD = 2;
 
 await loadGameSpritesInNode();
+checkRitualOpenings();
+checkRevealPath();
+checkBindingGeometry();
 for (let stream = 0; stream < WHOLE_FIGHT_STREAMS; stream++) {
   const failuresBefore = failures.length;
   const unseededRandom = Math.random;
@@ -886,62 +1417,29 @@ for (let stream = 0; stream < WHOLE_FIGHT_STREAMS; stream++) {
 }
 
 function playWholeFight(stream: number): void {
-  // Derived, not written down: the confrontation lives on the tower's last
-  // storey, and a gate that hardcoded the number would quietly generate and
-  // measure a different room the day the tower grew a floor.
-  const TOWER_TOP_FLOOR = TOWER_FLOOR_COUNT - 1;
-  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('tower', TOWER_TOP_FLOOR, 'taloncrest_tower', false);
+  const rig = ritualRig([]);
+  const { map, human, cat, roster, companion, ritual, progress, context } = rig;
 
-  const arrival = map._interiorStairDownTiles[0] ?? map.startTile;
-  const human = new HumanPlayer(arrival.x, arrival.y + 1, TILE_SIZE);
-  const cat = new CatPlayer(arrival.x + 1, arrival.y + 1, TILE_SIZE);
-  human.isActive = true;
-  cat.isActive = false;
-
-  const roster = new MobRoster(map, new SpellSystem());
-  const spawned: Mob[] = [];
-  const progress = createMurderQuestProgress();
-  // Straight into the Lich: Miss Quill's half of the room is the same fight it
-  // has always been, and it has its own coverage in `verify:interiors`.
-  progress.stage = 'quill_slain';
-  const doomsday = createDoomsdayProgress();
-  const companion = new CompanionSystem(map, arrival.x, arrival.y);
-  const confrontation = new QuillConfrontationSystem(
-    map,
-    new EventBus(),
-    (mob) => {
-      spawned.push(mob);
-      roster.add(mob);
-    },
-    progress,
-    null,
-    doomsday,
-    partyLevelOf(human.level, cat.level),
-    companion,
-    new Conversation(null),
-  );
-
-  const lich = spawned.find((mob) => mob.displayName === 'The Lich') ?? null;
-  check(lich !== null, 'the confrontation puts the Lich in the room');
+  const lich = ritual.wardenMob;
+  check(lich !== null, 'the ritual puts the Warden in the room');
+  const farCornerTile =
+    findNearbyWalkableTile(
+      map,
+      (map.structure[0]?.length ?? 0) - 2,
+      map.structure.length - 2,
+      STANDING_SEARCH_RADIUS_TILES,
+    ) ?? map.startTile;
+  const farCorner: TilePos = { col: farCornerTile.x, row: farCornerTile.y };
 
   // A permanent damage-over-time, applied before the first phase change and
   // never removed. This is the shape of the worst thing a real build can do to
   // this fight: a DoT ticks through the scripted slides that open every phase,
-  // where the player has no control and the phase logic is not running. Without
-  // it the harness plays too politely to ever land a blow in one of those
-  // windows, and the checks below would pass without ever being tested.
+  // where the player has no control and the phase logic is not running, and
+  // through the whole of the binding, where the circle is meant to refuse it.
+  // Without it the harness plays too politely to ever land a blow in one of
+  // those windows, and the checks below would pass without ever being tested.
   if (lich !== null) lich.applyStatus(makePoison(human, LASTING_POISON_TICKS));
 
-  const context: SystemContext = {
-    human,
-    cat,
-    active: human,
-    inactive: cat,
-    activeIsMoving: false,
-    roster,
-    gameMap: map,
-  };
   const mobLoop = new MobUpdateLoop();
 
   /** One crawler's swing, in the harness. Small, so no phase is skipped by a spike. */
@@ -993,10 +1491,36 @@ function playWholeFight(stream: number): void {
   let leaveFloorKeptGrid = false;
   let barksProbed = 0;
   let barkHaltBreaches = 0;
+  let bindingFrames = 0;
+  let pillarsAtStart = -1;
+  let lichHpLostInBinding = 0;
+  let catChannelFrames = 0;
+  const carrierPillarsSeen = new Set<string>();
+  let carrierLeft = false;
+  let carrierOnWorkedPillarFrames = 0;
+  let ordersOntoThreatenedGround = 0;
+  let companionHeldBackFrames = 0;
+  /**
+   * The spare probe: while the cat works a pillar, the human is stood in the
+   * far corner, so she is the nearer target by far, and the Lich is watched
+   * for turning on her.
+   */
+  let spareProbeFrames = 0;
+  let spareProbeSettled = false;
+  let spareBreaches = 0;
+  const SPARE_PROBE_FRAMES = 90;
+  /** Frames into the probe before the Lich's choice of target is read, so the choice it made before the probe has gone. */
+  const SPARE_PROBE_SETTLE_FRAMES = 10;
+  let faultInjected = false;
   /** Frames of update pushed at the fight with a bark up — a phase clock would move. */
   const BARK_HALT_PROBE_FRAMES = 120;
-  /** A one-line bark never needs more than skip-reveal plus turn-the-page. */
-  const BARK_MAX_TURNS_PER_PAGE = 4;
+  /**
+   * Presses that close any one bark. Headless, with no canvas to lay it out
+   * on, the box pages a bark a few words at a time, and each page takes a
+   * skip-reveal and a turn: the bound is per word of the longest line a bark
+   * can say, with room to spare.
+   */
+  const BARK_MAX_TURNS = 256;
   let swingsThatFoundTheLich = 0;
   let swingsThatMissedTheGrid = 0;
   /** Damage the party took, per phase, so a hazard that stopped biting is visible. */
@@ -1019,7 +1543,7 @@ function playWholeFight(stream: number): void {
   const gapStandableOnStorey = (gapStart: number, band: LichWaveBand): boolean => {
     for (let col = gapStart; col < gapStart + CONTRACT.gapWidthTiles; col++) {
       for (let row = band.firstRow; row <= band.lastRow; row++) {
-        if (!map.isWalkable(col, row)) return false;
+        if (!map.isWalkable(col, row, 'walker')) return false;
       }
     }
     return true;
@@ -1159,7 +1683,7 @@ function playWholeFight(stream: number): void {
     const dy = targetY - human.y;
     const length = Math.hypot(dx, dy);
     if (length < PLAYER_SPEED) return;
-    const battle = confrontation.lichBattle;
+    const battle = ritual.lichBattle;
     const fromX = human.x;
     const fromY = human.y;
     const wasMarked = (battle?.getHazardEscapeVector(fromX, fromY) ?? null) !== null;
@@ -1176,10 +1700,10 @@ function playWholeFight(stream: number): void {
     const nextY = human.y + dy * PLAYER_SPEED;
     // Axis by axis, so a diagonal into a corner still slides along the wall the
     // way `applyMovement` lets a real player slide.
-    if (map.isWalkable(Math.round(nextX / TILE_SIZE), Math.round(human.y / TILE_SIZE))) {
+    if (map.isWalkable(Math.round(nextX / TILE_SIZE), Math.round(human.y / TILE_SIZE), 'walker')) {
       human.x = nextX;
     }
-    if (map.isWalkable(Math.round(human.x / TILE_SIZE), Math.round(nextY / TILE_SIZE))) {
+    if (map.isWalkable(Math.round(human.x / TILE_SIZE), Math.round(nextY / TILE_SIZE), 'walker')) {
       human.y = nextY;
     }
   };
@@ -1189,7 +1713,7 @@ function playWholeFight(stream: number): void {
 
     // The world is halted while a bark is on screen, and the only thing that
     // moves is the player turning the page.
-    if (confrontation.isDialogOpen) {
+    if (ritual.isDialogOpen) {
       // Once, before turning the first page: prove the fight holds still on its
       // own account rather than because the scene remembered to stop calling it.
       // The scene's early return is one list; the system's own guard is the
@@ -1200,19 +1724,19 @@ function playWholeFight(stream: number): void {
       // the page would have looked identical. The wave list and the hazard field
       // both advance every frame the firewall is live, and the tantrum's
       // objective line carries a countdown.
-      const beforeBark = describeFightState(confrontation);
+      const beforeBark = describeFightState(ritual);
       for (let probe = 0; probe < BARK_HALT_PROBE_FRAMES; probe++) {
-        confrontation.update(context);
+        ritual.update(context, CATTERY_STOREY);
       }
       barksProbed++;
-      if (describeFightState(confrontation) !== beforeBark) barkHaltBreaches++;
-      // Two presses, same frame: the first skips the sentence reveal instead of
-      // closing the page, and only the second actually turns it — the harness
-      // has to spend both here or the reveal's own frames would leak into the
+      if (describeFightState(ritual) !== beforeBark) barkHaltBreaches++;
+      // Every press the bark takes, same frame: each page's first press skips
+      // the sentence reveal and only the second turns it — the harness has to
+      // spend them all here or the reveal's own frames would leak into the
       // phase-timing budget below.
       let turnsSpent = 0;
-      while (confrontation.isDialogOpen && turnsSpent < BARK_MAX_TURNS_PER_PAGE) {
-        confrontation.advanceDialog();
+      while (ritual.isDialogOpen && turnsSpent < BARK_MAX_TURNS) {
+        ritual.advanceDialog();
         turnsSpent++;
       }
       barksRead++;
@@ -1225,8 +1749,8 @@ function playWholeFight(stream: number): void {
     // not a contrived case — it is what a real party with a burn on the boss
     // does every single time a phase changes. Banked and then spent by the
     // phase that opens, it skipped the entire firewall gauntlet.
-    const lockRose = confrontation.playerLocked && !wasPartyLocked;
-    wasPartyLocked = confrontation.playerLocked;
+    const lockRose = ritual.playerLocked && !wasPartyLocked;
+    wasPartyLocked = ritual.playerLocked;
     if (lockRose && lich.isAlive) {
       // Measured across the call, not against maximum health: a poison tick has
       // the Lich below maximum from the first second, so "is it hurt?" is true
@@ -1242,9 +1766,15 @@ function playWholeFight(stream: number): void {
       lich.takeDamageFrom(HARNESS_HIT_DAMAGE, human, 'melee');
       if (lich.hp < hpBeforeBlow) hitsLandedUnderLock++;
     }
-    const battle = confrontation.lichBattle;
+    const battle = ritual.lichBattle;
+    const lichHpAtFrameStart = lich.hp;
+    const frameOpenedBound = battle?.phase === 'binding';
     if (battle !== null) {
       lastLiveBattle = battle;
+      if (FAULT !== null && !faultInjected) {
+        faultInjected = true;
+        injectDriverFault(lich, battle);
+      }
       const phase = battle.phase;
       battlePhaseThisFrame = phase;
       const isDazed = battle.objectiveLine.startsWith('The Lich is spent');
@@ -1268,8 +1798,8 @@ function playWholeFight(stream: number): void {
       // for the very code that check exists to test.
       if (lockRose && phase === 'tantrum' && !leaveFloorProbed) {
         leaveFloorProbed = true;
-        confrontation.leaveFloor(context);
-        leaveFloorReleasedLock = !confrontation.playerLocked;
+        ritual.leaveFloor(context);
+        leaveFloorReleasedLock = !ritual.playerLocked;
         // Looked up, not struck: a blow here would be banked and then spent as
         // the firewall's own "the player reached it" transition, and the probe
         // would skip the phase it is standing in.
@@ -1279,6 +1809,26 @@ function playWholeFight(stream: number): void {
       // un-parked companion is walking north into a room that is about to be on
       // fire, and excluding those frames excludes the thing the opening order
       // exists to prevent.
+      if (phase === 'binding') {
+        bindingFrames++;
+        if (pillarsAtStart < 0) pillarsAtStart = battle.litPillars.size;
+        const working = battle.channellingPillar;
+        if (working !== null) catChannelFrames++;
+        const carrierPillar = battle.carrierPillar;
+        if (carrierPillar !== null) carrierPillarsSeen.add(carrierPillar);
+        if (carrierPillar !== null && working === carrierPillar) carrierOnWorkedPillarFrames++;
+        // The order, not where she ends up: her hazard escape rescues a
+        // companion sent onto threatened ground, which is exactly what makes
+        // the outcome a poor witness for whether the order was right.
+        const spot = battle.companionSpotOrder;
+        if (battle.companionHeldBack) companionHeldBackFrames++;
+        else if (spot !== null) {
+          const threatened =
+            battle.getHazardEscapeVector(spot.col * TILE_SIZE, spot.row * TILE_SIZE) !== null;
+          if (threatened) ordersOntoThreatenedGround++;
+        }
+      }
+      if (battle.carrierStage === 'gone') carrierLeft = true;
       if (phase === 'firewall') {
         // The planner honouring a usability test is checked in isolation above.
         // This is the other half: that the fight hands it a correct one, on the
@@ -1333,7 +1883,7 @@ function playWholeFight(stream: number): void {
       if (phasesSeen[phasesSeen.length - 1] !== phase) phasesSeen.push(phase);
       framesInPhase.set(phase, (framesInPhase.get(phase) ?? 0) + 1);
 
-      if (!confrontation.playerLocked) {
+      if (!ritual.playerLocked) {
         // A grounded Lich is charged, not danced around. The window is three
         // seconds long and it is the only one in the phase, so a player runs at
         // it and stops dodging — which is also what makes "everything still in
@@ -1399,6 +1949,23 @@ function playWholeFight(stream: number): void {
         else swingsThatMissedTheGrid++;
       }
 
+      // Once, on purpose: while the cat works a pillar, stand the human in the
+      // far corner, so the cat is much the nearer target, and watch the Lich
+      // keep its back to her. A probe rather than a count, because with the
+      // human fighting at its side the Lich would choose the human anyway,
+      // and a rule that is never asked anything cannot fail.
+      if (phase === 'binding' && !spareProbeSettled) {
+        if (battle.channellingPillar === null) spareProbeFrames = 0;
+        else {
+          spareProbeFrames++;
+          human.x = farCorner.col * TILE_SIZE;
+          human.y = farCorner.row * TILE_SIZE;
+          const settled = spareProbeFrames > SPARE_PROBE_SETTLE_FRAMES;
+          if (settled && lich.currentTarget === cat) spareBreaches++;
+          if (spareProbeFrames >= SPARE_PROBE_FRAMES) spareProbeSettled = true;
+        }
+      }
+
       // Once, on purpose: stand the player under a falling orb and hold them
       // there until it lands. Watching for a hit to happen by itself is not a
       // measurement — "nobody was hurt" is equally what a rain that stopped
@@ -1449,7 +2016,7 @@ function playWholeFight(stream: number): void {
           const standCol = Math.round(human.x / TILE_SIZE);
           let bestCol: number | null = null;
           for (let col = 0; col < (map.structure[row]?.length ?? 0); col++) {
-            if (!columnBurns(col, wave.gapStart) || !map.isWalkable(col, row)) continue;
+            if (!columnBurns(col, wave.gapStart) || !map.isWalkable(col, row, 'walker')) continue;
             if (bestCol === null || Math.abs(col - standCol) < Math.abs(bestCol - standCol)) {
               bestCol = col;
             }
@@ -1526,16 +2093,21 @@ function playWholeFight(stream: number): void {
 
     companion.update(context);
     mobLoop.update(context);
-    confrontation.update(context);
+    ritual.update(context, CATTERY_STOREY);
     for (const mob of roster.mobs) mob.tickTimers();
 
+    if (frameOpenedBound && lich.hp < lichHpAtFrameStart) {
+      lichHpLostInBinding += lichHpAtFrameStart - lich.hp;
+    }
     if (lichDefeatedAtFrame < 0 && !lich.isAlive) lichDefeatedAtFrame = framesSpent;
-    if (stageOf(progress) === 'lich_slain') break;
+    if (phaseOf(progress) === 'aftermath') break;
   }
   mobLoop.dispose();
   console.log(
     `fight stream ${stream}: ${phasesSeen.join(' → ')} in ${framesSpent} frames ` +
-      `(firewall ${framesInPhase.get('firewall') ?? 0}, tantrum ${framesInPhase.get('tantrum') ?? 0}), ` +
+      `(binding ${bindingFrames}, firewall ${framesInPhase.get('firewall') ?? 0}, tantrum ${framesInPhase.get('tantrum') ?? 0}), ` +
+      `${pillarsAtStart} pillars lit, the carrier on ${[...carrierPillarsSeen].join('/') || 'none'}, ` +
+      `the companion held off her pillar ${companionHeldBackFrames} frame(s); ` +
       `${barksRead} bark pages read, ${Math.max(0, firewallLocks - 1)} firewall reset(s); ` +
       `${landedOrbsMeasured} orbs landed, nearest ${closestOrbImpactTiles.toFixed(2)} tiles from the companion, ` +
       `who ended at (${cat.x.toFixed(1)}, ${cat.y.toFixed(1)}) px`,
@@ -1546,8 +2118,47 @@ function playWholeFight(stream: number): void {
     `the Lich survived ${FIGHT_FRAME_BUDGET} frames of being fought, so some phase cannot be left`,
   );
   check(
-    phasesSeen.join(' → ') === 'onslaught → firewall → tantrum → reckoning',
-    `the fight ran through ${phasesSeen.join(' → ')}, not all four phases in order`,
+    phasesSeen.join(' → ') === 'binding → onslaught → firewall → tantrum → reckoning',
+    `the fight ran through ${phasesSeen.join(' → ')}, not the binding and all four phases in order`,
+  );
+
+  // The binding, fought rather than visited.
+  check(
+    pillarsAtStart === TOWN_CAT_IDS.length,
+    `${pillarsAtStart} pillars were lit with no cat let out, not ${TOWN_CAT_IDS.length}`,
+  );
+  check(
+    bindingFrames >= BINDING_CHANNEL_FRAMES,
+    `the binding lasted ${bindingFrames} frames, less than one pillar's ${BINDING_CHANNEL_FRAMES} frames of work — it was skipped, not fought`,
+  );
+  check(
+    catChannelFrames >= BINDING_CHANNEL_FRAMES,
+    `the cat worked a pillar for ${catChannelFrames} frames in all, less than the ${BINDING_CHANNEL_FRAMES} one pillar takes — she is not unbinding them`,
+  );
+  check(
+    lichHpLostInBinding === 0,
+    `the Lich lost ${lichHpLostInBinding} health while pillars of the circle were still lit — the circle does not shield it`,
+  );
+  check(
+    carrierPillarsSeen.size === 1,
+    `the carrier came for ${carrierPillarsSeen.size} pillar(s) over the binding, not one`,
+  );
+  check(carrierLeft, 'the carrier never flew back out of the observatory window');
+  check(
+    carrierOnWorkedPillarFrames === 0,
+    `the carrier was on the pillar the cat was working for ${carrierOnWorkedPillarFrames} frame(s)`,
+  );
+  check(
+    ordersOntoThreatenedGround === 0,
+    `the companion was ordered onto a channel spot the hazard field marks on ${ordersOntoThreatenedGround} frame(s) — the order and the flee rule disagree about her pillar`,
+  );
+  check(
+    spareProbeSettled,
+    'the spare probe never ran its length, so the Lich was never asked to choose',
+  );
+  check(
+    spareBreaches === 0,
+    `the Lich turned on the cat working a pillar on ${spareBreaches} frame(s) while the human stood to be fought`,
   );
   check(barksRead > 0, 'no phase ever opened a bark, so the transition beats never played');
   check(leaveFloorProbed, 'the leave-floor probe never ran, so it proved nothing');
@@ -1786,22 +2397,37 @@ function playWholeFight(stream: number): void {
     tantrumFrames >= DODGE_SURVIVAL_FRAMES,
     `the tantrum lasted ${tantrumFrames} frames, less than the ${DODGE_SURVIVAL_FRAMES} of clean dodging its daze is supposed to cost`,
   );
-  const finalStage = stageOf(progress);
+  const finalPhase = phaseOf(progress);
   check(
-    finalStage === 'lich_slain',
-    `the questline is at "${finalStage}" after the Lich fell, not "lich_slain"`,
+    finalPhase === 'aftermath',
+    `the questline is at "${finalPhase}" after the Warden fell, not "aftermath"`,
   );
   check(
-    doomsday.stage === 'containment',
-    `the Doomsday chain is at "${doomsday.stage}" after the fight, not "containment"`,
+    rig.fallenHookRuns() === 1,
+    `the aftermath hook ran ${rig.fallenHookRuns()} times after the Warden fell, not once`,
   );
-  check(doomsday.deadlineAt !== null, 'the containment deadline was never set');
+  const finaleStems = rig.claims
+    .filter((claim) => claim.owner === 'tower_finale')
+    .map((claim) =>
+      claim.selection.kind === 'stems' ? claim.selection.stem : claim.selection.kind,
+    );
+  // The leave-floor probe walks off the storey and the fight plays on as if
+  // the party came straight back, which claims the full mix again.
+  const expectedStems = [
+    'warden_ritual_battle_bound',
+    'warden_ritual_battle',
+    ...(leaveFloorProbed ? ['warden_ritual_battle'] : []),
+  ];
   check(
-    doomsday.crystalTile !== null,
-    'the crystal was never placed, so there is nothing to contain',
+    finaleStems.join(',') === expectedStems.join(','),
+    `the fight claimed ${finaleStems.join(', ') || 'nothing'}, not the bound stem, then the full mix once the circle broke${leaveFloorProbed ? ', then the full mix again on coming back up' : ''}`,
   );
   check(
-    confrontation.lichBattle === null,
+    rig.releases.includes('tower_finale'),
+    'the fight never let its music go after the Warden fell',
+  );
+  check(
+    ritual.lichBattle === null,
     'the battle system outlived the fight, so its hazards are still registered with the companion',
   );
 
@@ -1832,11 +2458,13 @@ function playWholeFight(stream: number): void {
 // ─────────────────────────────────────── report
 
 if (failures.length > 0) {
+  if (FAULT !== null) console.error(`fault injected: ${FAULT}`);
   console.error(`verify:lich — ${failures.length} failure(s)\n`);
   for (const failure of failures) console.error(`  ✗ ${failure}`);
   process.exit(1);
 }
 
+if (FAULT !== null) console.log(`fault injected: ${FAULT}`);
 console.log(
-  `verify:lich — all checks passed (${WAVES_SAMPLED} waves, ${ORB_FRAMES_SAMPLED} orb-rain frames, full phase sweep over ${WHOLE_FIGHT_STREAMS} streams)`,
+  `verify:lich — all checks passed (${WAVES_SAMPLED} waves, ${ORB_FRAMES_SAMPLED} orb-rain frames, the binding and every phase over ${WHOLE_FIGHT_STREAMS} streams)`,
 );

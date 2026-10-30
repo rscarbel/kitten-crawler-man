@@ -138,6 +138,11 @@ export const LANE_STREET = 59;
 export const COBBLE_STREET = 60;
 /** Tile type for the market plaza and civic terrace — large cut flagstones, walkable. */
 export const PLAZA_STONE = 61;
+/**
+ * The storm-drain grate on the Civic Terrace, two tiles wide, laid in the
+ * terrace's flagstone: walkable, and the door down into the sewer.
+ */
+export const STORM_DRAIN_GRATE = 189;
 
 /**
  * Tile type for a post-and-rail fence enclosing a yard or garden — not walkable.
@@ -808,11 +813,35 @@ export const LAB_STATION_PROP_TILE_TYPES: ReadonlyArray<number> = [
   LAB_STATION_LANTERN,
 ];
 
+// ── Climbers' footing ────────────────────────────────────────────────────────
+// Ground only a climber reaches: who may stand on each is declared in
+// `TILE_PASSABLE_BY` in `walkability.ts`.
+
+/**
+ * A ledge a cat stands on above the floor — a beam, a shelf top, a wall
+ * ledge. A walker cannot climb onto it; stepping between it and the floor is
+ * a hop. Low enough to see past.
+ */
+export const CAT_LEDGE = 190;
+/**
+ * A gap only a cat fits through — a vent, the gap under a door, a hole in a
+ * grille. A walker cannot pass; a cat squeezes through it at floor level.
+ */
+export const CAT_GAP = 191;
+
+/**
+ * A hole through a storey's floor where the boards have gone, or the open
+ * shaft a building's bells hang in: dark down to the storey below. Nobody
+ * stands on it, but a thing thrown or knocked off flies across it, and a
+ * board fallen over it is floor again.
+ */
+export const FLOOR_DROP = 192;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 189;
+export const TILE_TYPE_COUNT = 193;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -957,7 +986,7 @@ export type TileContent = {
   treeAnimFrame?: number;
   /**
    * Which way the river runs across a `FloorTypeValue.water` tile: one of the
-   * eight `FLOW_DIR_*` constants.
+   * eight indices into `FLOW_DIR_VECTORS`.
    *
    * Recorded by the river painter while it carves, and read by
    * `WaterAnimationSystem` to advect its highlights and foam. It lives on the
@@ -1055,19 +1084,9 @@ export const BRIDGE_AXIS_EAST_WEST = 0;
 export const BRIDGE_AXIS_NORTH_SOUTH = 1;
 
 /**
- * The eight compass directions a river tile can flow in, as indices into
- * `FLOW_DIR_VECTORS`. Screen coordinates, so south is +y.
+ * The eight compass directions a river tile can flow in, clockwise from east;
+ * a tile's flow direction is an index into this. Screen coordinates, so south is +y.
  */
-export const FLOW_DIR_E = 0;
-export const FLOW_DIR_SE = 1;
-export const FLOW_DIR_S = 2;
-export const FLOW_DIR_SW = 3;
-export const FLOW_DIR_W = 4;
-export const FLOW_DIR_NW = 5;
-export const FLOW_DIR_N = 6;
-export const FLOW_DIR_NE = 7;
-
-/** Unit vector per `FLOW_DIR_*` index, in the same order. */
 export const FLOW_DIR_VECTORS: ReadonlyArray<{ readonly x: number; readonly y: number }> = [
   { x: 1, y: 0 },
   { x: Math.SQRT1_2, y: Math.SQRT1_2 },
@@ -1107,7 +1126,7 @@ export function isDungeonWater(cell: TileContent | undefined): boolean {
 /** The deepest `waterDepth` a water tile records, in the river or on a dungeon floor. */
 export const MAX_WATER_DEPTH = 3;
 
-/** Packs a heading in radians into the nearest `FLOW_DIR_*` index. */
+/** Packs a heading in radians into the nearest `FLOW_DIR_VECTORS` index. */
 export function flowDirFromAngle(angleRadians: number): number {
   const octant = Math.round((angleRadians / (Math.PI * 2)) * FLOW_DIR_VECTORS.length);
   return ((octant % FLOW_DIR_VECTORS.length) + FLOW_DIR_VECTORS.length) % FLOW_DIR_VECTORS.length;

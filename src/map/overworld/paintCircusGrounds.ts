@@ -158,7 +158,7 @@ function leavesRimConnected(grid: TileGrid, footprint: ReadonlyArray<TilePoint>)
     }
     if (blocked.has(tileKey(tile)) || grid.isSolid(tile.x, tile.y)) return false;
     const type = grid.typeAt(tile.x, tile.y);
-    return type !== undefined && isWalkableTileType({ tileId: '', type });
+    return type !== undefined && isWalkableTileType({ tileId: '', type }, 'walker');
   };
   const beside: TilePoint[] = [];
   for (const tile of footprint) {

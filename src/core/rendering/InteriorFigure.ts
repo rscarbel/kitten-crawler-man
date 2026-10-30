@@ -9,5 +9,7 @@
  */
 export interface InteriorFigure {
   y: number;
+  /** The line it sorts on when that is not `y`: a body standing on furniture sorts below the furniture. */
+  readonly depthY?: number;
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void;
 }

@@ -125,7 +125,7 @@ export function paintInteriorMiniMap(
   rect: Rect,
   map: GameMap,
   active: { readonly x: number; readonly y: number },
-  companion: { readonly x: number; readonly y: number },
+  companion: { readonly x: number; readonly y: number } | null,
   objective: { readonly x: number; readonly y: number } | null = null,
 ): void {
   const mapW = map.structure[0]?.length ?? 1;
@@ -161,14 +161,16 @@ export function paintInteriorMiniMap(
       (entity.x + TILE_SIZE * TILE_CENTRE) / TILE_SIZE,
       (entity.y + TILE_SIZE * TILE_CENTRE) / TILE_SIZE,
     );
-  const companionAt = tileOf(companion);
-  ctx.fillStyle = MINIMAP_MARKER_COLORS.companion;
-  dot(
-    ctx,
-    companionAt.x,
-    companionAt.y,
-    Math.max(COMPANION_DOT_MIN, pxPerTile * COMPANION_DOT_TILES),
-  );
+  if (companion !== null) {
+    const companionAt = tileOf(companion);
+    ctx.fillStyle = MINIMAP_MARKER_COLORS.companion;
+    dot(
+      ctx,
+      companionAt.x,
+      companionAt.y,
+      Math.max(COMPANION_DOT_MIN, pxPerTile * COMPANION_DOT_TILES),
+    );
+  }
   const activeAt = tileOf(active);
   ctx.fillStyle = MINIMAP_MARKER_COLORS.player;
   dot(ctx, activeAt.x, activeAt.y, Math.max(PLAYER_DOT_MIN, pxPerTile * PLAYER_DOT_TILES));

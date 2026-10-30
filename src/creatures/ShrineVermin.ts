@@ -180,6 +180,6 @@ export class ShrineVermin extends Rat {
     const centreY = this.y + this.tileSize / 2;
     const tileX = Math.floor((centreX + headingX * lookahead) / this.tileSize);
     const tileY = Math.floor((centreY + headingY * lookahead) / this.tileSize);
-    return map.isWalkable(tileX, tileY);
+    return map.isWalkable(tileX, tileY, 'walker');
   }
 }

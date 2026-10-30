@@ -9,8 +9,7 @@ import type { TacticalMove } from './tactics/tacticalFrame';
 const KRASUE_HP = 9;
 const KRASUE_SPEED = 2.0;
 
-/** Also the ceiling the night-attack swarm's spawn ring must stay well under — see `MurderMysteryQuestSystem`. */
-export const AGGRO_RANGE_TILES = 8;
+const AGGRO_RANGE_TILES = 8;
 const ATTACK_RANGE_TILES = 0.9;
 const ATTACK_DAMAGE = 6;
 /** Frames between contact strikes (~1.3 s at 60 fps) — fast but no longer punishing. */

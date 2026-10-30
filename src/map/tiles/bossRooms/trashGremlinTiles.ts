@@ -79,7 +79,7 @@ const GRIME_NEIGHBOURS: Readonly<
 function banksGrime(structure: TileContent[][], tx: number, ty: number): boolean {
   const row = ty >= 0 && ty < structure.length ? structure[ty] : undefined;
   if (row === undefined || tx < 0 || tx >= row.length) return true;
-  return !isWalkableTileType(row[tx]);
+  return !isWalkableTileType(row[tx], 'walker');
 }
 
 /**
@@ -93,7 +93,7 @@ function heapRunsOnInto(structure: TileContent[][], tx: number, ty: number): boo
   const tile = row[tx];
   if (tile.type === TRASH_PILE) return true;
   if (tile.type === TRASH_TOWER || tile.type === TRASH_BAG) return false;
-  return !isWalkableTileType(tile);
+  return !isWalkableTileType(tile, 'walker');
 }
 
 /**

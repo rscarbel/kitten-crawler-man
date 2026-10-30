@@ -35,7 +35,7 @@ import { drawSharkFinSprite } from '../../sprites/sharkFinSprite';
 import type { DungeonWorldAction } from '../../scenes/dungeonWorldActions';
 import type { CutscenePoint } from '../cutscene/cutsceneCamera';
 import type { CutsceneScript, CutsceneStep } from '../cutscene/cutsceneSteps';
-import type { SystemContext } from '../GameSystem';
+import { type SystemContext, presentCrawlers } from '../GameSystem';
 import { MashInteraction, type MashInteractionDef, type MashPress } from '../MashInteraction';
 import type { BossRoomSealRule, DressingRenderable } from './BossRoomDressing';
 import {
@@ -1021,7 +1021,7 @@ export class FloodedPumpRoomSystem
    */
   private resolveBarrelHits(ctx: SystemContext): void {
     if (this.barrelPlace === 'stacked') return;
-    for (const attacker of [ctx.human, ctx.cat]) {
+    for (const attacker of presentCrawlers(ctx)) {
       if (!attacker.isAlive || !attacker.isAttackPeak()) continue;
       const centre = centreTilesOf(attacker);
       const reachTiles = (attacker.getMeleeRange() * BARREL_HIT_REACH_SHARE) / TILE_SIZE;
@@ -1051,7 +1051,7 @@ export class FloodedPumpRoomSystem
     for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
       for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
         if (dry.some((rect) => rectContainsTile(rect, x, y))) continue;
-        if (!isWalkableTileType(this.gameMap.structure[y][x])) continue;
+        if (!isWalkableTileType(this.gameMap.structure[y][x], 'walker')) continue;
         tiles.push({ x, y });
       }
     }

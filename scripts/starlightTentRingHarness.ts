@@ -47,7 +47,7 @@ export function standRing(
   }).bind(chests);
   const counts = { confirms: 0, exits: 0 };
   const exits = new InteriorExitFixtureSystem({
-    confirm: (leave) => {
+    confirm: (_destination, leave) => {
       counts.confirms++;
       leave();
     },

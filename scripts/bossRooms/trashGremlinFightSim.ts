@@ -127,7 +127,6 @@ function describeSource(source: DamageSource | undefined): string {
       return source.hazard ?? 'environmental';
     case 'status':
     case 'dynamite':
-    case 'doomsday':
     case 'wheelPenalty':
     case 'siege':
       return source.kind;
@@ -213,7 +212,7 @@ export function stageTrashGremlinFight(side: DoorSide): StagedTrashGremlinFight 
     human: crawler,
     cat,
     active: crawler,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,
@@ -280,12 +279,12 @@ class Chaser {
     const from = centreOf(crawler);
     const to = centreOf(quarry);
     let goal = to;
-    if (!map.hasWalkableLine(from.x, from.y, to.x, to.y)) {
+    if (!map.hasWalkableLine(from.x, from.y, to.x, to.y, 'walker')) {
       this.pathAge++;
       if (this.pathAge >= REPATH_INTERVAL_FRAMES) {
         const start = tileOf(crawler);
         const end = tileOf(quarry);
-        this.path = map.findPath(start.x, start.y, end.x, end.y, SIM_PATH_MAX_TILES);
+        this.path = map.findPath(start.x, start.y, end.x, end.y, 'walker', SIM_PATH_MAX_TILES);
         this.pathAge = 0;
       }
       const here = tileOf(crawler);

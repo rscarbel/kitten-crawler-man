@@ -4,6 +4,8 @@ import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import { ANY_TILE, type TileFilter } from '../map/findWalkableTile';
 import type { MobRoster } from './kits/SceneWorld';
+import type { CompanionRef, PartyPresence } from '../core/party/partySplit';
+import type { SystemContext } from './GameSystem';
 
 /**
  * A party-side creature that goes where the crawlers go: through a building's
@@ -17,6 +19,11 @@ import type { MobRoster } from './kits/SceneWorld';
 export interface CarriedCompanion {
   /** The live creature, or null when this companion is not out. */
   readonly body: Mob | null;
+  /**
+   * Whether the crawler it follows is on this map. A split party's away group
+   * keeps its companions where it left them; only the live group's are carried.
+   */
+  readonly followsLiveGroup: boolean;
   /**
    * Where it should stand on `map` beside the crawler it follows, among the
    * tiles `isAcceptable` admits, or null when there is nowhere it could stand
@@ -35,6 +42,32 @@ export interface CarriedCompanion {
    * `mobs` — the roster it now stands in — from here on.
    */
   onPlaced(mobs: Mob[]): void;
+}
+
+/** Which crawler a party companion follows this frame, as the split's presence decides it. */
+export type CompanionLeader =
+  | { readonly kind: 'together' }
+  | { readonly kind: 'away' }
+  | { readonly kind: 'group'; readonly crawler: SystemContext['active'] };
+
+/**
+ * While the party is split, a companion follows its own group: the steered
+ * crawler when that crawler is in the group, else the group's first. It is
+ * `away` when its group is on another map, and `together` (the caller picks)
+ * while the party is whole.
+ */
+export function companionLeader(
+  presence: PartyPresence,
+  companion: CompanionRef,
+  ctx: Pick<SystemContext, 'active' | 'human' | 'cat'>,
+): CompanionLeader {
+  if (!presence.companionIsPresent(companion)) return { kind: 'away' };
+  const groupCrawlers = presence.crawlersWithCompanion(companion);
+  if (groupCrawlers === null) return { kind: 'together' };
+  const steeredKind = ctx.active === ctx.human ? 'human' : 'cat';
+  if (groupCrawlers.includes(steeredKind)) return { kind: 'group', crawler: ctx.active };
+  if (groupCrawlers.length === 0) return { kind: 'away' };
+  return { kind: 'group', crawler: groupCrawlers[0] === 'human' ? ctx.human : ctx.cat };
 }
 
 /** What a building is told, at the door, about the companions coming in. */
@@ -96,7 +129,7 @@ export function carryCompanions(
 ): void {
   for (const companion of companions) {
     const body = companion.body;
-    if (body === null) continue;
+    if (body === null || !companion.followsLiveGroup) continue;
     const landing = companion.landingTile(map, isAcceptable);
     if (landing === null) {
       companion.putAway(from.mobs, from.grid);
@@ -106,8 +139,7 @@ export function carryCompanions(
     const previousX = body.x;
     const previousY = body.y;
     if (from === to) {
-      body.x = landing.x * TILE_SIZE;
-      body.y = landing.y * TILE_SIZE;
+      body.placeAt(landing.x * TILE_SIZE, landing.y * TILE_SIZE);
       from.grid.move(body, previousX, previousY);
     } else {
       // Removed before the move: the grid finds an entry by the position it was
@@ -115,8 +147,7 @@ export function carryCompanions(
       from.grid.remove(body);
       const index = from.mobs.indexOf(body);
       if (index >= 0) from.mobs.splice(index, 1);
-      body.x = landing.x * TILE_SIZE;
-      body.y = landing.y * TILE_SIZE;
+      body.placeAt(landing.x * TILE_SIZE, landing.y * TILE_SIZE);
       to.add(body);
     }
     companion.onPlaced(to.mobs);

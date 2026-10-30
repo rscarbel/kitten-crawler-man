@@ -189,7 +189,7 @@ export class TownPropSystem implements GameSystem {
       const key = tileKey(tile.x, tile.y);
       if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
       if (this.doorwayKeepClear.has(key)) continue;
-      if (!this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y)) continue;
+      if (!this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y, 'walker')) continue;
       this.occupied.add(key);
       return tile;
     }
@@ -334,6 +334,11 @@ export class TownPropSystem implements GameSystem {
     if (this.fortuneTellerProp !== null) this.fortuneTellerProp.markerState = state;
   }
 
+  /** The plaza notice board's tile, or null in a town without one. */
+  get noticeBoardTile(): TileXY | null {
+    return this.board?.tile ?? null;
+  }
+
   /** Sets the plaza notice board's overhead beacon/glyph; a prop, so like Voss it has no `markerType` of its own. */
   setNoticeBoardMarker(state: QuestMarkerState): void {
     if (this.board !== null) this.board.markerState = state;
@@ -400,7 +405,7 @@ export class TownPropSystem implements GameSystem {
           const key = tileKey(tx, ty);
           if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
           if (this.doorwayKeepClear.has(key)) continue;
-          if (this.gameMap.isWalkableIgnoringPermanent(tx, ty)) return { x: tx, y: ty };
+          if (this.gameMap.isWalkableIgnoringPermanent(tx, ty, 'walker')) return { x: tx, y: ty };
         }
       }
     }

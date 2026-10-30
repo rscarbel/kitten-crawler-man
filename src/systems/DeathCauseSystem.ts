@@ -78,7 +78,6 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   Lion: 'lion',
   Elf: 'elf',
   DireBear: 'direBear',
-  MissQuill: 'missQuill',
   ShieldFairy: 'shieldFairy',
   HealingFairy: 'healingFairy',
   NecroFairy: 'necroFairy',
@@ -92,7 +91,6 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
  */
 export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
-  if (source.kind === 'doomsday') return 'doomsdayExplosion';
   if (source.kind === 'siege') return 'siegeFriendlyFire';
   if (source.kind === 'scripted') return SCRIPTED_DEATHS[source.death].cause;
   // A wheel penalty stops at 1 HP, so it is never the blow that killed.
@@ -108,6 +106,8 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (source.hazard === 'lichFirewall') return 'lichFirewall';
     if (source.hazard === 'lichOrb') return 'lichOrb';
     if (source.hazard === 'trashAvalanche') return 'trashAvalanche';
+    if (source.hazard === 'towerWard') return 'towerWard';
+    if (source.hazard === 'towerBell') return 'towerBell';
     return 'burningTree';
   }
 

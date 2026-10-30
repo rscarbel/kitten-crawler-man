@@ -161,7 +161,7 @@ function findOpenTile(radius: number, near: { x: number; y: number }): { x: numb
         let open = true;
         for (let oy = -radius; oy <= radius && open; oy++) {
           for (let ox = -radius; ox <= radius && open; ox++) {
-            if (!gameMap.isWalkable(cx + ox, cy + oy)) open = false;
+            if (!gameMap.isWalkable(cx + ox, cy + oy, 'walker')) open = false;
           }
         }
         if (open) return { x: cx, y: cy };
@@ -1127,7 +1127,7 @@ section('Converted allies');
     human: companionRig.human,
     cat: companionRig.cat,
     active,
-    inactive: active === companionRig.human ? companionRig.cat : companionRig.human,
+    partner: active === companionRig.human ? companionRig.cat : companionRig.human,
     activeIsMoving: false,
     roster: companionRig.roster,
     gameMap,
@@ -1221,7 +1221,7 @@ section('Converted allies');
     human: boltRig.human,
     cat: boltRig.cat,
     active: boltRig.human,
-    inactive: boltRig.cat,
+    partner: boltRig.cat,
     activeIsMoving: false,
     roster: boltRig.roster,
     gameMap,
@@ -1280,7 +1280,7 @@ section('Converted allies');
       human: crawler,
       cat: arena.cat,
       active: crawler,
-      inactive: arena.cat,
+      partner: arena.cat,
       activeIsMoving: false,
       roster: arena.roster,
       gameMap,

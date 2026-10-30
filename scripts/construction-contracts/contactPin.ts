@@ -373,7 +373,7 @@ function spotPressable(rig: SiegeRig, spotIndex: number, rect: TileRect): boolea
   if (system === null) return false;
   for (let y = rect.y - REACH_SEARCH_TILES; y < rect.y + rect.h + REACH_SEARCH_TILES; y++) {
     for (let x = rect.x - REACH_SEARCH_TILES; x < rect.x + rect.w + REACH_SEARCH_TILES; x++) {
-      if (!rig.map.isWalkable(x, y)) continue;
+      if (!rig.map.isWalkable(x, y, 'walker')) continue;
       rig.human.x = x * TILE_SIZE;
       rig.human.y = y * TILE_SIZE;
       rig.human.isMoving = false;

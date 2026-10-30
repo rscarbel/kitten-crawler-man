@@ -51,7 +51,11 @@ import { GameMap } from '../src/map/GameMap.js';
 import { TutorialMap } from '../src/map/TutorialMap.js';
 import { getLevelDef } from '../src/levels/index.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
-import { setDungeonFloorTheme, type DungeonFloorThemeId } from '../src/map/dungeon/floorTheme.js';
+import {
+  DUNGEON_FLOOR_THEME_IDS,
+  setDungeonFloorTheme,
+  type GeneratedFloorThemeId,
+} from '../src/map/dungeon/floorTheme.js';
 import { buildWallCaseStructure } from '../src/map/dungeon/wallCaseFixture.js';
 import { WALL_FACE_RISE_TILES, WALL_FADE_TILES } from '../src/map/dungeon/wallLight.js';
 import { drawTerrainTile } from '../src/map/tiles/terrainTiles.js';
@@ -69,7 +73,7 @@ const SEEDS_PER_FLOOR = 4;
 const FIRST_SEED = 101;
 const FLOORS: ReadonlyArray<{
   readonly level: DungeonFloorNumber;
-  readonly theme: DungeonFloorThemeId;
+  readonly theme: GeneratedFloorThemeId;
 }> = [
   { level: 1, theme: 'cellars' },
   { level: 2, theme: 'service_level' },
@@ -598,7 +602,7 @@ const BROKEN_PAINTERS: ReadonlyArray<{
   {
     name: "leaves the rock's dark top between a thin wall's slivers",
     check: 'thin',
-    structure: buildWallCaseStructure(),
+    structure: buildWallCaseStructure('cellars'),
     painter: (paintCtx, structure, type, sx, sy, ts, tx, ty) => {
       paintWall(paintCtx, structure, type, sx, sy, ts, tx, ty);
       if (!isThinTop(structure, tx, ty)) return;
@@ -626,9 +630,9 @@ for (const { name, check, painter, structure } of BROKEN_PAINTERS) {
   if (!caught) failed = true;
 }
 
-for (const theme of ['cellars', 'service_level'] as const) {
+for (const theme of DUNGEON_FLOOR_THEME_IDS) {
   setDungeonFloorTheme(theme);
-  report(`wall-case fixture, ${theme}`, sweep(paintWall, buildWallCaseStructure()));
+  report(`wall-case fixture, ${theme}`, sweep(paintWall, buildWallCaseStructure(theme)));
 }
 
 // The tutorial is a cellar walled right out to the map's edge, with no void

@@ -179,9 +179,9 @@ export function verifyScytheEvictionRecovery(check: Check): void {
   check(rig.quest.tryInteract(human), 'the human takes the scythe off the barn wall');
   check(rig.quest.guidance()?.kind === 'grain_field', 'with it held, guidance is the grain field');
 
-  human.inventory.addItem('doomsday_scenario', 1);
+  human.inventory.addItem('quest_prison_key', 1);
   check(
-    questSlotItem(human) === 'doomsday_scenario' && !rig.quest.scytheHeld,
+    questSlotItem(human) === 'quest_prison_key' && !rig.quest.scytheHeld,
     "another quest's item takes the slot and the scythe is gone",
   );
   const guidance = rig.quest.guidance();
@@ -209,7 +209,7 @@ export function verifyScytheEvictionRecovery(check: Check): void {
   check(questSlotItem(human) === 'quest_scythe', 'and it is back in the quest slot');
   check(
     rig.remarks.length === 1,
-    'taking it back evicts the crystal, which is not this quest’s to remark on',
+    'taking it back evicts the prison key, which is not this quest’s to remark on',
   );
   check(
     rig.state.blueprints.phase === 'harvest_grain' &&
@@ -235,7 +235,7 @@ export function verifyKnockedOutRemark(check: Check): void {
   }
   grantBlueprintsItem(rig.cat, 'quest_scythe');
   rig.cat.isKnockedOut = true;
-  rig.cat.inventory.addItem('doomsday_scenario', 1);
+  rig.cat.inventory.addItem('quest_prison_key', 1);
   check(
     rig.remarks.length === 1 &&
       rig.remarks[0].speaker === rig.human &&
@@ -264,7 +264,7 @@ export function verifyBlueprintsEvictionRecovery(check: Check): void {
     'with the blueprints held, guidance is the stations',
   );
 
-  cat.inventory.addItem('doomsday_scenario', 1);
+  cat.inventory.addItem('quest_prison_key', 1);
   check(!rig.quest.blueprintsHeld, "another quest's item takes the slot and the blueprints go");
   const guidance = rig.quest.guidance();
   check(
@@ -289,7 +289,7 @@ export function verifyBlueprintsEvictionRecovery(check: Check): void {
 
   wendellHandsBackBlueprints(check, rig, cat);
   check(questSlotItem(cat) === 'quest_blueprints', 'the cat holds the blueprints again');
-  check(rig.remarks.length === 1, 'the crystal they evicted draws no remark');
+  check(rig.remarks.length === 1, 'the prison key they evicted draws no remark');
   check(
     rig.state.blueprints.phase === 'build_stations' &&
       rig.state.blueprints.stationsUpgraded.saw &&

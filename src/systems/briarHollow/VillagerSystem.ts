@@ -1035,7 +1035,7 @@ export class VillagerSystem {
       (tile) =>
         navigator.isStandable(tile.x, tile.y) && !othersPosts.has(navigator.keyOf(tile.x, tile.y)),
       {
-        canStand: (tile) => this.deps.gameMap.isWalkable(tile.x, tile.y),
+        canStand: (tile) => this.deps.gameMap.isWalkable(tile.x, tile.y, 'walker'),
         talkRangeTiles: VILLAGER_TALK_RANGE_TILES,
       },
     );

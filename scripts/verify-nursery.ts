@@ -78,7 +78,7 @@ function soleGrateBuilderTile(): { x: number; y: number } {
         if (manhattan(tile, grate) !== reach) continue;
         const inRoom =
           x >= bounds.x && x < bounds.x + bounds.w && y >= bounds.y && y < bounds.y + bounds.h;
-        if (!inRoom || !gameMap.isWalkable(x, y)) continue;
+        if (!inRoom || !gameMap.isWalkable(x, y, 'walker')) continue;
         const rivalInReach = room.grateTiles.some(
           (other) => other !== grate && manhattan(tile, other) <= BUILD_REACH_TILES,
         );
@@ -108,7 +108,7 @@ function freshQuest() {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,

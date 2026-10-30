@@ -175,6 +175,7 @@ function buildScene(hire: MercenaryTemplateId | null, layout: SceneLayout): Scen
       : {
           id: hire,
           name: getMercenaryTemplate(hire).name,
+          terms: 'paid',
           contractLevelId: FLOOR,
           introduced: true,
         };
@@ -184,7 +185,7 @@ function buildScene(hire: MercenaryTemplateId | null, layout: SceneLayout): Scen
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
@@ -322,6 +323,7 @@ function buildSceneDeferred(id: MercenaryTemplateId, map: GameMap): Scene {
   scene.roster.active = {
     id,
     name: getMercenaryTemplate(id).name,
+    terms: 'paid',
     contractLevelId: FLOOR,
     introduced: true,
   };
@@ -335,7 +337,7 @@ function standsOn(merc: Mercenary, tileX: number, tileY: number): boolean {
 
 function standsOnFloor(map: GameMap, merc: Mercenary): boolean {
   const tile = tileOf(merc);
-  return map.isWalkable(tile.x, tile.y) && !map.isStairwellTile(tile.x, tile.y);
+  return map.isWalkable(tile.x, tile.y, 'walker') && !map.isStairwellTile(tile.x, tile.y);
 }
 
 /**
@@ -501,7 +503,7 @@ function spawnsOffTheStairwell(): { avoided: boolean; blindLandsOnIt: boolean } 
   // A ring search that admitted stairwells would stop at radius zero: the
   // requested tile is walkable, so it is the answer.
   const blindLandsOnIt =
-    map.isWalkable(behind.x, behind.y) && map.isStairwellTile(behind.x, behind.y);
+    map.isWalkable(behind.x, behind.y, 'walker') && map.isStairwellTile(behind.x, behind.y);
   const scene = buildSceneAround(
     'ivy_ashgrove',
     map,
@@ -1033,7 +1035,7 @@ function homecomingPastDeinonychus(
   built.cat.isActive = true;
   const scene: Scene = {
     ...built,
-    ctx: { ...built.ctx, active: built.cat, inactive: built.human },
+    ctx: { ...built.ctx, active: built.cat, partner: built.human },
   };
   scene.human.x = scene.cat.x - TILE_SIZE * from.x * DEINONYCHUS_HOMECOMING_HUMAN_OFFSET_TILES;
   scene.human.y = scene.cat.y - TILE_SIZE * from.y * DEINONYCHUS_HOMECOMING_HUMAN_OFFSET_TILES;

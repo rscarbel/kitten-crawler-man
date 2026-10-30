@@ -11,9 +11,7 @@ type FloorEncounterSlot =
 type QuestEncounterName =
   | 'spider'
   | 'defend'
-  | 'murder-mystery'
-  | 'quill-confrontation'
-  | 'cult-hideout'
+  | 'lodge-cellar'
   | 'stealth-key-snatch'
   | 'goblin-prison'
   | 'tutorial'
@@ -21,7 +19,10 @@ type QuestEncounterName =
   | 'escort-ambush'
   | 'starlight-tent-maze'
   | 'anchor-shrine'
-  | 'interior-hostiles';
+  | 'interior-hostiles'
+  | 'storm-drain'
+  | 'tower-ritual'
+  | 'tower-archive';
 
 /**
  * Which encounter a spawn belongs to. An encounter is the unit a kind ladder

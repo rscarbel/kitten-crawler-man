@@ -132,7 +132,7 @@ function makePlace(
     human: party.human,
     cat: party.cat,
     active: party.human,
-    inactive: party.cat,
+    partner: party.cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
@@ -302,6 +302,7 @@ function journey(worldSeed: number, options: JourneyOptions): StepReading[] {
   roster.active = {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
+    terms: 'paid',
     contractLevelId: level3.id,
     introduced: true,
   };

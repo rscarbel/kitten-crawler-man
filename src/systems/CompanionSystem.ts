@@ -1,4 +1,6 @@
 import type { GameMap } from '../map/GameMap';
+import type { ClimberFooting } from '../creatures/climberFooting';
+import type { MobilityClass } from '../map/mobility';
 import {
   TILE_SIZE,
   FOLLOWER_SPEED,
@@ -19,12 +21,14 @@ import {
   type HazardEscape,
 } from './GroundHazardSource';
 import type { BossRoomSystem } from './BossRoomSystem';
-import { PartyTrail, routeTrailBetween } from './partyTrail';
+import { PartyTrail, trailGroundOn } from './partyTrail';
 import { normalize, clamp, randomInt } from '../utils';
 
 type Entity = {
   x: number;
   y: number;
+  readonly mobility: MobilityClass;
+  readonly climbing: ClimberFooting | null;
   isMoving: boolean;
   facingX: number;
   facingY: number;
@@ -75,8 +79,11 @@ type CharStance = {
 };
 
 /**
- * A battle-scoped order to stand somewhere: where to stand, and whether to hold
- * fire while standing there.
+ * An order to stand somewhere and stay: where to stand, and whether to hold
+ * fire while standing there. A fight gives one to keep a companion on a safe
+ * spot; a room gives one to keep a companion's weight on a pressure plate.
+ * The crawler companion takes it through `CompanionSystem.setDirective`, a
+ * cat ally through `CatAllySystem.setDirective`.
  *
  * Coordinates are top-left world pixels — the same frame as `Player.x` /
  * `Player.y`, as the movement anchors this system keeps, and as the hazard
@@ -238,6 +245,8 @@ export class CompanionSystem implements GameSystem {
   private catWanderTimer = 0;
   private catKiteAngle = 0;
   private humanIdleFrames = 0;
+  /** Crawlers a cutscene is moving, whose feet and hands this drive leaves alone. */
+  private readonly heldForScript = new Set<HumanPlayer | CatPlayer>();
   private _followOverride = false;
 
   private humanEvasionAngle = Math.random() * Math.PI * 2;
@@ -327,6 +336,12 @@ export class CompanionSystem implements GameSystem {
     this.catStance.combatStance = stanceState.cat;
   }
 
+  /** While `held`, a cutscene owns `crawler`'s body and this drive neither walks nor swings it. */
+  holdForScript(crawler: HumanPlayer | CatPlayer, held: boolean): void {
+    if (held) this.heldForScript.add(crawler);
+    else this.heldForScript.delete(crawler);
+  }
+
   /**
    * Moves the companion onto a different map — a tower storey, reached by its
    * stairwell — and drops everything that only meant something on the last one.
@@ -342,6 +357,10 @@ export class CompanionSystem implements GameSystem {
    * do: the stairs already put the party back together, so a recall that was in
    * flight when they took them has nothing left to do. So does any standing
    * order: the tile it names is a tile on the floor they just left.
+   *
+   * The new map may hold a split party's live group of one crawler: the away
+   * crawler is left as it was, and the group's party companions (its hire,
+   * a cat ally) are what follow the steered one there.
    */
   setMap(gameMap: GameMap, human: HumanPlayer, cat: CatPlayer): void {
     this.gameMap = gameMap;
@@ -400,12 +419,18 @@ export class CompanionSystem implements GameSystem {
     this.clearDirective();
     human.autoTarget = null;
     cat.autoTarget = null;
-    this.humanStance.anchorX = human.x;
-    this.humanStance.anchorY = human.y;
-    this.catStance.anchorX = cat.x;
-    this.catStance.anchorY = cat.y;
-    this.catWanderTargetX = cat.x;
-    this.catWanderTargetY = cat.y;
+    // An away crawler's stance keeps the anchor it was left with: its position
+    // is on another map, and the stance is what it resumes with there.
+    if (!human.isAway) {
+      this.humanStance.anchorX = human.x;
+      this.humanStance.anchorY = human.y;
+    }
+    if (!cat.isAway) {
+      this.catStance.anchorX = cat.x;
+      this.catStance.anchorY = cat.y;
+      this.catWanderTargetX = cat.x;
+      this.catWanderTargetY = cat.y;
+    }
   }
 
   /**
@@ -421,7 +446,10 @@ export class CompanionSystem implements GameSystem {
     this.trail =
       spacingPx === null
         ? null
-        : new PartyTrail(spacingPx, (from, to) => routeTrailBetween(this.gameMap, from, to));
+        : new PartyTrail(
+            spacingPx,
+            trailGroundOn(() => this.gameMap),
+          );
   }
 
   /** The trail the follower is walking, when it is on one. */
@@ -641,10 +669,13 @@ export class CompanionSystem implements GameSystem {
     this.tickTargetBans();
 
     const companion = human.isActive ? cat : human;
+    // A split party's live group may hold one crawler and no crawler
+    // companion at all; its party companions follow that crawler on their own.
+    if (companion.isAway || this.heldForScript.has(companion)) return;
     // Encased in ice is handled like being knocked out: no step and no swing.
     // A companion that walked off while its block was still drawn around it
     // would read as a bug rather than a freeze.
-    if (companion.isKnockedOut || !companion.canAct) {
+    if (companion.isKnockedOut || !companion.canAct || companion.isCrossingFooting) {
       companion.isMoving = false;
       return;
     }
@@ -684,7 +715,11 @@ export class CompanionSystem implements GameSystem {
    */
   private companionMoveFactor = 1;
 
-  entityMoveWithCollision(entity: { x: number; y: number }, rawDx: number, rawDy: number): void {
+  entityMoveWithCollision(
+    entity: Pick<Entity, 'x' | 'y' | 'mobility' | 'climbing'>,
+    rawDx: number,
+    rawDy: number,
+  ): void {
     const dx = rawDx * this.companionMoveFactor;
     const dy = rawDy * this.companionMoveFactor;
     const mapPxW = (this.gameMap.structure[0]?.length ?? this.gameMap.structure.length) * TILE_SIZE;
@@ -699,8 +734,13 @@ export class CompanionSystem implements GameSystem {
       const tileYtop = Math.floor((entity.y + ts * COLLISION_BOX_TOP_FRACTION) / ts);
       const tileYbot = Math.floor((entity.y + ts * COLLISION_BOX_BOTTOM_FRACTION) / ts);
       if (
-        this.gameMap.isWalkable(tileXnext, tileYtop) &&
-        this.gameMap.isWalkable(tileXnext, tileYbot)
+        this.gameMap.isWalkable(tileXnext, tileYtop, entity.mobility) &&
+        this.gameMap.isWalkable(tileXnext, tileYbot, entity.mobility) &&
+        !this.crossesFooting(
+          entity,
+          tileXnext,
+          Math.floor((entity.y + ts * TILE_CENTER_OFFSET) / ts),
+        )
       ) {
         entity.x = nextX;
       }
@@ -714,12 +754,26 @@ export class CompanionSystem implements GameSystem {
       const tileXleft = Math.floor((entity.x + ts * COLLISION_BOX_LEFT_FRACTION) / ts);
       const tileXright = Math.floor((entity.x + ts * COLLISION_BOX_RIGHT_FRACTION) / ts);
       if (
-        this.gameMap.isWalkable(tileXleft, tileYnext) &&
-        this.gameMap.isWalkable(tileXright, tileYnext)
+        this.gameMap.isWalkable(tileXleft, tileYnext, entity.mobility) &&
+        this.gameMap.isWalkable(tileXright, tileYnext, entity.mobility) &&
+        !this.crossesFooting(
+          entity,
+          Math.floor((entity.x + ts * TILE_CENTER_OFFSET) / ts),
+          tileYnext,
+        )
       ) {
         entity.y = nextY;
       }
     }
+  }
+
+  /** Whether the follower's step is a hop or squeeze onto another footing, started in its place. */
+  private crossesFooting(
+    entity: Pick<Entity, 'x' | 'y' | 'climbing'>,
+    tileX: number,
+    tileY: number,
+  ): boolean {
+    return entity.climbing?.crossInto(entity, tileX, tileY) ?? false;
   }
 
   /** Clear line of sight between two entities, measured centre to centre. */
@@ -1247,7 +1301,7 @@ export class CompanionSystem implements GameSystem {
    * a companion visibly shaking on the rim of a rolling boss's range.
    */
   private stepUnlessIntoMarkedGround(
-    entity: { x: number; y: number },
+    entity: Pick<Entity, 'x' | 'y' | 'mobility' | 'climbing'>,
     dx: number,
     dy: number,
   ): boolean {
@@ -1310,7 +1364,7 @@ export class CompanionSystem implements GameSystem {
    * step was taken.
    */
   private stepAwayClearOfMarkedGround(
-    entity: { x: number; y: number },
+    entity: Pick<Entity, 'x' | 'y' | 'mobility' | 'climbing'>,
     awayX: number,
     awayY: number,
     speed: number,
@@ -1874,6 +1928,7 @@ export class CompanionSystem implements GameSystem {
         entity.y + ts * TILE_CENTER_OFFSET,
         targetX + ts * TILE_CENTER_OFFSET,
         targetY + ts * TILE_CENTER_OFFSET,
+        entity.mobility,
       );
 
     let moveNx = dx / dist;
@@ -1909,6 +1964,7 @@ export class CompanionSystem implements GameSystem {
           startTY,
           goalTX,
           goalTY,
+          entity.mobility,
           COMPANION_MAX_PATH_DISTANCE_TILES,
         );
         cached.path = raw.length > 1 ? raw.slice(1) : [];

@@ -205,7 +205,7 @@ function walkableInRow(
   toX: number,
 ): Probe | null {
   for (let x = fromX; x <= toX; x++) {
-    if (isWalkableTileType(gameMap.structure[row][x])) return { tx: x, ty: row };
+    if (isWalkableTileType(gameMap.structure[row][x], 'walker')) return { tx: x, ty: row };
   }
   return null;
 }

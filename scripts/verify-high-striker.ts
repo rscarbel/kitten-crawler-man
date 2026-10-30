@@ -190,14 +190,20 @@ function checkShutInSpot(kind: 'human' | 'cat'): void {
   }
   const pocket = { x: placed.rect.x - 1, y: placed.rect.y };
   const farSpot = { x: placed.rect.x + 1, y: placed.rect.y };
-  if (!site.map.isWalkable(pocket.x, pocket.y) || !walksToForecourt(site.map, grounds, farSpot)) {
+  if (
+    !site.map.isWalkable(pocket.x, pocket.y, 'walker') ||
+    !walksToForecourt(site.map, grounds, farSpot)
+  ) {
     failures.push(`seed ${SWING_SEED}: both striking spots must start open for the shut-in check`);
     return;
   }
   for (const step of SHUT_IN_NEIGHBOURS) {
     site.map.blockTilePermanently(pocket.x + step.dx, pocket.y + step.dy);
   }
-  if (!site.map.isWalkable(pocket.x, pocket.y) || walksToForecourt(site.map, grounds, pocket)) {
+  if (
+    !site.map.isWalkable(pocket.x, pocket.y, 'walker') ||
+    walksToForecourt(site.map, grounds, pocket)
+  ) {
     failures.push(
       `seed ${SWING_SEED}: the west striking spot is not a walkable dead end once shut in`,
     );

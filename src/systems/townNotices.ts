@@ -4,18 +4,19 @@
  * board in the town square. It is the board's analog to `townDialog.ts`:
  * citizens gossip about what the player has done, and the board posts the same
  * world state as concrete, actionable notices — an available quest reads as an
- * OPEN posting, an in-progress one as ACTIVE with the current objective, a
- * finished one as DONE, and a live doomsday countdown as a DANGER alert.
- * Briar Hollow's board shares Wendell's work order and adds the siege call.
+ * OPEN posting, an in-progress one as ACTIVE with the current objective, and a
+ * finished one as DONE. Briar Hollow's board shares Wendell's work order and
+ * adds the siege call as a DANGER alert.
  *
  * Pure data + selection: no rendering, no audio, no scene coupling. The owning
  * `TownPropSystem` / `NoticeBoard` supply the context and draw the result.
  */
 
-import type { MurderQuestStage } from '../core/quests/MurderQuestProgress';
-import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { BountyPhase } from '../core/quests/BountyProgress';
 import { asListItem, listed } from '../dialog/scripts/wendellContracts';
+import type { TownCatId } from '../core/state/townCatIds';
+import { TOWN_CATS } from './critters/TownCats';
+import { buildingDisplayName } from '../map/buildingIds';
 
 /** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → SOON → DONE. */
 export type NoticeTone = 'danger' | 'active' | 'available' | 'upcoming' | 'done';
@@ -28,13 +29,11 @@ export interface Notice {
 
 /** The quest flags that determine what the board posts. */
 export interface TownNoticeContext {
-  murder: MurderQuestStage;
-  /** How many of the three murder clues have been gathered so far. */
-  murderCluesFound: number;
-  doomsday: DoomsdayStage;
   /** Live bounty state, or null on maps with no notice board bounty (non-overworld). */
   bounty: BountyNoticeState | null;
   workOrder: WorkOrderNoticeState;
+  /** The town cats posted missing, one notice each; empty while nobody has put them up. */
+  missingCats: readonly TownCatId[];
 }
 
 /** Where Wendell's construction contracts stand, for the work-order posting on both boards. */
@@ -53,8 +52,6 @@ export interface BountyNoticeState {
   typeLabel: string | null;
 }
 
-export const TOTAL_MURDER_CLUES = 3;
-
 /** Board-ordering priority: the most urgent postings float to the top. */
 const TONE_PRIORITY: Record<NoticeTone, number> = {
   danger: 0,
@@ -66,81 +63,6 @@ const TONE_PRIORITY: Record<NoticeTone, number> = {
 
 function byTonePriority(a: Notice, b: Notice): number {
   return TONE_PRIORITY[a.tone] - TONE_PRIORITY[b.tone];
-}
-
-function murderNotice(ctx: TownNoticeContext): Notice | null {
-  const title = 'The Krasue Murders';
-  switch (ctx.murder) {
-    case 'not_started':
-      return {
-        title,
-        body: 'The town watch seeks anyone willing to look into a killing the guard cannot explain.',
-        tone: 'available',
-      };
-    case 'body_waiting':
-      return {
-        title,
-        body: 'A fresh body lies untended by the square. Someone should take a closer look before the trail goes cold.',
-        tone: 'available',
-      };
-    case 'investigation':
-      return {
-        title,
-        body: `Clues gathered: ${ctx.murderCluesFound}/${TOTAL_MURDER_CLUES}. Search the well, the victim's home, and the roost.`,
-        tone: 'active',
-      };
-    case 'night_attack':
-      return {
-        title,
-        body: 'Something hunts the streets after dark. Bar your doors — or take up arms and end it.',
-        tone: 'danger',
-      };
-    case 'cult_hideout':
-      return {
-        title,
-        body: 'The trail leads to a hidden den beyond the walls. Root out whoever shelters the killer.',
-        tone: 'active',
-      };
-    case 'confrontation':
-      return {
-        title,
-        body: 'The killer has a name at last, and the name has a patron. End the Krasue murders for good.',
-        tone: 'active',
-      };
-    case 'quill_slain':
-      return {
-        title,
-        body: 'Miss Quill has fallen — but something far worse rose in her place. The tower is not safe yet.',
-        tone: 'danger',
-      };
-    case 'lich_slain':
-    case 'complete':
-      return {
-        title,
-        body: 'The Krasue murders are over. The town sleeps a little easier tonight.',
-        tone: 'done',
-      };
-  }
-}
-
-function doomsdayNotice(ctx: TownNoticeContext): Notice | null {
-  switch (ctx.doomsday) {
-    case 'containment':
-      return {
-        title: 'SOUL CRYSTAL UNSTABLE',
-        body: 'The crystal in the tower is destabilizing. Reach it and contain the surge before the whole city is consumed.',
-        tone: 'danger',
-      };
-    case 'escape':
-      return {
-        title: 'CONTAINMENT FAILED',
-        body: 'There is no more time. Flee to the stairwell now, before the blast takes everyone with it.',
-        tone: 'danger',
-      };
-    case 'inactive':
-    case 'complete':
-      return null;
-  }
 }
 
 /**
@@ -218,6 +140,33 @@ export function workOrderNotice(state: WorkOrderNoticeState): Notice {
   }
 }
 
+/** What each owner wrote on their cat's notice. */
+const MISSING_CAT_DESCRIPTIONS = {
+  taloncrest_inn_cat: 'Fat ginger cat. Sleeps on the end of the bar. Never misses supper.',
+  taloncrest_old_lady_cottage_cat:
+    'Tiny and grey, with four white socks. Went out through a high window that nobody could climb to.',
+  taloncrest_apothecary_cat:
+    'Lean silver tabby, green eyes. Smells faintly of mint. The night she went, somebody left a dish of fish in our back room.',
+  taloncrest_flagon_tavern_cat:
+    'Broad black-and-white mouser, one torn ear. Will not be picked up.',
+  taloncrest_mill_farm_cat:
+    'Scruffy brown mill cat. Sleeps up on the millstones every night. Gone from them with the mill door bolted.',
+  taloncrest_smithy_cat:
+    'All black and always sooty, amber eyes. Likes the warm side of the forge.',
+  taloncrest_general_store_cat:
+    'Calico. Sits on the shop step all day. Taken from right outside the door.',
+} as const satisfies Record<TownCatId, string>;
+
+/** One missing cat's notice, signed with the house she was taken from. */
+function missingCatNotice(cat: TownCatId): Notice {
+  const def = TOWN_CATS[cat];
+  return {
+    title: `MISSING: ${def.displayName}`,
+    body: `${MISSING_CAT_DESCRIPTIONS[cat]} Bring word to ${buildingDisplayName(def.home)}.`,
+    tone: 'active',
+  };
+}
+
 const VILLAGE_SIEGE_NOTICE: Notice = {
   title: 'TO ARMS',
   body: 'The dead are at the palisade. Every pair of hands to the walls, and every pair of feet away from them.',
@@ -244,13 +193,12 @@ export function buildVillageNotices(ctx: VillageNoticeContext): Notice[] {
  * least the standing ruins bounty so the board is never blank.
  */
 export function buildTownNotices(ctx: TownNoticeContext): Notice[] {
-  const notices: Notice[] = [];
-  for (const notice of [murderNotice(ctx), doomsdayNotice(ctx)]) {
-    if (notice !== null) notices.push(notice);
-  }
-  notices.push(bountyNotice(ctx.bounty));
-  notices.push(PLUMBLINE_FARM_NOTICE);
-  notices.push(workOrderNotice(ctx.workOrder));
+  const notices = [
+    ...ctx.missingCats.map(missingCatNotice),
+    bountyNotice(ctx.bounty),
+    PLUMBLINE_FARM_NOTICE,
+    workOrderNotice(ctx.workOrder),
+  ];
   notices.sort(byTonePriority);
   return notices;
 }

@@ -83,14 +83,25 @@ import {
   CIRCUS_STRUCTURE_LOW,
   BONE_PILE,
   SLUMPED_SKELETON,
+  CAT_LEDGE,
+  CAT_GAP,
+  FLOOR_DROP,
 } from './tileTypes';
+import {
+  type Footing,
+  type MobilityClass,
+  PASSABLE_BY_CLIMBERS,
+  PASSABLE_BY_EVERYONE,
+  PASSABLE_BY_NOBODY,
+  type PassableBy,
+} from './mobility';
 import {
   SERVICE_SIGHT_TRANSPARENT_TILE_TYPES,
   SERVICE_SOLID_TILE_TYPES,
 } from './serviceLevelProps';
 import { CELLAR_SIGHT_TRANSPARENT_TILE_TYPES, CELLAR_SOLID_TILE_TYPES } from './cellarProps';
 
-/** Tile types that cannot be walked on. Everything not listed here is walkable. */
+/** Tile types nobody stands on. Every type in neither this list nor {@link CLASS_LIMITED_TILE_TYPES} is open to everyone. */
 const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   FloorTypeValue.wall,
   // `FloorTypeValue.water` is deliberately absent: river water is **walkable**,
@@ -113,8 +124,8 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   FOUNTAIN,
   TORCH,
   // A stone well is as solid as the fountain beside it: nothing needs the
-  // player to stand on one — the murder quest's clue and the drink heal both
-  // measure distance to the tile instead.
+  // player to stand on one — the drink heal measures distance to the tile
+  // instead.
   WELL,
   TABLE,
   BOOKSHELF,
@@ -216,7 +227,23 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   SLUMPED_SKELETON,
   PRISON_COVER,
   ...LAB_STATION_PROP_TILE_TYPES,
+  FLOOR_DROP,
 ];
+
+/**
+ * Tile types only some classes stand on: ground a climber reaches and a
+ * walker does not.
+ */
+const CLASS_LIMITED_TILE_TYPES: ReadonlyMap<number, PassableBy> = new Map([
+  [CAT_LEDGE, PASSABLE_BY_CLIMBERS],
+  [CAT_GAP, PASSABLE_BY_CLIMBERS],
+]);
+
+/** Who may stand on each tile type, by type. */
+function tilePassableBy(type: number): PassableBy {
+  if (NON_WALKABLE_TILE_TYPES.includes(type)) return PASSABLE_BY_NOBODY;
+  return CLASS_LIMITED_TILE_TYPES.get(type) ?? PASSABLE_BY_EVERYONE;
+}
 
 /**
  * Solid tile types low enough to see and shoot over. A crawler crouched behind
@@ -249,6 +276,10 @@ const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
   LAB_STATION_BARRICADE,
   LAB_STATION_JERRY_CAN,
   LAB_STATION_LANTERN,
+  // A ledge is a beam or a shelf top a cat walks along: seen past and under.
+  CAT_LEDGE,
+  // A hole in the floor is open air from one side to the other.
+  FLOOR_DROP,
 ];
 
 /**
@@ -292,10 +323,18 @@ export function isLobBlockingTileType(tile: TileContent): boolean {
  * is one array read rather than a chain of inequality checks.
  * MODERN_DECORATION is excluded — its walkability depends on the tile's variant.
  */
-const WALKABLE_BY_TILE_TYPE = ((): Uint8Array => {
-  const table = new Uint8Array(TILE_TYPE_COUNT).fill(1);
-  for (const type of NON_WALKABLE_TILE_TYPES) table[type] = 0;
-  return table;
+const WALKABLE_BY_TILE_TYPE: Readonly<Record<MobilityClass, Uint8Array>> = ((): Record<
+  MobilityClass,
+  Uint8Array
+> => {
+  const tableFor = (mobility: MobilityClass): Uint8Array => {
+    const table = new Uint8Array(TILE_TYPE_COUNT);
+    for (let type = 0; type < TILE_TYPE_COUNT; type++) {
+      table[type] = tilePassableBy(type).has(mobility) ? 1 : 0;
+    }
+    return table;
+  };
+  return { walker: tableFor('walker'), climber: tableFor('climber') };
 })();
 
 const SIGHT_TRANSPARENT_BY_TILE_TYPE = ((): Uint8Array => {
@@ -317,13 +356,20 @@ export function isSightTransparentTileType(tile: TileContent): boolean {
  * Whether a tile's *type* permits walking, ignoring every runtime block bit
  * (placed props, locked arena doors, stairwell footprints).
  *
- * The single source of truth for type-level walkability: `GameMap.isWalkable`
+ * The single source of truth for type-level walkability, by the mover's class: `GameMap.isWalkable`
  * layers its block mask over this, and the map validators run it on a bare grid
  * with no `GameMap` instance in play.
  */
-export function isWalkableTileType(tile: TileContent): boolean {
+export function isWalkableTileType(tile: TileContent, mobility: MobilityClass): boolean {
   if (tile.type === MODERN_DECORATION) {
     return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
   }
-  return WALKABLE_BY_TILE_TYPE[tile.type] === 1;
+  return WALKABLE_BY_TILE_TYPE[mobility][tile.type] === 1;
+}
+
+/** What a climber stands on at a tile of this type; see `Footing`. */
+export function tileFooting(tile: TileContent): Footing {
+  if (tile.type === CAT_LEDGE) return 'ledge';
+  if (tile.type === CAT_GAP) return 'gap';
+  return 'floor';
 }

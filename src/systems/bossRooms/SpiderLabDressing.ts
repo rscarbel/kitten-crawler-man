@@ -35,7 +35,7 @@ import {
   LIGHT_BANK_TILES,
   WEB_GROWTH_FRAMES,
 } from '../../sprites/art/spiderLabArt';
-import type { SystemContext } from '../GameSystem';
+import { type SystemContext, presentCrawlers } from '../GameSystem';
 import type { LootSystem } from '../LootSystem';
 import type { CheckpointedDressing, DressingRenderable } from './BossRoomDressing';
 import { InertBossRoomDressing } from './InertBossRoomDressing';
@@ -405,7 +405,7 @@ export class SpiderLabDressing
   override update(ctx: SystemContext): void {
     this.clock++;
     if (this.lightChangeFrames < LIGHTS_RESTORE_FRAMES) this.lightChangeFrames++;
-    for (const crawler of [ctx.human, ctx.cat]) {
+    for (const crawler of presentCrawlers(ctx)) {
       if (crawler.isAlive && crawler.isAttackPeak()) this.resolveSwing(crawler);
     }
     for (const missile of ctx.cat.getMissiles()) {

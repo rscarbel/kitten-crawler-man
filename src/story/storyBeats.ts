@@ -208,4 +208,37 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
       "Bigger place. More people. More people means more help, if you're smart about who you trust. You can't do the rest of this alone. Nobody can.",
     ],
   },
+
+  floor3_dave_pumpkin: {
+    speaker: 'dave',
+    trigger: { kind: 'safeRoomArrival', floor: 3 },
+    requires: ['floor3_dave_allies'],
+    lines: [
+      "I've been in this town before. A long time before you.",
+      "I wasn't on my own then. I had a cat. Pumpkin. Bad-tempered, and the best partner I ever had.",
+      'We got as far as that tower. She went in there and never came out.',
+      'I waited longer than I should have. Then I went on without her.',
+    ],
+  },
+
+  floor3_dave_chosen_first: {
+    speaker: 'dave',
+    trigger: { kind: 'safeRoomArrival', floor: 3 },
+    requires: ['floor3_dave_pumpkin'],
+    lines: [
+      "There's a part I left out. When she picked me, she picked me the way she's picked you.",
+      "Me and Pumpkin both. That's why she talked to me at all.",
+      "After the tower I kept going on my own. That's where I hit the ceiling.",
+      "So when I tell you to find people, that's where it comes from.",
+    ],
+  },
+
+  floor3_caroline_chosen_first: {
+    speaker: 'caroline',
+    trigger: { kind: 'afterBeat', beat: 'floor3_dave_chosen_first' },
+    requires: ['floor3_dave_chosen_first'],
+    message: carolineLines.message(
+      'Correct. Dave was selected before you. On this floor he was separated from his partner. Alone, he did not progress. Your selection accounts for that.',
+    ),
+  },
 });

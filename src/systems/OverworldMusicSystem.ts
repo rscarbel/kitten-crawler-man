@@ -5,7 +5,8 @@
  * with the lumber yard's and Merrit's farm's own songs, a harvest theme out at the village quarry, and a
  * shuffled wilds playlist between. Each zone
  * is an area claim; a fight's battle or boss claim outranks it, so crossing a
- * zone edge mid-fight changes nothing that is heard.
+ * zone edge mid-fight changes nothing that is heard. Once every stolen cat is
+ * home, the town's playlist carries their song too.
  */
 
 import { TILE_SIZE } from '../core/constants';
@@ -16,6 +17,7 @@ import type { MusicTrackId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { isAtLumberYard } from './briarHollow/resourceZones';
+import { CATS_HOME_SONG } from './missingCats/missingCatsSoundCues';
 
 type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'lumber_yard' | 'farm' | 'quarry';
 
@@ -51,6 +53,8 @@ export class OverworldMusicSystem implements GameSystem {
   constructor(
     private readonly map: GameMap,
     private readonly music: MusicClaims,
+    /** Whether the stolen cats have all walked home, which adds their song to the town's. */
+    private readonly catsHome: () => boolean,
   ) {}
 
   update(ctx: SystemContext): void {
@@ -73,7 +77,12 @@ export class OverworldMusicSystem implements GameSystem {
 
   /** The playlist of the zone a body standing at this top-left position is in. */
   zoneSelectionAt(bodyX: number, bodyY: number): MusicSelection {
-    return { kind: 'playlist', ids: ZONE_TRACKS[this.zoneAt(bodyX, bodyY)] };
+    return { kind: 'playlist', ids: this.tracksOf(this.zoneAt(bodyX, bodyY)) };
+  }
+
+  private tracksOf(zone: MusicZone): ReadonlyArray<MusicTrackId> {
+    const tracks = ZONE_TRACKS[zone];
+    return zone === 'town' && this.catsHome() ? [...tracks, CATS_HOME_SONG] : tracks;
   }
 
   /**
@@ -93,7 +102,7 @@ export class OverworldMusicSystem implements GameSystem {
     this.music.claimMusic({
       owner: 'overworld_zone',
       layer: 'area',
-      selection: { kind: 'playlist', ids: ZONE_TRACKS[zone] },
+      selection: { kind: 'playlist', ids: this.tracksOf(zone) },
       fadeInMs: ZONE_FADE_MS,
     });
   }

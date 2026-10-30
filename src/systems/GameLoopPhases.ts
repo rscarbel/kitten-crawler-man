@@ -201,7 +201,7 @@ export function applyMovement(
   const mapPxW = (gameMap.structure[0]?.length ?? gameMap.structure.length) * TILE_SIZE;
   const mapPxH = gameMap.structure.length * TILE_SIZE;
 
-  if (player.hasStatus('stuck') || !player.canAct) {
+  if (player.hasStatus('stuck') || !player.canAct || player.isCrossingFooting) {
     player.isMoving = false;
     return;
   }
@@ -237,7 +237,7 @@ export function applyMovement(
   if (!tryStepX(player, gameMap, nextX, dx)) {
     const probeX = leadingEdgeX(nextX, dx);
     const rowY = player.y + TILE_SIZE * CENTER_COLLISION_OFFSET;
-    const frame = gameMap.structureRectAt(probeX, rowY);
+    const frame = gameMap.structureRectAt(probeX, rowY, player.mobility);
     const slideY = frame === null ? 0 : cornerSlide(rowY, frame.top, frame.bottom, dy, speed);
     if (slideY !== 0) tryStepY(player, gameMap, clampY(player.y + slideY), slideY, southAnchor);
   }
@@ -246,7 +246,7 @@ export function applyMovement(
   if (!tryStepY(player, gameMap, nextY, dy, southAnchor)) {
     const columnX = player.x + TILE_SIZE * CENTER_COLLISION_OFFSET;
     const probeY = nextY + TILE_SIZE * verticalAnchor(dy, southAnchor);
-    const frame = gameMap.structureRectAt(columnX, probeY);
+    const frame = gameMap.structureRectAt(columnX, probeY, player.mobility);
     const slideX = frame === null ? 0 : cornerSlide(columnX, frame.left, frame.right, dx, speed);
     if (slideX !== 0) tryStepX(player, gameMap, clampX(player.x + slideX), slideX);
   }
@@ -265,9 +265,21 @@ function verticalAnchor(dy: number, southAnchor: SouthCollisionAnchor): number {
 
 function tryStepX(player: Player, gameMap: GameMap, nextX: number, dx: number): boolean {
   const rowY = player.y + TILE_SIZE * CENTER_COLLISION_OFFSET;
-  if (!gameMap.isCrawlerWalkableAt(leadingEdgeX(nextX, dx), rowY)) return false;
+  const probeX = leadingEdgeX(nextX, dx);
+  if (!gameMap.isCrawlerWalkableAt(probeX, rowY, player.mobility)) return false;
+  if (crossesFooting(player, probeX, rowY)) return true;
   player.x = nextX;
   return true;
+}
+
+/**
+ * Whether the step's leading point lands on another footing, starting the
+ * climber's hop or squeeze there instead of the step.
+ */
+function crossesFooting(player: Player, probeX: number, probeY: number): boolean {
+  const climbing = player.climbing;
+  if (climbing === null) return false;
+  return climbing.crossInto(player, Math.floor(probeX / TILE_SIZE), Math.floor(probeY / TILE_SIZE));
 }
 
 function tryStepY(
@@ -279,7 +291,8 @@ function tryStepY(
 ): boolean {
   const columnX = player.x + TILE_SIZE * CENTER_COLLISION_OFFSET;
   const probeY = nextY + TILE_SIZE * verticalAnchor(dy, southAnchor);
-  if (!gameMap.isCrawlerWalkableAt(columnX, probeY)) return false;
+  if (!gameMap.isCrawlerWalkableAt(columnX, probeY, player.mobility)) return false;
+  if (crossesFooting(player, columnX, probeY)) return true;
   player.y = nextY;
   return true;
 }
@@ -316,7 +329,8 @@ function cornerSlide(
  * while the player `hasStatus('stuck')` or is frozen.
  */
 export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
-  if (player.knockbackFramesRemaining <= 0) return;
+  // A blow mid-hop waits for the landing, so the knockback starts from the footing the hop reached.
+  if (player.knockbackFramesRemaining <= 0 || player.isCrossingFooting) return;
 
   const stepDistance = knockbackStepPx(player, TILE_SIZE);
 
@@ -325,6 +339,7 @@ export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
     player.knockbackDirX * stepDistance,
     player.knockbackDirY * stepDistance,
     gameMap,
+    player.mobility,
   );
 
   player.knockbackFramesRemaining--;
@@ -332,25 +347,23 @@ export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
 }
 
 /**
- * Phase 9: Check death conditions.
+ * Phase 9: Check death conditions over the crawlers on this map.
  * Returns true if the game should end.
  *
  * Rules:
  * - Active player dying is always immediate game over.
  * - Inactive player dying enters the knocked-out state (handled in DungeonScene before this call).
  * - A knocked-out player has 90 seconds to be revived; expiry is game over.
+ *
+ * An away crawler of a split party is not passed: it is frozen on another
+ * map, and nothing here can end its run.
  */
-export function checkDeath(human: HumanPlayer, cat: CatPlayer): boolean {
-  // Active player death = immediate game over
-  if (human.isActive && !human.isAlive) return true;
-  if (cat.isActive && !cat.isAlive) return true;
-  // Inactive player died without being caught by the knockout handler = game over
-  if (!human.isActive && !human.isAlive && !human.isKnockedOut) return true;
-  if (!cat.isActive && !cat.isAlive && !cat.isKnockedOut) return true;
-  // Knocked-out timer expired
-  if (human.isKnockedOut && human.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
-  if (cat.isKnockedOut && cat.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
-  return false;
+export function checkDeath(present: readonly (HumanPlayer | CatPlayer)[]): boolean {
+  return present.some((crawler) => {
+    const diedUncaught = !crawler.isAlive && (crawler.isActive || !crawler.isKnockedOut);
+    const bledOut = crawler.isKnockedOut && crawler.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES;
+    return diedUncaught || bledOut;
+  });
 }
 
 /** Melee reach of the human player, in tiles. */

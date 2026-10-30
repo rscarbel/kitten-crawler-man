@@ -353,7 +353,7 @@ export class GoblinArcher extends Mob {
     // stops an arrow on any unwalkable tile. On sight alone an archer would hold
     // its band behind a palisade and loose into it every cooldown.
     const arrowWouldArrive = this.map
-      ? this.map.hasWalkableLine(bow.x, bow.y, targetCx, targetCy)
+      ? this.map.hasWalkableLine(bow.x, bow.y, targetCx, targetCy, this.mobility)
       : true;
     const hasClearShot = hasLineOfSight && arrowWouldArrive;
 

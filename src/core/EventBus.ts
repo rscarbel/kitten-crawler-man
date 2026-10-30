@@ -36,8 +36,34 @@ import type { ProcessingStationKind } from '../systems/briarHollow/processingSta
 import type { Rarity } from './items/defs/rarity';
 import type { ChallengeSummary } from '../ai/interactions/challenges';
 import type { ExplosionVariant } from '../sprites/dynamiteExplosion';
+import type { ConveyorEndId } from '../map/interiorMechanisms';
+import type { ExchangeFlagId } from './party/partySplit';
+import type { TowerMoment } from '../systems/tower/towerMoments';
 
 export interface GameEvents {
+  /**
+   * Something made a noise in the world at (`x`, `y`) world pixels: a thing
+   * knocked off a ledge landing. Whatever listens for noises (a watcher, a
+   * guard) decides for itself whether it is within `radiusTiles` and what it
+   * does about it, the way `respondToNoise` answers the prison's noises.
+   */
+  worldNoise: { x: number; y: number; radiusTiles: number; cause: 'knocked_off' };
+
+  /** A set of pressure plates has opened its target all the way. */
+  plateSetOpened: { set: string };
+
+  /** A conveyor has taken `item` from one end; it now waits at the end named `to`. */
+  conveyorSent: { conveyor: string; item: ItemId; to: ConveyorEndId };
+
+  /** A signal fixture's pull was worked, raising `flag` for its other end. */
+  conveyorSignalled: { conveyor: string; flag: ExchangeFlagId };
+
+  /**
+   * The tower's storey works reached a point the questline's chapters turn
+   * on: a hand-over, a cutscene or a line of dialog hooks it here.
+   */
+  towerMoment: { moment: TowerMoment };
+
   mobKilled: {
     mob: Mob;
     killer: HumanPlayer | CatPlayer | null;

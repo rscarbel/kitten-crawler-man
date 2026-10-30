@@ -120,7 +120,7 @@ const placed = grounds?.structures.find((structure) => structure.structure === '
 if (placed === undefined) throw new Error(`seed ${seed}: the grounds stood no high striker`);
 const striker = { x: placed.rect.x, y: placed.rect.y };
 
-if (!site.map.isWalkable(striker.x, striker.y + 1)) {
+if (!site.map.isWalkable(striker.x, striker.y + 1, 'walker')) {
   throw new Error('the tile south of the striker, where each play starts, is not walkable');
 }
 

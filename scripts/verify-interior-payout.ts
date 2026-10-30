@@ -116,7 +116,10 @@ console.log('Break once, restore on re-entry, silent on re-break');
   const map2 = buildInterior(generalStoreEntry.id, generalStoreEntry.kind, false);
   const { target: target2 } = findBreakable(map2);
   check(target2.id === target1.id, "the prop's id is stable across regeneration");
-  check(!map2.isWalkable(target2.tile.x, target2.tile.y), 'the prop is standing again on re-entry');
+  check(
+    !map2.isWalkable(target2.tile.x, target2.tile.y, 'walker'),
+    'the prop is standing again on re-entry',
+  );
 
   const loot2 = new LootSystem(map2);
   const record2 = new TownMemoryInteriorPayoutRecord(
@@ -131,7 +134,7 @@ console.log('Break once, restore on re-entry, silent on re-break');
     'the re-break still registers (art, sound, tile unblocks)',
   );
   check(
-    map2.isWalkable(target2.tile.x, target2.tile.y),
+    map2.isWalkable(target2.tile.x, target2.tile.y, 'walker'),
     'the tile is walkable again after the re-break',
   );
   const secondDrop = loot2.captureCheckpoint().pendingLoots.length;

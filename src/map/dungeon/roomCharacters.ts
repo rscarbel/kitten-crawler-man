@@ -21,7 +21,7 @@
  * through `FloorSurface` (`floorSurface.ts`).
  */
 
-import type { DungeonFloorThemeId } from './floorTheme';
+import type { DungeonFloorThemeId, GeneratedFloorThemeId } from './floorTheme';
 import type { Floor1Material } from './floor1Materials';
 import type { Floor2Material } from './floor2Materials';
 import type { Zone } from '../regionMap';
@@ -357,6 +357,7 @@ export interface AmbienceSpec {
 export const FLOOR_AMBIENCE_BED = {
   cellars: 'cellar_bed',
   service_level: 'service_level_bed',
+  sewer: 'flooded_room',
 } as const satisfies Record<DungeonFloorThemeId, AmbienceBedId>;
 
 // ── Characters ──────────────────────────────────────────────────────────────
@@ -402,7 +403,7 @@ export type CharacterId = RoomCharacterId | HallwayCharacterId;
 export interface RoomCharacter {
   readonly kind: 'room';
   readonly id: RoomCharacterId;
-  readonly floor: DungeonFloorThemeId;
+  readonly floor: GeneratedFloorThemeId;
   /** Zones a room must lie in to be given this character. */
   readonly zones: ReadonlyArray<Zone>;
   /** Relative chance among the characters eligible for a room. */
@@ -426,7 +427,7 @@ export interface RoomCharacter {
 export interface HallwayCharacter {
   readonly kind: 'hallway';
   readonly id: HallwayCharacterId;
-  readonly floor: DungeonFloorThemeId;
+  readonly floor: GeneratedFloorThemeId;
   readonly zones: ReadonlyArray<Zone>;
   readonly weight: number;
   readonly floorMaterial: CharacterFloorMaterial;
@@ -1045,13 +1046,13 @@ export const FLOOR2_HALLWAY_CHARACTERS = [
 export const ROOM_CHARACTERS_BY_FLOOR = {
   cellars: FLOOR1_ROOM_CHARACTERS,
   service_level: FLOOR2_ROOM_CHARACTERS,
-} as const satisfies Record<DungeonFloorThemeId, ReadonlyArray<RoomCharacter>>;
+} as const satisfies Record<GeneratedFloorThemeId, ReadonlyArray<RoomCharacter>>;
 
 /** Each floor's hallway characters. */
 export const HALLWAY_CHARACTERS_BY_FLOOR = {
   cellars: FLOOR1_HALLWAY_CHARACTERS,
   service_level: FLOOR2_HALLWAY_CHARACTERS,
-} as const satisfies Record<DungeonFloorThemeId, ReadonlyArray<HallwayCharacter>>;
+} as const satisfies Record<GeneratedFloorThemeId, ReadonlyArray<HallwayCharacter>>;
 
 /**
  * The loose props each special region is furnished with, per floor. Only the
@@ -1062,7 +1063,7 @@ export const HALLWAY_CHARACTERS_BY_FLOOR = {
  * from here would stack on top of theirs.
  */
 export const SPECIAL_REGION_PROPS: Record<
-  DungeonFloorThemeId,
+  GeneratedFloorThemeId,
   Partial<Record<SpecialRegionTag, ReadonlyArray<PropSetEntry>>>
 > = {
   cellars: {

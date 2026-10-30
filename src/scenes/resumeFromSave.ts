@@ -125,6 +125,7 @@ export function sceneSetupFromSave(
     options.worldSeed = savedWorld.worldSeed;
     options.artSeed = savedWorld.artSeed;
     options.spawnAt = savedWorld.resumeTile ?? undefined;
+    options.savedIndoorsIn = savedWorld.savedIndoorsIn ?? undefined;
     options.floorElapsedFrames = savedWorld.floorElapsedFrames;
     options.persistedWorldState = savedWorld.persisted;
   }

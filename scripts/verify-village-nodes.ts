@@ -247,7 +247,7 @@ function makeRig(): Rig {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,

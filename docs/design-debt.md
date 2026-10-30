@@ -136,11 +136,11 @@ Entry shape:
 
 ### An interior holds each scripted encounter by its own type beside `encounter`
 
-- **Where:** `BuildingInteriorScene`'s `starlightTentMaze`, `towerConfrontation` and `prison` fields, each also stored in `encounter`; the reads of them in `scriptOwnsParty`, the `update` dialog returns, the Space and tap chains, `cameraFocus`, the sorted render pass and `mountSurfaces`.
-- **Problem:** `InteriorEncounter` covers update, drawing and teardown, but whether an encounter locks the party, owns a conversation, takes a press, moves the camera or adds figures is asked of each concrete system by name, so the scene grows a branch per encounter.
-- **Cost:** a new scripted room means editing every one of those sites in the scene; missing one (a tap chain that does not know the new encounter locks the party) compiles.
-- **Better shape:** optional members on `InteriorEncounter` for each of those questions (`playerLocked`, `isDialogOpen`, `tryInteract`, `sortedFigures`, `cameraTarget`, `surfaces`), asked through `activeEncounter`, so the typed handles go away.
-- **Until then:** give a new encounter what it needs through `InteriorEncounter` and the fixtures `startEncounter` hands it (the storey's chest placer and exit fixtures) rather than another typed field on the scene. A new scripted walk or talk is a `CutsceneStep` list played on the scene's `CutsceneKit`, never another `playerLocked` flag beside the tower's and the prison's.
+- **Where:** `BuildingInteriorScene`'s `starlightTentMaze` and `prison` fields, each also stored in `encounter`; the reads of them in `scriptOwnsParty`, the `update` dialog return and the maze's `partyResetPending` / `partyReleasePending` flags, the Space chain, the hazard escape vector, the follow refusal, the prison's ground and its fade surface in `mountSurfaces`, and the sorted render pass.
+- **Problem:** `InteriorEncounter` already answers update, drawing, teardown, `playerLocked`, `tryInteract`, `surfaces`, `roomFigures`, `allyTargets`, `carriedCompanions` and `stairRefusal` (the tower's `TowerStoreysSystem` goes through nothing else), but the maze and the prison are still asked by name whether they own a conversation, take a press, replace the room's ground, steer the companion or reset the party, so the scene keeps a branch per encounter for those.
+- **Cost:** a new scripted room that needs one of those questions means editing the scene at each site; missing one compiles.
+- **Better shape:** the remaining questions as optional members on `InteriorEncounter` (`isDialogOpen`, `ground`, `hazardEscapeVector`, `followDisabled`, a party reset request), asked through `activeEncounter`, so the two typed handles go away.
+- **Until then:** give a new encounter what it needs through `InteriorEncounter` and the fixtures `startEncounter` hands it (the storey's chest placer and exit fixtures), adding an optional member when it needs a question the interface does not ask yet, rather than another typed field on the scene. A new scripted walk or talk is a `CutsceneStep` list played on the scene's `CutsceneKit`, never another `playerLocked` flag beside the tower's and the prison's.
 - **Size:** M
 - **Found:** 2026-10-26, interior chests and exit fixtures; extended 2026-10-27, cutscene director.
 

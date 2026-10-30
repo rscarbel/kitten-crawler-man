@@ -151,14 +151,15 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     return this.progress.status;
   }
 
-  private crawlers(): readonly Player[] {
+  /** Both crawlers wherever they are: the bags, the purse and the reward are the roster's. */
+  private wholeParty(): readonly Player[] {
     const { human, cat } = this.party();
     return [human, cat];
   }
 
   /** How many of the item the party holds, across both bags. */
   private partyCountOf(id: ItemId): number {
-    return this.crawlers().reduce((total, crawler) => total + crawler.inventory.countOf(id), 0);
+    return this.wholeParty().reduce((total, crawler) => total + crawler.inventory.countOf(id), 0);
   }
 
   private holdsShard(id: (typeof ANCHOR_SHARD_IDS)[number]): boolean {
@@ -263,7 +264,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
 
   /** The other crawler, for a purchase that draws from the party's shared purse. */
   private companionOf(active: Player): Player {
-    const companion = this.crawlers().find((crawler) => crawler !== active);
+    const companion = this.wholeParty().find((crawler) => crawler !== active);
     return companion ?? active;
   }
 
@@ -402,7 +403,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     }
     if (this.shardsHeld < SHARDS_REQUIRED) return;
 
-    const crawlers = this.crawlers();
+    const crawlers = this.wholeParty();
     // Each shard comes out of whichever bag happens to hold it — the party is one
     // party, and which crawler picked a shard up is not the player's problem.
     for (const shardId of ANCHOR_SHARD_IDS) {

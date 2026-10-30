@@ -11,12 +11,13 @@
  *
  * ## How a tile is built
  *
- * 1. **The wall top**: dressed capstones on floor 1 and poured strips on floor 2,
- *    crisp and low in contrast, tiled from one patch per floor.
+ * 1. **The wall top**: dressed capstones on floor 1, poured strips on floor 2 and
+ *    brick courses in the sewer, crisp and low in contrast, tiled from one patch
+ *    per floor.
  * 2. **The structure**: each floor paints one face strip, two tiles tall and four
  *    across — the lit cap, then the face down to its foot, with the floor's finish
  *    (a damp tide line on floor 1, a painted two-tone band and rubber skirting on
- *    floor 2) over `paintCoursedBlocks` masonry. An upper-face tile takes the strip
+ *    floor 2, a slime tide line in the sewer) over `paintCoursedBlocks` masonry. An upper-face tile takes the strip
  *    from its cap down, a lower-face tile its bottom half, a one-tile-thick wall the
  *    whole face squeezed into one tile. Slivers, rims, jambs and corners are drawn
  *    with it; the composite is cached per floor, shape and strip slice.
@@ -43,6 +44,7 @@ import { paintCoursedBlocks, type CoursedBlockOptions } from '../../map/tilegen/
 import {
   CELLAR_WALL_RAMP,
   CINDERBLOCK_RAMP,
+  SEWER_BRICK_RAMP,
   mix,
   sampleRamp,
   shade,
@@ -222,6 +224,61 @@ const SERVICE_MASONRY: CoursedBlockOptions = {
 };
 const SERVICE_MASONRY_SEED = 0x2e7b19;
 
+// ── the sewer: wet engineering brick, a slime tide line ────────────────────
+
+const SEWER_FACE_RAMP: Ramp = liftedForFace(SEWER_BRICK_RAMP);
+/**
+ * Pale lime mortar, well above the brick in value: the ground's mortar sits at
+ * the brick's own value and differs only in hue, so on a face the courses
+ * vanish and the wall reads as a flat panel.
+ */
+const SEWER_MORTAR: RGB = [96, 92, 80];
+/**
+ * The cap, arris and rim are what make a wall's edge read against the dark
+ * brick top, so they sit as bright as the other floors' caps even though the
+ * brick under them is the darkest face of any floor.
+ */
+const SEWER_CAP: RGB = [124, 108, 94];
+const SEWER_CAP_HIGHLIGHT: RGB = [148, 130, 114];
+const SEWER_SLIME: RGB = [26, 32, 20];
+/**
+ * Top of the slime band, as a fraction of the body from the cap down, before its
+ * wander: a little higher than the cellars' tide, because the channels beside
+ * these walls rise with every storm.
+ */
+const SEWER_TIDE_TOP = 0.7;
+const SEWER_TIDE_WANDER = 0.04;
+const SEWER_TIDE_PERIOD = 6;
+const SEWER_TIDE_SEED = 509;
+const SEWER_TIDE_ALPHA = 0.55;
+const SEWER_TIDE_EDGE_PX = 6;
+/** The faint pale bloom of lime the water leaves along its highest line. */
+const SEWER_SALT_PX = 2;
+const SEWER_SALT_FACTOR = 1.1;
+/** Seep streaks running down from the cap: broad, soft and rare, so the brick stays calm. */
+const SEWER_SEEP_PERIOD = 16;
+const SEWER_SEEP_SEED = 521;
+const SEWER_SEEP_THRESHOLD = 0.7;
+const SEWER_SEEP_FACTOR = 0.86;
+
+const SEWER_MASONRY: CoursedBlockOptions = {
+  coursesPerTile: 4,
+  blocksPerCoursePerTile: 1.5,
+  ramp: SEWER_FACE_RAMP,
+  jointRamp: { ...SEWER_FACE_RAMP, mid: SEWER_MORTAR, light: SEWER_MORTAR },
+  jointPx: 2.4,
+  jointStrength: 0.62,
+  bondOffset: 0.5,
+  edgeBandPx: 1.6,
+  topLight: 1.12,
+  bottomShadow: 0.84,
+  toneFloor: 0.3,
+  toneSpread: 0.36,
+  grainStrength: 0.1,
+  jointWanderPx: 0.5,
+};
+const SEWER_MASONRY_SEED = 0x5e3a11;
+
 // ── themes ─────────────────────────────────────────────────────────────────
 
 interface WallTheme {
@@ -269,6 +326,22 @@ function serviceFinish(pixel: RGB, v: number, x: number, y: number, noise: Noise
   return scuffed ? shade(banded, SERVICE_SCUFF_FACTOR) : banded;
 }
 
+function sewerFinish(pixel: RGB, v: number, x: number, y: number, noise: NoiseField): RGB {
+  const seeping = noise.value(x, 0, SEWER_SEEP_PERIOD, SEWER_SEEP_SEED) > SEWER_SEEP_THRESHOLD;
+  const seeped = seeping ? shade(pixel, SEWER_SEEP_FACTOR) : pixel;
+  const tideTop =
+    SEWER_TIDE_TOP +
+    signedNoise(noise.value(x, y, SEWER_TIDE_PERIOD, SEWER_TIDE_SEED)) * SEWER_TIDE_WANDER;
+  const bodyPx = STRIP_HEIGHT_PX - BODY_TOP_TILES * TILE_PX;
+  const pxBelowTide = (v - tideTop) * bodyPx;
+  if (pxBelowTide >= 0) {
+    const fadeIn = Math.min(1, pxBelowTide / SEWER_TIDE_EDGE_PX);
+    return mix(seeped, SEWER_SLIME, SEWER_TIDE_ALPHA * fadeIn);
+  }
+  if (pxBelowTide > -SEWER_SALT_PX) return shade(seeped, SEWER_SALT_FACTOR);
+  return seeped;
+}
+
 const THEMES: Readonly<Record<DungeonFloorThemeId, WallTheme>> = {
   cellars: {
     masonry: CELLAR_MASONRY,
@@ -283,6 +356,13 @@ const THEMES: Readonly<Record<DungeonFloorThemeId, WallTheme>> = {
     cap: SERVICE_CAP,
     capHighlight: SERVICE_CAP_HIGHLIGHT,
     finish: serviceFinish,
+  },
+  sewer: {
+    masonry: SEWER_MASONRY,
+    masonrySeed: SEWER_MASONRY_SEED,
+    cap: SEWER_CAP,
+    capHighlight: SEWER_CAP_HIGHLIGHT,
+    finish: sewerFinish,
   },
 };
 
@@ -788,7 +868,8 @@ interface WallTopFinish {
  * do not match the tile grid, so it reads as wall mass rather than as floor.
  *
  * Floor 1 is capped with big dressed capstones; floor 2 is poured in long strips
- * that still carry their formwork's board marks.
+ * that still carry their formwork's board marks; the sewer's brick runs on over
+ * the top of its walls in narrow courses.
  */
 const WALL_TOPS: Readonly<Record<DungeonFloorThemeId, WallTopFinish>> = {
   cellars: {
@@ -804,6 +885,13 @@ const WALL_TOPS: Readonly<Record<DungeonFloorThemeId, WallTopFinish>> = {
     courseHeightPx: 96,
     unitLengthsPx: [80, 112, 144],
     boardLinePx: 8,
+  },
+  sewer: {
+    ramp: { shadow: [30, 25, 22], mid: [45, 38, 34], light: [52, 44, 39], accent: [60, 51, 45] },
+    seed: 0x7a11c5,
+    courseHeightPx: 24,
+    unitLengthsPx: [40, 48, 56, 64],
+    boardLinePx: 0,
   },
 };
 

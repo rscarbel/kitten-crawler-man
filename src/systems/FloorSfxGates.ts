@@ -40,6 +40,10 @@ export interface OverworldActivity {
   readonly escortAmbushersStanding: boolean;
   /** A bounty has been taken and not yet collected. */
   readonly bountyOut: boolean;
+  /** The stolen cats' stakeout or rooftop chase is on. */
+  readonly stakeoutUnderWay: boolean;
+  /** Belle has agreed to sit on the fountain as bait, so the capture can start the moment she does. */
+  readonly captureDue: boolean;
 }
 
 /**
@@ -58,6 +62,11 @@ export function groupsActiveAnywhere(
     starlightTent: false,
     floodedPumpRoomMusic: false,
     trashGremlinMusic: false,
+    missingCatsStakeout: activity.stakeoutUnderWay,
+    missingCatsCapture: activity.captureDue,
+    missingCatsReunion: false,
+    wardenRitualMusic: false,
+    towerSplitMusic: false,
   };
 }
 

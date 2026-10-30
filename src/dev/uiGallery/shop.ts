@@ -3,6 +3,7 @@
  * data, one named fixture at a time.
  */
 
+import { createMissingCatsProgress } from '../../core/quests/missingCatsProgress';
 import { TILE_SIZE } from '../../core/constants';
 import { createMercenaryRoster } from '../../core/party/MercenaryRoster';
 import { MERCENARY_TEMPLATES } from '../../core/party/mercenaryTemplates';
@@ -78,11 +79,7 @@ const SELL_STACKS = [
   { id: 'rope', qty: 1 },
   { id: 'riot_kneeguards', qty: 1 },
 ] as const;
-const QUIET_CONTEXT: TownDialogContext = {
-  murder: 'not_started',
-  doomsday: 'inactive',
-  quillNamed: false,
-};
+const QUIET_CONTEXT: TownDialogContext = { missingCats: createMissingCatsProgress() };
 const CONTRACT_FLOOR = 'level3';
 const APOTHECARY_SHOP = 'apothecary' as const satisfies ShopId;
 /** Poultices bought off the apothecary's three-unit batch, so its row reads "Low stock". */
@@ -409,7 +406,7 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
     surfaces: (shown) => {
       const roster = createMercenaryRoster();
       roster.floorLevelId = CONTRACT_FLOOR;
-      const desk = new MercenaryGuildSystem(roster, null);
+      const desk = new MercenaryGuildSystem(roster, null, () => false);
       desk.openPanel();
       const party = makeParty(FIXTURE_COINS);
       return [
@@ -426,10 +423,11 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
       roster.active = {
         id: hire.id,
         name: hire.name,
+        terms: 'paid',
         contractLevelId: CONTRACT_FLOOR,
         introduced: true,
       };
-      const desk = new MercenaryGuildSystem(roster, null);
+      const desk = new MercenaryGuildSystem(roster, null, () => false);
       desk.openPanel();
       desk.askDismiss();
       const party = makeParty(FIXTURE_COINS);

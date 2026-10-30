@@ -13,7 +13,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { routeResultSchema, type ResidencyFloor, type RouteResult } from './residencyRoutes.js';
+import {
+  RESIDENCY_FLOORS,
+  routeResultSchema,
+  type ResidencyFloor,
+  type RouteResult,
+} from './residencyRoutes.js';
 
 /** A Retina display, as the game is played on: below 2 the figure cache bakes at half density. */
 const RETINA_DEVICE_PIXEL_RATIO = 2;
@@ -44,10 +49,10 @@ export async function runResidencyRouteHere(
   try {
     switch (floor) {
       case '3': {
-        if (route !== 'tour' && route !== 'direct')
-          throw new Error(`floor 3 has no route ${route}`);
+        const floor3Route = RESIDENCY_FLOORS['3'].routes.find((known) => known === route);
+        if (floor3Route === undefined) throw new Error(`floor 3 has no route ${route}`);
         const { runFloor3Route } = await import('./residencyFloor3.js');
-        return await runFloor3Route(route, {
+        return await runFloor3Route(floor3Route, {
           shim,
           scratchDirectory: scratch,
           findRetainers: options.findRetainers,

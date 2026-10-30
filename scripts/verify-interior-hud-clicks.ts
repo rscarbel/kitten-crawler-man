@@ -174,8 +174,6 @@ async function enter(
     undefined,
     undefined,
     undefined,
-    undefined,
-    undefined,
     anchorProgress,
     undefined,
     undefined,

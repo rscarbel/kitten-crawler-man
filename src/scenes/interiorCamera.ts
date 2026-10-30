@@ -419,7 +419,7 @@ export function interiorWalkableBounds(map: GameMap): WorldRect {
   let maxY = -1;
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      if (!map.isWalkable(x, y)) continue;
+      if (!map.isWalkable(x, y, 'walker')) continue;
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x);

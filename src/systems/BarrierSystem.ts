@@ -230,7 +230,7 @@ export class BarrierSystem implements GameSystem {
       return;
     }
 
-    if (!this.gameMap.isWalkable(tileX, tileY)) {
+    if (!this.gameMap.isWalkable(tileX, tileY, 'walker')) {
       c.player.inventory.addItem(c.itemId, 1);
       return;
     }

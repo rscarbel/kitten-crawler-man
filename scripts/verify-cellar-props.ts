@@ -106,7 +106,7 @@ function benchWith(tileType: number, tilesWide: number): Bench {
 
 function standing(bench: Bench): boolean {
   return bench.footprint.some(
-    (cell) => !isWalkableTileType(bench.gameMap.structure[cell.y][cell.x]),
+    (cell) => !isWalkableTileType(bench.gameMap.structure[cell.y][cell.x], 'walker'),
   );
 }
 

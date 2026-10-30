@@ -172,11 +172,11 @@ export function finishRevival(
 export function downedCompanionArrowCandidate(
   ctx: CanvasRenderingContext2D,
   active: Player,
-  inactive: Player,
+  inactive: Player | null,
   camX: number,
   camY: number,
 ): ArrowCandidate | null {
-  if (!inactive.isKnockedOut) return null;
+  if (inactive?.isKnockedOut !== true) return null;
   const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
   if (dist <= REVIVE_RANGE_PX) return null;
   return {
@@ -201,8 +201,8 @@ export function downedCompanionArrowCandidate(
  * teammate is drawn separately, through {@link downedCompanionArrowCandidate}
  * and the shared arrow arbiter.
  */
-export function knockedOutBandEntry(inactive: Player): TopBandEntry | null {
-  if (!inactive.isKnockedOut) return null;
+export function knockedOutBandEntry(inactive: Player | null): TopBandEntry | null {
+  if (inactive?.isKnockedOut !== true) return null;
 
   const pulse = knockoutPulse();
   const secondsLeft = knockoutSecondsLeft(KNOCKOUT_TIMEOUT_FRAMES, inactive.knockedOutFrames);

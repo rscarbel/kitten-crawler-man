@@ -174,7 +174,7 @@ export function tileRefusal(
 ): string | null {
   const { gameMap, defense } = world;
   if (gameMap.isTileInsideTownWall(tileX, tileY)) return 'inside the town wall';
-  if (!gameMap.isWalkable(tileX, tileY)) return 'blocked';
+  if (!gameMap.isWalkable(tileX, tileY, 'walker')) return 'blocked';
   if (gameMap.isWadeable(tileX, tileY)) return 'water';
   const type = gameMap.structure[tileY]?.[tileX]?.type;
   if (type === HOLLOW_THRESHOLD) return 'a doorway';
@@ -229,7 +229,7 @@ function floodFrom(
   const open = (x: number, y: number): boolean =>
     Math.max(Math.abs(x - centre.x), Math.abs(y - centre.y)) <= radius &&
     !inFootprint(blocked, x, y) &&
-    gameMap.isWalkable(x, y);
+    gameMap.isWalkable(x, y, 'walker');
   if (!open(start.x, start.y)) return reached;
   const queue: Array<{ x: number; y: number }> = [start];
   reached.add(tileCoordKey(start.x, start.y));
@@ -282,7 +282,7 @@ export function pushOutTile(
       if (seen.has(key)) continue;
       seen.add(key);
       // A body inside the footprint crosses it on its way out; outside it, only open ground counts.
-      if (!inFootprint(footprint, nx, ny) && !gameMap.isWalkable(nx, ny)) continue;
+      if (!inFootprint(footprint, nx, ny) && !gameMap.isWalkable(nx, ny, 'walker')) continue;
       queue.push({ x: nx, y: ny, d: current.d + 1 });
     }
   }
@@ -303,7 +303,7 @@ export function corridorStaysOpen(
   for (let y = footprint.y - 1; y <= footprint.y + footprint.h; y++) {
     for (let x = footprint.x - 1; x <= footprint.x + footprint.w; x++) {
       if (inFootprint(footprint, x, y)) continue;
-      if (gameMap.isWalkable(x, y)) ring.push({ x, y });
+      if (gameMap.isWalkable(x, y, 'walker')) ring.push({ x, y });
     }
   }
   if (ring.length === 0) return true;

@@ -568,14 +568,27 @@ export const SUBJECTS: readonly SvgSubject[] = [
   {
     name: 'baggi',
     views: async () => {
-      const { drawBaggiSprite, drawBaggiCorpse } = await import('../src/sprites/baggiSprite.js');
+      const { drawBaggiSprite } = await import('../src/sprites/baggiSprite.js');
+      const at = { facingX: 0, facingY: 1, walkPhase: 0, timeSeconds: 0 };
       return [
-        { name: 'idle', paint: ({ dom, unit }) => drawBaggiSprite(dom, 0, 0, unit) },
+        {
+          name: 'idle',
+          paint: ({ dom, unit }) => {
+            drawBaggiSprite(dom, 0, 0, unit, { ...at, role: 'idle' });
+          },
+        },
         {
           name: 'walk',
-          paint: ({ dom, unit }) => drawBaggiSprite(dom, 0, 0, unit, WALK_FRAME, true),
+          paint: ({ dom, unit }) => {
+            drawBaggiSprite(dom, 0, 0, unit, {
+              ...at,
+              role: 'walk',
+              facingX: 1,
+              facingY: 0,
+              walkPhase: WALK_FRAME,
+            });
+          },
         },
-        { name: 'corpse', paint: ({ dom, unit }) => drawBaggiCorpse(dom, 0, 0, unit) },
       ];
     },
   },

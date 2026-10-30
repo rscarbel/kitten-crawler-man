@@ -90,11 +90,6 @@ export const CAROLINE_OBJECTIVE_INTEL = {
     'This station serves the laboratory at the end of the hallway outside. The scientist there is offering a contract. It is optional.',
   ),
 
-  krasue_murders: intel(
-    'Citizens of Taloncrest are being killed. The city guard classifies the killer as an animal. The classification is wrong. Investigation is optional.',
-    (direction) => `The first killing was ${direction} of here.`,
-  ),
-
   shady_bounties: intel(
     'A man outside the tattoo parlour in the Low Quarter pays for kills in the ruins. The work is optional and repeatable.',
     (direction) => `He is usually ${direction} of here.`,
@@ -112,6 +107,47 @@ export const CAROLINE_OBJECTIVE_INTEL = {
   speed_fizz_tip: intel(
     'The tinker sells Speed Fizz. It doubles movement speed for twenty-five seconds.',
     (direction) => `His stall is ${direction} of here.`,
+  ),
+
+  missing_cats_notices: intel(
+    'Every cat in Taloncrest but one is missing. Each has a notice on the board. The town has not connected them.',
+    (direction) => `The Market Plaza notice board is ${direction} of this room.`,
+    'The notices are on the Market Plaza board.',
+  ),
+
+  missing_cats_owners: intel(
+    'Four households hold evidence: the Sleeping Cat Inn, Old Lori’s cottage, Herb & Remedy and Miller’s Farm. Hear each owner first. One trace is visible only to Belle.',
+    (direction) => `The nearest unexamined household is ${direction} of this room.`,
+  ),
+
+  missing_cats_cellar: intel(
+    'Sgt. Kessler holds Blackwood Lodge and the town’s case against the elves. The lodge cellar opens onto the old cistern. Hostiles are using it.',
+    (direction) => `Blackwood Lodge is ${direction} of this room, at the end of its alley.`,
+  ),
+
+  missing_cats_stakeout: intel(
+    'One cat remains in town: Penny, at the General Store. The thief will come for her at dusk. It will not approach while it can see you.',
+    (direction) => `The General Store is ${direction} of this room.`,
+  ),
+
+  missing_cats_temple: intel(
+    'The thief landed on the Temple of the Sky. Deacon Aviel keeps it. The feather from Miller’s Farm has a match inside.',
+    (direction) => `The temple is ${direction} of this room.`,
+  ),
+
+  missing_cats_bait: intel(
+    'The Warden has asked for one more cat, and named Belle. The carrier collects at dusk. Whatever you plan, the tower has had longer to plan for it.',
+    (direction) => `The fountain is ${direction} of this room.`,
+  ),
+
+  missing_cats_tower_door: intel(
+    'Belle is alive on the top storey of the Town Center Tower. The front door will not be opened for you. The cellar elf at Blackwood Lodge knows another way in.',
+    (direction) => `Blackwood Lodge is ${direction} of this room.`,
+  ),
+
+  missing_cats_drain: intel(
+    'The storm drain under the Civic Terrace runs to the tower’s cistern. The Warden is at the top of the tower. It knows you are coming.',
+    (direction) => `The grate is ${direction} of this room.`,
   ),
 } as const satisfies Record<AdviceObjectiveId, Intel>;
 

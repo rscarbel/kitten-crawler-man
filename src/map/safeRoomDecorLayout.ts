@@ -200,12 +200,12 @@ function occupiedTiles(
   };
 
   for (let x = bounds.x; x <= lastX; x++) {
-    if (map.isWalkableIgnoringPermanent(x, bounds.y - 1)) noteDoorway(x, bounds.y);
-    if (map.isWalkableIgnoringPermanent(x, lastY + 1)) noteDoorway(x, lastY);
+    if (map.isWalkableIgnoringPermanent(x, bounds.y - 1, 'walker')) noteDoorway(x, bounds.y);
+    if (map.isWalkableIgnoringPermanent(x, lastY + 1, 'walker')) noteDoorway(x, lastY);
   }
   for (let y = bounds.y; y <= lastY; y++) {
-    if (map.isWalkableIgnoringPermanent(bounds.x - 1, y)) noteDoorway(bounds.x, y);
-    if (map.isWalkableIgnoringPermanent(lastX + 1, y)) noteDoorway(lastX, y);
+    if (map.isWalkableIgnoringPermanent(bounds.x - 1, y, 'walker')) noteDoorway(bounds.x, y);
+    if (map.isWalkableIgnoringPermanent(lastX + 1, y, 'walker')) noteDoorway(lastX, y);
   }
 
   return { occupied, doorwayTiles };

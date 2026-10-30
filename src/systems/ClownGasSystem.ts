@@ -22,7 +22,7 @@ import type { Mob } from '../creatures/Mob';
 import { EvilClown, VIAL_ATTACK_TYPE } from '../creatures/EvilClown';
 import { TILE_SIZE } from '../core/constants';
 import { drawClownGas, drawClownVial, drawClownVialShatter } from '../sprites/clownGasSprite';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
@@ -234,7 +234,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
   private landingPointFor(vial: Vial): { x: number; y: number } {
     const tileX = Math.floor(vial.toX / TILE_SIZE);
     const tileY = Math.floor(vial.toY / TILE_SIZE);
-    if (this.gameMap.isWalkable(tileX, tileY)) return { x: vial.toX, y: vial.toY };
+    if (this.gameMap.isWalkable(tileX, tileY, 'walker')) return { x: vial.toX, y: vial.toY };
     return { x: vial.fromX, y: vial.fromY };
   }
 
@@ -243,7 +243,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
    * player-like targets (Deinonychus, hired mercenaries).
    */
   private targetsFor(ctx: SystemContext): readonly Player[] {
-    const targets: Player[] = [ctx.human, ctx.cat];
+    const targets: Player[] = presentCrawlers(ctx);
     /**
      * Defend-quest NPCs are escorted, not hunted. `MobUpdateLoop` strips them
      * out of the shared AI target list for exactly this reason, and

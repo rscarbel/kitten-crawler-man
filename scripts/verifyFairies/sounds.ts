@@ -23,11 +23,8 @@ import type { FairyGateReport } from './report';
 /** The module that maps every fairy cast, system cue and fireball cue to its sound. */
 const FAIRY_CUE_MODULE = new URL('../../src/systems/fairyAudioCues.ts', import.meta.url);
 
-/**
- * Where a fairy can be heard: rooms on floors 1 and 2, the floor-3 wilds, and
- * beside the hard-mode bosses the murder-mystery systems stage.
- */
-const FAIRY_GROUPS: readonly SfxGroup[] = ['level1', 'level2', 'level3', 'murderMysteryQuest'];
+/** Where a fairy can be heard: rooms on floors 1 and 2 and the floor-3 wilds. */
+const FAIRY_GROUPS: readonly SfxGroup[] = ['level1', 'level2', 'level3'];
 
 /** The floors a necro fairy spawns on, and so raises skeletons on. */
 const NECRO_FLOOR_GROUPS: readonly SfxGroup[] = ['level1', 'level2', 'level3'];
@@ -106,10 +103,10 @@ export function verifyFairySounds(report: FairyGateReport): void {
   const droppedFairy =
     firstFairySound === undefined
       ? []
-      : missingFrom(FAIRY_GROUPS, fairySounds, withoutId('murderMysteryQuest', firstFairySound));
+      : missingFrom(FAIRY_GROUPS, fairySounds, withoutId('level3', firstFairySound));
   report.checkCatches(
     droppedFairy.length === 0,
-    'a murder-mystery group missing one fairy sound is caught',
+    'a floor-3 group missing one fairy sound is caught',
     droppedFairy.join('; '),
   );
 

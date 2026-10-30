@@ -239,7 +239,7 @@ function placeNearSite(
   // its occupant able to do nothing but shuffle on the spot.
   for (const needsRoom of [true, false]) {
     const isUsable = (x: number, y: number): boolean =>
-      isFree(x, y) && map.isWalkable(x, y) && (!needsRoom || hasRoomToMove(map, x, y));
+      isFree(x, y) && map.isWalkable(x, y, 'walker') && (!needsRoom || hasRoomToMove(map, x, y));
 
     if (isUsable(wanted.x, wanted.y)) return take(wanted.x, wanted.y);
     for (let ring = 1; ring <= PLACEMENT_RESCUE_RINGS; ring++) {
@@ -299,7 +299,7 @@ function findWalkableTileNearSite(
       const ty = Math.round(centreY + Math.sin(angle) * reach);
       const key = tileKey(tx, ty);
       if (claimed.has(key)) continue;
-      if (!map.isWalkable(tx, ty)) continue;
+      if (!map.isWalkable(tx, ty, 'walker')) continue;
       if (needsRoom && !hasRoomToMove(map, tx, ty)) continue;
       claimed.add(key);
       return { x: tx, y: ty };

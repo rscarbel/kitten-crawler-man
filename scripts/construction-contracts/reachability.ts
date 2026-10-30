@@ -73,7 +73,7 @@ function floodWalkable(problem: ReachProblem): Set<number> {
     spot.footprint?.surface === 'prop' ? [spot.footprint.rect] : [],
   );
   const open = (x: number, y: number): boolean =>
-    problem.map.isWalkable(x, y) &&
+    problem.map.isWalkable(x, y, 'walker') &&
     problem.extraBlocked?.(x, y) !== true &&
     !propFootprints.some((rect) => rectContains(rect, x, y));
   const reached = new Set<number>();

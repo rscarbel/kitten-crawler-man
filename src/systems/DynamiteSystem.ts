@@ -1257,7 +1257,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       const nextX = dyn.x + dyn.vx;
       const txX = Math.floor(nextX / TILE_SIZE);
       const ty = Math.floor(dyn.y / TILE_SIZE);
-      if (!this.gameMap.isWalkable(txX, ty)) {
+      if (!this.gameMap.isWalkable(txX, ty, 'walker')) {
         dyn.vx = -dyn.vx * DYN_BOUNCE;
       } else {
         dyn.x = nextX;
@@ -1266,7 +1266,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       const nextY = dyn.y + dyn.vy;
       const tx = Math.floor(dyn.x / TILE_SIZE);
       const tyY = Math.floor(nextY / TILE_SIZE);
-      if (!this.gameMap.isWalkable(tx, tyY)) {
+      if (!this.gameMap.isWalkable(tx, tyY, 'walker')) {
         dyn.vy = -dyn.vy * DYN_BOUNCE;
       } else {
         dyn.y = nextY;
@@ -1531,7 +1531,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       const nextX = x + vx;
       const txX = Math.floor(nextX / TILE_SIZE);
       const ty = Math.floor(y / TILE_SIZE);
-      if (!this.gameMap.isWalkable(txX, ty)) {
+      if (!this.gameMap.isWalkable(txX, ty, 'walker')) {
         vx = -vx * DYN_BOUNCE;
       } else {
         x = nextX;
@@ -1540,7 +1540,7 @@ export class DynamiteSystem implements GameSystem, ExplosiveSource {
       const nextY = y + vy;
       const tx = Math.floor(x / TILE_SIZE);
       const tyY = Math.floor(nextY / TILE_SIZE);
-      if (!this.gameMap.isWalkable(tx, tyY)) {
+      if (!this.gameMap.isWalkable(tx, tyY, 'walker')) {
         vy = -vy * DYN_BOUNCE;
       } else {
         y = nextY;

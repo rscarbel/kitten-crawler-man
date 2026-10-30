@@ -2,8 +2,8 @@
  * Cross-scene state for the Cloak & Dagger's casino: whatever its tables and
  * machines must remember between visits.
  *
- * Like the questline progress objects (`MurderQuestProgress`,
- * `DoomsdayProgress`, …), this is a plain mutable object threaded by reference
+ * Like the questline progress objects (`AnchorQuestProgress`,
+ * `BountyProgress`, …), this is a plain mutable object threaded by reference
  * through the `DungeonScene` ↔ `BuildingInteriorScene` constructors so it
  * survives entering and leaving the club.
  */

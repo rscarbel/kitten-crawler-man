@@ -271,7 +271,7 @@ function checkCaptureResets(cause: 'touch' | 'spotlight') {
     const door = firstDoor(harness);
     check(!door.broken, `${cause}: the cell's door is boarded`);
     check(
-      !harness.scene['map'].isWalkable(door.x / TILE_SIZE, door.y / TILE_SIZE),
+      !harness.scene['map'].isWalkable(door.x / TILE_SIZE, door.y / TILE_SIZE, 'walker'),
       `${cause}: and its tile is blocked`,
     );
     check(prison.loopFrame === 0 && shiftedBefore > 0, `${cause}: the loop clock is back at 0`);
@@ -324,7 +324,7 @@ function checkDoorBreaks(
     harness.step(DOOR_OPEN_FRAMES);
     const map = harness.scene['map'];
     check(
-      map.isWalkable(door.x / TILE_SIZE, door.y / TILE_SIZE),
+      map.isWalkable(door.x / TILE_SIZE, door.y / TILE_SIZE, 'walker'),
       `${weapon}: the broken door's tile is open`,
     );
   };
@@ -780,7 +780,7 @@ function checkFollowerKeepsToTrail(harness: PrisonHarness): void {
     { x: parsed.entry.x + 1, y: parsed.entry.y },
     { x: parsed.entry.x - 1, y: parsed.entry.y },
     { x: parsed.entry.x, y: parsed.entry.y - 1 },
-  ].find((tile) => map.isWalkable(tile.x, tile.y));
+  ].find((tile) => map.isWalkable(tile.x, tile.y, 'walker'));
   if (startBeside === undefined) throw new Error('nothing walkable beside the prison entry');
   harness.placeAt(cat, startBeside);
   harness.step(1);
@@ -803,7 +803,14 @@ function checkFollowerKeepsToTrail(harness: PrisonHarness): void {
     const trail = trails[trails.length - 1];
     trail.push({ x: leader.x, y: leader.y });
     const startTile = tileOf(leader);
-    const route = map.findPath(startTile.x, startTile.y, leg.to.x, leg.to.y, ROUTE_SEARCH_TILES);
+    const route = map.findPath(
+      startTile.x,
+      startTile.y,
+      leg.to.x,
+      leg.to.y,
+      'walker',
+      ROUTE_SEARCH_TILES,
+    );
     check(route.length > 1, `leg ${legIndex + 1}: the intake has a route to walk`);
     for (const waypoint of route.slice(1)) {
       const targetX = waypoint.x * TILE_SIZE;
@@ -821,7 +828,7 @@ function checkFollowerKeepsToTrail(harness: PrisonHarness): void {
         const offTrailPx = Math.min(...trails.map((line) => distanceToPolyline(follower, line)));
         worstPx = Math.max(worstPx, offTrailPx);
         const footTile = tileOf(follower);
-        if (!map.isWalkable(footTile.x, footTile.y)) offWalkable++;
+        if (!map.isWalkable(footTile.x, footTile.y, 'walker')) offWalkable++;
       }
     }
   }
@@ -863,10 +870,14 @@ function tilesAcrossAWall(harness: PrisonHarness) {
   for (let y = 1; y < grid.height - 1; y++) {
     for (let x = 1; x + WALL_GAP_TILES < grid.width - 1; x++) {
       const far = { x: x + WALL_GAP_TILES, y };
-      if (!map.isWalkable(x, y) || !map.isWalkable(far.x, far.y) || map.isWalkable(x + 1, y)) {
+      if (
+        !map.isWalkable(x, y, 'walker') ||
+        !map.isWalkable(far.x, far.y, 'walker') ||
+        map.isWalkable(x + 1, y, 'walker')
+      ) {
         continue;
       }
-      const detour = map.findPath(x, y, far.x, far.y, MAX_DETOUR_TILES);
+      const detour = map.findPath(x, y, far.x, far.y, 'walker', MAX_DETOUR_TILES);
       if (detour.length > WALL_GAP_TILES + 1 && detour.length <= MAX_DETOUR_TILES) {
         return { near: { x, y }, far };
       }
@@ -904,7 +915,7 @@ function checkTrailRestartAroundWall(harness: PrisonHarness): void {
         y: Math.floor((cat.y + TILE_SIZE * (TILE_HALF + dy)) / TILE_SIZE),
       })),
     );
-    if (corners.some((tile) => !map.isWalkable(tile.x, tile.y))) blockedFrames++;
+    if (corners.some((tile) => !map.isWalkable(tile.x, tile.y, 'walker'))) blockedFrames++;
     closest = Math.min(closest, Math.hypot(cat.x - human.x, cat.y - human.y));
   }
   check(

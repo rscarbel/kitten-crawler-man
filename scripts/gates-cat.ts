@@ -37,14 +37,18 @@ import {
   TILE_SCALE,
   TILE_X,
   TILE_Y,
+  TRAVERSAL_FRAMES,
+  TALK_FRAMES,
   WALK_FRAMES,
   type RowSpec,
 } from '../src/sprites/art/catFigure.js';
 import { GROUND_Y, type CatPose } from '../src/sprites/art/catArt.js';
+import { WARMED_CAT_ROWS } from '../src/sprites/catSprite.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import type { CatLook } from '../src/sprites/looks/catLook.js';
 import { BELLE_LOOK } from '../src/sprites/looks/cats/belle.js';
 import { PUMPKIN_LOOK } from '../src/sprites/looks/cats/pumpkin.js';
+import { TOWN_CAT_IDS, type TownCatId } from '../src/core/state/townCatIds.js';
 
 const INK_ALPHA_THRESHOLD = 24;
 const SOLID_ALPHA_THRESHOLD = 200;
@@ -179,9 +183,24 @@ const BELLE_MEASURED_CELL_FILL_SHARE = 0.113;
 /** A look's floor is this share of its measured fill. */
 const CELL_FILL_MARGIN = 0.9;
 
+/** Each town cat's widest pose, measured; the tiny cottage cat fills far less of the shared cell. */
+const TOWN_CAT_MEASURED_CELL_FILL_SHARE = {
+  taloncrest_inn_cat: 0.1075,
+  taloncrest_old_lady_cottage_cat: 0.0838,
+  taloncrest_apothecary_cat: 0.1175,
+  taloncrest_flagon_tavern_cat: 0.1206,
+  taloncrest_mill_farm_cat: 0.1175,
+  taloncrest_smithy_cat: 0.1168,
+  taloncrest_general_store_cat: 0.1042,
+} as const satisfies Record<TownCatId, number>;
+
 const MIN_CELL_FILL_BY_LOOK: ReadonlyMap<string, number> = new Map([
   [PUMPKIN_LOOK.id, PUMPKIN_MIN_CELL_FILL_SHARE],
   [BELLE_LOOK.id, BELLE_MEASURED_CELL_FILL_SHARE * CELL_FILL_MARGIN],
+  ...TOWN_CAT_IDS.map((id): [string, number] => [
+    id,
+    TOWN_CAT_MEASURED_CELL_FILL_SHARE[id] * CELL_FILL_MARGIN,
+  ]),
 ]);
 
 function gateStructure(look: CatLook, figure: FigureDef): void {
@@ -731,6 +750,8 @@ const FRAME_CONSTANTS: ReadonlyMap<string, number> = new Map([
   ['ACTION_FRAMES', ACTION_FRAMES],
   ['KO_FRAMES', KO_FRAMES],
   ['DANCE_FRAMES', DANCE_FRAMES],
+  ['TRAVERSAL_FRAMES', TRAVERSAL_FRAMES],
+  ['TALK_FRAMES', TALK_FRAMES],
 ]);
 
 /**
@@ -751,6 +772,10 @@ const DIRECTIONAL_BASES = [
   'mine',
   'carry_walk',
   'carry_idle',
+  'hop_up',
+  'hop_down',
+  'squeeze',
+  'talk',
 ] as const;
 const DIRECTIONAL_SUFFIXES = ['', '_side', '_side_west', '_away'] as const;
 
@@ -810,43 +835,24 @@ function gateRuntimeStates(figure: FigureDef): void {
     fail('G8', failure);
   }
 
-  const prewarm = /const PREWARMED_ROWS: ReadonlyArray<CatState> = \[([^\]]*)\]/.exec(source);
-  if (prewarm === null) {
-    fail('G8', `${SPRITE_MODULE_PATH} does not declare a PREWARMED_ROWS list`);
-  } else {
-    const held = /const HELD_ROWS: [^=]*= \{([^}]*)\};/.exec(source);
-    if (held === null) fail('G8', `${SPRITE_MODULE_PATH} does not declare a HELD_ROWS table`);
-    const warmedWhenHeld = [...(held?.[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1]);
-    for (const failure of missingStateFailures(
-      figure,
-      warmedWhenHeld,
-      `${SPRITE_MODULE_PATH}'s HELD_ROWS`,
-    )) {
-      fail('G8', failure);
-    }
-    // A row played only while she holds something is warmed when the hold begins.
-    const warmed = [
-      ...[...prewarm[1].matchAll(/'([^']+)'/g)].map((match) => match[1]),
-      ...warmedWhenHeld,
-    ];
-    for (const failure of missingStateFailures(
-      figure,
-      warmed,
-      `${SPRITE_MODULE_PATH}'s PREWARMED_ROWS`,
-    )) {
-      fail('G8', failure);
-    }
-    // Her painter costs an order of magnitude more per frame than the point at
-    // which painting on demand fits inside a frame's slack, so a row nobody
-    // warms is a dropped frame the first time she plays it.
-    for (const state of figure.states.keys()) {
-      if (warmed.includes(state)) continue;
-      fail(
-        'G8',
-        `nothing prewarms "${state}", and her painter is far too slow to bake a row of it on ` +
-          'the frame she first needs it',
-      );
-    }
+  for (const failure of missingStateFailures(
+    figure,
+    [...WARMED_CAT_ROWS],
+    `${SPRITE_MODULE_PATH}'s WARMED_CAT_ROWS`,
+  )) {
+    fail('G8', failure);
+  }
+  // Her painter costs an order of magnitude more per frame than the point at
+  // which painting on demand fits inside a frame's slack, so a row nobody
+  // warms is a dropped frame the first time she plays it.
+  const warmed: ReadonlySet<string> = WARMED_CAT_ROWS;
+  for (const state of figure.states.keys()) {
+    if (warmed.has(state)) continue;
+    fail(
+      'G8',
+      `nothing prewarms "${state}", and her painter is far too slow to bake a row of it on ` +
+        'the frame she first needs it',
+    );
   }
 
   const table = /const FRAME_COUNT: Record<CatState, number> = \{([^}]*)\}/.exec(source);

@@ -72,7 +72,7 @@ import { drawDangerCircle, drawDangerPath } from '../sprites/dangerTelegraph';
 import { drawThrownDumbbell } from '../sprites/roosterSprite';
 import { frameTime } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import type { SystemContext } from './GameSystem';
+import { type SystemContext, presentCrawlers } from './GameSystem';
 import { InertBossRoomDressing } from './bossRooms/InertBossRoomDressing';
 import { gymStripLights, type StripLight } from './bossRooms/bossRoomMoodLights';
 import { drawStripLight } from '../sprites/art/moodLightArt';
@@ -332,7 +332,7 @@ export class GymRoomSystem
       { x: tile.x - 1, y: tile.y },
       { x: tile.x, y: tile.y + 1 },
       { x: tile.x, y: tile.y - 1 },
-    ].filter((n) => gameMap.isWalkable(n.x, n.y));
+    ].filter((n) => gameMap.isWalkable(n.x, n.y, 'walker'));
     let best = neighbours[0] ?? tile;
     let bestDist = Infinity;
     for (const n of neighbours) {
@@ -673,9 +673,9 @@ export class GymRoomSystem
     const view: RoosterFlockView = {
       members: living.map((bird) => ({ x: bird.x + half, y: bird.y + half })),
       active: ctx.active.isAlive ? ctx.active : null,
-      crawlers: [ctx.human, ctx.cat],
+      crawlers: presentCrawlers(ctx),
       room: layout.bounds,
-      isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY),
+      isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY, 'walker'),
     };
     for (const minion of minions) minion.flockView = view;
     if (bigRooster === null) return;
@@ -742,7 +742,10 @@ export class GymRoomSystem
     const layout = this.layout;
     const map = this.gameMap;
     if (layout === null || map === null) return null;
-    return { ...layout.bounds, isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY) };
+    return {
+      ...layout.bounds,
+      isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY, 'walker'),
+    };
   }
 
   /**
@@ -765,7 +768,7 @@ export class GymRoomSystem
       this.raiseCue(GYM_CUES.kettlebellImpact.takes);
       this.spawnPuffs(bell, CHALK_PUFFS_PER_KETTLEBELL);
       if (this.defeated || bigRooster?.isAlive !== true) continue;
-      for (const crawler of [ctx.human, ctx.cat]) {
+      for (const crawler of presentCrawlers(ctx)) {
         if (!crawler.isAlive || !this.bellHits(bell, crawler)) continue;
         const share = crawler === active ? 1 : COMPANION_KETTLEBELL_DAMAGE_SHARE;
         bigRooster.landKettlebell(crawler, share);
@@ -783,7 +786,10 @@ export class GymRoomSystem
     const layout = this.layout;
     const map = this.gameMap;
     if (layout === null || map === null) return null;
-    return { room: layout.bounds, isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY) };
+    return {
+      room: layout.bounds,
+      isWalkable: (tileX, tileY) => map.isWalkable(tileX, tileY, 'walker'),
+    };
   }
 
   /**
@@ -812,7 +818,7 @@ export class GymRoomSystem
     const reach = EXERCISE_BALL_RADIUS_PX + TILE_SIZE * CRAWLER_BODY_RADIUS_TILES;
     this.balls.all.forEach((state, index) => {
       if (state.phase !== 'rolling') return;
-      for (const crawler of [ctx.human, ctx.cat]) {
+      for (const crawler of presentCrawlers(ctx)) {
         if (!crawler.isAlive) continue;
         const cooldownKey = `${index}:${crawler === ctx.human ? 'human' : 'cat'}`;
         if (this.ballHitCooldowns.has(cooldownKey)) continue;
@@ -979,7 +985,7 @@ export class GymRoomSystem
    * `CombatSystem` resolves a punch on, so a swing counts once.
    */
   private resolvePropHits(ctx: SystemContext): void {
-    for (const attacker of [ctx.human, ctx.cat]) {
+    for (const attacker of presentCrawlers(ctx)) {
       if (!attacker.isAlive || !attacker.isAttackPeak()) continue;
       const ax = attacker.x + TILE_SIZE * TILE_CENTER;
       const ay = attacker.y + TILE_SIZE * TILE_CENTER;
@@ -1016,7 +1022,7 @@ export class GymRoomSystem
   private pushBodiesOnBelts(ctx: SystemContext): void {
     if (!this.beltsLive || this.gameMap === null) return;
     const map = this.gameMap;
-    const push = (body: { x: number; y: number }): boolean => {
+    const push = (body: Pick<Player, 'x' | 'y' | 'mobility' | 'isCrossingFooting'>): boolean => {
       const belt = this.poweredBeltAt(
         body.x + TILE_SIZE * TILE_CENTER,
         body.y + TILE_SIZE * TILE_CENTER,
@@ -1027,10 +1033,11 @@ export class GymRoomSystem
         belt.push.dx * TREADMILL_PUSH_PX_PER_FRAME,
         belt.push.dy * TREADMILL_PUSH_PX_PER_FRAME,
         map,
+        body.mobility,
       );
       return true;
     };
-    for (const crawler of [ctx.human, ctx.cat]) {
+    for (const crawler of presentCrawlers(ctx)) {
       if (crawler.isAlive) push(crawler);
     }
     for (const mob of ctx.roster.mobs) {

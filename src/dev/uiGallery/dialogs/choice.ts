@@ -237,6 +237,7 @@ export const FIXTURES: readonly DialogFixture[] = [
       exitBuildingPromptSurface('exit-building', {
         isOpen: shown,
         buildingId: () => TAVERN.id,
+        goingInto: () => null,
         exit: noop,
         stay: noop,
       }),

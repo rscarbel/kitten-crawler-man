@@ -1313,7 +1313,8 @@ export class ConstructionSystem {
     const gameMap = this.deps.gameMap;
     const blockedTiles = new Map<number, { x: number; y: number }>();
     for (const tile of this.deps.defense.footprintOf(ref)) {
-      if (!gameMap.isWalkable(tile.x, tile.y)) blockedTiles.set(tileCoordKey(tile.x, tile.y), tile);
+      if (!gameMap.isWalkable(tile.x, tile.y, 'walker'))
+        blockedTiles.set(tileCoordKey(tile.x, tile.y), tile);
     }
     if (blockedTiles.size === 0) return;
     const interior = this.deps.site.interior;

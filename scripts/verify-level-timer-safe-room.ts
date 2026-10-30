@@ -117,7 +117,7 @@ function isNearAnySafeRoom(map: InstanceType<typeof GameMap>, x: number, y: numb
 function findOutsideTile(map: InstanceType<typeof GameMap>): Tile | null {
   for (let y = 0; y < map.structure.length; y++) {
     for (let x = 0; x < map.structure.length; x++) {
-      if (map.isWalkable(x, y) && !isNearAnySafeRoom(map, x, y)) return { x, y };
+      if (map.isWalkable(x, y, 'walker') && !isNearAnySafeRoom(map, x, y)) return { x, y };
     }
   }
   return null;
@@ -133,13 +133,13 @@ function findOutsideTile(map: InstanceType<typeof GameMap>): Tile | null {
 function framesCounted(scene: Scene, activeTile: Tile, inactiveTile: Tile): number {
   if (!readOutCutscenes(scene)) throw new Error('a story cutscene never finished');
   const before = scene.floorClockElapsedFrames;
-  const startingHp = scene.pm.players().map((player) => player.hp);
+  const startingHp = scene.pm.wholeParty().map((player) => player.hp);
   for (let frame = 0; frame < FRAMES_PER_CASE; frame++) {
-    scene.pm.players().forEach((player, index) => {
+    scene.pm.wholeParty().forEach((player, index) => {
       player.hp = startingHp[index] ?? player.hp;
     });
     placeAt(scene.pm.active(), activeTile);
-    placeAt(scene.pm.inactive(), inactiveTile);
+    placeAt(scene.pm.partnerAnywhere(), inactiveTile);
     scene.update();
   }
   return scene.floorClockElapsedFrames - before;

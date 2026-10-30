@@ -22,6 +22,9 @@ export const STORY_BEAT_ORDER = [
   'floor2_caroline_pressure',
   'floor3_caroline_arrival',
   'floor3_dave_allies',
+  'floor3_dave_pumpkin',
+  'floor3_dave_chosen_first',
+  'floor3_caroline_chosen_first',
 ] as const;
 
 /** One beat of the story. */

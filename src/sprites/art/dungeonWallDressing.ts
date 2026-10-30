@@ -300,6 +300,17 @@ const FLOOR_DEFAULTS: Readonly<Record<DungeonFloorThemeId, WallDressingSet>> = {
     spotChance: 0.18,
     pipeRunChance: 0.3,
   },
+  sewer: {
+    ...PLAIN,
+    spots: [
+      { kind: 'damp', weight: 3 },
+      { kind: 'stain', weight: 3 },
+      { kind: 'moss', weight: 1 },
+      { kind: 'crack', weight: 1 },
+    ],
+    spotChance: 0.16,
+    pipeRunChance: 0.15,
+  },
 };
 
 /** The dressing a floor's walls carry where nothing more specific has been chosen. */

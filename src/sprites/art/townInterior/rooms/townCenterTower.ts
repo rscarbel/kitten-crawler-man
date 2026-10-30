@@ -1,15 +1,13 @@
 /**
- * Bespoke furniture for the Town Center Tower: the magistrate's seat of
- * government, and Miss Quill's domain from the ground floor's public counter to
- * the office at the top.
+ * Bespoke furniture for the Town Center Tower, the Warden's seat, from the
+ * ground floor's public counter to the room at the top.
  *
  * Every civic piece is built in one joinery — dark walnut, green baize, brass
- * fittings — so the four storeys read as one building's furniture: the
- * cabinets and pigeonholes the town's records are filed in, the scriveners'
- * desks they are copied at, the board the town's writs are posted to, and the
- * magistrate's own desk. Quill's workshop on the storey below the office is
- * the exception, and on purpose: copper, glass and a violet charge that does
- * not belong in a records office at all.
+ * fittings — so the storeys read as one building's furniture: the cabinets and
+ * pigeonholes the town's records are filed in, the scriveners' desks they are
+ * copied at, and the board the Warden's proclamations are posted to. The
+ * third storey's workshop is the exception, and on purpose: copper, glass and
+ * a violet charge that does not belong in a records office at all.
  *
  * Every painter keeps its ink inside its own footprint's columns and above
  * its foot, and only rises above the footprint, so a wall piece climbs the
@@ -29,15 +27,15 @@ import {
   type FootprintBox,
   type Rng,
 } from '../../town/townArt';
-import { getTownRamp, sampleRamp, mix, type RGB, type Ramp } from '../../town/townPalette';
+import { getTownRamp, sampleRamp, type RGB, type Ramp } from '../../town/townPalette';
 import { paintGrandHearth } from './hornedFlagon';
 
 type Ctx = CanvasRenderingContext2D;
 
 // ── Materials no shared ramp covers ─────────────────────────────────────────
 
-/** Oiled walnut: darker than the town's oak, the wood a magistrate's office is fitted in. */
-const WALNUT: Ramp = {
+/** Oiled walnut: darker than the town's oak, the wood the tower is fitted in. */
+export const WALNUT: Ramp = {
   shadow: [40, 26, 18],
   mid: [86, 56, 36],
   light: [130, 90, 58],
@@ -50,15 +48,15 @@ const BAIZE: Ramp = {
   light: [66, 108, 78],
   accent: [98, 138, 102],
 };
-/** Wound copper, the capacitor's own metal. */
+/** Wound copper, the workshop's coils. */
 const COPPER: Ramp = {
   shadow: [92, 42, 24],
   mid: [160, 84, 46],
   light: [208, 132, 82],
   accent: [240, 186, 130],
 };
-const BRASS_DIM: RGB = [132, 100, 44];
-const BRASS_BRIGHT: RGB = [226, 192, 110];
+export const BRASS_DIM: RGB = [132, 100, 44];
+export const BRASS_BRIGHT: RGB = [226, 192, 110];
 const PARCHMENT: RGB = [222, 206, 164];
 const PARCHMENT_SHADE: RGB = [176, 156, 112];
 const PAPER: RGB = [232, 226, 206];
@@ -70,17 +68,13 @@ const INK: RGB = [28, 24, 30];
 const BOX_CARD: RGB = [150, 122, 82];
 const CORK: RGB = [150, 112, 70];
 const BOX_CARD_SHADE: RGB = [108, 86, 56];
-const CANDLE_WAX: RGB = [234, 222, 180];
-const CANDLE_FLAME: RGB = [252, 210, 120];
-const GLASS: RGB = [180, 206, 214];
 const GLASS_LIGHT: RGB = [228, 240, 244];
-const FOIL: RGB = [190, 194, 200];
-/** The soul charge Quill stores — a violet no honest lamp burns. */
+/** The charge the workshop stores — a violet no honest lamp burns. */
 const CHARGE_CORE: RGB = [238, 214, 255];
 const CHARGE_MID: RGB = [170, 110, 238];
 const CHARGE_EDGE: RGB = [96, 48, 168];
 
-function ironRamp(): Ramp {
+export function ironRamp(): Ramp {
   return getTownRamp('iron_black');
 }
 
@@ -92,7 +86,7 @@ const SHADOW_RADIUS_X_TILES = 0.62;
 const SHADOW_RADIUS_Y_TILES = 0.14;
 
 /** A long piece's shadow is a band along its foot, not one ellipse under its middle. */
-function bandShadow(ctx: Ctx, box: FootprintBox, ts: number, alpha: number): void {
+export function bandShadow(ctx: Ctx, box: FootprintBox, ts: number, alpha: number): void {
   const segments = Math.max(1, Math.round(box.width / ts));
   for (let i = 0; i < segments; i++) {
     const centreX = box.left + (box.width * (i + 0.5)) / segments;
@@ -107,14 +101,14 @@ function bandShadow(ctx: Ctx, box: FootprintBox, ts: number, alpha: number): voi
   }
 }
 
-function inkRect(ctx: Ctx, x: number, y: number, w: number, h: number, ts: number): void {
+export function inkRect(ctx: Ctx, x: number, y: number, w: number, h: number, ts: number): void {
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   inkOutline(ctx, ts);
 }
 
 /** A filled, outlined rectangle in one ramp stop. */
-function slab(
+export function slab(
   ctx: Ctx,
   ramp: Ramp,
   stop: number,
@@ -131,13 +125,20 @@ function slab(
 
 /** Thin lit edge along the top of a surface, the one highlight every slab gets. */
 const LIT_EDGE_TILES = 0.03;
-function litEdge(ctx: Ctx, ramp: Ramp, x: number, y: number, w: number, ts: number): void {
+export function litEdge(ctx: Ctx, ramp: Ramp, x: number, y: number, w: number, ts: number): void {
   ctx.fillStyle = rgb(sampleRamp(ramp, 0.9));
   ctx.fillRect(x, y, w, ts * LIT_EDGE_TILES);
 }
 
 /** A soft round glow, for a flame or a charged orb. */
-function glow(ctx: Ctx, x: number, y: number, radius: number, colour: RGB, alpha: number): void {
+export function glow(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  radius: number,
+  colour: RGB,
+  alpha: number,
+): void {
   const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
   gradient.addColorStop(0, rgba(colour, alpha));
   gradient.addColorStop(1, rgba(colour, 0));
@@ -189,23 +190,6 @@ function waxSeal(ctx: Ctx, x: number, y: number, radius: number): void {
   ctx.fillStyle = rgb(WAX_RED_LIGHT);
   ctx.beginPath();
   ctx.arc(x - radius * 0.2, y - radius * 0.2, radius * 0.45, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-/** A short candle in a brass dish, lit. */
-function candle(ctx: Ctx, x: number, baseY: number, ts: number): void {
-  const dishW = ts * 0.16;
-  const stickW = ts * 0.05;
-  const stickH = ts * 0.16;
-  ctx.fillStyle = rgb(BRASS_DIM);
-  ctx.fillRect(x - dishW / 2, baseY - ts * 0.03, dishW, ts * 0.03);
-  ctx.fillStyle = rgb(CANDLE_WAX);
-  ctx.fillRect(x - stickW / 2, baseY - ts * 0.03 - stickH, stickW, stickH);
-  const flameY = baseY - ts * 0.03 - stickH - ts * 0.04;
-  glow(ctx, x, flameY, ts * 0.2, CANDLE_FLAME, 0.45);
-  ctx.fillStyle = rgb(CANDLE_FLAME);
-  ctx.beginPath();
-  ctx.ellipse(x, flameY, ts * 0.02, ts * 0.045, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -489,129 +473,6 @@ export function paintScrivenerDesk(
   });
 }
 
-// ── Magistrate's desk ───────────────────────────────────────────────────────
-
-const MAGISTRATE_DESK_TOP_RISE_TILES = 0.58;
-const MAGISTRATE_DESK_TOP_DEPTH_TILES = 0.4;
-const MAGISTRATE_DESK_PANEL_COUNT = 3;
-
-/**
- * The magistrate's own desk: a panelled walnut front, a baize top under a
- * blotter, the town seal and its stamp, a brass candlestick, and the day's
- * writs in a tray — every one of them already signed.
- */
-export function paintMagistrateDesk(
-  ctx: Ctx,
-  frame: TownPropFrame,
-  _variant: number,
-  rng: Rng,
-): void {
-  withFootprintClip(ctx, frame, () => {
-    const box = footprintBox(frame);
-    const ts = frame.tileScale;
-    bandShadow(ctx, box, ts, 0.42);
-    const front = box.bottom - ts * MAGISTRATE_DESK_TOP_RISE_TILES;
-    const back = front - ts * MAGISTRATE_DESK_TOP_DEPTH_TILES;
-    const left = box.left + ts * 0.04;
-    const width = box.width - ts * 0.08;
-
-    // Panelled front.
-    slab(ctx, WALNUT, 0.32, left, front, width, box.bottom - front - ts * 0.02, ts);
-    const panelGap = ts * 0.08;
-    const panelW =
-      (width - panelGap * (MAGISTRATE_DESK_PANEL_COUNT + 1)) / MAGISTRATE_DESK_PANEL_COUNT;
-    for (let i = 0; i < MAGISTRATE_DESK_PANEL_COUNT; i++) {
-      const px = left + panelGap + i * (panelW + panelGap);
-      const py = front + ts * 0.1;
-      const ph = box.bottom - front - ts * 0.22;
-      ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.45));
-      ctx.fillRect(px, py, panelW, ph);
-      ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.7));
-      ctx.fillRect(px, py, panelW, Math.max(1, ts * 0.02));
-      ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.12));
-      ctx.fillRect(px, py + ph - Math.max(1, ts * 0.02), panelW, Math.max(1, ts * 0.02));
-    }
-    // The town's arms on the centre panel, in brass.
-    const armsX = left + width / 2;
-    const armsY = front + (box.bottom - front) * 0.45;
-    ctx.fillStyle = rgb(BRASS_DIM);
-    ctx.beginPath();
-    ctx.moveTo(armsX - ts * 0.1, armsY - ts * 0.1);
-    ctx.lineTo(armsX + ts * 0.1, armsY - ts * 0.1);
-    ctx.lineTo(armsX + ts * 0.1, armsY + ts * 0.02);
-    ctx.lineTo(armsX, armsY + ts * 0.12);
-    ctx.lineTo(armsX - ts * 0.1, armsY + ts * 0.02);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = rgb(BRASS_BRIGHT);
-    ctx.fillRect(armsX - ts * 0.015, armsY - ts * 0.08, ts * 0.03, ts * 0.14);
-
-    // Top: rim, baize and blotter.
-    slab(ctx, WALNUT, 0.62, left - ts * 0.02, back, width + ts * 0.04, front - back, ts);
-    ctx.fillStyle = rgb(sampleRamp(BAIZE, 0.45));
-    ctx.fillRect(left + ts * 0.06, back + ts * 0.05, width - ts * 0.12, front - back - ts * 0.1);
-    litEdge(ctx, WALNUT, left - ts * 0.02, back, width + ts * 0.04, ts);
-    slab(ctx, WALNUT, 0.5, left - ts * 0.02, front, width + ts * 0.04, ts * 0.1, ts);
-    const blotterW = ts * 1.1;
-    const blotterX = left + width / 2 - blotterW / 2;
-    const blotterY = back + ts * 0.08;
-    const blotterH = front - back - ts * 0.16;
-    ctx.fillStyle = rgb(mix(PAPER, BAIZE.light, 0.15));
-    ctx.fillRect(blotterX, blotterY, blotterW, blotterH);
-    ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.2));
-    ctx.fillRect(blotterX, blotterY, ts * 0.06, blotterH);
-    ctx.fillRect(blotterX + blotterW - ts * 0.06, blotterY, ts * 0.06, blotterH);
-    // A writ on the blotter, signed and sealed.
-    ctx.fillStyle = rgb(PARCHMENT);
-    ctx.fillRect(blotterX + ts * 0.3, blotterY + ts * 0.03, ts * 0.42, blotterH - ts * 0.05);
-    ctx.fillStyle = rgba(INK, 0.55);
-    for (let l = 0; l < 3; l++) {
-      ctx.fillRect(
-        blotterX + ts * 0.34,
-        blotterY + ts * (0.07 + l * 0.05),
-        ts * 0.32,
-        Math.max(1, ts * 0.01),
-      );
-    }
-    waxSeal(ctx, blotterX + ts * 0.62, blotterY + blotterH - ts * 0.07, ts * 0.04);
-
-    // West end: candlestick and inkstand.
-    candle(ctx, left + ts * 0.3, back + ts * 0.18, ts);
-    ctx.fillStyle = rgb(BRASS_DIM);
-    ctx.fillRect(left + ts * 0.48, back + ts * 0.12, ts * 0.24, ts * 0.08);
-    ctx.fillStyle = rgb(INK);
-    ctx.fillRect(left + ts * 0.52, back + ts * 0.06, ts * 0.06, ts * 0.07);
-    ctx.fillRect(left + ts * 0.62, back + ts * 0.06, ts * 0.06, ts * 0.07);
-    ctx.strokeStyle = rgb(PAPER);
-    ctx.lineWidth = Math.max(1, ts * 0.015);
-    ctx.beginPath();
-    ctx.moveTo(left + ts * 0.55, back + ts * 0.07);
-    ctx.lineTo(left + ts * 0.66, back - ts * 0.16);
-    ctx.stroke();
-
-    // East end: the seal stamp on its block, and the writ tray.
-    const stampX = box.right - ts * 1.25;
-    ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.2));
-    ctx.fillRect(stampX, back + ts * 0.02, ts * 0.12, ts * 0.16);
-    ctx.fillStyle = rgb(BRASS_BRIGHT);
-    ctx.fillRect(stampX - ts * 0.02, back + ts * 0.16, ts * 0.16, ts * 0.04);
-    const trayX = box.right - ts * 0.95;
-    const trayW = ts * 0.7;
-    const stackRng = forkRng(rng);
-    let y = back + ts * 0.26;
-    for (let f = 0; f < 5; f++) {
-      const fh = ts * 0.035;
-      y -= fh;
-      ctx.fillStyle = rgb(f % 2 === 0 ? PARCHMENT : PAPER);
-      ctx.fillRect(trayX + ts * 0.05 + jitter(stackRng, ts * 0.02), y, trayW - ts * 0.1, fh);
-    }
-    ctx.strokeStyle = rgb(BRASS_DIM);
-    ctx.lineWidth = Math.max(1, ts * 0.025);
-    ctx.strokeRect(trayX, back + ts * 0.06, trayW, ts * 0.22);
-    waxSeal(ctx, trayX + trayW - ts * 0.12, y + ts * 0.05, ts * 0.035);
-  });
-}
-
 // ── Archive boxes ───────────────────────────────────────────────────────────
 
 const ARCHIVE_BOX_HEIGHT_TILES = 0.26;
@@ -670,7 +531,7 @@ const WRIT_BOARD_BOTTOM_TILES = 0.45;
 const WRIT_BOARD_NOTICES = 7;
 
 /**
- * The public board for the magistrate's writs and proclamations: a cork panel
+ * The public board for the Warden's writs and proclamations: a cork panel
  * in a walnut frame, every notice sealed, one of them a reward bill with a
  * face sketched on it.
  */
@@ -739,136 +600,6 @@ export function paintWritBoard(ctx: Ctx, frame: TownPropFrame, _variant: number,
   });
 }
 
-// ── Coil bench ──────────────────────────────────────────────────────────────
-
-const COIL_BENCH_TOP_RISE_TILES = 0.55;
-const COIL_BENCH_TOP_DEPTH_TILES = 0.32;
-const LEYDEN_JAR_COUNT = 4;
-
-/**
- * Quill's workbench: a row of foil-wrapped Leyden jars, each holding a little
- * of the violet charge, a spool of copper wire half wound onto a former, and
- * cut lengths of wire across the top. Nothing on it is labelled.
- */
-export function paintCoilBench(ctx: Ctx, frame: TownPropFrame, _variant: number, rng: Rng): void {
-  withFootprintClip(ctx, frame, () => {
-    const box = footprintBox(frame);
-    const ts = frame.tileScale;
-    bandShadow(ctx, box, ts, 0.36);
-    const iron = ironRamp();
-    const front = box.bottom - ts * COIL_BENCH_TOP_RISE_TILES;
-    const back = front - ts * COIL_BENCH_TOP_DEPTH_TILES;
-    const left = box.left + ts * 0.05;
-    const width = box.width - ts * 0.1;
-
-    // Trestle legs and a stretcher shelf of scrap copper.
-    for (const lx of [left + ts * 0.08, left + width / 2 - ts * 0.04, left + width - ts * 0.16]) {
-      slab(ctx, WALNUT, 0.28, lx, front, ts * 0.08, box.bottom - front - ts * 0.02, ts);
-    }
-    slab(
-      ctx,
-      WALNUT,
-      0.35,
-      left + ts * 0.08,
-      box.bottom - ts * 0.18,
-      width - ts * 0.16,
-      ts * 0.05,
-      ts,
-    );
-    ctx.strokeStyle = rgb(sampleRamp(COPPER, 0.5));
-    ctx.lineWidth = Math.max(1, ts * 0.02);
-    const scrapRng = forkRng(rng);
-    for (let i = 0; i < 5; i++) {
-      const sx = left + ts * 0.3 + scrapRng() * (width - ts * 0.6);
-      ctx.beginPath();
-      ctx.arc(sx, box.bottom - ts * 0.24, ts * (0.04 + scrapRng() * 0.04), Math.PI, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // Scorched top.
-    slab(ctx, WALNUT, 0.55, left, back, width, front - back, ts);
-    litEdge(ctx, WALNUT, left, back, width, ts);
-    slab(ctx, WALNUT, 0.42, left, front, width, ts * 0.08, ts);
-    ctx.fillStyle = rgba(INK, 0.35);
-    ctx.beginPath();
-    ctx.ellipse(
-      left + width * 0.68,
-      back + (front - back) * 0.5,
-      ts * 0.28,
-      ts * 0.08,
-      0,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    // The jars.
-    const jarW = ts * 0.2;
-    const jarH = ts * 0.36;
-    const jarBase = back + (front - back) * 0.8;
-    for (let i = 0; i < LEYDEN_JAR_COUNT; i++) {
-      const jx = left + ts * 0.14 + i * (jarW + ts * 0.06);
-      const jy = jarBase - jarH;
-      ctx.fillStyle = rgba(GLASS, 0.85);
-      ctx.fillRect(jx, jy, jarW, jarH);
-      ctx.fillStyle = rgb(FOIL);
-      ctx.fillRect(jx, jy + jarH * 0.45, jarW, jarH * 0.55);
-      ctx.fillStyle = rgb(mix(FOIL, GLASS_LIGHT, 0.5));
-      ctx.fillRect(jx + jarW * 0.12, jy + jarH * 0.5, jarW * 0.12, jarH * 0.42);
-      inkRect(ctx, jx, jy, jarW, jarH, ts);
-      ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.3));
-      ctx.fillRect(jx - ts * 0.01, jy - ts * 0.04, jarW + ts * 0.02, ts * 0.05);
-      const rodTop = jy - ts * 0.16;
-      ctx.fillStyle = rgb(sampleRamp(COPPER, 0.6));
-      ctx.fillRect(jx + jarW / 2 - ts * 0.01, rodTop, ts * 0.02, ts * 0.13);
-      glow(ctx, jx + jarW / 2, rodTop, ts * 0.12, CHARGE_MID, 0.55);
-      ctx.fillStyle = rgb(CHARGE_CORE);
-      ctx.beginPath();
-      ctx.arc(jx + jarW / 2, rodTop, ts * 0.03, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // A chain bus-bar along the rods.
-    const firstRodX = left + ts * 0.14 + jarW / 2;
-    const lastRodX = firstRodX + (LEYDEN_JAR_COUNT - 1) * (jarW + ts * 0.06);
-    ctx.strokeStyle = rgb(sampleRamp(COPPER, 0.7));
-    ctx.lineWidth = Math.max(1, ts * 0.015);
-    ctx.beginPath();
-    ctx.moveTo(firstRodX, jarBase - jarH - ts * 0.12);
-    ctx.quadraticCurveTo(
-      (firstRodX + lastRodX) / 2,
-      jarBase - jarH - ts * 0.04,
-      lastRodX,
-      jarBase - jarH - ts * 0.12,
-    );
-    ctx.stroke();
-
-    // The wire spool and its former.
-    const spoolX = box.right - ts * 0.55;
-    const spoolY = jarBase - ts * 0.16;
-    ctx.fillStyle = rgb(sampleRamp(iron, 0.4));
-    ctx.fillRect(spoolX - ts * 0.18, spoolY - ts * 0.14, ts * 0.04, ts * 0.2);
-    ctx.fillRect(spoolX + ts * 0.14, spoolY - ts * 0.14, ts * 0.04, ts * 0.2);
-    const windings = 7;
-    for (let w = 0; w < windings; w++) {
-      ctx.fillStyle = rgb(sampleRamp(COPPER, w % 2 === 0 ? 0.55 : 0.75));
-      ctx.fillRect(spoolX - ts * 0.14 + w * ts * 0.04, spoolY - ts * 0.12, ts * 0.04, ts * 0.16);
-    }
-    inkRect(ctx, spoolX - ts * 0.18, spoolY - ts * 0.14, ts * 0.36, ts * 0.2, ts);
-    ctx.strokeStyle = rgb(sampleRamp(COPPER, 0.65));
-    ctx.beginPath();
-    ctx.moveTo(spoolX + ts * 0.18, spoolY - ts * 0.04);
-    ctx.bezierCurveTo(
-      spoolX + ts * 0.32,
-      spoolY + ts * 0.02,
-      spoolX + ts * 0.22,
-      front - ts * 0.02,
-      spoolX + ts * 0.38,
-      front + ts * 0.12,
-    );
-    ctx.stroke();
-  });
-}
-
 // ── Conduit coil ────────────────────────────────────────────────────────────
 
 /** Height of the coil's column, in tiles; the orb rises above it. */
@@ -878,7 +609,7 @@ const CONDUIT_COIL_ORB_RADIUS_TILES = 0.15;
 
 /**
  * A copper-wound column on an iron foot, topped with a glass orb holding the
- * violet charge — the same work, on a smaller scale, that Remex was made into.
+ * violet charge.
  */
 export function paintConduitCoil(
   ctx: Ctx,
@@ -952,138 +683,6 @@ export function paintConduitCoil(
       ctx.lineTo(box.centreX + side * orbRadius * 2.3, orbY - ts * 0.08);
       ctx.stroke();
     }
-  });
-}
-
-// ── Petition counter ────────────────────────────────────────────────────────
-
-const PETITION_COUNTER_TOP_RISE_TILES = 0.62;
-const PETITION_COUNTER_TOP_DEPTH_TILES = 0.3;
-const PETITION_COUNTER_GRILLE_HEIGHT_TILES = 0.42;
-const PETITION_COUNTER_GRILLE_BARS_PER_TILE = 5;
-/** The window in the grille a petition is passed through, in tiles from the west end. */
-const PETITION_COUNTER_WINDOW_OFFSET_TILES = 1.5;
-const PETITION_COUNTER_WINDOW_WIDTH_TILES = 0.9;
-
-/**
- * The public counter on the ground floor: a long panelled walnut front, a
- * brass grille along the back with one window cut in it, the petition book
- * open under a chained quill, a hand bell, and a tray of forms.
- */
-export function paintPetitionCounter(
-  ctx: Ctx,
-  frame: TownPropFrame,
-  _variant: number,
-  rng: Rng,
-): void {
-  withFootprintClip(ctx, frame, () => {
-    const box = footprintBox(frame);
-    const ts = frame.tileScale;
-    bandShadow(ctx, box, ts, 0.4);
-    const front = box.bottom - ts * PETITION_COUNTER_TOP_RISE_TILES;
-    const back = front - ts * PETITION_COUNTER_TOP_DEPTH_TILES;
-    const left = box.left + ts * 0.03;
-    const width = box.width - ts * 0.06;
-
-    // The grille behind the top, with its window.
-    const grilleTop = back - ts * PETITION_COUNTER_GRILLE_HEIGHT_TILES;
-    const windowLeft = left + ts * PETITION_COUNTER_WINDOW_OFFSET_TILES;
-    const windowRight = windowLeft + ts * PETITION_COUNTER_WINDOW_WIDTH_TILES;
-    const bars = Math.round(frame.footprintW * PETITION_COUNTER_GRILLE_BARS_PER_TILE);
-    ctx.fillStyle = rgb(BRASS_DIM);
-    for (let i = 0; i <= bars; i++) {
-      const bx = left + (width * i) / bars;
-      if (bx > windowLeft && bx < windowRight) continue;
-      ctx.fillRect(bx - ts * 0.012, grilleTop, ts * 0.024, back - grilleTop);
-    }
-    ctx.fillStyle = rgb(BRASS_BRIGHT);
-    ctx.fillRect(left, grilleTop, windowLeft - left, ts * 0.03);
-    ctx.fillRect(windowRight, grilleTop, left + width - windowRight, ts * 0.03);
-    ctx.fillStyle = rgb(BRASS_DIM);
-    ctx.fillRect(windowLeft, grilleTop + ts * 0.1, windowRight - windowLeft, ts * 0.03);
-
-    // Panelled front.
-    slab(ctx, WALNUT, 0.32, left, front, width, box.bottom - front - ts * 0.02, ts);
-    const panels = frame.footprintW;
-    const panelGap = ts * 0.1;
-    const panelW = (width - panelGap * (panels + 1)) / panels;
-    for (let i = 0; i < panels; i++) {
-      const px = left + panelGap + i * (panelW + panelGap);
-      const py = front + ts * 0.12;
-      const ph = box.bottom - front - ts * 0.26;
-      ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.45));
-      ctx.fillRect(px, py, panelW, ph);
-      ctx.fillStyle = rgb(sampleRamp(WALNUT, 0.7));
-      ctx.fillRect(px, py, panelW, Math.max(1, ts * 0.02));
-    }
-
-    // Top.
-    slab(ctx, WALNUT, 0.62, left, back, width, front - back, ts);
-    ctx.fillStyle = rgb(sampleRamp(BAIZE, 0.45));
-    ctx.fillRect(left + ts * 0.05, back + ts * 0.05, width - ts * 0.1, front - back - ts * 0.1);
-    litEdge(ctx, WALNUT, left, back, width, ts);
-    slab(ctx, WALNUT, 0.5, left, front, width, ts * 0.09, ts);
-
-    // The petition book, open under the window, its quill on a chain.
-    const bookW = ts * 0.62;
-    const bookX = (windowLeft + windowRight) / 2 - bookW / 2;
-    const bookY = back + ts * 0.06;
-    const bookH = front - back - ts * 0.12;
-    ctx.fillStyle = rgb(WAX_RED);
-    ctx.fillRect(bookX - ts * 0.02, bookY - ts * 0.01, bookW + ts * 0.04, bookH + ts * 0.02);
-    ctx.fillStyle = rgb(PAPER);
-    ctx.fillRect(bookX, bookY, bookW / 2 - ts * 0.01, bookH);
-    ctx.fillStyle = rgb(mix(PAPER, PAPER_SHADE, 0.4));
-    ctx.fillRect(bookX + bookW / 2 + ts * 0.01, bookY, bookW / 2 - ts * 0.01, bookH);
-    ctx.fillStyle = rgba(INK, 0.5);
-    for (let l = 0; l < 3; l++) {
-      ctx.fillRect(
-        bookX + ts * 0.03,
-        bookY + bookH * (0.25 + l * 0.22),
-        bookW / 2 - ts * 0.08,
-        Math.max(1, ts * 0.01),
-      );
-    }
-    const quillX = bookX + bookW + ts * 0.1;
-    ctx.strokeStyle = rgb(sampleRamp(ironRamp(), 0.6));
-    ctx.lineWidth = Math.max(1, ts * 0.01);
-    ctx.beginPath();
-    ctx.moveTo(bookX + bookW, bookY + bookH * 0.5);
-    ctx.quadraticCurveTo(quillX - ts * 0.04, front, quillX, bookY + bookH * 0.6);
-    ctx.stroke();
-    ctx.strokeStyle = rgb(PAPER);
-    ctx.lineWidth = Math.max(1, ts * 0.015);
-    ctx.beginPath();
-    ctx.moveTo(quillX, bookY + bookH * 0.6);
-    ctx.lineTo(quillX + ts * 0.1, bookY - ts * 0.1);
-    ctx.stroke();
-
-    // A hand bell at the west end, a tray of blank forms at the east.
-    const bellX = left + ts * 0.4;
-    const bellBase = back + ts * 0.2;
-    ctx.fillStyle = rgb(BRASS_DIM);
-    ctx.beginPath();
-    ctx.moveTo(bellX - ts * 0.08, bellBase);
-    ctx.quadraticCurveTo(bellX - ts * 0.07, bellBase - ts * 0.14, bellX, bellBase - ts * 0.15);
-    ctx.quadraticCurveTo(bellX + ts * 0.07, bellBase - ts * 0.14, bellX + ts * 0.08, bellBase);
-    ctx.closePath();
-    ctx.fill();
-    inkOutline(ctx, ts);
-    ctx.fillStyle = rgb(BRASS_BRIGHT);
-    ctx.fillRect(bellX - ts * 0.04, bellBase - ts * 0.12, ts * 0.02, ts * 0.08);
-    const trayX = box.right - ts * 0.95;
-    const trayW = ts * 0.6;
-    const formRng = forkRng(rng);
-    let y = back + ts * 0.22;
-    for (let f = 0; f < 6; f++) {
-      const fh = ts * 0.03;
-      y -= fh;
-      ctx.fillStyle = rgb(f % 2 === 0 ? PAPER : PARCHMENT);
-      ctx.fillRect(trayX + ts * 0.05 + jitter(formRng, ts * 0.015), y, trayW - ts * 0.1, fh);
-    }
-    ctx.strokeStyle = rgb(BRASS_DIM);
-    ctx.lineWidth = Math.max(1, ts * 0.02);
-    ctx.strokeRect(trayX, back + ts * 0.04, trayW, ts * 0.18);
   });
 }
 

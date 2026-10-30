@@ -48,7 +48,7 @@ export const CHARACTERS = {
   pumpkin: {
     species: 'cat',
     displayName: 'Pumpkin',
-    speakerId: 'belle',
+    speakerId: 'pumpkin',
     plays: false,
   },
   belle: {

@@ -48,7 +48,7 @@ export class VillageNavigator {
 
   /** A tile a villager may walk across. */
   isPassable(tileX: number, tileY: number): boolean {
-    return this.contains(tileX, tileY) && this.gameMap.isWalkable(tileX, tileY);
+    return this.contains(tileX, tileY) && this.gameMap.isWalkable(tileX, tileY, 'walker');
   }
 
   /** A doorway: a villager crosses it and never stops on it. */

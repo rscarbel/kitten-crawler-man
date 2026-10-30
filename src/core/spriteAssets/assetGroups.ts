@@ -31,7 +31,7 @@ export type AssetGroup =
  * Every creature/effect/environment sheet a group covers.
  *
  * Roughly half of `src/sprites/*` (Krasue, Lemur, Lion,
- * MissQuill, Remex, Baggi, DireBear, RuinsGhoul, Elf,
+ * DireBear, RuinsGhoul, Elf,
  * all townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
  * this file. See `MOB_SPRITE_KEYS` below for the canonical "does this mob type
@@ -389,10 +389,8 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
 
   /** `bountyDefs.ts`'s `DARK_KNIGHT_DEF` — painted, not baked. */
   dark_knight: [],
-  // The Dire Bear, Miss Quill and Remex are painted procedurally, so none holds a sheet.
+  /** The Dire Bear is painted procedurally, so it holds no sheet. */
   dire_bear: [],
-  miss_quill: [],
-  remex: [],
   /** Boss adds and set-piece hostiles, all procedural or painted. */
   kraken_tentacle: [],
   spider_hatchling: [],
@@ -406,8 +404,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
  * companions, hirelings). None is a `MobKind`: they never appear in a spawn
  * table, so `SYSTEM_ASSET_REQUIREMENTS` is the only place that names them.
  */
-export type FriendlyCreatureKind =
-  'cow' | 'calf' | 'ratkin_soldier' | 'baggi' | 'deinonychus' | 'mercenary';
+export type FriendlyCreatureKind = 'cow' | 'calf' | 'ratkin_soldier' | 'deinonychus' | 'mercenary';
 
 /** Any creature whose sprite needs `verify:assets` checks. */
 export type CreatureKind = MobKind | FriendlyCreatureKind;
@@ -421,8 +418,6 @@ export const FRIENDLY_CREATURE_SPRITE_KEYS: Readonly<
   calf: [],
   /** Briar Hollow's militia, painted by `ratkinCastSprite.ts` like the rest of the ratkin cast. */
   ratkin_soldier: [],
-  /** `Baggi` — procedural. */
-  baggi: [],
   /** `DeinonychusSystem` — a persistent companion, not a spawn-table mob; painted. */
   deinonychus: [],
   /** `MercenarySystem`'s hirelings, drawn through `MERCENARY_ART` (`src/sprites/mercenaryArt.ts`); painted. */

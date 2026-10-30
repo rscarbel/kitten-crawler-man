@@ -252,7 +252,8 @@ function pathsFrom(room: Room, from: Point): Map<string, Point[]> {
         next.x < bounds.x + bounds.w &&
         next.y >= bounds.y &&
         next.y < bounds.y + bounds.h;
-      if (!inRoom || paths.has(tileKey(next)) || !room.map.isWalkable(next.x, next.y)) continue;
+      if (!inRoom || paths.has(tileKey(next)) || !room.map.isWalkable(next.x, next.y, 'walker'))
+        continue;
       paths.set(tileKey(next), [...path, next]);
       queue.push(next);
     }
@@ -396,7 +397,7 @@ function verifySafeRooms(): void {
       const allTiles: Point[] = [];
       for (let y = room.bounds.y; y < room.bounds.y + room.bounds.h; y++) {
         for (let x = room.bounds.x; x < room.bounds.x + room.bounds.w; x++) {
-          if (room.map.isWalkable(x, y)) allTiles.push({ x, y });
+          if (room.map.isWalkable(x, y, 'walker')) allTiles.push({ x, y });
         }
       }
       // The floor the party can actually stand on: everything reachable from

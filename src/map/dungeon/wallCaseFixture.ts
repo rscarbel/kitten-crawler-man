@@ -14,10 +14,12 @@
  *   the third room — and one standing on the wall whose face looks into the
  *   rooms below, so its foot is that face's upper tile — the room below the first;
  * - a wall two tiles thick with a corridor through it;
- * - a crawler sign hung on a face above a corridor.
+ * - a crawler sign hung on a face above a corridor, on the themes the generator
+ *   lays floors in.
  */
 
 import { CRAWLER_SIGN, FloorTypeValue, VOID_TYPE, type TileContent } from '../tileTypes';
+import { isGeneratedFloorTheme, type DungeonFloorThemeId } from './floorTheme';
 
 /**
  * `#` wall, `.` and `,` two floors, `S` a sign plaque, `~` the void border — three
@@ -55,7 +57,7 @@ const WALL_CASE_ROWS: ReadonlyArray<string> = [
 /** The sign's arrow points east along the corridor below it. */
 const SIGN_ARROW_EAST_RADIANS = 0;
 
-function tileFor(symbol: string, x: number, y: number): TileContent {
+function tileFor(symbol: string, x: number, y: number, hangsSign: boolean): TileContent {
   const tileId = `${x}#${y}`;
   switch (symbol) {
     case '~':
@@ -65,6 +67,7 @@ function tileFor(symbol: string, x: number, y: number): TileContent {
     case ',':
       return { tileId, type: FloorTypeValue.wood };
     case 'S':
+      if (!hangsSign) return { tileId, type: FloorTypeValue.wall };
       return {
         tileId,
         type: CRAWLER_SIGN,
@@ -77,8 +80,14 @@ function tileFor(symbol: string, x: number, y: number): TileContent {
   }
 }
 
-export function buildWallCaseStructure(): TileContent[][] {
+/**
+ * The fixture as it would be laid under `theme`. A crawler sign points to the
+ * stairs the generator placed, so a theme the generator never lays (the sewer)
+ * gets plain wall where the sign would hang, as its real maps do.
+ */
+export function buildWallCaseStructure(theme: DungeonFloorThemeId): TileContent[][] {
+  const hangsSign = isGeneratedFloorTheme(theme);
   return WALL_CASE_ROWS.map((row, y) =>
-    Array.from({ length: row.length }, (_, x) => tileFor(row.charAt(x), x, y)),
+    Array.from({ length: row.length }, (_, x) => tileFor(row.charAt(x), x, y, hangsSign)),
   );
 }

@@ -161,6 +161,7 @@ function build(id: MercenaryTemplateId, extras: Player[] = []): Harness | null {
   roster.active = {
     id,
     name: getMercenaryTemplate(id).name,
+    terms: 'paid',
     contractLevelId: FLOOR,
     introduced: true,
   };
@@ -169,7 +170,7 @@ function build(id: MercenaryTemplateId, extras: Player[] = []): Harness | null {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,

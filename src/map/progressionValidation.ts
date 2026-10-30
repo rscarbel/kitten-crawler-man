@@ -189,7 +189,7 @@ function floodFill(
     if (y < 0 || y >= height || x < 0 || x >= width) return false;
     if (visited[y][x]) return false;
     if (isBlocked(x, y)) return false;
-    return isWalkableTileType(grid[y][x]);
+    return isWalkableTileType(grid[y][x], 'walker');
   };
 
   if (!open(start.x, start.y)) return visited;
@@ -280,13 +280,13 @@ export function buildRoomGraph(grid: TileContent[][], rooms: ReadonlyArray<Rect>
   for (let startY = 0; startY < height; startY++) {
     for (let startX = 0; startX < width; startX++) {
       if (roomAt[startY][startX] === NO_ROOM) continue;
-      if (!isWalkableTileType(grid[startY][startX])) continue;
+      if (!isWalkableTileType(grid[startY][startX], 'walker')) continue;
       for (const step of FLOOD_STEPS) {
         const nx = startX + step.dx;
         const ny = startY + step.dy;
         if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
         if (roomAt[ny][nx] === NO_ROOM) continue;
-        if (!isWalkableTileType(grid[ny][nx])) continue;
+        if (!isWalkableTileType(grid[ny][nx], 'walker')) continue;
         join(roomAt[startY][startX], roomAt[ny][nx]);
       }
     }
@@ -382,7 +382,7 @@ function forEachCorridorComponent(
       if (seen[startY][startX]) continue;
       seen[startY][startX] = true;
       if (roomAt[startY][startX] !== NO_ROOM) continue;
-      if (!isWalkableTileType(grid[startY][startX])) continue;
+      if (!isWalkableTileType(grid[startY][startX], 'walker')) continue;
 
       const touched: number[] = [];
       const queue: Point[] = [{ x: startX, y: startY }];
@@ -394,7 +394,7 @@ function forEachCorridorComponent(
           const nx = x + step.dx;
           const ny = y + step.dy;
           if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
-          if (!isWalkableTileType(grid[ny][nx])) continue;
+          if (!isWalkableTileType(grid[ny][nx], 'walker')) continue;
           const room = roomAt[ny][nx];
           if (room !== NO_ROOM) {
             touched.push(room);
@@ -1240,7 +1240,7 @@ export function validateProgression(
         // would be a toll gate again, which is the one thing this room is not.
         if (doorTile.type === QUEST_EXIT_DOOR_CLOSED) {
           fail('S5', `the onward doorway at (${tile.x},${tile.y}) generates boarded shut`);
-        } else if (!isWalkableTileType(doorTile)) {
+        } else if (!isWalkableTileType(doorTile, 'walker')) {
           fail('S5', `the onward doorway at (${tile.x},${tile.y}) generates unwalkable`);
         }
       }
@@ -1380,7 +1380,7 @@ function validateFloodedApproaches(
   };
   const walkable = (tile: Point): boolean => {
     const cell = cellAt(tile);
-    return cell !== null && isWalkableTileType(cell);
+    return cell !== null && isWalkableTileType(cell, 'walker');
   };
   for (const { gauntletIndex, bossType, spec } of expected) {
     const approach = data.floodedApproaches.find((built) => built.bossType === bossType);

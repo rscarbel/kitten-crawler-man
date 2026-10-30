@@ -19,8 +19,8 @@ const CLOCK_FIELD_WIDTH = 2;
  * the world, because the mobs they were scored on are standing again. Deaths
  * and time played describe the player's run instead, and nothing rewinds them:
  * a death that undid its own tally would make every death free. Whether the
- * party has heard the shield-fairy ward explainer is run history too: a
- * one-time hint that a death replayed would no longer be one-time. So is every
+ * party has heard the shield-fairy ward explainer, or the cat-senses one, is
+ * run history too: a one-time hint that a death replayed would no longer be one-time. So is every
  * pet given to Deinonychus or a cow: the player did it, and no rewind takes it back.
  * The current floor's time played is run history for the same reason as the
  * total: only taking the stairs to a new floor starts it again.
@@ -38,6 +38,7 @@ export class GameStats {
   private _framesPlayed = 0;
   private _floorFramesPlayed = 0;
   private _wardExplainerHeard = false;
+  private _catSensesExplained = false;
   private _deinonychusPets = 0;
   private _cowPets = 0;
   private _midgePets = 0;
@@ -113,6 +114,10 @@ export class GameStats {
     this._wardExplainerHeard = true;
   }
 
+  recordCatSensesExplained(): void {
+    this._catSensesExplained = true;
+  }
+
   /** One fixed update of play the world was not halted for. */
   recordPlayedFrame(): void {
     this._framesPlayed++;
@@ -184,6 +189,11 @@ export class GameStats {
     return this._wardExplainerHeard;
   }
 
+  /** Whether the box explaining Belle's senses has been shown in this run. */
+  get catSensesExplained(): boolean {
+    return this._catSensesExplained;
+  }
+
   get deinonychusPets(): number {
     return this._deinonychusPets;
   }
@@ -211,6 +221,7 @@ export class GameStats {
       framesPlayed: this._framesPlayed,
       floorFramesPlayed: this._floorFramesPlayed,
       wardExplainerHeard: this._wardExplainerHeard,
+      catSensesExplained: this._catSensesExplained,
       deinonychusPets: this._deinonychusPets,
       cowPets: this._cowPets,
       midgePets: this._midgePets,
@@ -241,6 +252,7 @@ export class GameStats {
     stats._framesPlayed = snapshot.framesPlayed;
     stats._floorFramesPlayed = snapshot.floorFramesPlayed;
     stats._wardExplainerHeard = snapshot.wardExplainerHeard;
+    stats._catSensesExplained = snapshot.catSensesExplained;
     stats._deinonychusPets = snapshot.deinonychusPets;
     stats._cowPets = snapshot.cowPets;
     stats._midgePets = snapshot.midgePets;
@@ -257,6 +269,7 @@ export class GameStats {
     this._framesPlayed = Math.max(this._framesPlayed, live._framesPlayed);
     this._floorFramesPlayed = Math.max(this._floorFramesPlayed, live._floorFramesPlayed);
     this._wardExplainerHeard ||= live._wardExplainerHeard;
+    this._catSensesExplained ||= live._catSensesExplained;
     this._deinonychusPets = Math.max(this._deinonychusPets, live._deinonychusPets);
     this._cowPets = Math.max(this._cowPets, live._cowPets);
     this._midgePets = Math.max(this._midgePets, live._midgePets);
@@ -277,6 +290,7 @@ export interface GameStatsSnapshot {
   framesPlayed: number;
   floorFramesPlayed: number;
   wardExplainerHeard: boolean;
+  catSensesExplained: boolean;
   deinonychusPets: number;
   cowPets: number;
   midgePets: number;
@@ -306,6 +320,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     framesPlayed,
     floorFramesPlayed,
     wardExplainerHeard,
+    catSensesExplained,
     deinonychusPets,
     cowPets,
     midgePets,
@@ -323,6 +338,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     !isNonNegativeFinite(framesPlayed) ||
     !isNonNegativeFinite(floorFramesPlayed) ||
     typeof wardExplainerHeard !== 'boolean' ||
+    typeof catSensesExplained !== 'boolean' ||
     !isNonNegativeFinite(deinonychusPets) ||
     !isNonNegativeFinite(cowPets) ||
     !isNonNegativeFinite(midgePets)
@@ -342,6 +358,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     framesPlayed,
     floorFramesPlayed,
     wardExplainerHeard,
+    catSensesExplained,
     deinonychusPets,
     cowPets,
     midgePets,

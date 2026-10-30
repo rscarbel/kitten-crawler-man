@@ -205,7 +205,7 @@ function buildArena(side: DoorSide, bossAtPx?: TilePoint): Arena {
     human: env.frame.human,
     cat: env.frame.cat,
     active: env.frame.human,
-    inactive: env.frame.cat,
+    partner: env.frame.cat,
     activeIsMoving: false,
     roster,
     gameMap,
@@ -218,7 +218,7 @@ function setActive(arena: Arena, crawler: SystemContext['active']): void {
   human.isActive = crawler === human;
   cat.isActive = crawler === cat;
   arena.ctx.active = crawler;
-  arena.ctx.inactive = crawler === human ? cat : human;
+  arena.ctx.partner = crawler === human ? cat : human;
 }
 
 /** One frame: the crawler walks along `heading`, then the mob loop resolves bodies. */
@@ -351,7 +351,7 @@ interface PinSpot {
  */
 function findPinSpot(arena: Arena): PinSpot | null {
   const { gameMap, room } = arena.env;
-  const open = (x: number, y: number): boolean => gameMap.isWalkable(x, y);
+  const open = (x: number, y: number): boolean => gameMap.isWalkable(x, y, 'walker');
   for (const tile of room.interior) {
     if (!open(tile.x, tile.y) || open(tile.x, tile.y - 1)) continue;
     if (!open(tile.x, tile.y + 1)) continue;
@@ -387,8 +387,8 @@ function checkPinnedAgainstWall(side: DoorSide): void {
 
   for (let frame = 0; frame < PIN_FRAMES; frame++) step(arena, human, { x: 0, y: 1 });
   const pinnedX = human.x;
-  const wallProbe = { x: human.x, y: human.y };
-  pushPlayerWithCollision(wallProbe, 0, -1, arena.env.gameMap);
+  const wallProbe = { x: human.x, y: human.y, isCrossingFooting: false };
+  pushPlayerWithCollision(wallProbe, 0, -1, arena.env.gameMap, human.mobility);
   check(
     wallProbe.y === human.y &&
       distanceBetween(human, arena.boss) <= KRAKEN_BODY_RADIUS_PX + CONTACT_SLACK_PX,
@@ -435,7 +435,7 @@ function checkRoomLeavesSpaceBehindHerBody(side: DoorSide): void {
   const herCentre = centreOf(arena.boss);
   let nearestBlockedEdge = Infinity;
   for (const tile of room.interior) {
-    if (gameMap.isWalkable(tile.x, tile.y)) continue;
+    if (gameMap.isWalkable(tile.x, tile.y, 'walker')) continue;
     const nearestX = Math.max(tile.x * TILE_SIZE, Math.min(herCentre.x, (tile.x + 1) * TILE_SIZE));
     const nearestY = Math.max(tile.y * TILE_SIZE, Math.min(herCentre.y, (tile.y + 1) * TILE_SIZE));
     nearestBlockedEdge = Math.min(

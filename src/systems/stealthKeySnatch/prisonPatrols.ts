@@ -12,11 +12,17 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
-import type { PrisonGuardDef, PrisonSpotlightDef } from '../../map/goblinPrisonLayouts';
+import type {
+  PrisonGuardDef,
+  PrisonSpotlightDef,
+  StealthGuardDef,
+  StealthSpotlightDef,
+} from '../../map/goblinPrisonLayouts';
 import {
   isPrisonGuardWalkable,
   type ParsedPrisonLayout,
   type PrisonTile,
+  type StealthFloor,
 } from '../../map/goblinPrisonPlan';
 import {
   GOBLIN_GUARD_WALK_GROUND_PER_CYCLE_TILES,
@@ -94,8 +100,8 @@ export type GuardSegment =
       readonly halfArc: number;
     };
 
-export interface CompiledGuard {
-  readonly def: PrisonGuardDef;
+export interface CompiledGuard<D extends StealthGuardDef = StealthGuardDef> {
+  readonly def: D;
   /** The loop's own length before it is padded to divide the cycle. */
   readonly naturalFrames: number;
   readonly periodFrames: number;
@@ -104,8 +110,8 @@ export interface CompiledGuard {
   readonly routeTiles: ReadonlyArray<{ readonly tile: PrisonTile; readonly loopFrame: number }>;
 }
 
-export interface CompiledSpotlight {
-  readonly def: PrisonSpotlightDef;
+export interface CompiledSpotlight<S extends StealthSpotlightDef = StealthSpotlightDef> {
+  readonly def: S;
   readonly naturalFrames: number;
   readonly periodFrames: number;
   readonly anchor: PrisonPoint;
@@ -113,13 +119,28 @@ export interface CompiledSpotlight {
   readonly centreAt: (loopFrame: number) => PrisonPoint;
 }
 
-export interface CompiledPrison {
-  readonly parsed: ParsedPrisonLayout;
+/**
+ * Where a guard's cone starts. The prison's goblins hold a flashlight out in
+ * front of them, read off the art's own lens; a guard with no light of its
+ * own looks out from a point just ahead of its face.
+ */
+export type GuardLens = 'flashlight' | 'eyes';
+
+/** Any stealth floor's patrols and lights compiled for one difficulty: all the runtime and the solver read. */
+export interface CompiledStealth {
+  readonly parsed: StealthFloor;
   readonly difficulty: Difficulty;
   readonly tuning: PrisonDifficultyTuning;
+  readonly lens: GuardLens;
   readonly cycleFrames: number;
   readonly guards: ReadonlyArray<CompiledGuard>;
   readonly spotlights: ReadonlyArray<CompiledSpotlight>;
+}
+
+export interface CompiledPrison extends CompiledStealth {
+  readonly parsed: ParsedPrisonLayout;
+  readonly guards: ReadonlyArray<CompiledGuard<PrisonGuardDef>>;
+  readonly spotlights: ReadonlyArray<CompiledSpotlight<PrisonSpotlightDef>>;
 }
 
 export class PrisonScriptError extends Error {}
@@ -171,7 +192,7 @@ export function periodWithinCycle(
   return cycleFrames;
 }
 
-function waypoint(parsed: ParsedPrisonLayout, name: string, label: string): PrisonTile {
+function waypoint(parsed: StealthFloor, name: string, label: string): PrisonTile {
   const tile = parsed.waypoints.get(name);
   if (tile === undefined) throw new PrisonScriptError(`${label}: no point "${name}" in the layout`);
   return tile;
@@ -184,8 +205,8 @@ interface GuardBuild {
 }
 
 function buildGuardSegments(
-  parsed: ParsedPrisonLayout,
-  def: PrisonGuardDef,
+  parsed: StealthFloor,
+  def: StealthGuardDef,
   tuning: PrisonDifficultyTuning,
   startFacing: number,
 ): GuardBuild {
@@ -260,7 +281,7 @@ function buildGuardSegments(
   return { segments, endFacing: facing, end: at };
 }
 
-function firstMoveHeading(parsed: ParsedPrisonLayout, def: PrisonGuardDef): number {
+function firstMoveHeading(parsed: StealthFloor, def: StealthGuardDef): number {
   const firstWalk = def.script.split(/\s+/).find((token) => token.startsWith('>'));
   const startName = def.script.trim().split(/\s+/)[0] ?? '';
   if (firstWalk === undefined) return 0;
@@ -312,11 +333,11 @@ function routeTilesOf(
  *   not along a row or column, a loop that does not end where it starts, or a
  *   loop longer than the cycle.
  */
-export function compileGuard(
-  parsed: ParsedPrisonLayout,
-  def: PrisonGuardDef,
+function compileGuard<D extends StealthGuardDef>(
+  parsed: StealthFloor,
+  def: D,
   tuning: PrisonDifficultyTuning,
-): CompiledGuard {
+): CompiledGuard<D> {
   const draft = buildGuardSegments(parsed, def, tuning, firstMoveHeading(parsed, def));
   const build = buildGuardSegments(parsed, def, tuning, draft.endFacing);
   const startName = def.script.trim().split(/\s+/)[0] ?? '';
@@ -444,11 +465,11 @@ function pointAlong(points: ReadonlyArray<PrisonPoint>, distance: number): Priso
  * the beam pauses at the yard wall rather than crawling; a pivot eases in and
  * out of each end of its swing.
  */
-export function compileSpotlight(
-  parsed: ParsedPrisonLayout,
-  def: PrisonSpotlightDef,
+function compileSpotlight<S extends StealthSpotlightDef>(
+  parsed: StealthFloor,
+  def: S,
   tuning: PrisonDifficultyTuning,
-): CompiledSpotlight {
+): CompiledSpotlight<S> {
   const anchorTile = parsed.anchors.get(def.anchor);
   if (anchorTile === undefined) throw new PrisonScriptError(`${def.id}: no anchor "${def.anchor}"`);
   const anchor = tileCentrePx(anchorTile);
@@ -530,6 +551,7 @@ export function compilePrisonWithTuning(
     parsed,
     difficulty,
     tuning,
+    lens: 'flashlight',
     cycleFrames: layout.cycleFrames,
     guards: layout.guards
       .filter((def) => def.tier <= tuning.guardTier)
@@ -537,6 +559,32 @@ export function compilePrisonWithTuning(
     spotlights: layout.spotlights
       .filter((def) => def.tier <= tuning.spotlightTier)
       .map((def) => compileSpotlight(parsed, def, tuning)),
+  };
+}
+
+/**
+ * Compiles any stealth floor's guards and lights that stand at this
+ * difficulty, with cones cast from `lens`.
+ */
+export function compileStealthFloor(
+  floor: StealthFloor,
+  difficulty: Difficulty,
+  tuning: PrisonDifficultyTuning,
+  lens: GuardLens,
+): CompiledStealth {
+  const { layout } = floor;
+  return {
+    parsed: floor,
+    difficulty,
+    tuning,
+    lens,
+    cycleFrames: layout.cycleFrames,
+    guards: layout.guards
+      .filter((def) => def.tier <= tuning.guardTier)
+      .map((def) => compileGuard(floor, def, tuning)),
+    spotlights: layout.spotlights
+      .filter((def) => def.tier <= tuning.spotlightTier)
+      .map((def) => compileSpotlight(floor, def, tuning)),
   };
 }
 
@@ -548,7 +596,7 @@ export interface PrisonState {
 }
 
 /** Every guard's pose and every beam's landing point on `frame` of the shared clock. */
-export function prisonStateAt(compiled: CompiledPrison, frame: number): PrisonState {
+export function prisonStateAt(compiled: CompiledStealth, frame: number): PrisonState {
   return {
     frame,
     guards: compiled.guards.map((guard) => guardPoseAt(guard, frame)),
@@ -574,6 +622,9 @@ const GUARD_STILL_TICKS_PER_FRAME = 6;
  * screen has no side of its own.
  */
 const PROFILE_FLIP_EPSILON = 1e-6;
+/** How far ahead of a lensless guard's body centre its look starts: a little in front of the face. */
+const EYES_AHEAD_OF_BODY_TILES = 0.25;
+const EYES_AHEAD_OF_BODY_PX = TILE_SIZE * EYES_AHEAD_OF_BODY_TILES;
 /** How many steps the lens is walked back toward the body when it sits in a wall. */
 const LENS_PULLBACK_STEPS = 8;
 
@@ -630,16 +681,12 @@ export function guardAnimation(
  * last point the light can reach.
  */
 export function guardLensPoint(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   pose: GuardPose,
   frame: number,
   alert = false,
 ): PrisonPoint {
-  const animation = guardAnimation(pose, frame, compiled.tuning.patrolSpeedPxPerFrame, alert);
-  const anchor = guardLensAnchor(animation.state, animation.frame, guardFacingX(pose.facing));
-  const tileLeft = pose.x - TILE_SIZE * TILE_CENTRE_OFFSET;
-  const tileTop = pose.y - TILE_SIZE * TILE_CENTRE_OFFSET;
-  const lens = { x: tileLeft + anchor.x * TILE_SIZE, y: tileTop + anchor.y * TILE_SIZE };
+  const lens = unclampedLensPoint(compiled, pose, frame, alert);
   const { grid } = compiled.parsed;
   const body = { x: pose.x, y: pose.y };
   for (let step = LENS_PULLBACK_STEPS; step > 0; step--) {
@@ -656,9 +703,35 @@ export function guardLensPoint(
   return body;
 }
 
+function unclampedLensPoint(
+  compiled: CompiledStealth,
+  pose: GuardPose,
+  frame: number,
+  alert: boolean,
+): PrisonPoint {
+  switch (compiled.lens) {
+    case 'flashlight': {
+      const animation = guardAnimation(pose, frame, compiled.tuning.patrolSpeedPxPerFrame, alert);
+      const anchor = guardLensAnchor(animation.state, animation.frame, guardFacingX(pose.facing));
+      const tileLeft = pose.x - TILE_SIZE * TILE_CENTRE_OFFSET;
+      const tileTop = pose.y - TILE_SIZE * TILE_CENTRE_OFFSET;
+      return { x: tileLeft + anchor.x * TILE_SIZE, y: tileTop + anchor.y * TILE_SIZE };
+    }
+    case 'eyes':
+      return {
+        x: pose.x + Math.cos(pose.facing) * EYES_AHEAD_OF_BODY_PX,
+        y: pose.y + Math.sin(pose.facing) * EYES_AHEAD_OF_BODY_PX,
+      };
+    default: {
+      const unhandled: never = compiled.lens;
+      throw new PrisonScriptError(`unhandled guard lens ${String(unhandled)}`);
+    }
+  }
+}
+
 /** A guard's flashlight cone on `frame` of the shared clock: the one shape that is drawn and that sees. */
 export function guardCone(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   pose: GuardPose,
   frame: number,
   alert = false,
@@ -673,7 +746,7 @@ export function guardCone(
 
 /** Casts every light in a state: one cone per guard, one disc per spotlight. */
 export function castPrisonLights(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   state: PrisonState,
 ): ReadonlyArray<PrisonLight> {
   const { grid } = compiled.parsed;
@@ -689,6 +762,6 @@ export function castPrisonLights(
 }
 
 /** Whether every tile a guard's walks cross is open floor. */
-export function guardRouteIsWalkable(parsed: ParsedPrisonLayout, guard: CompiledGuard): boolean {
+export function guardRouteIsWalkable(parsed: StealthFloor, guard: CompiledGuard): boolean {
   return guard.routeTiles.every(({ tile }) => isPrisonGuardWalkable(parsed.grid, tile.x, tile.y));
 }

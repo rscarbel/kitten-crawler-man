@@ -491,6 +491,8 @@ const QUIET_OVERWORLD = {
   escortUnderWay: false,
   escortAmbushersStanding: false,
   bountyOut: false,
+  stakeoutUnderWay: false,
+  captureDue: false,
 };
 
 /** Where the scripted village stands, in tiles. */
@@ -506,6 +508,11 @@ const FIRST_CUES = {
   starlightTent: 'high_striker_bell',
   floodedPumpRoomMusic: 'the_kraken_battle',
   trashGremlinMusic: 'king_of_the_heap',
+  missingCatsStakeout: 'rooftop_chase',
+  missingCatsCapture: 'capture_at_dusk',
+  missingCatsReunion: 'reunion_jingle',
+  wardenRitualMusic: 'warden_ritual_battle',
+  towerSplitMusic: 'tower_split_full',
 } as const satisfies Record<(typeof GATED_SFX_GROUPS)[number], SoundId>;
 
 /** A tile `tiles` west of the scripted village's west edge. */

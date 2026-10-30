@@ -1,7 +1,6 @@
 /**
  * Soul bolts — the cult's signature ranged attack: a shrieking violet orb of
- * cold fire. Shared by `Elf` and `MissQuill` so the projectile physics and
- * look stay identical between the two.
+ * cold fire, thrown by `Elf`.
  */
 
 import type { Player } from '../Player';
@@ -63,7 +62,7 @@ export function advanceSoulBolts(
     if (map) {
       const tx = Math.floor(nextX / tileSize);
       const ty = Math.floor(nextY / tileSize);
-      if (!map.isWalkable(tx, ty)) {
+      if (!map.isWalkable(tx, ty, 'walker')) {
         bolt.exploding = true;
         bolt.explodeTick = EXPLODE_TICKS;
         continue;

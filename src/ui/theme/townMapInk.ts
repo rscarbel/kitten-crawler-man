@@ -15,7 +15,6 @@ export const TOWN_MAP_INK = {
   villageStroke: 'rgba(251, 191, 36, 0.85)',
   villageDistrictLabelColor: '#fcd34d',
   startTileColor: '#38bdf8',
-  escapeTileColor: '#f97316',
   unknownTileColor: '#ff00ff',
   tiles: {
     voidType: '#05070b',

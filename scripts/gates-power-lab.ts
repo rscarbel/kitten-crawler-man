@@ -114,7 +114,7 @@ function standingTileNear(gameMap: GameMap, from: TilePoint, distance: number): 
       x: Math.round(from.x + Math.cos(angle) * distance),
       y: Math.round(from.y + Math.sin(angle) * distance),
     };
-    if (gameMap.isWalkable(tile.x, tile.y)) return tile;
+    if (gameMap.isWalkable(tile.x, tile.y, 'walker')) return tile;
   }
   return from;
 }

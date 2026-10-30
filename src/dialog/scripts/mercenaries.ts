@@ -107,6 +107,10 @@ export const CRUSH_LINES = {
     crush.bark(() => `Look after ${crawlerDisplayName('cat')}.`),
     crush.bark('You lived. That was the job.'),
   ],
+  loanEnd: [
+    crush.bark("Tower's done. Loan's done. I'm due back at the desk."),
+    crush.bark('Sydney lent me for the tower. Tower is finished. So am I.'),
+  ],
 } satisfies MercenaryLines;
 
 /** A forge hand: warm, practical, talks about his work like it is the weather. */
@@ -197,6 +201,10 @@ export const HAMMER_HANDS_LINES = {
     hammerHands.bark("You came through. That's what I like to see."),
     hammerHands.bark('Off you go. Mind the stairs.'),
   ],
+  loanEnd: [
+    hammerHands.bark("That's the tower seen to. Sydney wants me back by supper."),
+    hammerHands.bark("Loan's over. Tell the cats I said goodbye."),
+  ],
 } satisfies MercenaryLines;
 
 /** A ranger: dry, quick, counts her arrows. */
@@ -286,6 +294,10 @@ export const IVY_ASHGROVE_LINES = {
     ivyAshgrove.bark('You stayed alive. Makes my job look good.'),
     ivyAshgrove.bark('Off you go. Watch the corners.'),
   ],
+  loanEnd: [
+    ivyAshgrove.bark("That was the tower. Sydney only lent me for the tower, so I'm off."),
+    ivyAshgrove.bark('Loan paper ends at the Warden. Glad I was here for it.'),
+  ],
 } satisfies MercenaryLines;
 
 /** A monk: unhurried, kind, with a dry sense of what he has seen. */
@@ -374,6 +386,12 @@ export const BROTHER_ANSELM_LINES = {
     brotherAnselm.bark('Peace go with you down the stairs.'),
     brotherAnselm.bark('Rest when you can. You will not, but you should.'),
   ],
+  loanEnd: [
+    brotherAnselm.bark(
+      'The desk lent me for the tower, and the tower is quiet now. I will go back.',
+    ),
+    brotherAnselm.bark('My loan ends here. Take the cats home gently.'),
+  ],
 } satisfies MercenaryLines;
 
 const tumbledown = speakerLines('tumbledown');
@@ -395,6 +413,9 @@ export const TUMBLEDOWN_ACTIONS = {
   revived: [tumbledown.bark('Tumbledown heaves itself back together.')],
   death: [tumbledown.bark('Tumbledown comes apart, one boulder at a time.')],
   floorEnd: [tumbledown.bark('Tumbledown turns and trudges back toward the Barracks.')],
+  loanEnd: [
+    tumbledown.bark('Tumbledown stops, looks at the dark circle, and turns for the Barracks.'),
+  ],
 } satisfies MercenaryLines;
 
 export const CRUSH = { lines: CRUSH_LINES } satisfies MercenaryVoice;

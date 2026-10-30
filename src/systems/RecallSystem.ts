@@ -123,6 +123,8 @@ export class RecallSystem implements GameSystem {
     private readonly audio: AudioManager | null,
     private readonly travelState: TravelUnlockState,
     private readonly openTravelMenu: (caster: HumanPlayer | CatPlayer) => void,
+    /** Why the stone cannot carry the party as it stands (split across maps), or null. */
+    private readonly partyRefusal: () => string | null,
   ) {}
 
   /** Frames left before the stone will answer again; zero when it is ready. */
@@ -227,6 +229,8 @@ export class RecallSystem implements GameSystem {
   /** The one reason this press cannot use the stone at all, or null if it can. */
   private pressRefusal(caster: HumanPlayer | CatPlayer): string | null {
     if (this.levelDef.isOverworld !== true) return INERT_UNDERGROUND_TOAST;
+    const partyRefusal = this.partyRefusal();
+    if (partyRefusal !== null) return partyRefusal;
     if (this.isBossFightActive()) return BOSS_FIGHT_TOAST;
     if (this.hasNearbyEnemy(caster, RECALL_ENEMY_BLOCK_RADIUS_PX)) return ENEMIES_NEARBY_TOAST;
     return null;
@@ -240,6 +244,11 @@ export class RecallSystem implements GameSystem {
     // pressed it; the party has changed shape, so the hold is gone.
     if (ctx.active !== channel.caster) {
       this.endChannel(CANCELLED_TOAST);
+      return;
+    }
+    const partyRefusal = this.partyRefusal();
+    if (partyRefusal !== null) {
+      this.endChannel(partyRefusal);
       return;
     }
     if (ctx.activeIsMoving) {

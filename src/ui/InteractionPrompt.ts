@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import { chooseFocus, type FocusCandidate, type PromptOwner } from './interactionFocus';
 import type { Requirement } from './RequirementRow';
 import { skinsFor } from './theme/skins';
 import type { Theme } from './theme/tokens';
@@ -26,6 +27,10 @@ export interface QueuedPrompt {
   readonly keyOverride: string | null;
   /** What the press costs, shown over the pill wherever the pill ends up; null for a free press. */
   readonly requirements: readonly Requirement[] | null;
+  /** Who raised it, through {@link raisePromptsFor}; null for a prompt raised outside one. */
+  readonly owner: PromptOwner | null;
+  /** Canvas distance from the steering crawler to the prompted object's foot, for ranking it. */
+  readonly focusDistance: number;
 }
 
 /**
@@ -58,6 +63,9 @@ const keepClear: PromptKeepClear[] = [];
 const keepClearPool: Array<{ -readonly [K in keyof PromptKeepClear]: PromptKeepClear[K] }> = [];
 let promptsSuppressed = false;
 let promptsDrawnThisFrame = 0;
+let raisingFor: PromptOwner | null = null;
+let focusOrigin: { x: number; y: number } | null = null;
+let shownOwner: PromptOwner | null = null;
 
 /**
  * Silences every floating prompt for the frame.
@@ -78,6 +86,54 @@ export function setInteractionPromptsSuppressed(suppressed: boolean): void {
   promptsDrawnThisFrame = 0;
   queue.length = 0;
   keepClear.length = 0;
+  focusOrigin = null;
+  shownOwner = null;
+}
+
+/**
+ * Sets where the crawler the player is steering stands this frame, so the
+ * prompts in reach can be ranked by how near they are. `sx`, `sy` are the
+ * centre of the crawler's tile in `ctx`'s current space.
+ *
+ * Call it once per frame after {@link setInteractionPromptsSuppressed} and
+ * before any prompt is raised.
+ */
+export function anchorInteractionFocus(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+): void {
+  const m = ctx.getTransform();
+  focusOrigin = { x: m.a * sx + m.c * sy + m.e, y: m.b * sx + m.d * sy + m.f };
+}
+
+/**
+ * Raises whatever prompts `raise` raises on behalf of `owner`, so the prompt
+ * surface can rank them and the scene's next press can go to whichever one
+ * was shown. Returns what `raise` returns.
+ */
+export function raisePromptsFor<T>(owner: PromptOwner, raise: () => T): T {
+  const outer = raisingFor;
+  raisingFor = owner;
+  try {
+    return raise();
+  } finally {
+    raisingFor = outer;
+  }
+}
+
+/**
+ * Hands an interact press to whatever the one interact prompt on screen
+ * names, when `owners` — the scene's own — raised it. Returns whether it took
+ * the press. A scene calls this ahead of the rest of its interact chain, so
+ * the press always reaches the thing the prompt named; owners from another
+ * scene are ignored, since the prompt last shown may be from the scene this
+ * one replaced.
+ */
+export function pressFocusedPrompt(owners: Readonly<Record<string, PromptOwner>>): boolean {
+  const owner = shownOwner;
+  if (owner === null || !Object.values(owners).includes(owner)) return false;
+  return owner.act();
 }
 
 /**
@@ -232,13 +288,18 @@ function queuePrompt(
   promptsDrawnThisFrame++;
   const anchorX = sx + objW / 2;
   const m = ctx.getTransform();
+  const footX = m.a * anchorX + m.c * objBottom + m.e;
+  const footY = m.b * anchorX + m.d * objBottom + m.f;
   queue.push({
     canvasX: m.a * anchorX + m.c * artTop + m.e,
     canvasY: m.b * anchorX + m.d * artTop + m.f,
-    canvasBottom: m.b * anchorX + m.d * objBottom + m.f,
+    canvasBottom: footY,
     label: label === undefined || label === '' ? null : label,
     keyOverride: keyOverride ?? null,
     requirements,
+    owner: raisingFor,
+    focusDistance:
+      focusOrigin === null ? 0 : Math.hypot(footX - focusOrigin.x, footY - focusOrigin.y),
   });
 }
 
@@ -252,8 +313,24 @@ export function hasQueuedPrompts(): boolean {
   return queue.length > 0;
 }
 
-/** Hands every queued prompt to `draw` and empties the queue. */
+/**
+ * Hands `draw` the prompts to show and empties the queue: of every prompt for
+ * the interact key, only the one {@link chooseFocus} ranks first, so the
+ * player is never offered several presses when a press reaches one; a prompt
+ * for some other key names a different press and is always shown.
+ */
 export function drainQueuedPrompts(draw: (prompt: QueuedPrompt) => void): void {
-  for (const prompt of queue) draw(prompt);
+  const interactPrompts = queue.filter((prompt) => prompt.keyOverride === null);
+  const focusIndex = chooseFocus(interactPrompts.map(focusCandidate));
+  const focus: QueuedPrompt | null = focusIndex < 0 ? null : interactPrompts[focusIndex];
+  shownOwner = focus === null ? null : focus.owner;
+  for (const prompt of queue) {
+    if (prompt.keyOverride === null && prompt !== focus) continue;
+    draw(prompt);
+  }
   queue.length = 0;
+}
+
+function focusCandidate(prompt: QueuedPrompt): FocusCandidate {
+  return { kind: prompt.owner?.kind ?? 'other', distance: prompt.focusDistance };
 }

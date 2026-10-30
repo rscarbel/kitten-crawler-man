@@ -70,6 +70,7 @@ const CAMERA_SERVO_HOLD_FRAMES = 12;
 const FLOOR_ONE_SHOTS: Readonly<Record<DungeonFloorThemeId, ReadonlyArray<AmbientOneShotId>>> = {
   cellars: ['water_drip', 'stone_settle', 'distant_growl'],
   service_level: ['water_drip', 'pipe_knock', 'fluorescent_flicker'],
+  sewer: ['water_drip', 'pipe_knock', 'distant_growl'],
 };
 
 /** The tiles of standing water on a floor, for placing a drip. */

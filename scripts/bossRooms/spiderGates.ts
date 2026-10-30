@@ -109,7 +109,7 @@ function reachableFrom(
     for (const [dx, dy] of STEPS) {
       const x = next.x + dx;
       const y = next.y + dy;
-      if (reached.has(tileKey(x, y)) || !inside(x, y) || !map.isWalkable(x, y)) continue;
+      if (reached.has(tileKey(x, y)) || !inside(x, y) || !map.isWalkable(x, y, 'walker')) continue;
       reached.add(tileKey(x, y));
       frontier.push({ x, y });
     }

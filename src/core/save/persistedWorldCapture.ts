@@ -6,7 +6,6 @@
 
 import type { BountyCheckpoint } from '../../systems/BountySystem';
 import type { DefendQuestCheckpoint } from '../../systems/DefendQuestSystem';
-import type { MurderMysteryQuestCheckpoint } from '../../systems/MurderMysteryQuestSystem';
 import type { SpiderQuestCheckpoint } from '../../systems/SpiderQuestSystem';
 import {
   lockProgressOf,
@@ -17,7 +16,6 @@ import {
 import type {
   PersistedBountyCheckpoint,
   PersistedDefendQuestCheckpoint,
-  PersistedMurderMysteryQuestCheckpoint,
   PersistedSpiderQuestCheckpoint,
   PersistedTreasureChestCheckpoint,
 } from './PersistedWorldState';
@@ -108,25 +106,6 @@ export function fromPersistedDefendQuestCheckpoint(
   persisted: PersistedDefendQuestCheckpoint,
 ): DefendQuestCheckpoint {
   return { ...persisted, questMobs: [] };
-}
-
-export function toPersistedMurderMysteryQuestCheckpoint(
-  cp: MurderMysteryQuestCheckpoint,
-): PersistedMurderMysteryQuestCheckpoint {
-  return {
-    questStatuses: cp.questStatuses,
-    phase: cp.phase,
-    swarmCleared: cp.swarmCleared,
-    swarmStarted: cp.swarmStarted,
-    swarmDefeatedBaseline: cp.swarmDefeatedBaseline,
-    swarmSpawnQueue: cp.swarmSpawnQueue,
-  };
-}
-
-export function fromPersistedMurderMysteryQuestCheckpoint(
-  persisted: PersistedMurderMysteryQuestCheckpoint,
-): MurderMysteryQuestCheckpoint {
-  return { ...persisted, swarm: [], swarmSpawnGrace: [], baggi: null };
 }
 
 export function toPersistedSpiderQuestCheckpoint(

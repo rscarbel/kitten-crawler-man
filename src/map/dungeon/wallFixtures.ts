@@ -385,7 +385,7 @@ class FixturePlacer {
     for (const tile of tiles) {
       if (!isFixtureFace(this.grid, tile.x, tile.y - 1)) continue;
       const face = { x: tile.x, y: tile.y - 1 };
-      if (isWalkableTileType(this.grid[tile.y][tile.x])) clear.push(face);
+      if (isWalkableTileType(this.grid[tile.y][tile.x], 'walker')) clear.push(face);
       else if (!coversFaceBehind(this.grid, tile.x, tile.y)) fronted.push(face);
     }
     const readingOrder = (a: Point, b: Point): number => a.y - b.y || a.x - b.x;

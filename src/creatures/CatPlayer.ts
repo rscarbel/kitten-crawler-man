@@ -1,4 +1,6 @@
 import { gearModifiers, wornClaws } from '../gear/gearHooks';
+import { ClimberFooting } from './climberFooting';
+import type { MobilityClass } from '../map/mobility';
 import { weaponHitTags, type DamageTags } from '../core/combat/damageTags';
 import { Player, type FigureMouth, type StatusFigureBox } from '../Player';
 import { intoxicationDilatesPupils, intoxicationOf } from '../core/combat/Intoxication';
@@ -7,25 +9,29 @@ import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
 import {
-  activeCatLook,
   CatAnimator,
+  CatAppearance,
   drawCatSprite,
   drawMissiles,
-  prewarmCatSprite,
   prewarmMagicMissileCast,
   prewarmCatHold,
   catCellFor,
   catMouthSocketInTile,
   CAT_THROW_RELEASE_TICKS,
+  CAT_TRAVERSAL_ROWS,
   type CatHeldDraw,
   type CatSpriteState,
+  type CatVerb,
   type CatWorkSwing,
   type MissileDepthLayer,
   CAT_WORK_SWING_OF_TOOL,
+  prewarmCatTalk,
 } from '../sprites/catSprite';
 import { catGarmentsWearing } from '../sprites/garments/itemLooks';
-import { setOutfit } from '../sprites/outfits';
-import { FacingState } from '../sprites/facingView';
+import { PLAYER_CAT_LOOK } from '../sprites/art/catFigure';
+import type { CatLook } from '../sprites/looks/catLook';
+import { FacingState, type FacingSelection, selectFacing } from '../sprites/facingView';
+import type { Pt } from '../sprites/art/catArt';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import { catMouthOf } from '../sprites/crawlerMouths';
 import type { GameMap } from '../map/GameMap';
@@ -88,6 +94,22 @@ export class CatPlayer extends Player {
   override get isCrawler(): boolean {
     return true;
   }
+
+  get mobility(): MobilityClass {
+    return 'climber';
+  }
+
+  private readonly footing = new ClimberFooting({
+    map: () => this.map,
+    play: (move) => this.animator.play(move),
+    warm: () => {
+      for (const row of CAT_TRAVERSAL_ROWS) this.appearance.prewarmRow(row);
+    },
+  });
+
+  override get climbing(): ClimberFooting {
+    return this.footing;
+  }
   private missiles: Missile[] = [];
   /** Reused result set for the homing missiles' neighbour queries. */
   private readonly _homingQuery = new Set<Mob>();
@@ -101,8 +123,10 @@ export class CatPlayer extends Player {
   private readonly ATTACK_FRAMES = CAT_SWIPE_FRAMES;
   /** Frames left before the companion AI may swipe again; see {@link autoMeleeTick}. */
   private autoSwipeCooldown = 0;
+  /** Who she is painted as and what she has on; every draw of her goes through it. */
+  readonly appearance: CatAppearance<'crawler'>;
   /** Drives her pose: the action playing, plus the boredom timer behind idle breaks. */
-  private readonly animator = new CatAnimator();
+  private readonly animator: CatAnimator;
   /** The view her facing is drawn in, held through the selector's hysteresis. */
   private readonly facing = new FacingState(this.facingX, this.facingY);
 
@@ -132,11 +156,11 @@ export class CatPlayer extends Player {
   private static readonly TILE_CENTER_OFFSET = 0.5;
 
   protected override get statusFigureBox(): StatusFigureBox {
-    return activeCatLook().statusFigureBox;
+    return this.appearance.look.statusFigureBox;
   }
 
   protected override get statusMouth(): FigureMouth | null {
-    return catMouthOf(catCellFor(this.spriteState()));
+    return catMouthOf(this.appearance.look, catCellFor(this.spriteState()));
   }
 
   private spriteState(held: CatHeldDraw | null = this.heldDraw()): CatSpriteState {
@@ -144,14 +168,43 @@ export class CatPlayer extends Player {
     return {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
-      facing: this.facing.peek(this.facingX, this.facingY),
+      facing:
+        this.footing.crossingFacing ??
+        this.talkFacing ??
+        this.facing.peek(this.facingX, this.facingY),
       isKnockedOut: this.isKnockedOut,
       oneShot: this.animator.current,
       carrying: hold === 'carry' || hold === 'throw',
       working: hold === 'chop' || hold === 'mine' ? hold : null,
       cockedToThrow: hold === 'throw' && this.explosive?.cocked === true,
       pupilsDilated: intoxicationDilatesPupils(intoxicationOf(this)),
+      talking: this.talkFacing !== null,
     };
+  }
+
+  /**
+   * The view she talks in, turned to whoever she is in conversation with;
+   * null while she is not talking. Her gameplay facing is left alone, as the
+   * human's is: it is what her next swipe or missile goes along.
+   */
+  private talkFacing: FacingSelection | null = null;
+
+  get isTalking(): boolean {
+    return this.talkFacing !== null;
+  }
+
+  /** Talks, turned toward `toward` (world pixels, a tile's top-left), until {@link stopTalking}. */
+  startTalking(toward: Pt): void {
+    const dx = toward.x - this.x;
+    const dy = toward.y - this.y;
+    const facing =
+      dx === 0 && dy === 0 ? this.facing.peek(this.facingX, this.facingY) : selectFacing(dx, dy);
+    this.talkFacing = facing;
+    prewarmCatTalk(this.appearance, facing);
+  }
+
+  stopTalking(): void {
+    this.talkFacing = null;
   }
   private static readonly SUBMISSILE_COUNT_BASE = 3;
   private static readonly SUBMISSILE_COUNT_RANDOM_RANGE = 3;
@@ -213,15 +266,18 @@ export class CatPlayer extends Player {
     return this.abilityManager?.getLevel('magic_missile') ?? 1;
   }
 
-  constructor(tileX: number, tileY: number, tileSize: number) {
+  /** `look` is the player's cat unless a preview asks for another. */
+  constructor(tileX: number, tileY: number, tileSize: number, look: CatLook = PLAYER_CAT_LOOK) {
     super(tileX, tileY, tileSize, {
       baseHpOffset: CAT_BASE_HP_OFFSET,
       crawlerKind: CAT_CRAWLER_KIND,
     });
+    this.appearance = new CatAppearance('crawler', look);
+    this.animator = new CatAnimator(this.appearance);
     // She is drawn on essentially every frame of the scene she is built for, so
     // her standing and walking rows are queued now rather than paid for as
     // cache misses on the scene's first frame.
-    prewarmCatSprite();
+    this.appearance.prewarm();
     this.inventory.addItem('magic_missile_tome', 1);
     this.inventory.placeOnHotbar('magic_missile_tome', CatPlayer.TOME_HOTBAR_SLOT);
     // The base player already granted the starting potions; moving that one
@@ -436,7 +492,12 @@ export class CatPlayer extends Player {
     if (tool !== null && isOwnedToolKind(tool.kind)) this.lastOwnedToolKind = tool.kind;
     const swing = this.workSwing;
     if (swing !== null) {
-      prewarmCatHold(swing, this.facing.peek(this.facingX, this.facingY), this.isMoving);
+      prewarmCatHold(
+        this.appearance,
+        swing,
+        this.facing.peek(this.facingX, this.facingY),
+        this.isMoving,
+      );
     }
   }
 
@@ -456,6 +517,21 @@ export class CatPlayer extends Player {
     this.animator.play(this.workSwing ?? 'swipe');
   }
 
+  /** Queues `verb`'s row ahead of the moment she plays it; her painter is too slow to bake it on that frame. */
+  cueVerb(verb: CatVerb): void {
+    this.appearance.prewarmRow(verb, true);
+  }
+
+  /** Plays `verb` once: a paw bat, a sniff, a reach for a latch, or one cycle of a channel's strain. */
+  playVerb(verb: CatVerb): void {
+    this.animator.play(verb);
+  }
+
+  /** Whether `verb` is the animation playing now. */
+  isPlayingVerb(verb: CatVerb): boolean {
+    return this.animator.current?.action === verb;
+  }
+
   /**
    * A small thing a scene puts in her jaws to carry, over the quest item she
    * would otherwise carry there; null hands the jaws back to that item.
@@ -471,7 +547,12 @@ export class CatPlayer extends Player {
 
   private prewarmMouthCarry(): void {
     if (this.mouthCarry() === null) return;
-    prewarmCatHold('carry', this.facing.peek(this.facingX, this.facingY), this.isMoving);
+    prewarmCatHold(
+      this.appearance,
+      'carry',
+      this.facing.peek(this.facingX, this.facingY),
+      this.isMoving,
+    );
   }
 
   /**
@@ -596,7 +677,12 @@ export class CatPlayer extends Player {
       this.animator.stop('throw');
       this.finishThrow();
       this.explosive = { look: HELD_VISUALS[look], cocked: false };
-      prewarmCatHold('throw', this.facing.peek(this.facingX, this.facingY), this.isMoving);
+      prewarmCatHold(
+        this.appearance,
+        'throw',
+        this.facing.peek(this.facingX, this.facingY),
+        this.isMoving,
+      );
     },
     holdExplosive: (stance) => {
       if (this.explosive !== null) this.explosive.cocked = stance !== 'readied';
@@ -620,7 +706,7 @@ export class CatPlayer extends Player {
       this.finishThrow();
     },
     explosiveReleasePoint: () => {
-      const inTile = catMouthSocketInTile(catCellFor(this.spriteState()));
+      const inTile = catMouthSocketInTile(this.appearance, catCellFor(this.spriteState()));
       const tile = inTile ?? { x: CatPlayer.TILE_CENTER_OFFSET, y: CatPlayer.TILE_CENTER_OFFSET };
       return { x: this.x + tile.x * this.tileSize, y: this.y + tile.y * this.tileSize };
     },
@@ -882,7 +968,7 @@ export class CatPlayer extends Player {
           const ty = Math.floor(nextY / this.tileSize);
           // The bathroom queue's block flag stands in for the goblins on it,
           // and a missile meets them as bodies rather than as a wall.
-          if (!this.map.isWalkableIgnoringBathroomQueue(tx, ty)) {
+          if (!this.map.isWalkableIgnoringBathroomQueue(tx, ty, this.mobility)) {
             m.state = 'exploding';
             continue;
           }
@@ -915,20 +1001,20 @@ export class CatPlayer extends Player {
     fromY: number,
     toX: number,
     toY: number,
-  ): boolean => this.map === null || this.map.hasWalkableLine(fromX, fromY, toX, toY);
+  ): boolean =>
+    this.map === null || this.map.hasWalkableLine(fromX, fromY, toX, toY, this.mobility);
 
   /** Whether a missile at this world point is over floor it can fly across; open everywhere without a map. */
   private readonly isOpenForMissiles = (worldX: number, worldY: number): boolean => {
     if (this.map === null) return true;
     const tx = Math.floor(worldX / this.tileSize);
     const ty = Math.floor(worldY / this.tileSize);
-    return this.map.isWalkableIgnoringBathroomQueue(tx, ty);
+    return this.map.isWalkableIgnoringBathroomQueue(tx, ty, this.mobility);
   };
 
   /**
    * Whether her gear has changed since her sprite was last dressed in it. Starts
-   * set so a build that is never restored is still dressed on its first draw,
-   * rather than in whatever the last crawler drawn had on.
+   * set so a build that is never restored is still dressed on its first draw.
    */
   private wearStale = true;
 
@@ -937,7 +1023,7 @@ export class CatPlayer extends Player {
     if (!this.wearStale) return;
     this.wearStale = false;
     const worn = this.inventory.equippedItems().map((item) => item.id);
-    setOutfit('cat', catGarmentsWearing(worn));
+    this.appearance.dress(catGarmentsWearing(worn));
   }
 
   protected override onEquipmentChanged(): void {
@@ -980,7 +1066,17 @@ export class CatPlayer extends Player {
     };
     drawMissileLayer('beyond');
     this.drawRetching(ctx, sx, sy, s, () => {
-      drawCatSprite(ctx, sx, sy, s, state, catCellFor(state), held, this.stowedDraw(held));
+      drawCatSprite(
+        ctx,
+        this.appearance,
+        sx,
+        sy,
+        s,
+        catCellFor(state),
+        state,
+        held,
+        this.stowedDraw(held),
+      );
     });
     drawMissileLayer('near');
 

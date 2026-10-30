@@ -147,7 +147,7 @@ function rayIsWalkable(
   ) {
     const tileX = Math.floor((cx + direction.dx * travelled) / TILE_SIZE);
     const tileY = Math.floor((cy + direction.dy * travelled) / TILE_SIZE);
-    if (!gameMap.isWalkable(tileX, tileY)) return false;
+    if (!gameMap.isWalkable(tileX, tileY, 'walker')) return false;
     if (travelled >= distance) return true;
   }
 }

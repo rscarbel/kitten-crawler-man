@@ -43,11 +43,6 @@ import { UiGalleryScene } from '../scenes/UiGalleryScene';
 import { TitleScene, type TitleStartState } from '../scenes/title/TitleScene';
 import { getLevelDef } from '../levels/index';
 import { createPartyCraftsState } from '../core/labour/partyCrafts';
-import {
-  createMurderQuestProgress,
-  type MurderQuestProgress,
-  type MurderQuestStage,
-} from '../core/quests/MurderQuestProgress';
 import { perfMonitor } from '../core/perf/PerfMonitor';
 import { setDeviceMemoryOverride } from '../core/perf/deviceMemoryBudget';
 import { renderQuality } from '../core/perf/RenderQuality';
@@ -68,7 +63,6 @@ import {
   parseWallTier,
   unlockEverythingForPlaytest,
 } from './briarHollowFortify';
-import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/quests/DoomsdayProgress';
 import { settings } from '../core/input/Settings';
 import { getMercenaryTemplate } from '../core/party/mercenaryTemplates';
 import { PET_NAME_SUGGESTIONS, PetNameBook, parsePetName } from '../core/party/petNames';
@@ -76,6 +70,7 @@ import {
   buildPlaytestBoot,
   playtestStartsPastBathroom,
   playtestStartsPastStealthGate,
+  playtestStartsPastNursery,
   resolvePlaytestSpawn,
   type PlaytestBoot,
 } from './playtestBoot';
@@ -107,44 +102,6 @@ import { storyDirectorBefore, storyPreviewLevel } from '../story/storyPreview';
  * Anything added here inherits that treatment; anything that a player is
  * *meant* to reach must not live in this file.
  */
-
-const MURDER_STAGES: ReadonlyArray<MurderQuestStage> = [
-  'not_started',
-  'body_waiting',
-  'investigation',
-  'night_attack',
-  'cult_hideout',
-  'confrontation',
-  'quill_slain',
-  'lich_slain',
-  'complete',
-];
-
-/**
- * Builds seeded Krasue Murders progress from a `?murder=<stage>` value, or null
- * when the parameter is absent or names no stage.
- */
-function parseMurderQuestProgress(stageParam: string | null): MurderQuestProgress | null {
-  if (stageParam === null) return null;
-  const stage = MURDER_STAGES.find((s) => s === stageParam);
-  if (stage === undefined) return null;
-
-  const progress = createMurderQuestProgress();
-  progress.stage = stage;
-
-  const stageIndex = MURDER_STAGES.indexOf(stage);
-  // No stage from the night attack on is reachable without all three clues, so a
-  // seeded drop-in has to carry them or the investigation dialogs contradict the
-  // stage they were seeded into.
-  if (stageIndex >= MURDER_STAGES.indexOf('night_attack')) {
-    progress.wellClueFound = true;
-    progress.homeClueFound = true;
-    progress.roostClueFound = true;
-  }
-  if (stageIndex >= MURDER_STAGES.indexOf('confrontation')) progress.quillNamed = true;
-
-  return progress;
-}
 
 /**
  * Frames the loop is allowed to run per second once it is driven off timers.
@@ -187,9 +144,7 @@ export function installDevLoopFallback(): void {
  * The options a dev-booted floor starts from: a copy, because the caller hands
  * the same object to the normal boot, whose saves must stay persisted and whose
  * quest state must not pick up a dev seed; without the persist step unless the
- * URL opts in with `save`; and with any `murder` stage seeded, so
- * `?playtest=<id>&murder=<stage>` drops a kitted party straight into a
- * questline beat; with the music of everything the party skipped past
+ * URL opts in with `save`; with the music of everything the party skipped past
  * already unlocked, as a save made there would have it; and, given `seed=<n>`,
  * the floor generated from that world seed and painted with the reviewed
  * art seed, so two visits to the same URL walk the same map; and, given
@@ -201,7 +156,6 @@ function devFloorOptions(
   params: URLSearchParams,
 ): DungeonSceneOptions {
   const persistsSaves = params.get('save') !== null;
-  const seededMurderProgress = parseMurderQuestProgress(params.get('murder'));
   const worldSeed = Number.parseInt(params.get('seed') ?? '', 10);
   const pinnedMap = Number.isInteger(worldSeed)
     ? { worldSeed, artSeed: DEFAULT_FLOOR_ART_SEED }
@@ -216,7 +170,6 @@ function devFloorOptions(
     ...cheats,
     saveProgress: persistsSaves ? options.saveProgress : undefined,
     progressWipe: persistsSaves ? options.progressWipe : undefined,
-    murderQuestProgress: seededMurderProgress ?? options.murderQuestProgress,
     backfillMusicLibrary: true,
   };
 }
@@ -238,8 +191,9 @@ function playtestPetNames(options: DungeonSceneOptions): PetNameBook {
 }
 
 /**
- * A copy of `options` with what every preset boot shares: the party, its spawn
- * and the puzzle chokes behind it. Never written into `options` itself, which
+ * A copy of `options` with what every preset boot shares: the party, its spawn,
+ * the run behind it (achievements, story heard, Dave's debriefs) and the
+ * puzzle chokes and nursery behind it. Never written into `options` itself, which
  * the caller goes on handing to the start menu: a preset's kit left there
  * would start the next real run and be saved over the player's own.
  */
@@ -255,6 +209,11 @@ function withPlaytestBoot(options: DungeonSceneOptions, boot: PlaytestBoot): Dun
     resolveSpawnTile: (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap),
     bathroomSolvedAtStart: (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap),
     stealthGateOpenAtStart: (gameMap) => playtestStartsPastStealthGate(boot.spawn, gameMap),
+    defendQuestCompleteAtStart: (gameMap) => playtestStartsPastNursery(boot.spawn, gameMap),
+    daveDebriefAtStart: boot.daveDebrief,
+    humanAchievements: boot.humanAchievements,
+    catAchievements: boot.catAchievements,
+    storyDirector: boot.storyDirector,
     preDefeatedBossTypes: boot.preDefeatedBossTypes,
     spiderQuestAwaitingHackingAtStart: boot.spiderQuestAwaitingHacking,
   };
@@ -317,8 +276,7 @@ function prisonLayoutNamed(value: string): PrisonLayout | null {
  *
  * `?playtest=spider` opens a named preset — a floor, a spawn landmark and a
  * fully kitted party. `?level=level3` opens a bare floor (`&spawn=circus` puts
- * the party on the circus grounds); `?level=level3&murder=cult_hideout` also
- * seeds the Krasue Murders questline. `?prison=1&difficulty=hard`
+ * the party on the circus grounds). `?prison=1&difficulty=hard`
  * walks the `prison` preset's party straight into the Goblin High Security
  * Prison, built from that layout on that difficulty; leaving it comes out in
  * floor 2's gate room. `?story=floor1_dave_chosen` boots the floor a story beat
@@ -600,10 +558,12 @@ function devRouteNamed(
             active: {
               id: preset.hire,
               name: getMercenaryTemplate(preset.hire).name,
-              contractLevelId: preset.levelId,
+              terms: 'paid',
+              contractLevelId: boot.levelDef.id,
               introduced: false,
             },
             lastDeceased: null,
+            towerLoanSigned: false,
             floorLevelId: null,
           };
         }
@@ -637,16 +597,10 @@ function devRouteNamed(
           };
         }
         if (preset.spawnAtCircus === true) floorOptions.spawnAtCircus = true;
-        if (boot.doomsdayStage !== undefined) {
-          const doomsday = createDoomsdayProgress();
-          doomsday.stage = boot.doomsdayStage;
-          doomsday.deadlineAt = Date.now() + DOOMSDAY_COUNTDOWN_MS;
-          floorOptions.doomsdayQuestProgress = doomsday;
-          // The countdown starts at the Lich's death, so the questline it ends is
-          // already at that beat; the crystal's spot is filled in by the tower's
-          // top floor the first time the party climbs to it.
-          floorOptions.murderQuestProgress =
-            parseMurderQuestProgress('lich_slain') ?? floorOptions.murderQuestProgress;
+        if (preset.stormDrain !== undefined) floorOptions.stormDrainOpenAtStart = true;
+        if (preset.stormDrain === 'enter') floorOptions.devEnterSewerAtStart = true;
+        if (preset.missingCatsPhase !== undefined) {
+          floorOptions.devMissingCatsPhase = preset.missingCatsPhase;
         }
         sceneManager.replace(
           new DungeonScene(

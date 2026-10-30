@@ -42,13 +42,20 @@
  *   on reachable open floor; the vermin also in plain view, not behind a pew's
  *   back or in a far corner.
  *
- *   npx tsx scripts/verify-companions-indoors.ts
+ * A split party (see `companionsIndoors/splitParty.ts`): away crawlers are
+ * never placed and ignored by the death check, a split survives a save,
+ * switching is refused, a hand-over saves, and a hire stays with its group.
+ *
+ *   npx tsx scripts/verify-companions-indoors.ts [--fault=<name>]
+ *
+ * Every `--fault=` injects one split-party regression and must turn it red.
  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TILE_SIZE } from '../src/core/constants';
+import { INTERACTABLE_RANK } from '../src/ui/interactionFocus';
 import { level3 } from '../src/levels/level3';
 import { setViewportSize } from '../src/core/rendering/Viewport';
 import {
@@ -82,13 +89,6 @@ import {
 } from '../src/systems/companionCarry';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { MercenarySystem } from '../src/systems/MercenarySystem';
-import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
-import { EventBus } from '../src/core/EventBus';
-import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
-import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
-import { settings } from '../src/core/input/Settings';
-import { BOSS_HEALER_DIFFICULTY } from '../src/levels/fairySpawner';
-import { HealingFairy } from '../src/creatures/fairies/HealingFairy';
 import { RockThrowSystem } from '../src/systems/RockThrowSystem';
 import { HirelingShotSystem } from '../src/systems/HirelingShotSystem';
 import { DeinonychusSystem } from '../src/systems/DeinonychusSystem';
@@ -115,9 +115,6 @@ const STARLIGHT_TENT_DIFFICULTY = 'normal';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
 import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
-import { CultHideoutSystem } from '../src/systems/CultHideoutSystem';
-import { interiorHostilesFor } from '../src/systems/interiorHostiles';
-import { createTownMemory } from '../src/core/state/TownMemory';
 import { applyMovement } from '../src/systems/GameLoopPhases';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { hudLayout } from '../src/ui/hud/hudLayout';
@@ -125,6 +122,12 @@ import { NO_INSETS, resolveViewport } from '../src/ui/core/viewport';
 import { BuildingSystem, downedPartnerEntryRefusal } from '../src/systems/BuildingSystem';
 import { crawlerName } from '../src/characters/characters';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import {
+  SPLIT_PARTY_FAULTS,
+  checkSplitParty,
+  isSplitPartyFault,
+  type SplitPartyFault,
+} from './companionsIndoors/splitParty';
 
 useDevPlayerIdentity();
 
@@ -228,7 +231,7 @@ function contextFor(party: Party, map: GameMap, roster: MobRoster, extras: Playe
     human: party.human,
     cat: party.cat,
     active,
-    inactive,
+    partner: inactive,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -499,7 +502,11 @@ function findOpenTileAway(map: GameMap, from: { x: number; y: number }) {
   for (let y = 0; y < map.structure.length; y++) {
     const row = map.structure[y];
     for (let x = 0; x < row.length; x++) {
-      if (!map.isWalkable(x, y) || !hasRoomToMove(map, x, y) || !map.isWalkable(x + 1, y)) {
+      if (
+        !map.isWalkable(x, y, 'walker') ||
+        !hasRoomToMove(map, x, y) ||
+        !map.isWalkable(x + 1, y, 'walker')
+      ) {
         continue;
       }
       const distance = Math.hypot(x - from.x, y - from.y);
@@ -581,6 +588,7 @@ function hireRoster(id: MercenaryTemplateId, hp?: number): MercenaryRoster {
   roster.active = {
     id,
     name: getMercenaryTemplate(id).name,
+    terms: 'paid',
     contractLevelId: HIRE_FLOOR,
     introduced: true,
     hp,
@@ -969,55 +977,6 @@ function checkHeldMobsAreOffLimits(): void {
   } else {
     check(false, 'Crush stands');
   }
-
-  const quill = readFileSync(QUILL_PATH, 'utf8');
-  const banner = methodBody(quill, 'private holdRoomForBanner(): void {');
-  const release = methodBody(quill, 'private releaseRoom(): void {');
-  check(
-    banner?.includes('mob.offLimitsToAllies = true;') === true &&
-      release?.includes('mob.offLimitsToAllies = false;') === true,
-    'the tower’s intro card puts its culprits off limits, and lets them go with the card',
-  );
-}
-
-// ── The tower's intro card on the hardest difficulty ─────────────────────────
-
-const TOWER_TOP_STOREY = 3;
-/** Party level for the confrontation: any level spawns the same room. */
-const CONFRONTATION_PARTY_LEVEL = 30;
-
-function checkQuillHealerHeld(): void {
-  section('On the hardest difficulty, the boss healer is held off limits with the room');
-  const previous = settings.difficulty;
-  settings.setDifficultyForSession(BOSS_HEALER_DIFFICULTY);
-  const map = makeTowerStorey(TOWER_TOP_STOREY);
-  const roster = makeRoster(map);
-  const spawned: Mob[] = [];
-  const progress = createMurderQuestProgress();
-  progress.stage = 'confrontation';
-  // The re-entry path, which opens straight onto the fight and its card.
-  progress.officeSceneSeen = true;
-  new QuillConfrontationSystem(
-    map,
-    new EventBus(),
-    (mob) => {
-      spawned.push(mob);
-      roster.add(mob);
-    },
-    progress,
-    null,
-    createDoomsdayProgress(),
-    CONFRONTATION_PARTY_LEVEL,
-    undefined,
-    new Conversation(null),
-  );
-  settings.setDifficultyForSession(previous);
-  const healers = spawned.filter((mob) => mob instanceof HealingFairy);
-  check(healers.length > 0, `a healer is in the room (${healers.length})`);
-  check(
-    healers.every((healer) => healer.aiHeld && healer.offLimitsToAllies),
-    'and held out of the fight with everyone else for the card',
-  );
 }
 
 // ── A hire's shots indoors ───────────────────────────────────────────────────
@@ -1035,7 +994,7 @@ function rangedFoeTile(map: GameMap, from: { x: number; y: number }) {
     for (let x = 0; x < (map.structure[y]?.length ?? 0); x++) {
       const distance = Math.hypot(x - from.x, y - from.y);
       if (distance < RANGED_FOE_MIN_TILES || distance > RANGED_FOE_MAX_TILES) continue;
-      if (!map.isWalkable(x, y) || !hasRoomToMove(map, x, y)) continue;
+      if (!map.isWalkable(x, y, 'walker') || !hasRoomToMove(map, x, y)) continue;
       const inSight = map.hasLineOfSight(
         (from.x + TILE_CENTER) * TILE_SIZE,
         (from.y + TILE_CENTER) * TILE_SIZE,
@@ -1258,7 +1217,7 @@ function blockingPropTiles(map: GameMap): Set<string> {
 /** Every tile a walker can reach from `from`, four-connected. */
 function reachableFrom(map: GameMap, from: { x: number; y: number }): Set<string> {
   const reached = new Set<string>();
-  if (!map.isWalkable(from.x, from.y)) return reached;
+  if (!map.isWalkable(from.x, from.y, 'walker')) return reached;
   const frontier = [{ x: from.x, y: from.y }];
   reached.add(`${from.x},${from.y}`);
   for (const tile of frontier) {
@@ -1266,7 +1225,7 @@ function reachableFrom(map: GameMap, from: { x: number; y: number }): Set<string
       const x = tile.x + dx;
       const y = tile.y + dy;
       const key = `${x},${y}`;
-      if (reached.has(key) || !map.isWalkable(x, y)) continue;
+      if (reached.has(key) || !map.isWalkable(x, y, 'walker')) continue;
       reached.add(key);
       frontier.push({ x, y });
     }
@@ -1300,7 +1259,7 @@ interface RoomFacts {
 function standingFaults(map: GameMap, facts: RoomFacts, tile: { x: number; y: number }): string[] {
   const key = `${tile.x},${tile.y}`;
   return [
-    map.isWalkable(tile.x, tile.y) ? '' : 'not walkable',
+    map.isWalkable(tile.x, tile.y, 'walker') ? '' : 'not walkable',
     facts.blocked.has(key) ? 'inside a prop' : '',
     hasRoomToMove(map, tile.x, tile.y) ? '' : 'no room to move',
     facts.reachable.has(key) ? '' : 'cut off from the way in',
@@ -1477,55 +1436,6 @@ function checkTempleVermin(): void {
 
 /** Rats the temple step asks for: its full count. */
 const TEMPLE_VERMIN_ASKED = 5;
-/** A party strong enough that the quest fights are at their own levels. */
-const QUEST_FIGHT_PARTY_LEVEL = 10;
-
-/** The questline's own hostiles indoors: the cult's hideout and the tower's stair guards. */
-function checkQuestHostilesIndoors(): void {
-  section('The questline’s hostiles indoors stand on open, reachable floor');
-  for (const arrival of everyRoomArrival()) {
-    if (arrival.fixedMarks !== undefined) continue;
-    const map = arrival.map;
-    const facts: RoomFacts = {
-      blocked: blockingPropTiles(map),
-      reachable: reachableFrom(map, arrival.landing),
-    };
-    const spawned: Mob[] = [];
-    if (arrival.buildingId === CULT_HIDEOUT_NAME && arrival.storey === GROUND_STOREY) {
-      const progress = createMurderQuestProgress();
-      progress.stage = 'cult_hideout';
-      new CultHideoutSystem(
-        map,
-        new EventBus(),
-        (mob) => spawned.push(mob),
-        progress,
-        QUEST_FIGHT_PARTY_LEVEL,
-      );
-    }
-    if (arrival.kind === 'tower') {
-      const progress = createMurderQuestProgress();
-      progress.stage = 'confrontation';
-      spawned.push(
-        ...interiorHostilesFor({
-          buildingId: arrival.buildingId,
-          buildingType: arrival.kind,
-          floor: arrival.storey,
-          map,
-          memory: createTownMemory(),
-          murderQuest: progress,
-          partyLevel: QUEST_FIGHT_PARTY_LEVEL,
-        }),
-      );
-    }
-    for (const [index, mob] of spawned.entries()) {
-      checkStandsFree(map, facts, mob, `${arrival.label}: hostile ${index + 1}`);
-    }
-  }
-}
-
-/** The house the cult holds its meetings in. */
-const CULT_HIDEOUT_NAME = 'taloncrest_garrison_lodge';
-
 function checkEveryRoom(): void {
   section('In every room, every body the party brings stands where it can move');
   setViewportSize(HUGE_SCREEN_PX, HUGE_SCREEN_PX);
@@ -1590,7 +1500,7 @@ function checkPartyOutdoors(): void {
       const cat = new CatPlayer(follower.x, follower.y, TILE_SIZE);
       if (follower.x === leader.x && follower.y === leader.y) {
         problems.push(`${where}: the companion is stacked on the leader`);
-      } else if (!map.isWalkable(follower.x, follower.y)) {
+      } else if (!map.isWalkable(follower.x, follower.y, 'walker')) {
         problems.push(`${where}: the companion lands on blocked ground at ${followerKey}`);
       } else if (doorKeys.has(followerKey)) {
         problems.push(`${where}: the companion lands on a door at ${followerKey}`);
@@ -1602,7 +1512,8 @@ function checkPartyOutdoors(): void {
         problems.push(`${where}: the companion at ${followerKey} cannot take a step`);
       }
       const eastX = leader.x + 1;
-      const eastIsStuck = !map.isWalkable(eastX, leader.y) || !hasRoomToMove(map, eastX, leader.y);
+      const eastIsStuck =
+        !map.isWalkable(eastX, leader.y, 'walker') || !hasRoomToMove(map, eastX, leader.y);
       if (eastIsStuck) eastOfLeaderStuck++;
     }
     check(map.buildingEntries.length > 0, `seed ${worldSeed}: the town has doors to walk out of`);
@@ -1629,7 +1540,8 @@ function checkPartyOutdoors(): void {
     );
     const followerCat = new CatPlayer(follower.x, follower.y, TILE_SIZE);
     check(
-      map.isWalkable(follower.x, follower.y) && bestWalkPx(followerCat, map) >= MIN_WALK_PX,
+      map.isWalkable(follower.x, follower.y, 'walker') &&
+        bestWalkPx(followerCat, map) >= MIN_WALK_PX,
       `the arrival search puts it at (${follower.x},${follower.y}), where it can walk`,
     );
   }
@@ -1647,7 +1559,7 @@ function firstLandingWalledToTheEast(map: GameMap): { x: number; y: number } | n
     const y = offset % 2 === 0 ? middleRow + offset / 2 : middleRow - (offset + 1) / 2;
     const columns = map.structure[y]?.length ?? 0;
     for (let x = 0; x + 1 < columns; x++) {
-      if (map.isWalkable(x + 1, y) || !hasRoomToMove(map, x, y)) continue;
+      if (map.isWalkable(x + 1, y, 'walker') || !hasRoomToMove(map, x, y)) continue;
       const probe = new CatPlayer(x + 1, y, TILE_SIZE);
       if (bestWalkPx(probe, map) >= MIN_WALK_PX) continue;
       return { x, y };
@@ -1663,7 +1575,6 @@ const INTERIOR_SCENE_PATH = resolve(SCENES_DIR, 'BuildingInteriorScene.ts');
 const DUNGEON_SCENE_PATH = resolve(SCENES_DIR, 'DungeonScene.ts');
 const INPUT_HANDLER_PATH = resolve(SCENES_DIR, '..', 'systems', 'GameplayInputHandler.ts');
 const MERC_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'MercenarySystem.ts');
-const QUILL_PATH = resolve(SCENES_DIR, '..', 'systems', 'QuillConfrontationSystem.ts');
 const OCCUPANT_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'InteriorOccupantSystem.ts');
 const PLAYER_MANAGER_PATH = resolve(SCENES_DIR, '..', 'core', 'party', 'PlayerManager.ts');
 const HUD_SURFACE_PATH = resolve(SCENES_DIR, '..', 'ui', 'hud', 'HudSurface.ts');
@@ -1741,14 +1652,14 @@ function checkSceneWiring(): void {
     inOrder(
       constructorBody,
       'stampSafeRoomDecor(this.map);',
-      'this.setPartyDown(this.map.startTile);',
+      'this.setPartyDown(this.floor.arrival?.tile ?? this.map.startTile);',
     ),
     'the party is set down after the safe room’s fittings are stamped',
   );
   check(
     inOrder(
       constructorBody,
-      'this.setPartyDown(this.map.startTile);',
+      'this.setPartyDown(this.floor.arrival?.tile ?? this.map.startTile);',
       'this.carryDeinonychusIn();',
     ),
     'and before Deinonychus lands beside the cat',
@@ -1776,7 +1687,10 @@ function checkSceneWiring(): void {
     inOrder(changeFloor, 'this.mercenarySystem.leaveStorey(', 'carryCompanions('),
     'and settles a downed hire before it carries anyone',
   );
-  const doExit = methodBody(interior, 'private doExit(defeated = false): void {');
+  const doExit = methodBody(
+    interior,
+    'private doExit(defeated = false, onward: PartyTransferRequest | null = null): void {',
+  );
   check(
     inOrder(doExit, 'this.companionDeparture()', 'this.deinonychusSystem.dismiss('),
     'the exit reads who walks out before putting Deinonychus away',
@@ -1790,17 +1704,19 @@ function checkSceneWiring(): void {
   const dungeon = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
   const door = methodBody(dungeon, 'private enterBuilding(');
   check(door !== null, 'the building door’s callback is found');
+  const throughTheDoor = methodBody(dungeon, 'private partyThroughTheDoor(');
   const exitOptions = methodBody(dungeon, 'private buildingExitOptions(');
   check(
     inOrder(
-      door,
+      throughTheDoor,
       'deinonychusWasOut: this.deinonychusSystem.followsThroughDoor',
       'this.deinonychusSystem.dismiss(',
     ),
     'the door reads whether he was out before putting him away',
   );
   check(
-    inOrder(door, 'this.deinonychusSystem.dismiss(', 'new BuildingInteriorScene('),
+    throughTheDoor?.includes('this.deinonychusSystem.dismiss(') === true &&
+      inOrder(door, 'this.partyThroughTheDoor(', 'new BuildingInteriorScene('),
     'and puts him away before the interior is built',
   );
   check(
@@ -1820,18 +1736,21 @@ function checkSceneWiring(): void {
 
   section('The interior keeps its companions’ controls and prompts straight');
   const render = methodBody(interior, 'render(ctx: CanvasRenderingContext2D): void {');
-  for (const surface of [
-    'this.shop.renderObjects(',
-    'this.club.renderObjects(',
-    'this.safeRoom.renderUI(',
-    'this.dave?.renderUI(',
-    'this.doctor.renderUI(',
-  ]) {
-    check(
-      inOrder(render, surface, 'this.renderMercenaryPrompt('),
-      `the hire’s Talk prompt is drawn after ${surface.slice('this.'.length, -1)}, and so yields to it`,
-    );
-  }
+  const mercenaryPrompt = methodBody(
+    interior,
+    'private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {',
+  );
+  check(
+    mercenaryPrompt?.includes('raisePromptsFor(this.promptOwners.mercenary') === true,
+    'the hire’s Talk prompt is raised for the hire',
+  );
+  const otherRanks = Object.entries(INTERACTABLE_RANK).flatMap(([kind, rank]) =>
+    kind === 'companion' ? [] : [rank],
+  );
+  check(
+    otherRanks.every((rank) => rank < INTERACTABLE_RANK.companion),
+    'and a companion ranks below every other prompt, so anything else in reach is the one shown',
+  );
   const hudModelBody = methodBody(interior, 'private hudModel(): HudModel {');
   check(
     hudModelBody !== null && /summon: [^,]*this\.hudSummon\(\)/.test(hudModelBody),
@@ -2029,6 +1948,18 @@ function checkDownedPartnerKeepsEveryDoorShut(): void {
 
 // ── Run ──────────────────────────────────────────────────────────────────────
 
+function parseFault(): SplitPartyFault | null {
+  const FAULT_FLAG = '--fault=';
+  const arg = process.argv.slice(2).find((candidate) => candidate.startsWith(FAULT_FLAG));
+  if (arg === undefined) return null;
+  const name = arg.slice(FAULT_FLAG.length);
+  if (isSplitPartyFault(name)) return name;
+  console.error(`unknown fault "${name}"; known: ${SPLIT_PARTY_FAULTS.join(', ')}`);
+  process.exit(2);
+}
+
+const splitFault = parseFault();
+
 checkDeinonychusThroughTheDoor();
 checkDeinonychusLocks();
 checkStoreyCarry();
@@ -2040,13 +1971,13 @@ checkDeskUnderTheSameRoof();
 checkCatchUp();
 checkHeldMobsAreOffLimits();
 checkHireShotsIndoors();
-checkQuillHealerHeld();
 checkEveryRoom();
 checkTempleVermin();
-checkQuestHostilesIndoors();
 checkPartyOutdoors();
 checkSceneWiring();
 checkDownedPartnerKeepsEveryDoorShut();
+section('A split party');
+checkSplitParty(check, splitFault);
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

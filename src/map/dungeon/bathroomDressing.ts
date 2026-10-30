@@ -64,7 +64,7 @@ function reachableFromEntrance(
     x >= bounds.x - 1 && x <= bounds.x + bounds.w && y >= bounds.y - 1 && y <= bounds.y + bounds.h;
   const open = (x: number, y: number): boolean => {
     if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) return false;
-    return isWalkableTileType(grid[y][x]) && !solid.has(keyOf(x, y));
+    return isWalkableTileType(grid[y][x], 'walker') && !solid.has(keyOf(x, y));
   };
   const start = room.entranceTile;
   const seen = new Set<string>();

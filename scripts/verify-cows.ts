@@ -330,7 +330,7 @@ function buildWorld(seed: number): World | null {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -727,7 +727,7 @@ function escapesFence(world: World): boolean {
   if (cow === undefined) return true;
   const { rect } = world.site.pasture;
   const post = { x: rect.x + Math.floor(rect.w / 2), y: rect.y };
-  if (world.map.isWalkable(post.x, post.y)) return true;
+  if (world.map.isWalkable(post.x, post.y, 'walker')) return true;
   cow.x = post.x * TILE_SIZE;
   cow.y = post.y * TILE_SIZE;
   world.roster.rebuildGrid();
@@ -1043,7 +1043,7 @@ function respawnSection(): void {
       check(!overlaps && moved, `seed ${seed}: ${name} was set down clear of the cow`);
       const landing = { x: Math.floor(body.x / TILE_SIZE), y: Math.floor(body.y / TILE_SIZE) };
       check(
-        world.map.isWalkable(landing.x, landing.y) &&
+        world.map.isWalkable(landing.x, landing.y, 'walker') &&
           hasRoomToMove(world.map, landing.x, landing.y),
         `seed ${seed}: ${name} landed on walkable ground with room to move`,
       );

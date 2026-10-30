@@ -9,7 +9,8 @@
  * happens to be loaded; see the note above `INTERIOR_BOARD_FLOOR` in
  * `src/map/tileTypes.ts`. The Cloak & Dagger has a floor type of its own and is
  * drawn elsewhere; the Starlight Tent's sawdust and its dark backstage canvas are rows
- * of this sheet.
+ * of this sheet, and so are the storm drain's brick, walkway and channel bed,
+ * which `src/map/dungeon/sewerMaterials.ts` draws through a palette of its own.
  *
  * This module is deliberately free of canvas code — `src/map/tiles/groundTiles.ts`
  * does the drawing.
@@ -53,6 +54,9 @@ const GROUND_BLEND_ORDER = {
   interior_counter: 7,
   starlight_tent_sawdust: 8,
   starlight_tent_backstage: 9,
+  sewer_channel: 10,
+  sewer_walkway: 11,
+  sewer_brick: 12,
 } as const satisfies Record<InteriorMaterial, number>;
 
 /**
@@ -64,7 +68,7 @@ const GROUND_BLEND_ORDER = {
  * which is the exact failure `CELLAR_WALL_RAMP` and `CINDERBLOCK_RAMP` exist to
  * prevent. Re-measure these whenever a material's painter or ramp changes.
  */
-const GROUND_FALLBACK_COLOR = {
+export const INTERIOR_GROUND_FALLBACK_COLOR = {
   interior_boards: '#9a7448',
   interior_stone: '#97979b',
   interior_plaster: '#b8ab95',
@@ -75,6 +79,9 @@ const GROUND_FALLBACK_COLOR = {
   interior_ink: '#946f45',
   starlight_tent_sawdust: '#ae965e',
   starlight_tent_backstage: '#161214',
+  sewer_brick: '#31251f',
+  sewer_walkway: '#696d63',
+  sewer_channel: '#4b4434',
 } as const satisfies Record<InteriorMaterial, string>;
 
 /** A finished room is swept, and none of its surfaces is loose. */
@@ -89,6 +96,9 @@ const GROUND_SPILL = {
   interior_ink: null,
   starlight_tent_sawdust: null,
   starlight_tent_backstage: null,
+  sewer_brick: null,
+  sewer_walkway: null,
+  sewer_channel: null,
 } as const satisfies Record<InteriorMaterial, GroundSpill | null>;
 
 /** Kerbs are a street feature; both sets are empty indoors. */
@@ -140,7 +150,7 @@ function interiorMaterialForTileType(type: number): InteriorMaterial | undefined
 export const TOWN_INTERIOR_GROUND: GroundPalette = {
   sheetKey: GROUND_SHEET_KEY,
   blendOrder: GROUND_BLEND_ORDER,
-  fallbackColor: GROUND_FALLBACK_COLOR,
+  fallbackColor: INTERIOR_GROUND_FALLBACK_COLOR,
   spill: GROUND_SPILL,
   kerbedMaterials: KERBED_MATERIALS,
   kerbSoftMaterials: KERB_SOFT_MATERIALS,

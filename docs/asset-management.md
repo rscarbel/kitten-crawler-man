@@ -281,6 +281,20 @@ Four decisions carry that, and each is load-bearing:
   magnitude across the fleet, so a cell count would let one figure spike a frame and hold
   another back for nothing.
 
+**Cats are a figure per look, bounded by row tier.** Every cat drawn owns a
+`CatAppearance` (`src/sprites/catSprite.ts`): her look, her outfit, the figure
+`catFigureFor(look, outfit)` memoises for the pair, and her own resident rows. Any number
+of cats share the cache at once; what bounds them is the rows each may bake, set by her
+`CatRowTier` in `CAT_ROW_TIERS`: `crawler` (every row, only the playable cat), `companion`
+(walk, idle, swipe, knocked out and the idle breaks) and `ambient` (idle, walk, sit, the
+idle breaks and the bolt). An ambient cat warms only `idle` and `sit` on arrival and her
+bolt on her owner's cue (`prewarmCued`), and holds no rows resident beyond the one drawn,
+so a room of them costs little more than the cells on screen. Measured at a 1× pixel
+ratio, the worst live case (the crawler, a companion and seven ambient cats, each warmed)
+is 4.65 MB: 2.14 MB for the crawler, 1.45 MB for the companion and 0.12–0.17 MB per
+ambient cat. The budget is bytes, not looks: when it tightens, an ambient tier sheds rows
+before any cat is refused.
+
 Cells are baked supersampled and downsampled into place, matching what the deleted
 offline generators did, so a cached cell is the sheet cell it replaced.
 

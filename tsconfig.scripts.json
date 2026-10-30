@@ -89,6 +89,7 @@
     "scripts/verify-difficulty-guard.ts",
     "scripts/difficultyGuardChecks.ts",
     "scripts/verify-lich.ts",
+    "scripts/verify-missing-cats.ts",
     "scripts/verify-spider-fight.ts",
     "scripts/verify-doomsday.ts",
     "scripts/verify-run-stats.ts",

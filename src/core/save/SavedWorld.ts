@@ -1,6 +1,7 @@
 import type { PersistedWorldState } from './PersistedWorldState';
 import { parsePersistedWorldState, parsePoint } from './PersistedWorldState';
 import { isRecord } from '../util/guards';
+import { isBuildingId, type BuildingId } from '../../map/buildingIds';
 
 /**
  * Changed whenever a change to map generation would make a seed produce a
@@ -27,6 +28,13 @@ export interface SavedWorld {
    */
   resumeTile: TilePoint | null;
   /**
+   * The building the save was written in, or `null` for one written outdoors.
+   * A save cannot stand a party up indoors, so it resumes on `resumeTile`;
+   * a questline that can stand this building up again as the save left it
+   * then takes the party back inside.
+   */
+  savedIndoorsIn: BuildingId | null;
+  /**
    * Frames the party has spent on this floor, counted on every difficulty so
    * that a switch to Nightmare mid-floor finds its time limit already running.
    */
@@ -41,11 +49,20 @@ export interface SavedWorld {
  */
 export function parseSavedWorld(value: unknown): SavedWorld | undefined {
   if (!isRecord(value)) return undefined;
-  const { generatorVersion, worldSeed, artSeed, resumeTile, floorElapsedFrames, persisted } = value;
+  const {
+    generatorVersion,
+    worldSeed,
+    artSeed,
+    resumeTile,
+    savedIndoorsIn,
+    floorElapsedFrames,
+    persisted,
+  } = value;
   if (generatorVersion !== WORLD_GENERATOR_VERSION) return undefined;
   if (!isFiniteNumber(worldSeed) || !isFiniteNumber(artSeed)) return undefined;
   const parsedResumeTile = resumeTile === null ? null : parsePoint(resumeTile);
   if (parsedResumeTile === undefined) return undefined;
+  if (savedIndoorsIn !== null && !isBuildingId(savedIndoorsIn)) return undefined;
   if (!isFiniteNumber(floorElapsedFrames) || floorElapsedFrames < 0) return undefined;
   const parsedPersisted = parsePersistedWorldState(persisted);
   if (parsedPersisted === undefined) return undefined;
@@ -54,6 +71,7 @@ export function parseSavedWorld(value: unknown): SavedWorld | undefined {
     worldSeed,
     artSeed,
     resumeTile: parsedResumeTile,
+    savedIndoorsIn,
     floorElapsedFrames,
     persisted: parsedPersisted,
   };

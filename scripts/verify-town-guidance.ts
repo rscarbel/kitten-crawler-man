@@ -258,7 +258,7 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
   }
   const props = propTiles(plan);
   const walkable = (x: number, y: number): boolean =>
-    map.isWalkable(x, y) && !props.has(y * MAP_SIZE + x);
+    map.isWalkable(x, y, 'walker') && !props.has(y * MAP_SIZE + x);
 
   // Every tile of every opening, not just the one the entry menu is keyed on —
   // a doorway several tiles wide must be enterable at any column along it.
@@ -266,7 +266,7 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
     const { x0, width } = entry.doorway;
     for (let x = x0; x < x0 + width; x++) {
       checkOnce(
-        map.isWalkable(x, entry.doorTile.y),
+        map.isWalkable(x, entry.doorTile.y, 'walker'),
         `'${entry.id}': column ${x - x0} of its ${width}-tile doorway is not walkable`,
       );
     }
@@ -393,9 +393,9 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
       checkOnce(false, `'${gate.name}': open ground stands beyond its apron`);
       continue;
     }
-    const goals = goalTilesForTarget(map, { x: outside.x, y: outside.y });
+    const goals = goalTilesForTarget(map, { x: outside.x, y: outside.y }, 'walker');
     const started = performance.now();
-    routeField = buildRouteField(map, goals, routeField);
+    routeField = buildRouteField(map, goals, 'walker', routeField);
     routeBuildMs.push(performance.now() - started);
     const { aim } = firstAimTile(routeField, map, plaza, outside, portals);
     checkOnce(
@@ -404,7 +404,7 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
     );
 
     const guide = new QuestRouteGuide();
-    guide.updateToTiles(map, groundPointOnTile(plaza), goals);
+    guide.updateToTiles(map, groundPointOnTile(plaza), goals, 'walker');
     const guideAim = guide.aim();
     const guideAimTile =
       guideAim === null
@@ -420,12 +420,12 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
   for (const entry of map.buildingEntries) {
     const target = doorwayBeaconTarget(entry);
     if (target === null) continue;
-    const goals = goalTilesForTarget(map, target);
+    const goals = goalTilesForTarget(map, target, 'walker');
     if (goals.length === 0) {
       checkOnce(false, `'${entry.id}': its door target has a tile a route can end on`);
       continue;
     }
-    routeField = buildRouteField(map, goals, routeField);
+    routeField = buildRouteField(map, goals, 'walker', routeField);
     const { aim, chain } = firstAimTile(routeField, map, plaza, entry.doorTile, portals);
     const last = chain[chain.length - 1];
     checkOnce(
@@ -466,7 +466,7 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
     checkOnce(false, 'Briar Hollow has open ground inside its palisade');
     continue;
   }
-  const palisadeField = buildRouteField(map, [inside], routeField);
+  const palisadeField = buildRouteField(map, [inside], 'walker', routeField);
   routeField = palisadeField;
   // The wilderness is unseeded, and the ring search can settle on a pocket
   // walled in by trees or cliffs; the arrow's aim only means something from
@@ -515,20 +515,20 @@ console.log('\nQuest route guide re-routes round a newly blocked tile while the 
       check(false, 'open ground stands beyond the first gate');
     } else {
       const target = { x: outside.x, y: outside.y };
-      const field = buildRouteField(map, goalTilesForTarget(map, target));
+      const field = buildRouteField(map, goalTilesForTarget(map, target, 'walker'), 'walker');
       const chain = downhillChain(field, map, plaza, QUEST_ROUTE_CHAIN_MAX_TILES);
       const guide = new QuestRouteGuide();
       for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++) {
-        guide.update(map, groundPointOnTile(plaza), target);
+        guide.update(map, groundPointOnTile(plaza), target, 'walker');
       }
       const blocked = chain[BLOCKED_ROUTE_INDEX];
       map.blockTilePermanently(blocked.x, blocked.y);
       const pacing = [chain[0], chain[1]];
       for (let tick = 0; tick < BLOCKED_ROUTE_TICKS; tick++) {
-        guide.update(map, groundPointOnTile(pacing[tick % pacing.length]), target);
+        guide.update(map, groundPointOnTile(pacing[tick % pacing.length]), target, 'walker');
       }
       check(
-        guide.trail().every((tile) => map.isWalkable(tile.x, tile.y)),
+        guide.trail().every((tile) => map.isWalkable(tile.x, tile.y, 'walker')),
         'a walking player gets a trail round a newly blocked route tile',
       );
       guide.dispose();
@@ -563,14 +563,14 @@ console.log('\nQuest route starts from the feet of a crawler standing just below
       continue;
     }
     const target = { x: plaza.x, y: plaza.y };
-    const field = buildRouteField(map, goalTilesForTarget(map, target));
+    const field = buildRouteField(map, goalTilesForTarget(map, target, 'walker'), 'walker');
     const costAt = (x: number, y: number): number => field.cost[y * field.columns + x];
     for (const building of site.buildings) {
       const rect = building.rect;
       const bottomRow = rect.y + rect.h - 1;
       const standRow = bottomRow + 1;
       for (let x = rect.x; x < rect.x + rect.w; x++) {
-        if (map.isWalkable(x, bottomRow)) continue;
+        if (map.isWalkable(x, bottomRow, 'walker')) continue;
         if (costAt(x, standRow) === Infinity) continue;
         const body = {
           x: x * TILE_SIZE,
@@ -578,7 +578,8 @@ console.log('\nQuest route starts from the feet of a crawler standing just below
         };
         const ground = crawlerGroundPoint(body);
         const guide = new QuestRouteGuide();
-        for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++) guide.update(map, ground, target);
+        for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++)
+          guide.update(map, ground, target, 'walker');
         standsChecked++;
         const trail = guide.trail();
         const origin = trail.length > 0 ? trail[0] : null;
@@ -652,7 +653,7 @@ const TRAIL_POINT_STRIDE = 2;
 
 function trailStrayTiles(ground: TrailGround, walk: readonly TilePoint[]): number {
   const shaper = new TrailShaper();
-  shaper.setWalk(ground, walk);
+  shaper.setWalk(ground, walk, 'walker');
   const shape = shaper.shape({
     unit: 'px',
     x: (walk[0].x + TILE_CENTRE_OFFSET) * TILE_SIZE,

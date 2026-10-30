@@ -38,6 +38,7 @@ import { buildWallCaseStructure } from '../map/dungeon/wallCaseFixture';
 import {
   DEFAULT_DUNGEON_FLOOR_THEME,
   setDungeonFloorTheme,
+  DUNGEON_FLOOR_THEME_IDS,
   type DungeonFloorThemeId,
 } from '../map/dungeon/floorTheme';
 import { flushEnvironmentArtCache } from '../map/environmentArtCache';
@@ -133,14 +134,12 @@ const NEXT_MODE: Readonly<Record<PreviewMode, PreviewMode>> = {
   walls: 'materials',
 };
 
-/** Floors drawn side by side in the Walls view. */
-const WALL_VIEW_THEMES: ReadonlyArray<{
-  readonly id: DungeonFloorThemeId;
-  readonly label: string;
-}> = [
-  { id: 'cellars', label: 'Floor 1 — cellars' },
-  { id: 'service_level', label: 'Floor 2 — service level' },
-];
+/** What each floor drawn side by side in the Walls view is labelled. */
+const WALL_VIEW_LABELS = {
+  cellars: 'Floor 1 — cellars',
+  service_level: 'Floor 2 — service level',
+  sewer: 'Storm drain — sewer',
+} as const satisfies Record<DungeonFloorThemeId, string>;
 const WALL_VIEW_GAP_TILES = 1;
 
 export class TilePreviewScene extends PreviewScene {
@@ -207,7 +206,7 @@ export class TilePreviewScene extends PreviewScene {
       ? 'generated ground — materials — ?tiles'
       : this.mode === 'transitions'
         ? 'generated ground — transitions (live composite via corner masks) — ?tiles'
-        : 'dungeon walls — every wall shape, both floors — ?tiles';
+        : 'dungeon walls — every wall shape, every floor — ?tiles';
   }
 
   protected previewCaptions(): readonly string[] {
@@ -323,7 +322,9 @@ export class TilePreviewScene extends PreviewScene {
     this.renderChrome(ctx);
   }
 
-  private readonly wallCases = buildWallCaseStructure();
+  private readonly wallCases = new Map(
+    DUNGEON_FLOOR_THEME_IDS.map((themeId) => [themeId, buildWallCaseStructure(themeId)] as const),
+  );
 
   /**
    * The wall-case fixture drawn by the game's own tile renderer under each
@@ -331,19 +332,19 @@ export class TilePreviewScene extends PreviewScene {
    * around each panel and put back to the default after.
    */
   private renderWalls(ctx: CanvasRenderingContext2D): void {
-    const structure = this.wallCases;
-    const panelW = (structure[0]?.length ?? 0) * PREVIEW_TILE;
-    const panelH = structure.length * PREVIEW_TILE;
-    WALL_VIEW_THEMES.forEach((theme, index) => {
+    DUNGEON_FLOOR_THEME_IDS.forEach((themeId, index) => {
+      const structure = this.wallCases.get(themeId) ?? buildWallCaseStructure(themeId);
+      const panelW = (structure[0]?.length ?? 0) * PREVIEW_TILE;
+      const panelH = structure.length * PREVIEW_TILE;
       const originX = MARGIN + index * (panelW + WALL_VIEW_GAP_TILES * PREVIEW_TILE);
       const originY = PANEL_LABEL_HEIGHT;
-      worldText(ctx, theme.label, {
+      worldText(ctx, WALL_VIEW_LABELS[themeId], {
         x: originX,
         y: LABEL_BASELINE_NUDGE,
         size: HINT_SIZE,
         color: LABEL_COLOR,
       });
-      setDungeonFloorTheme(theme.id);
+      setDungeonFloorTheme(themeId);
       ctx.save();
       ctx.translate(originX, originY);
       renderCanvas(ctx, structure, PREVIEW_TILE, 0, 0, panelW, panelH);

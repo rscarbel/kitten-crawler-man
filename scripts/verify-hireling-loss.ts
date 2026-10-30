@@ -139,6 +139,7 @@ function checkNewHireRoundTrips(): void {
   atDesk.active = {
     id,
     name: getMercenaryTemplate(id).name,
+    terms: 'paid',
     contractLevelId: level3.id,
     introduced: false,
   };

@@ -303,7 +303,7 @@ class ProbeBolts {
     bolt.travelled += this.rules.speed;
     const tileX = Math.floor(bolt.x / TILE_SIZE);
     const tileY = Math.floor(bolt.y / TILE_SIZE);
-    if (!this.rules.ignoresWalls && !this.map.isWalkable(tileX, tileY)) return false;
+    if (!this.rules.ignoresWalls && !this.map.isWalkable(tileX, tileY, 'walker')) return false;
     const hostiles = this.rules.strikesHostiles
       ? mobs.filter((mob) => mob !== this.owner && mob.isHostile)
       : [];

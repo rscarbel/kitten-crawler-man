@@ -70,7 +70,7 @@ only picks which. `docs/town.md` ("Who lives here") covers the cast, the species
 and why the crowd is rolled from the world seed.
 
 - **Species is its own axis.** `TownSpecies` (`src/systems/townSpecies.ts`: human,
-  Hawkfolk, dwarf, otter, crocodilian) is carried by `ResidentDef`, `OccupantSpec` and
+  Hawkfolk, dwarf, otter, crocodilian, orc, elf) is carried by `ResidentDef`, `OccupantSpec` and
   `Townsperson`. `TownRole` is only a job, so never add a species to it. A service belongs
   to the occupant who keeps it (`OccupantSpec.service`), not to a role.
 - **Species is not a look.** Only a `CrowdSpecies` (human, Hawkfolk) has a citizen cast:
@@ -117,10 +117,18 @@ and why the crowd is rolled from the world seed.
     paints (`Townsperson.routinePose`) and its positional sounds
     (`occupantRoutineCues.ts`). A new routine is a union member plus a case in
     `startOccupantRoutine`, whose switch fails to compile until it is handled.
+  - `presentWhen` (optional): whether the story has put them in the room, read over the
+    `TownDialogContext` each time the room is built. `InteriorOccupantSystem.forBuilding`
+    takes that context and stands only `presentOccupants(roster, town)`, so someone the
+    story brings in later is a roster entry, never a special case in the system.
   - `service` (`OccupantService`, `src/systems/townServices.ts`): a `menu` counter, a
     fortune `reading` or a `desk` screen, with its prompt verb. Talk is routed to the
     occupant who keeps it, so one building can hold two people of the same role who
     both offer something.
+  - Anyone whose stand tile touches a counter (an `INTERIOR_COUNTER` tile or a prop
+    anchored as `counter`) is talked to from across it: `findTalkTarget` reaches them
+    out to `ACROSS_COUNTER_TALK_RADIUS_TILES` when the tile midway is counter, and
+    `talkRangeTilesOf` gives the conversation the same reach.
 
   `npm run verify:interiors` checks every `prop` placement lands on a walkable,
   unreserved tile, every territory holds its stand tile, and every service resolves.

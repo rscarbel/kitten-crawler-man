@@ -9,13 +9,20 @@ import type { DifficultyProfile } from '../core/difficulty/difficultyProfiles';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
-import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
+import { dungeonFloorTheme, type DungeonFloorThemeId } from '../map/dungeon/floorTheme';
+import type { StairwellStyleId } from '../sprites/art/stairwellArt';
 import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
 import { clamp } from '../utils';
 
 const TILE_CENTER_OFFSET = 0.5;
 // Stairwell rendering
 const STAIRWELL_SCALE = 2;
+/** The sewer's way out climbs to the town above, so it is cut like a street stairwell. */
+const STAIRWELL_STYLE_BY_THEME = {
+  cellars: 'cellars',
+  service_level: 'service_level',
+  sewer: 'street',
+} as const satisfies Record<DungeonFloorThemeId, StairwellStyleId>;
 const STAIRWELL_PULSE_CENTER = 0.7;
 const STAIRWELL_PULSE_AMPLITUDE = 0.2;
 const STAIRWELL_PULSE_SPEED = 500; // ms
@@ -793,7 +800,15 @@ export class StairwellSystem implements GameSystem {
       )
         continue;
 
-      drawSpriteKey(ctx, 'stairwell', dungeonFloorTheme().id, 0, sx, sy, bw);
+      drawSpriteKey(
+        ctx,
+        'stairwell',
+        STAIRWELL_STYLE_BY_THEME[dungeonFloorTheme().id],
+        0,
+        sx,
+        sy,
+        bw,
+      );
 
       ctx.save();
       ctx.globalAlpha = pulse;

@@ -14,7 +14,7 @@ export const CROWD_SPECIES = ['human', 'hawkfolk'] as const;
 /** A species with an authored citizen cast: what a crowd may be rolled as. */
 export type CrowdSpecies = (typeof CROWD_SPECIES)[number];
 
-export type TownSpecies = CrowdSpecies | 'dwarf' | 'otter' | 'crocodilian';
+export type TownSpecies = CrowdSpecies | 'dwarf' | 'otter' | 'crocodilian' | 'orc' | 'elf';
 
 /**
  * The species assumed for a `SpeciesBearer` that doesn't carry one — a

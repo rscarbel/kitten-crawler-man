@@ -270,7 +270,7 @@ export class DoctorSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    this.tick(ctx.human, ctx.cat, ctx.active, ctx.inactive);
+    this.tick(ctx.human, ctx.cat, ctx.active, ctx.partner);
   }
 
   /**
@@ -285,13 +285,14 @@ export class DoctorSystem implements GameSystem {
     human: HumanPlayer,
     cat: CatPlayer,
     active: HumanPlayer | CatPlayer,
-    inactive: HumanPlayer | CatPlayer,
+    partner: HumanPlayer | CatPlayer | null,
   ): void {
     this.party = { human, cat };
     this.lastKnownActive = active;
     this.lastKnownCompanionNearby =
-      Math.hypot(active.x - inactive.x, active.y - inactive.y) / TILE_SIZE <
-      DOCTOR_COMPANION_NEARBY_TILES;
+      partner !== null &&
+      Math.hypot(active.x - partner.x, active.y - partner.y) / TILE_SIZE <
+        DOCTOR_COMPANION_NEARBY_TILES;
 
     for (const entry of this.entries) {
       entry.actionFrames++;
@@ -357,6 +358,7 @@ export class DoctorSystem implements GameSystem {
     // opened, so the doctor reads as someone who has noticed you come in.
     const humanClose = this.distanceToDoctorTiles(entry, human) < DOCTOR_TALK_DISTANCE_TILES;
     const catCloser =
+      !cat.isAway &&
       this.distanceToDoctorTiles(entry, cat) < this.distanceToDoctorTiles(entry, human);
     if (humanClose && !catCloser) {
       this.showBark(entry, entry.visited ? 'repeatVisit' : 'greeting', human);
@@ -366,7 +368,11 @@ export class DoctorSystem implements GameSystem {
 
   // ── Queries ─────────────────────────────────────────────────────────────────
 
-  private isInRoom(entry: DoctorEntry, entity: { x: number; y: number }): boolean {
+  private isInRoom(
+    entry: DoctorEntry,
+    entity: { readonly x: number; readonly y: number; readonly isAway?: boolean },
+  ): boolean {
+    if (entity.isAway === true) return false;
     const bounds = entry.layout.roomBounds;
     const tx = Math.floor((entity.x + TILE_SIZE / 2) / TILE_SIZE);
     const ty = Math.floor((entity.y + TILE_SIZE / 2) / TILE_SIZE);

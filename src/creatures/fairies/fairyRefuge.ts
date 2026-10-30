@@ -141,7 +141,14 @@ function routeRunsThroughParty(query: FairyRefugeQuery, x: number, y: number): b
   const ts = query.tileSize;
   const start = tileOf(query.fromX, query.fromY, ts);
   const goal = tileOf(x, y, ts);
-  const route = query.map.findMobPath(start.x, start.y, goal.x, goal.y, REFUGE_SEARCH_TILES);
+  const route = query.map.findMobPath(
+    start.x,
+    start.y,
+    goal.x,
+    goal.y,
+    'walker',
+    REFUGE_SEARCH_TILES,
+  );
   if (route.length === 0) return true;
   const clearancePx = ts * FAIRY_REFUGE_PARTY_CLEARANCE_TILES;
   const slackPx = ts * ROUTE_GRID_SLACK_TILES;
@@ -201,7 +208,7 @@ function roomLanding(map: GameMap, centreX: number, centreY: number, room: TileR
         const tileX = centreX + dx;
         const tileY = centreY + dy;
         if (!isTileInRect(tileX, tileY, room)) continue;
-        if (!map.isWalkable(tileX, tileY) || map.isStairwellTile(tileX, tileY)) continue;
+        if (!map.isWalkable(tileX, tileY, 'walker') || map.isStairwellTile(tileX, tileY)) continue;
         return { x: tileX, y: tileY };
       }
     }
@@ -271,7 +278,8 @@ function chooseOpenGroundRefuge(query: FairyRefugeQuery): FairyRefuge | null {
     if (Math.hypot(mob.x - query.fromX, mob.y - query.fromY) <= allyReachPx) continue;
     if (!withinSpawnLeash(query, mob.x, mob.y)) continue;
     const tile = tileOf(mob.x, mob.y, ts);
-    if (!map.isWalkable(tile.x, tile.y) || isFairyGroundForbidden(map, tile.x, tile.y)) continue;
+    if (!map.isWalkable(tile.x, tile.y, 'walker') || isFairyGroundForbidden(map, tile.x, tile.y))
+      continue;
     const score = refugeScore(query, mob.x, mob.y, true);
     candidates.push({ refuge: { x: mob.x, y: mob.y, room: null, source: mob }, score });
   }

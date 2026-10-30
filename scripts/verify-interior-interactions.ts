@@ -37,6 +37,7 @@ import {
 } from '../src/systems/townInteriorPropFigures.js';
 import { applyMovement, type MovementInput } from '../src/systems/GameLoopPhases.js';
 import { InteriorOccupantSystem } from '../src/systems/InteriorOccupantSystem.js';
+import { createMissingCatsProgress } from '../src/core/quests/missingCatsProgress.js';
 import {
   BREAK_REACTION_COOLDOWN_FRAMES,
   InteriorBreakReactions,
@@ -132,8 +133,8 @@ console.log('\nWalkable props stay out of the Y-sorted pass');
   let walkablePlaced = 0;
   for (const building of plan.buildings) {
     const map = buildInterior(building.id, building.kind, building.hasSafeRoom === true);
-    const sortedWalkable = townInteriorPropFigures(map).filter(
-      (figure) => TOWN_INTERIOR_PROPS[figure.placed.propId].walkable,
+    const sortedWalkable = townInteriorPropFigures(map).filter((figure) =>
+      TOWN_INTERIOR_PROPS[figure.placed.propId].passableBy.has('walker'),
     );
     const sortedWalkableIds = sortedWalkable.map((figure) => figure.placed.id).join(', ');
     check(
@@ -141,8 +142,8 @@ console.log('\nWalkable props stay out of the Y-sorted pass');
       `"${building.id}" sorts no walkable prop with the figures` +
         (sortedWalkable.length === 0 ? '' : ` (found ${sortedWalkableIds})`),
     );
-    const walkableHere = map.placedInteriorProps.filter(
-      (placed) => TOWN_INTERIOR_PROPS[placed.propId].walkable,
+    const walkableHere = map.placedInteriorProps.filter((placed) =>
+      TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker'),
     );
     walkablePlaced += walkableHere.length;
     const groundIds = new Set(townInteriorGroundProps(map).map((placed) => placed.id));
@@ -178,7 +179,10 @@ console.log('\nBreak flow (General Store)');
   attacker.facingY = -1;
   destruction.setActivePlayer(attacker);
 
-  check(!map.isWalkable(target.tile.x, target.tile.y), 'the prop blocks its tile before it breaks');
+  check(
+    !map.isWalkable(target.tile.x, target.tile.y, 'walker'),
+    'the prop blocks its tile before it breaks',
+  );
   check(destruction.broken.size === 0, 'nothing is broken yet');
 
   const swingDamage = 1;
@@ -194,7 +198,10 @@ console.log('\nBreak flow (General Store)');
     `the prop broke on its ${spec.hp}th hit (its own HP), took ${swings} swing(s)`,
   );
   check(destruction.broken.has(target.id), 'the broken instance is recorded by its stable id');
-  check(map.isWalkable(target.tile.x, target.tile.y), 'the tile is walkable again once broken');
+  check(
+    map.isWalkable(target.tile.x, target.tile.y, 'walker'),
+    'the tile is walkable again once broken',
+  );
 
   const dropsLoot = resolveDropsLoot(target, spec);
   const pending = loot.captureCheckpoint().pendingLoots;
@@ -258,7 +265,7 @@ console.log('\nMulti-tile props break whole (swing and blast)');
         const south = { x: farColumn, y: placed.tile.y + propDef.footprint.h, facingY: -1 };
         const north = { x: farColumn, y: placed.tile.y - 1, facingY: 1 };
         for (const side of [south, north]) {
-          if (!map.isWalkable(side.x, side.y)) continue;
+          if (!map.isWalkable(side.x, side.y, 'walker')) continue;
           return {
             buildingId: building.id,
             placedId: placed.id,
@@ -322,7 +329,7 @@ console.log('\nMulti-tile props break whole (swing and blast)');
         for (let dx = 0; dx < propDef.footprint.w; dx++)
           footprintTiles.push({ x: placed.tile.x + dx, y: placed.tile.y + dy });
       check(
-        footprintTiles.every((tile) => !map.isWalkable(tile.x, tile.y)),
+        footprintTiles.every((tile) => !map.isWalkable(tile.x, tile.y, 'walker')),
         `${name}: every footprint tile blocks before the break`,
       );
 
@@ -341,7 +348,7 @@ console.log('\nMulti-tile props break whole (swing and blast)');
       }
       check(destruction.broken.has(placed.id), `${name}: the prop breaks`);
       check(
-        footprintTiles.every((tile) => map.isWalkable(tile.x, tile.y)),
+        footprintTiles.every((tile) => map.isWalkable(tile.x, tile.y, 'walker')),
         `${name}: every footprint tile is walkable once broken`,
       );
       // Strikes after the break must not find a second prop in the rubble.
@@ -542,6 +549,7 @@ console.log('\nExamine/search/use dispatch');
       tile: { x: EXAMINE_TARGET_TILE, y: EXAMINE_TARGET_TILE },
       id: `jars@${EXAMINE_TARGET_TILE},${EXAMINE_TARGET_TILE}`,
       dropsLoot: undefined,
+      knockOff: null,
     },
     interaction: { kind: 'examine', id: 'jars' },
     x: EXAMINE_TARGET_TILE * TILE_SIZE,
@@ -559,6 +567,7 @@ console.log('\nExamine/search/use dispatch');
       tile: { x: SEARCH_TARGET_TILE, y: SEARCH_TARGET_TILE },
       id: `chest@${SEARCH_TARGET_TILE},${SEARCH_TARGET_TILE}`,
       dropsLoot: undefined,
+      knockOff: null,
     },
     interaction: { kind: 'search', id: 'chest' },
     x: SEARCH_TARGET_TILE * TILE_SIZE,
@@ -580,6 +589,7 @@ console.log('\nExamine/search/use dispatch');
       tile: { x: USE_TARGET_TILE, y: USE_TARGET_TILE },
       id: `shop_bell@${USE_TARGET_TILE},${USE_TARGET_TILE}`,
       dropsLoot: undefined,
+      knockOff: null,
     },
     interaction: { kind: 'use', id: 'shop_bell' },
     x: USE_TARGET_TILE * TILE_SIZE,
@@ -600,7 +610,9 @@ console.log('\nExamine/search/use dispatch');
 console.log('\nBreak reactions (General Store)');
 {
   const map = generalStoreMap;
-  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'taloncrest_general_store');
+  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'taloncrest_general_store', {
+    missingCats: createMissingCatsProgress(),
+  });
   const people = occupants?.people ?? [];
   check(people.length > 0, `the General Store has occupants to react (found ${people.length})`);
   const breakable = map.placedInteriorProps.filter(isBreakableInteriorProp);

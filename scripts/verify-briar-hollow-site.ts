@@ -235,7 +235,14 @@ function moverReachesTown(map: GameMap, site: BriarHollowSite): boolean {
       Math.hypot(a.exit.x - start.x, a.exit.y - start.y) -
       Math.hypot(b.exit.x - start.x, b.exit.y - start.y),
   )[0];
-  const path = map.findPath(start.x, start.y, nearest.exit.x, nearest.exit.y, ROAD_WALK_MAX_TILES);
+  const path = map.findPath(
+    start.x,
+    start.y,
+    nearest.exit.x,
+    nearest.exit.y,
+    'walker',
+    ROAD_WALK_MAX_TILES,
+  );
   return path.length > 0;
 }
 

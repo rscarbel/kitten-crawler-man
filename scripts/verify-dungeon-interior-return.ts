@@ -198,7 +198,7 @@ function currentScene(manager: Manager): unknown {
 
 /** Ticks `frames` frames with both crawlers pinned and topped up, so a stray blow cannot end the run. */
 function tickPinned(scene: Scene | Inside, frames: number): void {
-  const [human, cat] = scene.pm.players();
+  const [human, cat] = scene.pm.wholeParty();
   const humanAt = { x: human.x, y: human.y };
   const catAt = { x: cat.x, y: cat.y };
   for (let frame = 0; frame < frames; frame++) {
@@ -223,7 +223,7 @@ function chooseSideTile(map: LiveMap, returnTile: Tile): Tile | null {
     for (let dx = -SIDE_SEARCH_TILES; dx <= SIDE_SEARCH_TILES; dx++) {
       if (dx === 0 && dy <= 0) continue;
       const tile = { x: returnTile.x + dx, y: returnTile.y + dy };
-      if (map.isWalkable(tile.x, tile.y)) return tile;
+      if (map.isWalkable(tile.x, tile.y, 'walker')) return tile;
     }
   }
   return null;
@@ -316,7 +316,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   if (ctx === null) throw new Error('the shim canvas has no 2d context');
   check(await settleArrival(outside, ctx), `${label}: the floor's arrival screen finishes`);
   check(
-    map.isWalkable(door.x, door.y) && map.isWalkable(returnTile.x, returnTile.y),
+    map.isWalkable(door.x, door.y, 'walker') &&
+      map.isWalkable(returnTile.x, returnTile.y, 'walker'),
     `${label}: the prison door and its step are open floor once the scene is built`,
   );
   // The door opens only to a party the gate guard has briefed.
@@ -330,7 +331,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   const side = chooseSideTile(map, returnTile);
   check(side !== null, `${label}: there is open floor beside the door step`);
   if (side === null) return;
-  const [human, cat] = outside.pm.players();
+  const [human, cat] = outside.pm.wholeParty();
   placeAt(human, side);
   placeAt(cat, side);
   tickPinned(outside, SETTLE_FRAMES);
@@ -542,7 +543,7 @@ async function verifyDefeatIndoors(
   ctx: CanvasRenderingContext2D,
   label: string,
 ): Promise<void> {
-  for (const crawler of outside.pm.players()) placeAt(crawler, returnTile);
+  for (const crawler of outside.pm.wholeParty()) placeAt(crawler, returnTile);
   enterPrison(outside, entry);
   const inside = currentScene(sceneManager);
   if (!(inside instanceof BuildingInteriorScene)) {
@@ -591,7 +592,7 @@ async function verifyNoSaveMidFight(
     check(false, `${label}: floor 2 still has a hostile to stand at the door`);
     return;
   }
-  for (const crawler of outside.pm.players()) placeAt(crawler, returnTile);
+  for (const crawler of outside.pm.wholeParty()) placeAt(crawler, returnTile);
   placeAt(hostile, { x: returnTile.x + 1, y: returnTile.y });
   outside['world'].roster.rebuildGrid();
   const savesBefore = saves.length;
@@ -640,10 +641,10 @@ async function verifyDefeatWithoutDoorSave(
     check(false, `${label}: floor 2 has a save tile and a hostile for the last visit`);
     return;
   }
-  for (const crawler of outside.pm.players()) placeAt(crawler, savedTile);
+  for (const crawler of outside.pm.wholeParty()) placeAt(crawler, savedTile);
   outside['captureSavePoint'](savedTile);
 
-  for (const crawler of outside.pm.players()) placeAt(crawler, returnTile);
+  for (const crawler of outside.pm.wholeParty()) placeAt(crawler, returnTile);
   placeAt(hostile, { x: returnTile.x + 1, y: returnTile.y });
   outside['world'].roster.rebuildGrid();
   const savesBefore = saves.length;

@@ -67,11 +67,6 @@ const ELITE_MARKER_CROSS_ARM = 2.5;
 export type QuestMarkerType = 'exclamation' | 'question' | 'red_x' | 'elite';
 /** Stairwell icon half-size (extra pixels beyond pxPerTile). */
 const STAIRWELL_ICON_HALF_EXTRA = 1;
-/** The escape stairwell spans two tiles each way, and its icon is drawn a little proud of them. */
-const ESCAPE_MARKER_TILES = 2;
-const ESCAPE_MARKER_HALF_EXTRA = 1;
-const ESCAPE_MARKER_PULSE_BASE = 0.75;
-const ESCAPE_MARKER_PULSE_RANGE = 0.25;
 /** Extra tiles revealed around boss room bounds. */
 const BOSS_REVEAL_EXTRA_TILES = 15;
 /** Fog radius revealed around the nearest stairwell once the floor's last gauntlet boss dies. */
@@ -130,13 +125,6 @@ export class MiniMapSystem implements GameSystem {
   private _scrollTX = 0;
   private _scrollTY = 0;
   private corpseMarkers: CorpseMarker[] = [];
-  /**
-   * The doomsday escape stairwell, set by the scene each frame while the finale
-   * is live. Its own marker rather than an entry in `stairwellTiles`, which would
-   * make it a floor exit, and drawn through the fog: it is the one tile the
-   * player must be able to find from anywhere on the map.
-   */
-  escapeMarkerTile: { x: number; y: number } | null = null;
   /** Reused result set for the radar's neighbour query. */
   private readonly _radarQuery = new Set<Mob>();
   /** Tile the fog was last revealed around; TILE_NEVER_REVEALED until the first reveal. */
@@ -361,7 +349,7 @@ export class MiniMapSystem implements GameSystem {
     ctx: CanvasRenderingContext2D,
     rect: Rect,
     active: { x: number; y: number },
-    companion: { x: number; y: number },
+    companion: { x: number; y: number } | null,
     mobGrid: SpatialGrid<Mob>,
     daveTile: { x: number; y: number } | null,
     questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [],
@@ -426,25 +414,6 @@ export class MiniMapSystem implements GameSystem {
       );
     }
 
-    const escapeTile = this.escapeMarkerTile;
-    if (escapeTile !== null) {
-      const ex = mmX + (escapeTile.x - viewCenterTX + halfTiles) * pxPerTile;
-      const ey = mmY + (escapeTile.y - viewCenterTY + halfTiles) * pxPerTile;
-      const escapePulse =
-        ESCAPE_MARKER_PULSE_BASE +
-        ESCAPE_MARKER_PULSE_RANGE * Math.sin(frameTime * QUEST_MARKER_PULSE_SPEED);
-      ctx.save();
-      ctx.globalAlpha = escapePulse;
-      ctx.fillStyle = worldPalette.minimap.escape;
-      ctx.fillRect(
-        ex - ESCAPE_MARKER_HALF_EXTRA,
-        ey - ESCAPE_MARKER_HALF_EXTRA,
-        pxPerTile * ESCAPE_MARKER_TILES + ESCAPE_MARKER_HALF_EXTRA * 2,
-        pxPerTile * ESCAPE_MARKER_TILES + ESCAPE_MARKER_HALF_EXTRA * 2,
-      );
-      ctx.restore();
-    }
-
     ctx.strokeStyle = worldPalette.minimap.corpse;
     ctx.lineWidth = 1;
     for (const corpse of this.corpseMarkers) {
@@ -480,16 +449,18 @@ export class MiniMapSystem implements GameSystem {
       ctx.fill();
     }
 
-    const compTX = Math.floor((companion.x + HALF_TILE) / TILE_SIZE);
-    const compTY = Math.floor((companion.y + HALF_TILE) / TILE_SIZE);
-    const compSX =
-      mmX + (compTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-    const compSY =
-      mmY + (compTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-    ctx.fillStyle = MINIMAP_MARKER_COLORS.companion;
-    ctx.beginPath();
-    ctx.arc(compSX, compSY, COMPANION_DOT_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
+    if (companion !== null) {
+      const compTX = Math.floor((companion.x + HALF_TILE) / TILE_SIZE);
+      const compTY = Math.floor((companion.y + HALF_TILE) / TILE_SIZE);
+      const compSX =
+        mmX + (compTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const compSY =
+        mmY + (compTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      ctx.fillStyle = MINIMAP_MARKER_COLORS.companion;
+      ctx.beginPath();
+      ctx.arc(compSX, compSY, COMPANION_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Deinonychus — his own colour, and no fog test, exactly like the companion above:
     // he is party, and a party member you cannot find is the bug this answers.

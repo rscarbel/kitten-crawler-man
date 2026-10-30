@@ -12,17 +12,22 @@ import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
 import type { GauntletBossType } from '../map/bossRoomSizes';
-import type { TownBuildingId, BriarHollowBuildingId } from '../map/buildingIds';
-import type {
-  PlaytestDeinonychus,
-  PlaytestLoadout,
-  PlaytestPreset,
-  PlaytestSpawn,
-} from './playtestPresets';
+import type { TownBuildingId, BriarHollowBuildingId, STORM_DRAIN_ID } from '../map/buildingIds';
+import type { AchievementManager } from '../core/progression/AchievementManager';
+import type { StoryDirector } from '../story/StoryDirector';
+import type { DaveDebriefCheckpoint } from '../systems/daveDebrief';
+import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
+import { RUN_PROGRESS } from './playtestProgress';
+import { debriefsHeard, playRunHistory } from './playtestRunHistory';
+
+/** Deinonychus not yet earned, earned but waiting on a summon, or already out. */
+export type PlaytestDeinonychus = 'locked' | 'unlocked' | 'out';
 
 /**
  * Turns a {@link PlaytestPreset} into the scene inputs that describe it: two
- * player snapshots, an ability manager, and the floor to open.
+ * player snapshots, an ability manager, the floor to open, and the run behind
+ * it — achievements, story heard, bosses down, Dave's debriefs and the gear
+ * the run paid out (see `playtestRunHistory.ts`).
  *
  * Loadouts are built by mutating throwaway crawlers rather than by hand-writing
  * snapshot JSON, so a preset inherits every derivation the real game does —
@@ -35,9 +40,12 @@ export interface PlaytestBoot {
   abilityManager: AbilityManager;
   spawn: PlaytestSpawn;
   preDefeatedBossTypes: readonly GauntletBossType[];
-  doomsdayStage: PlaytestPreset['doomsdayStage'];
   spiderQuestAwaitingHacking: boolean;
   deinonychus: PlaytestDeinonychus;
+  humanAchievements: AchievementManager;
+  catAchievements: AchievementManager;
+  storyDirector: StoryDirector;
+  daveDebrief: DaveDebriefCheckpoint;
 }
 
 /** Tile a preset's crawlers start on before the real spawn point is resolved. */
@@ -59,7 +67,11 @@ function skillStatesFor(levels: Partial<Record<SkillId, number>>): SkillState[] 
   return states;
 }
 
-function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
+/** Hotbar, bag, quest slot and worn pieces, before the run's history pays its gear on top. */
+function placeLoadoutItems(player: Player, loadout: PlaytestLoadout): void {
+  if (loadout.hotbar.length > QUEST_SLOT_IDX) {
+    throw new Error('a playtest hotbar reaches the reserved quest slot');
+  }
   player.inventory.actionBar.slots.fill(null);
   player.inventory.equipment.clear();
 
@@ -76,7 +88,10 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
   for (const stack of [...loadout.hotbar, ...loadout.bag]) {
     if (stack.equipped === true) player.inventory.equipment.equipById(stack.id);
   }
+}
 
+/** Stats, level, skills and a full health bar, once every worn piece is on. */
+function settleLoadoutStats(player: Player, loadout: PlaytestLoadout): void {
   // Equipment first: stat getters — and therefore max HP — read from it.
   for (const stat of ALL_STATS) {
     const value = loadout.baseStats[stat];
@@ -106,22 +121,6 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
   player.hp = player.maxHp;
 }
 
-function humanSnapshotFor(preset: PlaytestPreset): PlayerSnapshot {
-  const human = new HumanPlayer(SCRATCH_TILE, SCRATCH_TILE, TILE_SIZE);
-  applyLoadout(human, preset.human);
-  // Both crawlers snapshot their own `isActive`, so leaving these at the
-  // constructor's default would restore a party with nobody driving.
-  human.isActive = true;
-  return snapPlayer(human);
-}
-
-function catSnapshotFor(preset: PlaytestPreset): PlayerSnapshot {
-  const cat = new CatPlayer(SCRATCH_TILE, SCRATCH_TILE, TILE_SIZE);
-  applyLoadout(cat, preset.cat);
-  cat.isActive = false;
-  return snapPlayer(cat);
-}
-
 function abilityManagerFor(levels: Partial<Record<AbilityId, number>>): AbilityManager {
   const manager = new AbilityManager();
   for (const def of Object.values(ABILITY_DEFS)) manager.register(def);
@@ -132,21 +131,49 @@ function abilityManagerFor(levels: Partial<Record<AbilityId, number>>): AbilityM
   return manager;
 }
 
+function deinonychusFor(preset: PlaytestPreset, earned: boolean): PlaytestDeinonychus {
+  if (preset.deinonychusOut === true) return 'out';
+  return earned ? 'unlocked' : 'locked';
+}
+
 export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
+  const progress = RUN_PROGRESS[preset.progress];
+  const levelDef = getLevelDef(progress.levelId);
   const abilityManager = abilityManagerFor(preset.abilityLevels);
-  if (preset.levelId === 'level3' && preset.abilityLevels.deinonychus === undefined) {
+  if (progress.levelId === 'level3' && preset.abilityLevels.deinonychus === undefined) {
     abilityManager.setLevel('deinonychus', LEVEL3_DEFAULT_DEINONYCHUS_LEVEL);
   }
+
+  const human = new HumanPlayer(SCRATCH_TILE, SCRATCH_TILE, TILE_SIZE);
+  const cat = new CatPlayer(SCRATCH_TILE, SCRATCH_TILE, TILE_SIZE);
+  const party = { human, cat };
+  placeLoadoutItems(human, preset.human);
+  placeLoadoutItems(cat, preset.cat);
+  const history = playRunHistory(preset, progress, party);
+  settleLoadoutStats(human, preset.human);
+  settleLoadoutStats(cat, preset.cat);
+  // Both crawlers snapshot their own `isActive`, so leaving these at the
+  // constructor's default would restore a party with nobody driving.
+  human.isActive = true;
+  cat.isActive = false;
+
+  const floorBossTypes = levelDef.bossRooms?.map((room) => room.type) ?? [];
+  const preDefeatedBossTypes = progress.bossesDefeated.filter((boss) =>
+    floorBossTypes.some((type) => type === boss),
+  );
   return {
-    levelDef: getLevelDef(preset.levelId),
-    humanSnap: humanSnapshotFor(preset),
-    catSnap: catSnapshotFor(preset),
+    levelDef,
+    humanSnap: snapPlayer(human),
+    catSnap: snapPlayer(cat),
     abilityManager,
     spawn: preset.spawn,
-    preDefeatedBossTypes: preset.preDefeatedBossTypes ?? [],
-    doomsdayStage: preset.doomsdayStage,
+    preDefeatedBossTypes,
     spiderQuestAwaitingHacking: preset.spiderQuestAwaitingHacking ?? false,
-    deinonychus: preset.deinonychus,
+    deinonychus: deinonychusFor(preset, history.deinonychusEarned),
+    humanAchievements: history.humanAchievements,
+    catAchievements: history.catAchievements,
+    storyDirector: history.storyDirector,
+    daveDebrief: debriefsHeard(preDefeatedBossTypes, party),
   };
 }
 
@@ -170,7 +197,7 @@ function spiderLabStationTile(gameMap: GameMap): { x: number; y: number } | null
   let bestDistance = Infinity;
   for (let y = stationBounds.y; y < stationBounds.y + stationBounds.h; y++) {
     for (let x = stationBounds.x; x < stationBounds.x + stationBounds.w; x++) {
-      if (!gameMap.isWalkable(x, y)) continue;
+      if (!gameMap.isWalkable(x, y, 'walker')) continue;
       const distance = Math.hypot(x - middle.x, y - middle.y);
       if (distance >= bestDistance) continue;
       best = { x, y };
@@ -200,7 +227,7 @@ function spiderHallwayHostTile(gameMap: GameMap): { x: number; y: number } | nul
       y >= hostBounds.y &&
       x < hostBounds.x + hostBounds.w &&
       y < hostBounds.y + hostBounds.h;
-    if (insideHost && gameMap.isWalkable(x, y)) return { x, y };
+    if (insideHost && gameMap.isWalkable(x, y, 'walker')) return { x, y };
   }
   return hallwayMouthTile;
 }
@@ -230,7 +257,7 @@ function questRoomApproachTile(gameMap: GameMap): { x: number; y: number } | nul
         ? -QUEST_DOORWAY_STEP_TILES
         : 0;
   const inside = { x: entranceTile.x + inwardX, y: entranceTile.y + inwardY };
-  return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
+  return gameMap.isWalkable(inside.x, inside.y, 'walker') ? inside : entranceTile;
 }
 
 /** How far inside its own doorway the bathroom preset stands the party. */
@@ -257,7 +284,7 @@ function bathroomApproachTile(gameMap: GameMap): { x: number; y: number } | null
         ? -BATHROOM_DOORWAY_STEP_TILES
         : 0;
   const inside = { x: entranceTile.x + inwardX, y: entranceTile.y + inwardY };
-  return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
+  return gameMap.isWalkable(inside.x, inside.y, 'walker') ? inside : entranceTile;
 }
 
 /**
@@ -267,7 +294,7 @@ function bathroomApproachTile(gameMap: GameMap): { x: number; y: number } | null
 function stealthGateGuardFront(gameMap: GameMap): { x: number; y: number } | null {
   const room = gameMap.stealthGateRoom;
   if (room === null) return null;
-  const talkTile = room.guardTalkTiles.find((tile) => gameMap.isWalkable(tile.x, tile.y));
+  const talkTile = room.guardTalkTiles.find((tile) => gameMap.isWalkable(tile.x, tile.y, 'walker'));
   return talkTile === undefined ? room.centre : { x: talkTile.x, y: talkTile.y };
 }
 
@@ -276,12 +303,12 @@ const TOWN_DOORSTEP_ROWS_SOUTH = 1;
 
 function townBuildingDoorstep(
   gameMap: GameMap,
-  buildingId: TownBuildingId,
+  buildingId: TownBuildingId | typeof STORM_DRAIN_ID,
 ): { x: number; y: number } | null {
   const entry = gameMap.buildingEntries.find((candidate) => candidate.id === buildingId);
   if (entry === undefined) return null;
   const doorstep = { x: entry.doorTile.x, y: entry.doorTile.y + TOWN_DOORSTEP_ROWS_SOUTH };
-  return gameMap.isWalkable(doorstep.x, doorstep.y) ? doorstep : null;
+  return gameMap.isWalkable(doorstep.x, doorstep.y, 'walker') ? doorstep : null;
 }
 
 function briarHollowThreshold(
@@ -289,7 +316,7 @@ function briarHollowThreshold(
   buildingId: BriarHollowBuildingId,
 ): { x: number; y: number } | null {
   const building = gameMap.briarHollow?.buildings.find((candidate) => candidate.id === buildingId);
-  const threshold = building?.doorways.find((tile) => gameMap.isWalkable(tile.x, tile.y));
+  const threshold = building?.doorways.find((tile) => gameMap.isWalkable(tile.x, tile.y, 'walker'));
   return threshold === undefined ? null : { x: threshold.x, y: threshold.y };
 }
 
@@ -303,7 +330,7 @@ const STAIRWELL_APPROACH_MAX_RING = 12;
 
 /** Walkable, off the stairs and inside `roomIndex` (any room when it is `-1`). */
 function isApproachTile(gameMap: GameMap, x: number, y: number, roomIndex: number): boolean {
-  if (!gameMap.isWalkable(x, y) || gameMap.isStairwellTile(x, y)) return false;
+  if (!gameMap.isWalkable(x, y, 'walker') || gameMap.isStairwellTile(x, y)) return false;
   return roomIndex === -1 || gameMap.roomIndexAt(x, y) === roomIndex;
 }
 
@@ -390,7 +417,10 @@ export function resolvePlaytestSpawn(
 export function playtestStartsPastBathroom(spawn: PlaytestSpawn, gameMap: GameMap): boolean {
   if (gameMap.bathroomRooms.length === 0) return false;
   const tile = resolveSpawnLandmark(spawn, gameMap);
-  return tile !== null && !reachableFromStart(gameMap, tile, (x, y) => gameMap.isWalkable(x, y));
+  return (
+    tile !== null &&
+    !reachableFromStart(gameMap, tile, (x, y) => gameMap.isWalkable(x, y, 'walker'))
+  );
 }
 
 /**
@@ -405,7 +435,30 @@ export function playtestStartsPastStealthGate(spawn: PlaytestSpawn, gameMap: Gam
   const tile = resolveSpawnLandmark(spawn, gameMap);
   return (
     tile !== null &&
-    !reachableFromStart(gameMap, tile, (x, y) => gameMap.isWalkableIgnoringBathroomQueue(x, y))
+    !reachableFromStart(gameMap, tile, (x, y) =>
+      gameMap.isWalkableIgnoringBathroomQueue(x, y, 'walker'),
+    )
+  );
+}
+
+/**
+ * Whether a preset drops the party past the floor's nursery: the route as built
+ * runs through it, so a party standing beyond it walked through, and the floor
+ * starts with the goblin mother's wave already held. Standing inside the
+ * nursery itself is not past it.
+ */
+export function playtestStartsPastNursery(spawn: PlaytestSpawn, gameMap: GameMap): boolean {
+  if (gameMap.questRooms.length === 0) return false;
+  const tile = resolveSpawnLandmark(spawn, gameMap);
+  if (tile === null) return false;
+  const { bounds } = gameMap.questRooms[0];
+  const insideNursery = (x: number, y: number): boolean =>
+    x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.w && y < bounds.y + bounds.h;
+  if (insideNursery(tile.x, tile.y)) return false;
+  return !reachableFromStart(
+    gameMap,
+    tile,
+    (x, y) => !insideNursery(x, y) && gameMap.isWalkableIgnoringPuzzleChokes(x, y, 'walker'),
   );
 }
 

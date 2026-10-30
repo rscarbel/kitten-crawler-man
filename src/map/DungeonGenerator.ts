@@ -99,7 +99,7 @@ import {
   type Zone,
 } from './regionMap';
 import { mulberry32 } from '../sprites/person/rng';
-import { DEFAULT_DUNGEON_FLOOR_THEME, type DungeonFloorThemeId } from './dungeon/floorTheme';
+import { DEFAULT_DUNGEON_FLOOR_THEME, type GeneratedFloorThemeId } from './dungeon/floorTheme';
 import {
   SPECIAL_REGION_LIGHTING,
   SPECIAL_REGION_PROPS,
@@ -1001,7 +1001,7 @@ export interface DungeonLevelOptions {
   /** Grates cut into the defense quest's room. Defaults to the base nursery's four. */
   questGrateCount?: number;
   /** Which floor's room characters the rooms are dressed from. Defaults to the cellars'. */
-  floorTheme?: DungeonFloorThemeId;
+  floorTheme?: GeneratedFloorThemeId;
   /**
    * False builds the floor with characters assigned but no props placed. Every
    * other draw is unchanged, so a harness can generate a seed both ways and
@@ -2347,7 +2347,7 @@ function buildDungeon(
       y < size &&
       x < grid[y].length &&
       !insideRoom(x, y) &&
-      isWalkableTileType(grid[y][x]);
+      isWalkableTileType(grid[y][x], 'walker');
 
     const seen = new Set<number>();
     if (open(startTile.x, startTile.y)) {
@@ -2439,7 +2439,7 @@ function buildDungeon(
   const insideAnyRoom = (x: number, y: number): boolean =>
     rooms.some((room) => x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h);
   const isOpenFloor = (x: number, y: number): boolean =>
-    y >= 0 && y < size && x >= 0 && x < grid[y].length && isWalkableTileType(grid[y][x]);
+    y >= 0 && y < size && x >= 0 && x < grid[y].length && isWalkableTileType(grid[y][x], 'walker');
   for (const planned of plannedBathrooms) {
     const bounds = planned.rect;
     const doorways = roomDoorways(grid, bounds);

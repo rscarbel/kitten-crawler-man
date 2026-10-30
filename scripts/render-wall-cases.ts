@@ -1,5 +1,5 @@
 /**
- * Every dungeon wall shape, both floors side by side, as a PNG — the node twin of
+ * Every dungeon wall shape, every floor theme side by side, as a PNG — the node twin of
  * the `?tiles` Walls view, over the same fixture.
  *
  *   npx tsx scripts/render-wall-cases.ts --scale=2 --out=preview/wall-cases.png
@@ -17,12 +17,16 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
 import { buildWallCaseStructure } from '../src/map/dungeon/wallCaseFixture.js';
-import { setDungeonFloorTheme, type DungeonFloorThemeId } from '../src/map/dungeon/floorTheme.js';
+import {
+  DEFAULT_DUNGEON_FLOOR_THEME,
+  DUNGEON_FLOOR_THEME_IDS,
+  setDungeonFloorTheme,
+} from '../src/map/dungeon/floorTheme.js';
 
 const DEFAULT_SCALE = 2;
 const DEFAULT_OUT = `${PREVIEW_DIR}/wall-cases.png`;
 const GAP_TILES = 1;
-const THEMES: ReadonlyArray<DungeonFloorThemeId> = ['cellars', 'service_level'];
+const THEMES = DUNGEON_FLOOR_THEME_IDS;
 const GAP_COLOR = '#12161f';
 
 /** Length of the `--name=` prefix an argument's value starts after. */
@@ -38,7 +42,7 @@ const outPath = stringArg('out', DEFAULT_OUT);
 
 await loadGameSpritesInNode();
 
-const structure = buildWallCaseStructure();
+const structure = buildWallCaseStructure(DEFAULT_DUNGEON_FLOOR_THEME);
 const tilesDown = structure.length;
 const tilesAcross = structure[0]?.length ?? 0;
 const panelW = tilesAcross * TILE_SIZE;
@@ -59,8 +63,9 @@ THEMES.forEach((theme, index) => {
   setDungeonFloorTheme(theme);
   gameCtx.save();
   gameCtx.translate(index * (panelW + gapPx), 0);
-  renderCanvas(gameCtx, structure, TILE_SIZE, 0, 0, panelW, panelH);
-  renderDecorationsOverlay(gameCtx, structure, TILE_SIZE, 0, 0, panelW, panelH);
+  const themed = buildWallCaseStructure(theme);
+  renderCanvas(gameCtx, themed, TILE_SIZE, 0, 0, panelW, panelH);
+  renderDecorationsOverlay(gameCtx, themed, TILE_SIZE, 0, 0, panelW, panelH);
   gameCtx.restore();
 });
 

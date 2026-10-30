@@ -181,7 +181,9 @@ export const DRESSING_TILE_TYPES: ReadonlySet<number> = new Set<number>([
 /** Whether dressing stood a solid piece on this tile: one a crawler walks round, not over. */
 export function isBlockingDressingTile(tile: TileContent): boolean {
   return (
-    tile.groundType !== undefined && DRESSING_TILE_TYPES.has(tile.type) && !isWalkableTileType(tile)
+    tile.groundType !== undefined &&
+    DRESSING_TILE_TYPES.has(tile.type) &&
+    !isWalkableTileType(tile, 'walker')
   );
 }
 
@@ -416,13 +418,13 @@ export function isWalledInPiece(grid: TileContent[][], x: number, y: number): bo
   const tile = tileAt(grid, x, y);
   if (tile?.groundType === undefined) return false;
   if (!DRESSING_TILE_TYPES.has(tile.type) || PROP_PART_TILE_TYPES.has(tile.type)) return false;
-  if (isWalkableTileType(tile)) return false;
+  if (isWalkableTileType(tile, 'walker')) return false;
   return !ORTHOGONAL.some((step) => isOpen(grid, x + step.x, y + step.y));
 }
 
 /** Whether a tile of this type stops movement, judged the way the map judges it. */
 function tileTypeBlocks(tileType: number): boolean {
-  return !isWalkableTileType({ tileId: '', type: tileType });
+  return !isWalkableTileType({ tileId: '', type: tileType }, 'walker');
 }
 
 function rollCount(range: CountRange, rng: Rng): number {
@@ -1050,7 +1052,7 @@ function isPlainFloor(grid: TileContent[][], x: number, y: number): boolean {
 
 function isOpen(grid: TileContent[][], x: number, y: number): boolean {
   const tile = tileAt(grid, x, y);
-  return tile !== null && isWalkableTileType(tile);
+  return tile !== null && isWalkableTileType(tile, 'walker');
 }
 
 /**

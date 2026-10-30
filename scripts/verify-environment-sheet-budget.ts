@@ -63,6 +63,7 @@ const { buildingLifeKeyOf } = await import('../src/sprites/buildinggen/runtimeBu
 const { FASTEST_WALK_TILES_PER_SECOND, tilesUntilInView } =
   await import('../src/systems/WorldResidency.js');
 const { buildScaledCity, DEFAULT_BLOCKS_PER_SIDE } = await import('./scaledCity.js');
+const { SEWER_GROUND } = await import('../src/map/dungeon/sewerMaterials.js');
 
 /**
  * Share of the budget a working set may not use. A sheet requested outside
@@ -274,6 +275,16 @@ function measure(label: string, sheets: FloorSheets): void {
 }
 
 for (const def of allLevelDefs()) measure(def.id, floorSheets(def));
+
+// The sewer is painted from the sheet the floor's own interiors bring, so a
+// visit underground is inside the floor's working set rather than beside it.
+const sewerFloorWide = floorWideBase(getLevelDef('level3'));
+if (!sewerFloorWide.has(SEWER_GROUND.sheetKey)) {
+  failures.push(
+    `the sewer's ground sheet ${SEWER_GROUND.sheetKey} is not among floor 3's indoor sheets, ` +
+      'so a visit to the sewer is not counted against the floor',
+  );
+}
 
 const city = buildScaledCity({ blocksPerSide: DEFAULT_BLOCKS_PER_SIDE });
 const cityLabel = `scaled city ${DEFAULT_BLOCKS_PER_SIDE}×${DEFAULT_BLOCKS_PER_SIDE}`;

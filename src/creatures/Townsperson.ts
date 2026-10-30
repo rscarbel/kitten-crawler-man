@@ -291,6 +291,34 @@ export class Townsperson implements WanderState {
     this.drawnRow = undefined;
   }
 
+  /**
+   * True while a cutscene moves this citizen: their wander stands aside and
+   * only {@link walkScripted} and {@link placeScripted} move them.
+   */
+  scripted = false;
+
+  /** One tick of a cutscene's walk along a unit heading, at this citizen's own pace; null stands them still. */
+  walkScripted(heading: { readonly dx: number; readonly dy: number } | null): void {
+    if (heading === null) {
+      this.moving = false;
+      return;
+    }
+    this.x += heading.dx * this.speed;
+    this.y += heading.dy * this.speed;
+    this.moving = true;
+    this.framesSinceTurn++;
+    this.phase =
+      (this.phase + gaitCyclesForDistance(this.speed, this.cycleDistance, this.walkFrames)) % 1;
+    this.updateFacing(heading.dx, heading.dy);
+  }
+
+  /** Sets this citizen down at a point for a cutscene, without a step. */
+  placeScripted(at: { readonly x: number; readonly y: number }): void {
+    this.x = at.x;
+    this.y = at.y;
+    this.moving = false;
+  }
+
   /** Held in place facing the player, by a conversation or by serving them. */
   get held(): boolean {
     return this.frozen || this.attending;
@@ -304,7 +332,7 @@ export class Townsperson implements WanderState {
   /** Advances one frame of wander, facing, and animation. */
   update(): void {
     this.followPurgedRecovery();
-    if (this.held) return;
+    if (this.held || this.scripted) return;
     stepWander(this, this.wander, sharedWanderStep);
     this.moving = sharedWanderStep.moving;
     this.framesSinceTurn++;

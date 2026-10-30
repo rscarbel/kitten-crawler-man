@@ -150,7 +150,7 @@ const AMBIENT_LINES_HAWKFOLK = {
   ],
   priest: [
     'The High Roost sits on our dome every seventh night. Aviel sweeps up the feathers after.',
-    'Donations are down since the magistrate stopped coming. Draw your own conclusions.',
+    'The tower sends down a proclamation every season and never a coin for the poor box. The roost has noticed.',
     'First carry’s free, the book says. It’s the second one that keeps the poor box full.',
     'Sit on the temple steps a while. Nobody up there minds the company.',
   ],
@@ -168,7 +168,7 @@ const AMBIENT_LINES_HAWKFOLK = {
   ],
   noble: [
     'Golden barring isn’t bought, whatever the tailors downstairs will tell you.',
-    'Featherfall used to receive callers. These days nobody receives anyone.',
+    'The Warden has not received a caller in years. The High Roost takes that personally.',
     'I slum it at the Stump once a season. Keeps the perspective honest.',
     'I have a seat on the High Roost in everything but the invitation.',
   ],
@@ -213,6 +213,8 @@ const AMBIENT_VOICE_OF = {
   dwarf: 'groundfolk',
   otter: 'groundfolk',
   crocodilian: 'groundfolk',
+  orc: 'groundfolk',
+  elf: 'groundfolk',
 } as const satisfies Record<TownSpecies, AmbientVoice>;
 
 /** The citizen's ambient pool, by the voice their species talks in. */
@@ -296,12 +298,44 @@ const DANGER_LINES_CROCODILIAN = {
   commoner: 'Stay low and keep still. Then RUN when I say!',
 } as const satisfies Record<TownRole, string>;
 
+const DANGER_LINES_ORC = {
+  guard: 'Behind me! Nothing gets past an orc who does not feel like moving!',
+  merchant: 'Leave the stock! Stock comes back. You do not!',
+  farmer: 'Grab a fork and stand with me, or get in the cellar. Pick one!',
+  smith: 'Hand me the big hammer. No, the BIG one!',
+  innkeeper: 'Tables on their sides, everybody down behind them!',
+  priest: 'Pray after! Run now!',
+  child: 'I am not scared! I am a LITTLE bit scared!',
+  drunk: 'Finally, something worth getting off the stool for!',
+  noble: 'One of you earn your wages and get between me and that!',
+  beggar: 'Little ones first! I will hold the corner!',
+  laborer: 'Down tools, pick up the heavy ones, swing low!',
+  commoner: 'Stop gawping and move! Indoors, NOW!',
+} as const satisfies Record<TownRole, string>;
+
+const DANGER_LINES_ELF = {
+  guard: 'Down, not up! The cellars held last time when the roofs did not!',
+  merchant: 'Leave the goods. Nothing on that cart is worth being found for.',
+  farmer: 'Into the root cellar, all of you. Under the ground is how we lived through it!',
+  smith: 'Bar the door and light a candle. Let her see we are still here!',
+  innkeeper: 'Everybody down to the cellar. Down, not out!',
+  priest: 'Hold up a light, all of you! She notices what is held up!',
+  child: 'Which way is down? Somebody show me which way is down!',
+  drunk: 'I lived a year under this hill once. I can do it again!',
+  noble: 'Somebody open the cistern hatch. I know the way from there!',
+  beggar: 'Follow me into the drains! Nobody looks for anyone in the drains!',
+  laborer: 'Lift the grate! Down the ladder, and mind the bottom rung!',
+  commoner: 'Do not wait to be carried. Get below ground!',
+} as const satisfies Record<TownRole, string>;
+
 const DANGER_LINES = {
   human: DANGER_LINES_HUMAN,
   hawkfolk: DANGER_LINES_HAWKFOLK,
   dwarf: DANGER_LINES_DWARF,
   otter: DANGER_LINES_OTTER,
   crocodilian: DANGER_LINES_CROCODILIAN,
+  orc: DANGER_LINES_ORC,
+  elf: DANGER_LINES_ELF,
 } as const satisfies Record<TownSpecies, Record<TownRole, string>>;
 
 /** The citizen's danger bark, in their own species' voice. */
@@ -310,43 +344,59 @@ export function dangerBark(species: TownSpecies, role: TownRole): string {
 }
 
 /**
- * How the town regards the player, once quests resolve. Unlike a gossip line
- * (third-person "the town's talking"), these greet the player directly — a
- * hero's welcome once threats are behind them, wary hope while the killer
- * still walks. Every role greets from the same pool, since the tier is about
- * the player's deeds, not the speaker's trade or species.
+ * How the town regards the party, as far as "A Cat Always Comes Back" has
+ * gone. Unlike a gossip line (third-person "the town's talking"), these greet
+ * the party directly. Every role greets from the same pool, since the tier is
+ * about the party's deeds, not the speaker's trade or species.
  */
-export type ReputationTier = 'savior' | 'murder_hero' | 'murder_wary';
-
-export const REPUTATION_GREETINGS = {
-  savior: [
-    'You held that tower together with your bare hands, near enough. We’re alive because of it.',
-    'The whole square would be ash by now if not for you. Nobody here forgets that.',
-    'Grandchildren not born yet are going to hear about you.',
-  ],
-  murder_hero: [
-    'Whatever was killing people, it isn’t anymore. That’s your doing.',
-    'My family sleeps with the door unbolted again. Thank you for that.',
-    'No more bodies by the well. Took long enough, but you did it.',
-  ],
-  murder_wary: [
-    'You’re looking into the killings, aren’t you. Watch yourself.',
-    'Careful who you trust out there. Whoever’s doing this wears a friendly face.',
-    'If anyone’s going to stop this, my money’s on you.',
-  ],
-} as const satisfies Record<ReputationTier, NonEmpty<string>>;
+export type ReputationTier = 'asking_after_cats' | 'cellar_held' | 'cat_taken' | 'cats_home';
 
 /**
- * The reactive, third-person gossip a citizen leads with when the world has
- * something worth reporting. Named by the world state each answers rather
- * than left as a chain of anonymous string literals, so the branch that picks
- * one and the line it picks read as the same fact.
+ * Exactly three greetings per tier. The citizen rotation diverts some talks to
+ * gossip on a modulus chosen coprime to this length, which only holds while
+ * every pool is the same length.
+ */
+export type ReputationGreetings = readonly [string, string, string];
+
+export const REPUTATION_GREETINGS = {
+  asking_after_cats: [
+    'You’re the ones asking after the cats. Good. Somebody ought to.',
+    'Find Biscuit, would you? The inn isn’t the inn without her on the step.',
+    'Every door on this street is left open a crack at night. Bring one of them back and I’ll buy the drink.',
+  ],
+  cellar_held: [
+    'You held the Lodge cellar with the elves. I don’t know what to make of that yet.',
+    'Kessler says you stood at that lid till it was done. He doesn’t say that about anyone.',
+    'Elves and crawlers on the same side of a fight. My grandmother would have spat.',
+  ],
+  cat_taken: [
+    'Sorry about your cat. Off the fountain, in front of everyone.',
+    'If there’s a door in that tower that opens, I hope you find it.',
+    'A cat always comes back. I’ve said it all my life, and I’m saying it to you.',
+  ],
+  cats_home: [
+    'Ours walked in the kitchen door this morning and asked for breakfast. That was you, wasn’t it.',
+    'Every cat in town came home the same night. Nobody believes it was luck.',
+    'You brought them home. My door’s open to you, any hour.',
+  ],
+} as const satisfies Record<ReputationTier, ReputationGreetings>;
+
+/**
+ * The third-person gossip a citizen leads with when the questline has
+ * something worth repeating, named by the state each one answers so the
+ * branch that picks a line and the line it picks read as the same fact.
  */
 export const GOSSIP_LINES = {
-  doomsdaySurvived: 'That tower nearly took the whole square with it. Nearly.',
-  murderResolved: 'The killings have stopped. Folk are sleeping again — we owe that to somebody.',
-  murderStillRaw: 'It isn’t over, is it. Doesn’t feel over.',
-  murderQuillNamed: 'They’re saying it was Miss Quill all along. Who’d have guessed?',
-  murderActiveUnnamed: 'Bar your door tonight. Someone’s still killing after dark.',
-  murderBodyFound: 'Did you hear? They found another one by the well.',
+  catsGoing: 'That’s another cat gone off this street. Somebody ought to put a notice up.',
+  noticesUp: 'Have you seen the board? Every cat in town is on it but Kestrel’s.',
+  elvesBlamed:
+    'Kessler found cat fur at the Lodge cellar lid. Elves, then. Who else lights candles under a town?',
+  lodgeHeld:
+    'They say the elves came up out of the Lodge cellar to hold it, not to rob it. Nobody’s sure what to do with that.',
+  pennyTaken: 'Kestrel’s Penny is gone too. That’s every cat inside the wall.',
+  avielGrounded:
+    'The High Roost clipped Deacon Aviel on the dome. Took his flight feathers in front of the whole parish.',
+  belleTaken:
+    'Heard the crawlers’ cat was taken right off the fountain. In the middle of the square.',
+  catsHome: 'Every cat in town is back on its own doorstep. Biscuit was on the inn step at dawn.',
 } as const;

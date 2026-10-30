@@ -90,7 +90,7 @@ export function gymFightRuleGates(context: RoomGateContext, gym: GymRoomSystem):
     );
   }
   for (const spot of layout.exerciseBalls) {
-    if (!context.env.gameMap.isWalkable(spot.x, spot.y)) {
+    if (!context.env.gameMap.isWalkable(spot.x, spot.y, 'walker')) {
       report.fail(`an exercise ball rests on ${spot.x},${spot.y}, which is not open floor`);
     }
   }
@@ -122,7 +122,7 @@ function gateKettlebellsSpareTheFlock(context: RoomGateContext, gym: GymRoomSyst
   const standY = (layout.spawn.y + HALF) * TILE_SIZE;
   const rainRoom: KettlebellRainRoom = {
     ...layout.bounds,
-    isWalkable: (tileX, tileY) => frame.gameMap.isWalkable(tileX, tileY),
+    isWalkable: (tileX, tileY) => frame.gameMap.isWalkable(tileX, tileY, 'walker'),
   };
   bigRooster.heaveRequest = { x: bigRooster.x, y: bigRooster.y };
   let crawlerHits = 0;

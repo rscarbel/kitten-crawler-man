@@ -452,6 +452,7 @@ const heldUnderLine = (run: BossCeilingRun): boolean =>
 const SILENT_LICH_HOOKS: LichBattleHooks = {
   openBark: (_pages, onClosed) => onClosed(),
   showBanner: () => undefined,
+  onBindingBroken: () => undefined,
 };
 
 /**

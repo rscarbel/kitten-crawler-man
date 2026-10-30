@@ -687,7 +687,7 @@ export class Kraken extends Mob implements KrakenRoomControl {
       const y = centreY + Math.sin(angle) * ts * distTiles;
       const tileX = Math.floor(x / ts);
       const tileY = Math.floor(y / ts);
-      if (this.map !== null && !this.map.isWalkable(tileX, tileY)) continue;
+      if (this.map !== null && !this.map.isWalkable(tileX, tileY, this.mobility)) continue;
       this.tentacleSpawns.push({ x, y });
       return;
     }

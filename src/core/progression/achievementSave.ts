@@ -18,8 +18,6 @@ const ACHIEVEMENT_IDS = [
   'safe_haven',
   'magic_touch',
   'quest_defend_npc',
-  'disaster_averted',
-  'out_before_the_fall',
   'on_retainer',
   'casino_jackpot',
   'bartenders_choice',

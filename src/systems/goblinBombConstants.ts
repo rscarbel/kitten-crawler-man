@@ -430,7 +430,7 @@ export function resolveLobLanding(
     // A track through a tile's exact corner spends no distance in it, and a
     // point on that corner belongs to the tile diagonally across.
     const crossedPx = leftAt - enteredAt;
-    if (crossedPx > 0 && gameMap.isWalkable(tileX, tileY)) {
+    if (crossedPx > 0 && gameMap.isWalkable(tileX, tileY, 'walker')) {
       landingAlong = leftAt >= reach ? reach : leftAt - Math.min(LANDING_INSET_PX, crossedPx / 2);
     }
     if (leftAt >= reach) break;

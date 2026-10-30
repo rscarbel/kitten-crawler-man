@@ -13,6 +13,7 @@
  * clip a wall is tightened, and at worst left sharp.
  */
 
+import type { MobilityClass } from '../../map/mobility';
 import { TILE_SIZE } from '../../core/constants';
 import type { GameMap } from '../../map/GameMap';
 import { tileCoordKey } from '../../map/tileIndex';
@@ -179,6 +180,7 @@ export class TrailShaper {
   private walk: readonly TilePoint[] = [];
   /** The walk's own tiles, as `tileCoordKey`s: always trail ground, whatever they are. */
   private readonly walkKeys = new Set<number>();
+  private mobility: MobilityClass = 'walker';
   private doorways: ReadonlySet<number> = new Set();
   /** Per point of {@link taut}, the index into the walk it stands on. */
   private readonly tautWalkIndex: number[] = [];
@@ -196,10 +198,11 @@ export class TrailShaper {
   } = { points: new Float32Array(0), count: 0, length: 0, routeId: 0 };
 
   /** The tile walk the trail follows on `gameMap`, first tile nearest the head. */
-  setWalk(gameMap: TrailGround, walk: readonly TilePoint[]): void {
-    if (gameMap === this.map && sameWalk(walk, this.walk)) return;
+  setWalk(gameMap: TrailGround, walk: readonly TilePoint[], mobility: MobilityClass): void {
+    if (gameMap === this.map && mobility === this.mobility && sameWalk(walk, this.walk)) return;
     const newMap = gameMap !== this.map;
     this.map = gameMap;
+    this.mobility = mobility;
     this.walk = walk;
     this.doorways = doorwayKeys(gameMap);
     this.walkKeys.clear();
@@ -298,7 +301,7 @@ export class TrailShaper {
     const key = tileCoordKey(tileX, tileY);
     if (this.walkKeys.has(key)) return true;
     return (
-      gameMap.isWalkable(tileX, tileY) &&
+      gameMap.isWalkable(tileX, tileY, this.mobility) &&
       !gameMap.isWadeable(tileX, tileY) &&
       !gameMap.isStairwellTile(tileX, tileY) &&
       !this.doorways.has(key)

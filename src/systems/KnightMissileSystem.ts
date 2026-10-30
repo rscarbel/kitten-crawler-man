@@ -23,7 +23,7 @@ import {
   drawKnightMissileBurst,
   KNIGHT_MISSILE_BURST_FRAMES,
 } from '../sprites/knightMissileSprite';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
@@ -183,7 +183,7 @@ export class KnightMissileSystem implements GameSystem {
   private hitsWall(missile: Missile): boolean {
     const tileX = Math.floor(missile.x / TILE_SIZE);
     const tileY = Math.floor(missile.y / TILE_SIZE);
-    return !this.gameMap.isWalkable(tileX, tileY);
+    return !this.gameMap.isWalkable(tileX, tileY, 'walker');
   }
 
   private burstAt(missile: Missile): void {
@@ -196,7 +196,7 @@ export class KnightMissileSystem implements GameSystem {
    * player-like targets (Deinonychus, hired mercenaries).
    */
   private targetsFor(ctx: SystemContext): readonly Player[] {
-    const targets: Player[] = [ctx.human, ctx.cat];
+    const targets: Player[] = presentCrawlers(ctx);
     // Defend-quest NPCs are escorted, not hunted — `MobUpdateLoop` strips them
     // out of the shared AI target list for the same reason, and killing one
     // fails the quest outright.

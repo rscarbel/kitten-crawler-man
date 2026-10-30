@@ -2,7 +2,8 @@
  * A hedge-witch's one room, crowded in clusters rather than dotted with
  * clutter: the north wall is three big pieces side by side — her jar
  * dresser, the hearth with the cauldron out on its stone, and a drying beam
- * hung end to end with herbs over a bench of cut stems — and everything
+ * hung end to end with herbs over a bench of cut stems, with a small window
+ * between the hearth and the beam — and everything
  * else in the room heaps up against a wall or around a piece of furniture:
  * the cat's armchair and a footstool on the hearth rug, books piled against
  * the east wall, the worktable with its baskets and jars along the west,
@@ -116,6 +117,10 @@ export function buildOldLorisCottageLayout(w: number, h: number): TownInteriorLa
     cottageFrame(w, h);
   const chimneyStepCol = hearthCol + TOWN_INTERIOR_PROPS.witch_hearth.footprint.w;
   const dryingBeamCol = chimneyStepCol + 1;
+  // The window is set into the wall face over the chimney step rather than
+  // standing on the floor row, so the step stays the bare tile the chimney
+  // is worked from. The missing-cats questline's cut latch lies under it.
+  const windowRow = northRow - 1;
 
   // The hearth rug and its seating, just south of the fire.
   const hearthRugRow = northRow + 2;
@@ -163,6 +168,7 @@ export function buildOldLorisCottageLayout(w: number, h: number): TownInteriorLa
     ),
     prop(hearthCol, northRow, 'witch_hearth', 0, contractTarget(CONTRACT_SITE, 'hearth')),
     prop(dryingBeamCol, northRow, 'drying_beam', 0, contractTarget(CONTRACT_SITE, 'drying_beam')),
+    prop(chimneyStepCol, windowRow, 'window_dressing'),
     statefulProp(eastCol, northRow + 1, 'mushroom_basket', 'mushroom_basket_1'),
     statefulProp(eastCol - 1, northRow + 1, 'basket', 'basket_1', 1),
 

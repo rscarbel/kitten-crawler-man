@@ -1425,7 +1425,7 @@ export class GrotesqueSpider extends Mob {
         const angle = (direction / ESCAPE_PROBE_DIRECTIONS) * Math.PI * 2;
         const stepX = Math.cos(angle) * PLAYER_SPEED;
         const stepY = Math.sin(angle) * PLAYER_SPEED;
-        const body = { x: t.x, y: t.y };
+        const body = { x: t.x, y: t.y, isCrossingFooting: false };
         for (let frame = 0; frame < lockFrames && !escapes; frame++) {
           const fromX = body.x;
           const fromY = body.y;
@@ -1433,7 +1433,7 @@ export class GrotesqueSpider extends Mob {
           // spit tears none, so a crawler sidestepping it on web does so at
           // the web's pace.
           const footing = attack === 'spit' ? this.escapeFootingAt(body.x, body.y) : 1;
-          pushPlayerWithCollision(body, stepX * footing, stepY * footing, map);
+          pushPlayerWithCollision(body, stepX * footing, stepY * footing, map, t.mobility);
           if (bounds !== null) {
             body.x = clamp(body.x, bounds.x * ts, (bounds.x + bounds.w - 1) * ts);
             body.y = clamp(body.y, bounds.y * ts, (bounds.y + bounds.h - 1) * ts);
@@ -2002,7 +2002,7 @@ export class GrotesqueSpider extends Mob {
 
     const ts = this.tileSize;
     if (this.map) {
-      if (!this.map.isWalkable(Math.floor(proj.x / ts), Math.floor(proj.y / ts))) {
+      if (!this.map.isWalkable(Math.floor(proj.x / ts), Math.floor(proj.y / ts), this.mobility)) {
         // Lands on its last position that was still open floor.
         this.spawnGroundTrap(proj.x - proj.vx, proj.y - proj.vy);
         this.activeProjectile = null;
@@ -2140,7 +2140,7 @@ export class GrotesqueSpider extends Mob {
     for (let attempt = 0; attempt < ROAM_PICK_ATTEMPTS; attempt++) {
       const tx = this.rollInt(ROAM_MIN_TILE, cols - ROAM_BORDER_MARGIN);
       const ty = this.rollInt(ROAM_MIN_TILE, rows - ROAM_BORDER_MARGIN);
-      if (this.map.isWalkable(tx, ty)) return { tx, ty };
+      if (this.map.isWalkable(tx, ty, this.mobility)) return { tx, ty };
     }
     return null;
   }

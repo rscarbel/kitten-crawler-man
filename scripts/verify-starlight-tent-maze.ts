@@ -339,7 +339,10 @@ console.log('\nChecking the generated map…');
 {
   for (const section of MAZE_SECTIONS) {
     for (const spawn of [section.humanSpawn, section.catSpawn]) {
-      check(map.isWalkable(spawn.x, spawn.y), `${section.id}: mark ${tileKey(spawn)} is walkable`);
+      check(
+        map.isWalkable(spawn.x, spawn.y, 'walker'),
+        `${section.id}: mark ${tileKey(spawn)} is walkable`,
+      );
       // A one-tile pocket passes `isWalkable` and traps whoever is put in it.
       check(
         hasRoomToMove(map, spawn.x, spawn.y),
@@ -356,7 +359,7 @@ console.log('\nChecking the generated map…');
     `${map._interiorExitTiles.length} exit tiles`,
   );
   check(
-    map.isWalkable(MAZE_RING_CENTRE_TILE.x, MAZE_RING_CENTRE_TILE.y) &&
+    map.isWalkable(MAZE_RING_CENTRE_TILE.x, MAZE_RING_CENTRE_TILE.y, 'walker') &&
       isInFinalChamber(MAZE_RING_CENTRE_TILE.x, MAZE_RING_CENTRE_TILE.y),
     `the ring tile ${tileKey(MAZE_RING_CENTRE_TILE)} south of the king pole is open ground`,
   );
@@ -378,7 +381,7 @@ console.log('\nChecking the generated map…');
       what: star.id,
     })),
   ];
-  const walkedOn = inWall.filter((piece) => map.isWalkable(piece.tile.x, piece.tile.y));
+  const walkedOn = inWall.filter((piece) => map.isWalkable(piece.tile.x, piece.tile.y, 'walker'));
   check(
     inWall.length > 0 && walkedOn.length === 0,
     `every light, star, window and pillar the board and the teaching strip set is solid (${
@@ -390,7 +393,7 @@ console.log('\nChecking the generated map…');
     ...EVERY_MIRROR.map((mirror) => mirror.tile),
     ...board.splitters.map((splitter) => boardTileToTent(splitter.tile)),
     ...TEACHING_STRIP_BOARD.splitters.map((splitter) => teachingTileToTent(splitter.tile)),
-  ].filter((tile) => !map.isWalkable(tile.x, tile.y));
+  ].filter((tile) => !map.isWalkable(tile.x, tile.y, 'walker'));
   check(
     standsOnFloor.length === 0,
     `every piece of glass stands on the floor plan's floor (${standsOnFloor.map(tileKey).join(' ') || 'all'})`,
@@ -490,7 +493,9 @@ console.log('\nChecking where hazards are allowed to be…');
   const inChamber = ALL_HAZARD_CELLS.filter((cell) => isInFinalChamber(cell.tileX, cell.tileY));
   check(inChamber.length === 0, 'no timed hazard is in the centre ring');
 
-  const offFloor = ALL_HAZARD_CELLS.filter((cell) => !map.isWalkable(cell.tileX, cell.tileY));
+  const offFloor = ALL_HAZARD_CELLS.filter(
+    (cell) => !map.isWalkable(cell.tileX, cell.tileY, 'walker'),
+  );
   check(offFloor.length === 0, 'every hazard cell is on walkable floor');
 
   // The tiles the maze *forces* a crawler to be parked on need more than
@@ -662,7 +667,7 @@ console.log('\nWalking a margin-slowed crawler through every fire-walk corridor�
       isOrthogonalWalk(corridor.route),
       `${corridor.id}: its route is a walk the mover can take`,
     );
-    const onFloor = corridor.route.every((tile) => map.isWalkable(tile.x, tile.y));
+    const onFloor = corridor.route.every((tile) => map.isWalkable(tile.x, tile.y, 'walker'));
     check(onFloor, `${corridor.id}: every route tile is open floor`);
 
     // No barrier may stand inside a trapped corridor. A gate half way along one
@@ -909,7 +914,7 @@ console.log('\nChecking the floor marks and the dressing density…');
   for (const key of floorIndex.keys()) {
     const [x, y] = key.split(',').map(Number);
     marksChecked++;
-    if (!map.isWalkable(x, y) || barrierByTile.has(key)) offFloor.push(key);
+    if (!map.isWalkable(x, y, 'walker') || barrierByTile.has(key)) offFloor.push(key);
   }
   check(marksChecked > 0, `the floor index marks some tiles at all (${marksChecked})`);
   check(
@@ -946,7 +951,7 @@ console.log('\nChecking the floor marks and the dressing density…');
     curbTiles.length > 0 &&
       curbTiles.every(([key]) => {
         const [x, y] = key.split(',').map(Number);
-        return map.isWalkable(x, y);
+        return map.isWalkable(x, y, 'walker');
       }),
     `the ring's curb is painted on walkable tiles only (${curbTiles.length})`,
   );
@@ -960,7 +965,7 @@ console.log('\nChecking the floor marks and the dressing density…');
   // Barrier tiles are one tile of wall until opened and never part of a hall,
   // so the rule is taken over the floor the tent starts with.
   const isFloor = (x: number, y: number): boolean =>
-    map.isWalkable(x, y) && !barrierByTile.has(`${x},${y}`);
+    map.isWalkable(x, y, 'walker') && !barrierByTile.has(`${x},${y}`);
   const withMarks = undressedSquares(
     MAZE_WIDTH,
     MAZE_HEIGHT,
@@ -995,7 +1000,7 @@ console.log('\nChecking the floor marks and the dressing density…');
 function passable(x: number, y: number, opened: ReadonlySet<string>): boolean {
   const barrier = barrierByTile.get(`${x},${y}`);
   if (barrier !== undefined) return opened.has(barrier);
-  return map.isWalkable(x, y);
+  return map.isWalkable(x, y, 'walker');
 }
 
 function reachableFrom(start: MazeTile, opened: ReadonlySet<string>): Set<string> {
@@ -1082,7 +1087,7 @@ console.log('\nCrossing the menagerie with the bell rung at the threshold…');
     );
     if (track === null) continue;
 
-    const onFloor = crossing.route.every((tile) => map.isWalkable(tile.x, tile.y));
+    const onFloor = crossing.route.every((tile) => map.isWalkable(tile.x, tile.y, 'walker'));
     check(onFloor, `${track.id}: every tile of its crossing is open floor`);
     check(
       isOrthogonalWalk(crossing.route),
@@ -1190,7 +1195,7 @@ console.log('\nCrossing the menagerie with the bell rung at the threshold…');
     );
     for (const pocket of pockets) {
       check(
-        map.isWalkable(pocket.x, pocket.y),
+        map.isWalkable(pocket.x, pocket.y, 'walker'),
         `${track.id}: its pocket ${tileKey(pocket)} is floor`,
       );
       check(
@@ -1754,7 +1759,7 @@ function buildMazeHarness(progress: StarlightTentProgress = createStarlightTentP
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: mazeMap,
@@ -1896,7 +1901,7 @@ console.log('\nDriving the curtains and the section resets…');
   maze.update(ctx);
   for (const block of MAZE_BLOCKS.filter((candidate) => candidate.section === 'firewalk')) {
     check(
-      mazeMap.isWalkable(block.barrierTile.x, block.barrierTile.y),
+      mazeMap.isWalkable(block.barrierTile.x, block.barrierTile.y, 'walker'),
       `${block.id}: its barrier opened`,
     );
   }
@@ -1907,15 +1912,15 @@ console.log('\nDriving the curtains and the section resets…');
   placeAt(cat, MAZE_CAT_SPAWN_TILE);
   maze.update(ctx);
   check(
-    !mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y),
+    !mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y, 'walker'),
     `${curtain.id}: one crawler in the room lifts nothing`,
   );
 
   placeAt(cat, { x: curtain.catRoom.x0, y: curtain.catRoom.y0 });
   maze.update(ctx);
   check(
-    mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y) &&
-      mazeMap.isWalkable(curtain.catBarrier.x, curtain.catBarrier.y),
+    mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y, 'walker') &&
+      mazeMap.isWalkable(curtain.catBarrier.x, curtain.catBarrier.y, 'walker'),
     `${curtain.id}: both in their rooms lifts both curtains`,
   );
   check(maze.isDialogOpen, `${curtain.id}: the act's card comes up`);
@@ -1986,12 +1991,12 @@ console.log('\nDriving the curtains and the section resets…');
     check(maze.isDialogOpen, 'the box explaining it is up');
     check(maze.dismissDialog(), 'and Escape closes it');
     check(
-      mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y),
+      mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y, 'walker'),
       'a reset does not drop a curtain the party already earned',
     );
     for (const block of MAZE_BLOCKS.filter((candidate) => candidate.section === 'firewalk')) {
       check(
-        mazeMap.isWalkable(block.barrierTile.x, block.barrierTile.y),
+        mazeMap.isWalkable(block.barrierTile.x, block.barrierTile.y, 'walker'),
         `${block.id}: a reset does not re-lock a door already opened`,
       );
     }
@@ -2117,7 +2122,7 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
   const roster = ctx.roster;
   check(
     isInFinalChamber(MAZE_RING_CHEST_TILE.x, MAZE_RING_CHEST_TILE.y) &&
-      !mazeMap.isWalkable(MAZE_RING_CHEST_TILE.x, MAZE_RING_CHEST_TILE.y) &&
+      !mazeMap.isWalkable(MAZE_RING_CHEST_TILE.x, MAZE_RING_CHEST_TILE.y, 'walker') &&
       chests.allChests.length === 1 &&
       finale.chest.state === 'locked',
     `the ring's chest stands locked at ${tileKey(MAZE_RING_CHEST_TILE)}, blocking its tile`,
@@ -2125,7 +2130,8 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
   check(
     RING_GUARD_POSTS.every(
       (post) =>
-        isInFinalChamber(post.tile.x, post.tile.y) && mazeMap.isWalkable(post.tile.x, post.tile.y),
+        isInFinalChamber(post.tile.x, post.tile.y) &&
+        mazeMap.isWalkable(post.tile.x, post.tile.y, 'walker'),
     ),
     'every guard post is open ring floor',
   );
@@ -2317,8 +2323,12 @@ console.log("\nChecking the centre ring's chest, guards and ladder…");
     'utf8',
   );
   check(
-    fixtureSource.includes('this.host.confirm(() => this.depart(spec))') &&
-      sceneSource.includes('confirm: (leave) => this.openExitMenu(leave)') &&
+    fixtureSource.includes(
+      'this.host.confirm(fixture.destination, () => this.depart(spec, fixture.destination))',
+    ) &&
+      sceneSource.includes(
+        'confirm: (destination, leave) => this.openExitMenu(leave, destination)',
+      ) &&
       /if \(this\.exitMenuOpen[^)]*\) \{\s*this\.mercenarySystem\.warnIfLeavingDowned\(\);/.test(
         sceneSource,
       ),
@@ -2630,7 +2640,7 @@ function traceSignature(trace: BoardTrace): string {
 }
 
 const exitsOpen = (mazeMap: GameMap): boolean =>
-  MAZE_HALL_EXITS.every((exit) => mazeMap.isWalkable(exit.tile.x, exit.tile.y));
+  MAZE_HALL_EXITS.every((exit) => mazeMap.isWalkable(exit.tile.x, exit.tile.y, 'walker'));
 
 /** A harness walked into the hall, its teaching doorways opened by real blows. */
 function buildHallHarness(progress?: StarlightTentProgress): ReturnType<typeof buildMazeHarness> {
@@ -2673,7 +2683,7 @@ console.log('\nLighting the teaching strip through real blows…');
   for (const half of MAZE_HALVES) {
     const doorway = MAZE_TEACHING_DOORWAYS[half];
     check(
-      !mazeMap.isWalkable(doorway.x, doorway.y),
+      !mazeMap.isWalkable(doorway.x, doorway.y, 'walker'),
       `the ${half}'s doorway into the hall starts shut`,
     );
   }
@@ -2686,7 +2696,7 @@ console.log('\nLighting the teaching strip through real blows…');
     let blows = 0;
     while (target.cycleIndex !== solution && blows < target.cycleLength) {
       check(
-        !mazeMap.isWalkable(doorway.x, doorway.y),
+        !mazeMap.isWalkable(doorway.x, doorway.y, 'walker'),
         `the ${half}'s doorway is still shut before its stars are lit`,
       );
       blowOn(maze, ctx, target);
@@ -2698,7 +2708,7 @@ console.log('\nLighting the teaching strip through real blows…');
       `${target.mirrorId}: after ${blows} blow(s) both of the ${half}'s bulbs are lit`,
     );
     check(
-      mazeMap.isWalkable(doorway.x, doorway.y),
+      mazeMap.isWalkable(doorway.x, doorway.y, 'walker'),
       `lighting both of the ${half}'s stars opens their doorway into the hall`,
     );
     blowOn(maze, ctx, target);
@@ -2707,7 +2717,7 @@ console.log('\nLighting the teaching strip through real blows…');
       `and one more blow puts both of the ${half}'s stars and bulbs out again`,
     );
     check(
-      mazeMap.isWalkable(doorway.x, doorway.y),
+      mazeMap.isWalkable(doorway.x, doorway.y, 'walker'),
       'while the doorway stays open: the strip is done once, like any board',
     );
   }
@@ -2860,7 +2870,8 @@ console.log('\nWalking the hall on the live map…');
       for (const [dx, dy] of NEIGHBOURS.slice(0, 4)) {
         const next = { x: tile.x + dx, y: tile.y + dy };
         const key = tileKey(next);
-        if (seen.has(key) || hot.has(key) || !mazeMap.isWalkable(next.x, next.y)) continue;
+        if (seen.has(key) || hot.has(key) || !mazeMap.isWalkable(next.x, next.y, 'walker'))
+          continue;
         seen.add(key);
         queue.push(next);
       }
@@ -2875,7 +2886,7 @@ console.log('\nWalking the hall on the live map…');
       { x: mirror.tile.x, y: mirror.tile.y - 1 },
     ].some((tile) => reach.has(tileKey(tile)));
   const glassBlocked = [...maze.hall.mirrorsOf('hall'), ...maze.hall.mirrorsOf('teaching')].filter(
-    (mirror) => mazeMap.isWalkable(mirror.tile.x, mirror.tile.y),
+    (mirror) => mazeMap.isWalkable(mirror.tile.x, mirror.tile.y, 'walker'),
   );
   check(glassBlocked.length === 0, 'no crawler can walk into a mirror: the glass is solid');
   const mirrorsSection = MAZE_SECTIONS.find((section) => section.id === 'mirrors');
@@ -2949,7 +2960,7 @@ console.log('\nChecking a mirror is only ever asked about from its own room…')
     const crawler = half === 'human' ? human : cat;
     const partner = half === 'human' ? cat : human;
     ctx.active = crawler;
-    ctx.inactive = partner;
+    ctx.partner = partner;
     for (const room of rooms) {
       const own = maze.hall
         .mirrorsOf(room.boardId)
@@ -2960,7 +2971,7 @@ console.log('\nChecking a mirror is only ever asked about from its own room…')
         .filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === half);
       for (let y = room.rows.y0; y <= room.rows.y1; y++) {
         for (let x = room.rows.x0; x <= room.rows.x1; x++) {
-          if (!mazeMap.isWalkable(x, y) || HOT_BEAM_TILES.has(`${x},${y}`)) continue;
+          if (!mazeMap.isWalkable(x, y, 'walker') || HOT_BEAM_TILES.has(`${x},${y}`)) continue;
           const px = x * TILE_SIZE;
           const py = y * TILE_SIZE;
           const distance = (mirror: MazeMirrorTarget): number =>
@@ -3055,7 +3066,7 @@ console.log('\nChecking every turn preview against the blow that follows it…')
     const crawler = half === 'human' ? human : cat;
     const partner = half === 'human' ? cat : human;
     ctx.active = crawler;
-    ctx.inactive = partner;
+    ctx.partner = partner;
     // Only the crawler's own mirrors in the same room compete: glass beyond the
     // wall is nearer from some tiles, and must never be the one asked about.
     const others = everyTarget
@@ -3075,7 +3086,7 @@ console.log('\nChecking every turn preview against the blow that follows it…')
       { x: target.tile.x, y: target.tile.y - 1 },
     ].find(
       (tile) =>
-        mazeMap.isWalkable(tile.x, tile.y) &&
+        mazeMap.isWalkable(tile.x, tile.y, 'walker') &&
         !HOT_BEAM_TILES.has(tileKey(tile)) &&
         others.every((other) => distance(tile, other) > 1),
     );
@@ -3157,13 +3168,13 @@ console.log('\nChecking the encore…');
   if (encore !== undefined) {
     const encoreTile = boardTileToTent(encore.tile);
     check(
-      !map.isWalkable(encoreTile.x, encoreTile.y) &&
+      !map.isWalkable(encoreTile.x, encoreTile.y, 'walker') &&
         TEST_PLAN.rows[encoreTile.y]?.[encoreTile.x] === '*',
       `the encore is set in the wall at ${tileKey(encoreTile)}, star glyph and all`,
     );
     const foot = starFootTile(board, encore);
     check(
-      map.isWalkable(foot.x, foot.y) &&
+      map.isWalkable(foot.x, foot.y, 'walker') &&
         Math.abs(foot.x - encoreTile.x) + Math.abs(foot.y - encoreTile.y) === 1,
       `its coins fall on open floor at its foot, ${tileKey(foot)}`,
     );
@@ -3259,7 +3270,7 @@ console.log('\nChanging the difficulty while the show is on…');
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: mazeMap,
@@ -3356,7 +3367,7 @@ console.log('\nChanging the difficulty while the show is on…');
     const strandedBlocks = oldGlass.filter(
       (tile) =>
         !newGlass.has(tileKey(tile)) &&
-        !mazeMap.isWalkable(tile.x, tile.y) &&
+        !mazeMap.isWalkable(tile.x, tile.y, 'walker') &&
         expected.rows[tile.y]?.[tile.x] === '.',
     );
     check(
@@ -3369,7 +3380,7 @@ console.log('\nChanging the difficulty while the show is on…');
     });
     check(wrongTiles.length === 0, 'the room is rebuilt from the new plan');
     const curtainsShut = MAZE_CURTAINS.every(
-      (curtain) => !mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y),
+      (curtain) => !mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y, 'walker'),
     );
     check(curtainsShut, 'every curtain is shut again');
     check(

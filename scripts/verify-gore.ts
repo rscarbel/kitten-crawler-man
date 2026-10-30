@@ -129,7 +129,7 @@ function findOpenGroundCentre(map: GameMap): { x: number; y: number } | null {
         dy++
       ) {
         for (let dx = -OPEN_GROUND_RADIUS_TILES; dx <= OPEN_GROUND_RADIUS_TILES; dx++) {
-          if (map.isWalkable(tileX + dx, tileY + dy)) continue;
+          if (map.isWalkable(tileX + dx, tileY + dy, 'walker')) continue;
           allWalkable = false;
           break;
         }

@@ -24,9 +24,14 @@ import {
 } from '../core/state/TownMemory';
 import {
   TOWN_INTERIOR_PROPS,
+  type TownInteriorDialogInteraction,
   type TownInteriorExamineId,
-  type TownInteriorInteraction,
 } from '../sprites/art/townInterior/townInteriorProps';
+import {
+  ANYONE_PERFORMS,
+  canPerform,
+  type PerformerTraits,
+} from '../core/party/interactionPerformer';
 import { randomInt } from '../utils';
 import {
   EXAMINE_LINES,
@@ -52,7 +57,7 @@ export type InteriorInteractionOutcome = 'shown' | 'found' | 'nothing_found' | '
 /** What pressing interact shows for one placed, interactable prop instance. */
 export interface PlacedInteraction {
   readonly placed: PlacedTownInteriorProp;
-  readonly interaction: TownInteriorInteraction;
+  readonly interaction: TownInteriorDialogInteraction;
   readonly x: number;
   readonly y: number;
 }
@@ -108,7 +113,7 @@ export class TownMemoryInteriorPayoutRecord implements InteriorPayoutRecord {
   }
 }
 
-const INTERACT_PROMPT_LABEL: Record<TownInteriorInteraction['kind'], string> = {
+const INTERACT_PROMPT_LABEL: Record<TownInteriorDialogInteraction['kind'], string> = {
   examine: 'Examine',
   search: 'Search',
   use: 'Use',
@@ -144,7 +149,7 @@ export class InteriorPropInteractionSystem {
   ) {
     for (const placedProp of map.placedInteriorProps) {
       const interaction = TOWN_INTERIOR_PROPS[placedProp.propId].interaction;
-      if (interaction === undefined) continue;
+      if (interaction === undefined || interaction.kind === 'knock_off') continue;
       this.placed.push({
         placed: placedProp,
         interaction,
@@ -154,11 +159,15 @@ export class InteriorPropInteractionSystem {
     }
   }
 
-  /** The nearest interactable to `(x, y)` in reach, or `null`. */
-  findTarget(x: number, y: number): PlacedInteraction | null {
+  /** The nearest interactable in reach of `crawler` that it may perform, or `null`. */
+  findTarget(
+    crawler: PerformerTraits & { readonly x: number; readonly y: number },
+  ): PlacedInteraction | null {
+    const { x, y } = crawler;
     let best: PlacedInteraction | null = null;
     let bestDistance = INTERACT_RADIUS;
     for (const candidate of this.placed) {
+      if (!canPerform(candidate.interaction.performer ?? ANYONE_PERFORMS, crawler)) continue;
       const cx = candidate.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const cy = candidate.y + TILE_SIZE * TILE_CENTER_OFFSET;
       const distance = Math.hypot(cx - x, cy - y);

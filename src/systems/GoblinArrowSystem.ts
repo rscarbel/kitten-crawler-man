@@ -28,7 +28,7 @@ import {
   SPENT_ARROW_FRAMES,
   drawGoblinArrow,
 } from '../sprites/goblinArrowSprite';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 
 /** One arrow, as the archer hands it over. */
 export interface GoblinArrowShot {
@@ -174,7 +174,13 @@ export class GoblinArrowSystem implements GameSystem {
 
       const nextX = arrow.x + arrow.vx;
       const nextY = arrow.y + arrow.vy;
-      if (!this.gameMap.isWalkable(Math.floor(nextX / TILE_SIZE), Math.floor(nextY / TILE_SIZE))) {
+      if (
+        !this.gameMap.isWalkable(
+          Math.floor(nextX / TILE_SIZE),
+          Math.floor(nextY / TILE_SIZE),
+          'walker',
+        )
+      ) {
         // Stopped at the last clear position rather than inside the wall, so the
         // shaft is left standing in floor the player can see.
         this.land(arrow);
@@ -228,7 +234,7 @@ export class GoblinArrowSystem implements GameSystem {
    * actually aiming at.
    */
   private targetsFor(ctx: SystemContext, arrow: Arrow): readonly Player[] {
-    const targets: Player[] = [ctx.human, ctx.cat];
+    const targets: Player[] = presentCrawlers(ctx);
     /**
      * Defend-quest NPCs are escorted, not hunted. `MobUpdateLoop` strips them
      * out of the shared AI target list for exactly this reason, and losing one

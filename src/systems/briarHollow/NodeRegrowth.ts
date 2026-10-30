@@ -244,7 +244,7 @@ export class NodeRegrowth {
    */
   private isClear(spot: RegrowSpot): boolean {
     const { gameMap, isTileClaimed } = this.deps;
-    if (!gameMap.isWalkable(spot.tileX, spot.tileY)) return false;
+    if (!gameMap.isWalkable(spot.tileX, spot.tileY, 'walker')) return false;
     if (isTileClaimed(spot.tileX, spot.tileY)) return false;
     for (const body of this.deps.bodies()) {
       if (bodyOverlapsTile(body, spot.tileX, spot.tileY)) return false;

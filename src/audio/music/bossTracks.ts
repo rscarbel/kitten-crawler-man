@@ -5,11 +5,6 @@ import { MUSIC_STEM_SETS } from './stemSets';
 import type { GauntletBossType } from '../../map/bossRoomSizes';
 import type { BountyTypeId } from '../../systems/bountyDefs';
 
-/** Miss Quill's track in the tower finale. */
-export const QUILL_TRACK = 'boss_music_3' as const satisfies MusicTrackId;
-/** The Lich's track in the tower finale. */
-export const LICH_TRACK = 'boss_music_2' as const satisfies MusicTrackId;
-
 /** The Kraken's track once her room has drained and she fights. */
 export const KRAKEN_BATTLE_TRACK = 'the_kraken_battle' as const satisfies MusicTrackId;
 
@@ -17,15 +12,14 @@ export const KRAKEN_BATTLE_TRACK = 'the_kraken_battle' as const satisfies MusicT
 const SHARED_BOSS_TRACK = 'boss_music_3' as const satisfies MusicTrackId;
 
 /** Every boss whose fight is announced with `bossFightInitiated`. */
-type BossMusicType =
-  GauntletBossType | BountyTypeId | 'grotesque_spider' | 'miss_quill' | 'the_lich';
+type BossMusicType = GauntletBossType | BountyTypeId | 'grotesque_spider' | 'the_lich';
 
 /**
  * How a boss's fight is scored:
  *
  * - `track`: the boss layer loops this track from the fight joined to the boss's fall.
  * - `scoredByFight`: the fight claims its own music as it goes (the tower
- *   finale's Quill, silence and Lich; the Kraken's room following its pumps).
+ *   finale's Lich; the Kraken's room following its pumps).
  *   `tracks` are the catalogued songs it can play, which a run's progress
  *   unlocks as it would a `track`.
  */
@@ -49,8 +43,7 @@ const BOSS_MUSIC: Readonly<Record<BossMusicType, BossMusic>> = {
     kind: 'scoredByFight',
     tracks: [MUSIC_STEM_SETS.kraken_flooded[0], KRAKEN_BATTLE_TRACK],
   },
-  miss_quill: { kind: 'scoredByFight', tracks: [QUILL_TRACK] },
-  the_lich: { kind: 'scoredByFight', tracks: [LICH_TRACK] },
+  the_lich: { kind: 'scoredByFight', tracks: [MUSIC_STEM_SETS.warden_ritual[0]] },
 };
 
 /** Boss events carry their boss as a plain string, so a listener checks it against the table. */

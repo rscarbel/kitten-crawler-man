@@ -5,6 +5,7 @@ import {
   type FigureMouth,
   type StatusFigureBox,
 } from '../Player';
+import type { MobilityClass } from '../map/mobility';
 import { TILE_SIZE } from '../core/constants';
 import {
   handTipInTile,
@@ -27,6 +28,7 @@ import {
   prewarmHumanSprite,
   activeHumanLook,
   type HumanRowSelection,
+  setHumanOutfit,
   setHumanHeld,
   setHumanOffHand,
   humanRowView,
@@ -36,7 +38,7 @@ import {
 import { type FacingSelection, FacingState } from '../sprites/facingView';
 import { humanMouthOf } from '../sprites/crawlerMouths';
 import { humanGarmentsWearing } from '../sprites/garments/itemLooks';
-import { setOutfit } from '../sprites/outfits';
+import { outfitOf } from '../sprites/garments/outfit';
 import { FALL_SPANS, HumanReactionDirector, type HumanWarmSpan } from '../sprites/humanReactions';
 import { IDLE_FRAMES_BEFORE_RELEASE } from '../sprites/figure/figureFrameCache';
 import {
@@ -227,6 +229,10 @@ export class HumanPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
   readonly crawlerKind = HUMAN_CRAWLER_KIND;
 
+  get mobility(): MobilityClass {
+    return 'walker';
+  }
+
   override get isCrawler(): boolean {
     return true;
   }
@@ -376,7 +382,7 @@ export class HumanPlayer extends Player {
   /** Dresses his sprite in the garments of what he has equipped; returns whether the look changed. */
   private wearEquipped(): boolean {
     const worn = this.inventory.equippedItems().map((item) => item.id);
-    return setOutfit('human', humanGarmentsWearing(worn));
+    return setHumanOutfit(outfitOf(activeHumanLook(), humanGarmentsWearing(worn)));
   }
 
   /**
@@ -880,7 +886,7 @@ export class HumanPlayer extends Player {
       const ty = Math.floor(nextY / this.tileSize);
       // The bathroom queue's block flag stands in for the goblins on it, and a
       // stone meets them as bodies rather than as a wall.
-      if (!map.isWalkableIgnoringBathroomQueue(tx, ty)) {
+      if (!map.isWalkableIgnoringBathroomQueue(tx, ty, 'walker')) {
         rock.state = 'done';
         this.pendingSlingshotWallImpact = { x: rock.x, y: rock.y };
         continue;
@@ -910,6 +916,7 @@ export class HumanPlayer extends Player {
       const blocked = !map.isWalkableIgnoringBathroomQueue(
         Math.floor(x / this.tileSize),
         Math.floor(y / this.tileSize),
+        'walker',
       );
       if (blocked) return taken * step;
     }

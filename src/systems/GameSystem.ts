@@ -20,7 +20,12 @@ export interface SystemContext {
   human: HumanPlayer;
   cat: CatPlayer;
   active: HumanPlayer | CatPlayer;
-  inactive: HumanPlayer | CatPlayer;
+  /**
+   * The crawler not being steered, when it is on this map; null while the
+   * party is split and it is away. `human` and `cat` stay the whole roster,
+   * for rewards and the save only.
+   */
+  partner: HumanPlayer | CatPlayer | null;
   activeIsMoving: boolean;
   /**
    * The scene's population — the list, the spatial index, and the one spawn path
@@ -42,4 +47,20 @@ export interface GameSystem {
   update?(ctx: SystemContext): void;
   /** Called when the scene is torn down. */
   dispose?(): void;
+}
+
+/**
+ * The crawlers on this map, human first, leaving out one away with the other
+ * group of a split party. What every in-world rule reads: who is hit, who
+ * stands on a plate, who is lit, who swings. `human` and `cat` on their own
+ * are the roster, for rewards and the save.
+ */
+export function presentCrawlers(party: {
+  readonly human: HumanPlayer;
+  readonly cat: CatPlayer;
+}): Array<HumanPlayer | CatPlayer> {
+  const present: Array<HumanPlayer | CatPlayer> = [];
+  if (!party.human.isAway) present.push(party.human);
+  if (!party.cat.isAway) present.push(party.cat);
+  return present;
 }

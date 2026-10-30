@@ -315,7 +315,7 @@ export class DeinonychusSystem implements GameSystem {
    * Returns the new Deinonychus instance to be added to the mobs array + grid.
    */
   summon(cat: CatPlayer, gameMap: GameMap): Deinonychus | null {
-    if (!this.canSummon) return null;
+    if (!this.canSummon || cat.isAway) return null;
 
     const spawn = this.findSpawnTile(cat, gameMap);
     if (spawn === null) {
@@ -367,7 +367,7 @@ export class DeinonychusSystem implements GameSystem {
    * is not a way around it.
    */
   carryIn(cat: CatPlayer, gameMap: GameMap): Deinonychus | null {
-    if (!this.unlocked || this.deinonychus !== null) return null;
+    if (!this.unlocked || this.deinonychus !== null || cat.isAway) return null;
     if (this.petState.restingUntilFull) return null;
     if (this.petState.hp <= 0) return null;
     const spawn = this.findSpawnTile(cat, gameMap);
@@ -379,6 +379,7 @@ export class DeinonychusSystem implements GameSystem {
   asCarriedCompanion(cat: CatPlayer): CarriedCompanion {
     return {
       body: this.deinonychus,
+      followsLiveGroup: !cat.isAway,
       landingTile: (map, isAcceptable) => this.findSpawnTile(cat, map, isAcceptable),
       putAway: (mobs, grid) => this.dismiss(mobs, grid),
       onPlaced: (mobs) => {
@@ -408,7 +409,7 @@ export class DeinonychusSystem implements GameSystem {
       return false;
     }
     const { cat, human, gameMap, bossRoom } = ctx;
-    if (!this.canSummon || !cat.isAlive || cat.isKnockedOut) return false;
+    if (!this.canSummon || cat.isAway || !cat.isAlive || cat.isKnockedOut) return false;
     if (cat.autoTarget?.isAlive === true) return true;
 
     // Centres cancel in the distance, so the query can use raw sprite origins;

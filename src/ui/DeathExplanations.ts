@@ -70,7 +70,6 @@ export type DeathCause =
   | 'lion'
   | 'elf'
   | 'direBear'
-  | 'missQuill'
   | 'shieldFairy'
   | 'healingFairy'
   | 'necroFairy'
@@ -90,13 +89,14 @@ export type DeathCause =
   | 'lichFirewall'
   | 'lichOrb'
   | 'trashAvalanche'
+  | 'towerWard'
+  | 'towerBell'
   | 'explosiveFriendlyFire'
   | 'siegeFriendlyFire'
   | 'raisedRatkin'
   | 'graveBull'
   | 'necromancerBolt'
   | 'necromancerPulse'
-  | 'doomsdayExplosion'
   | 'sharkAttack'
   | 'unknown';
 
@@ -234,12 +234,12 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Dragged down by hands that came up through the dirt. Out of the cone was the answer.',
   ],
   theLich: [
-    'A green bolt out of the magistrate’s own office. It filed you where it filed him.',
-    'The Lich killed you at arm’s length, which is how it has run this town for weeks.',
-    'You died in a room with a corpse at the desk. Now there are two.',
+    'A green bolt from the top of the tower. The Warden does not come down to its callers.',
+    'The Lich killed you at arm’s length, which is how it has run this town for years.',
+    'You climbed the whole tower to be struck from a chair that never moved.',
   ],
   theLichHands: [
-    'The office floor opened in a wedge and every hand in it had a grip on you.',
+    'The tower floor opened in a wedge and every hand in it had a grip on you.',
     'The red cone was the notice. You did not file a response, so the hands did.',
     'Held down by the dead while the thing in the robes watched. Out of the cone was the answer.',
   ],
@@ -279,14 +279,22 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Killed by the glass, not the clown. He was still juggling when you dropped.',
   ],
   lichFirewall: [
-    'The wall of fire crossed the office and you were not in the gap.',
+    'The wall of fire crossed the room and you were not in the gap.',
     'There was one way through it. You were standing everywhere else.',
-    'The magistrate’s office burned you down. The paperwork is presumably in order.',
+    'The top of the tower burned you down. The Warden did not stand up to watch.',
   ],
   lichOrb: [
     'A green light landed on the floor you were standing on. You had been warned.',
     'The circle was on the ground for a reason. You were still inside it.',
-    'The Lich rained soul-fire on the office and one of them found you.',
+    'The Lich rained soul-fire on the room and one of them found you.',
+  ],
+  towerWard: [
+    'The ward line was lit when you stepped into it. The cat could have told you when.',
+    'Water-borne light, the archivist called it. It burned like any other kind.',
+  ],
+  towerBell: [
+    'A bell the size of a cart swung through the beam you were standing on.',
+    'You were on the beam when the bell came back. It always comes back on the beat.',
   ],
   trashAvalanche: [
     'A tower of garbage came down on you. The Trash Gremlin calls that redecorating.',
@@ -457,11 +465,6 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You were mauled by a Dire Bear. When it rears up, step back.',
     'The Dire Bear brought its paw down on you. It gave you plenty of warning.',
   ],
-  missQuill: [
-    'Miss Quill put a soul bolt through you without losing her composure.',
-    'The Hawkfolk schoolteacher killed you. Every krasue in the city passed through her hands first.',
-    'Miss Quill finished the lesson. Interrupt her casting next time.',
-  ],
   shieldFairy: [
     'A blue fairy was still handing out wards when the fight killed you. Kill the fairy, drop the shields.',
     'Something you were already hitting was warded by a fairy you never bothered to look for.',
@@ -541,11 +544,6 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   siegeFriendlyFire: [
     "Flattened by your own trebuchet's shrapnel.",
     'A single chip of your own boulder was all it took. Stand clear of the landing next time.',
-  ],
-  doomsdayExplosion: [
-    'You were standing next to a city-sized bomb.',
-    'The soul crystal went off before you cleared the blast radius.',
-    'Taloncrest came down around you. You should have run faster.',
   ],
   sharkAttack: [
     'The fin was circling for a reason. You stepped off the raft while it was looking.',

@@ -53,9 +53,7 @@ import {
 import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
 import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { wornGarmentOf } from '../src/sprites/garments/garments.js';
-import { bareCatOutfit } from '../src/sprites/garments/cat/catDressing.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
-import { activeCatFigure, activeCatLook, setCatOutfit } from '../src/sprites/catSprite.js';
 import {
   activeHumanFigure,
   drawHumanSelection,
@@ -1246,25 +1244,35 @@ const TRANSIT_WARM_FRAMES = 60;
 /** Where the transit gate's crawler stands; anywhere on the map serves. */
 const TRANSIT_TILE = 3;
 
+/** A crawler built for the transit gate: the player, and the figure their sprite is drawn through. */
+interface TransitWearer {
+  readonly player: HumanPlayer | CatPlayer;
+  readonly figure: () => FigureDef;
+}
+
 /**
  * Each crawler a scene change rebuilds: how to build one, what an item looks
- * like on them, their sprite's figure, and how to put their sprite back in
- * its default outfit.
+ * like on them, and how to put the sprite every human shares back in its
+ * default outfit. The cat's outfit is her own appearance's, and goes with her.
  */
 const TRANSIT_CRAWLERS = [
   {
     kind: 'human',
-    build: () => new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE),
+    build: (): TransitWearer => ({
+      player: new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE),
+      figure: activeHumanFigure,
+    }),
     lookOf: humanLookOf,
-    figure: activeHumanFigure,
     undress: () => setHumanOutfit(defaultOutfitOf(PLAYER_LOOK)),
   },
   {
     kind: 'cat',
-    build: () => new CatPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE),
+    build: (): TransitWearer => {
+      const cat = new CatPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
+      return { player: cat, figure: () => cat.appearance.figure };
+    },
     lookOf: catLookOf,
-    figure: activeCatFigure,
-    undress: () => setCatOutfit(bareCatOutfit(activeCatLook())),
+    undress: () => undefined,
   },
 ] as const;
 
@@ -1281,29 +1289,29 @@ const TRANSIT_CRAWLERS = [
     crawlersGeared++;
     reset();
     const wearer = crawler.build();
-    wearer.inventory.addItem(shown.id, 1);
-    wearer.inventory.equipByItemId(shown.id);
-    const geared = crawler.figure();
+    wearer.player.inventory.addItem(shown.id, 1);
+    wearer.player.inventory.equipByItemId(shown.id);
+    const geared = wearer.figure();
     for (let i = 0; i < TRANSIT_WARM_FRAMES; i++) {
       beginFigureFrame();
-      wearer.render(ctx, 0, 0, TILE_SIZE);
+      wearer.player.render(ctx, 0, 0, TILE_SIZE);
     }
     const warmBytes = figureResidentBytes(geared);
-    const snapshot = snapPlayer(wearer);
+    const snapshot = snapPlayer(wearer.player);
     const residentAt: Array<readonly [string, number]> = [];
     const rebuilt = crawler.build();
     residentAt.push(['construct', figureResidentBytes(geared)]);
-    restorePlayer(rebuilt, snapshot);
+    restorePlayer(rebuilt.player, snapshot);
     residentAt.push(['restore', figureResidentBytes(geared)]);
     beginFigureFrame();
-    rebuilt.render(ctx, 0, 0, TILE_SIZE);
+    rebuilt.player.render(ctx, 0, 0, TILE_SIZE);
     residentAt.push(['first draw', figureResidentBytes(geared)]);
     const dropped = residentAt.filter(([, bytes]) => bytes === 0).map(([step]) => step);
     check(
       `a scene change keeps a geared ${crawler.kind}'s outfit resident`,
-      warmBytes > 0 && dropped.length === 0 && crawler.figure() === geared,
+      warmBytes > 0 && dropped.length === 0 && rebuilt.figure() === geared,
       `${geared.id} held ${warmBytes} bytes before the change; it held none after ` +
-        `${dropped.join(', ') || 'no step'} and is drawing ${crawler.figure().id}`,
+        `${dropped.join(', ') || 'no step'} and is drawing ${rebuilt.figure().id}`,
     );
     crawler.undress();
   }

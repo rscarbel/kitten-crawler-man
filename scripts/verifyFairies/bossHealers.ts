@@ -22,25 +22,21 @@ import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
 import { settings } from '../../src/core/input/Settings';
 import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficulty/difficultyProfiles';
-import { createMurderQuestProgress } from '../../src/core/quests/MurderQuestProgress';
-import { createDoomsdayProgress } from '../../src/core/quests/DoomsdayProgress';
 import { withWorldSeed } from '../../src/core/world/WorldRandom';
-import { GameMap, TOWER_FLOOR_COUNT } from '../../src/map/GameMap';
+import { GameMap } from '../../src/map/GameMap';
 import { roomDoorways } from '../../src/map/roomDoorways';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mob } from '../../src/creatures/Mob';
 import { GrotesqueSpider } from '../../src/creatures/GrotesqueSpider';
 import { Kraken } from '../../src/creatures/Kraken';
-import { MissQuill } from '../../src/creatures/MissQuill';
-import { TheLich } from '../../src/creatures/TheLich';
 import { HealingFairy } from '../../src/creatures/fairies/HealingFairy';
 import { bossOfHealer } from '../../src/creatures/fairies/bossHealerBond';
 import { dungeonOptionsForLevel } from '../../src/levels/dungeonOptions';
 import { level1 } from '../../src/levels/level1';
 import { level2 } from '../../src/levels/level2';
 import type { LevelDef } from '../../src/levels/types';
-import { partyLevelOf, spawnForLevel } from '../../src/levels/spawner';
+import { spawnForLevel } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { isStandaloneMobKind } from '../../src/levels/mobKinds';
 import {
@@ -51,7 +47,6 @@ import {
   spawnRoomFairies,
 } from '../../src/levels/fairySpawner';
 import { BossRoomSystem, type BossRoomMiniMap } from '../../src/systems/BossRoomSystem';
-import { QuillConfrontationSystem } from '../../src/systems/QuillConfrontationSystem';
 import { SpiderQuestSystem } from '../../src/systems/SpiderQuestSystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
@@ -73,7 +68,6 @@ const BOSS_HEALER_SEED = 0x0b_05_5e_ed;
 /** Party levels in each floor's own band, so every boss levels as it would in play. */
 const FLOOR1_PARTY_LEVEL = 5;
 const FLOOR2_PARTY_LEVEL = 12;
-const FLOOR3_PARTY_LEVEL = 24;
 /**
  * Frames of the spider cutscene run after the hack completes. The spider is
  * spawned on the cutscene's camera pan, which lands well inside this.
@@ -173,7 +167,7 @@ function contextFor(
     human: party.human,
     cat: party.cat,
     active: party.human,
-    inactive: party.cat,
+    partner: party.cat,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -297,44 +291,6 @@ function spiderSighting(difficulty: Difficulty, seed: number): BossSighting {
   });
 }
 
-// ── The tower: Miss Quill's fight, then the Lich's ──
-
-function towerSighting(
-  difficulty: Difficulty,
-  seed: number,
-  stage: 'confrontation' | 'quill_slain',
-): BossSighting {
-  return underDifficulty(difficulty, seed, () => {
-    const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-    map.generateInterior('tower', TOWER_FLOOR_COUNT - 1, 'taloncrest_tower', false);
-    const roster = new MobRoster(map, new SpellSystem());
-    const progress = createMurderQuestProgress();
-    progress.stage = stage;
-    // Straight into the fight: the office scene in front of it is dialog only.
-    progress.officeSceneSeen = true;
-    new QuillConfrontationSystem(
-      map,
-      new EventBus(),
-      (mob) => roster.add(mob),
-      progress,
-      null,
-      createDoomsdayProgress(),
-      partyLevelOf(FLOOR3_PARTY_LEVEL, FLOOR3_PARTY_LEVEL),
-      undefined,
-      new Conversation(null),
-    );
-    const boss =
-      stage === 'confrontation'
-        ? (roster.mobs.find((mob) => mob instanceof MissQuill) ?? null)
-        : (roster.mobs.find((mob) => mob instanceof TheLich) ?? null);
-    return {
-      name: stage === 'confrontation' ? 'miss_quill' : 'the_lich',
-      boss,
-      healers: healersIn(roster.mobs),
-    };
-  });
-}
-
 // ── The checks ──
 
 type SightingsByDifficulty = ReadonlyMap<Difficulty, readonly BossSighting[]>;
@@ -347,8 +303,6 @@ function collectSightings(): SightingsByDifficulty {
       ...floorBossSightings(level1, difficulty, FLOOR1_PARTY_LEVEL, seed),
       ...floorBossSightings(level2, difficulty, FLOOR2_PARTY_LEVEL, seed),
       spiderSighting(difficulty, seed),
-      towerSighting(difficulty, seed, 'confrontation'),
-      towerSighting(difficulty, seed, 'quill_slain'),
     ]);
   });
   return byDifficulty;
@@ -764,6 +718,7 @@ function stepToward(chaser: Player, quarry: { x: number; y: number }, map: GameM
     tileOfPx(chaser.y),
     tileOfPx(quarry.x),
     tileOfPx(quarry.y),
+    'walker',
   );
   const waypoint = route.length > DIRECT_ROUTE_TILES ? route[1] : undefined;
   const aimX = waypoint === undefined ? quarry.x : waypoint.x * TILE_SIZE;

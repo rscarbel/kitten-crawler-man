@@ -26,11 +26,16 @@ import {
 } from '../../sprites/art/itemIcons/gearTrinketIcons';
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
 import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
+import {
+  drawGreyFeatherIcon,
+  drawKeyRingIcon,
+  drawPawNoteIcon,
+  drawTunaTinIcon,
+} from '../../sprites/art/itemIcons/missingCatsIcons';
 import { drawCatnipTunaWaterIcon } from '../../sprites/art/itemIcons/catnipTunaWaterIcon';
 import { drawBlackPowderBombIcon } from '../../sprites/art/itemIcons/blackPowderBombIcon';
 import { drawSmokeBombIcon } from '../../sprites/art/itemIcons/smokeBombIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
-import { drawMagistratesWritIcon, drawUnreadableLetterIcon } from './murderMysteryLetterIcons';
 import {
   drawCooldownCrispIcon,
   drawHealthPotionIcon,
@@ -41,7 +46,6 @@ import {
 import { drawResourceIcon, type ResourceIconId } from './resourceIcons';
 import { drawEntanglementScrollIcon } from '../../sprites/art/itemIcons/scrollIcons';
 import { drawSkillBookIcon } from './skillBookIcon';
-import { drawSoulCrystalIcon } from './soulCrystalIcon';
 import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
 import { drawHeldVisualIcon } from '../../sprites/art/itemIcons/heldVisualIcon';
 import type { HeldVisualId } from '../../sprites/held/heldVisualIds';
@@ -206,12 +210,13 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   anchor_shard_lori: anchorShard,
   anchor_shard_temple: anchorShard,
   quest_wood_board: resource('wood_board'),
-  magistrates_writ: drawMagistratesWritIcon,
-  unreadable_letter: drawUnreadableLetterIcon,
-  doomsday_scenario: (ctx, rect) => drawSoulCrystalIcon(ctx, rect),
   quest_scythe: blueprintsQuest('quest_scythe'),
   quest_blueprints: blueprintsQuest('quest_blueprints'),
   quest_prison_key: drawPrisonKeyIcon,
+  quest_grey_feather: drawGreyFeatherIcon,
+  quest_tuna_tin: drawTunaTinIcon,
+  quest_key_ring: drawKeyRingIcon,
+  quest_pumpkin_note: drawPawNoteIcon,
 
   wood: resource('wood'),
   stone: resource('stone'),

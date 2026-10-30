@@ -68,6 +68,8 @@ const RESIDENT_LOOKS = {
   janitor_grout: { kind: 'bespoke', figure: 'janitor' },
   sydney: { kind: 'bespoke', figure: 'sydney' },
   brandon: { kind: 'bespoke', figure: 'brandon' },
+  taloncrest_apothecary_assistant: { kind: 'bespoke', figure: 'baggi' },
+  taloncrest_lodge_cellar_elf: { kind: 'bespoke', figure: 'cellar_elf' },
 } as const satisfies { readonly [Id in ResidentId]: ResidentLookFor<ResidentSpeciesOf<Id>> };
 
 /** What a named resident is always drawn as. */

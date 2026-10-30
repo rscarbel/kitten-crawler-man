@@ -89,7 +89,7 @@ function isPinnedRow(progress: JournalProgress, entry: TrackerEntry): boolean {
 
 /**
  * Un-pinning is tested first: a quest can stop being pinnable while pinned
- * (the murder mystery drops its tower tile when the boss dies), and refusing
+ * (its row can lose the place it pointed at when a stage ends), and refusing
  * the tap would strand the pin on it.
  */
 function togglePin(progress: JournalProgress, entry: TrackerEntry): void {

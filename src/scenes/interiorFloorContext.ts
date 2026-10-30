@@ -7,6 +7,7 @@ import type { LevelId } from '../levels/levelIds';
 import { groundSheetKeysAmong } from '../map/ground/runtimeGroundSheets';
 import type { InteriorVariant } from '../map/GameMap';
 import type { StealthKeySnatchVisit } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
+import type { InteriorArrival } from '../systems/partySplit/partyTransfer';
 
 /**
  * What a building's interior takes from the floor it stands on.
@@ -59,6 +60,11 @@ export interface InteriorFloorContext {
    * so a visit indoors draws on the floor's allowance rather than a fresh one.
    */
   readonly aiFloorKey?: string;
+  /**
+   * Where a transfer asked the party to be set down, and the card it arrives
+   * behind. Absent for a walk in through the front door.
+   */
+  readonly arrival?: InteriorArrival;
 }
 
 /**

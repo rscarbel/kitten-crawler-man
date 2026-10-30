@@ -16,7 +16,7 @@ import { RUINS_CIRCUS_BUFFER } from '../map/OverworldGenerator';
  * all of them can have a neighbour that is not.
  */
 export function isOverworldSpawnTileAllowed(map: GameMap, tileX: number, tileY: number): boolean {
-  if (!map.isWalkable(tileX, tileY) || !hasRoomToMove(map, tileX, tileY)) return false;
+  if (!map.isWalkable(tileX, tileY, 'walker') || !hasRoomToMove(map, tileX, tileY)) return false;
   if (map.isTileInsideTownWall(tileX, tileY)) return false;
   if (map.isInTownSafeZone(tileX * TILE_SIZE, tileY * TILE_SIZE)) return false;
   if (map.isTileInBriarHollowSpawnExclusion(tileX, tileY)) return false;

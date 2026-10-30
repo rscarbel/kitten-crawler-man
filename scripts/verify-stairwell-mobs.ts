@@ -205,7 +205,8 @@ function escapeIsOpen(map: GameMap, stairwell: Tile, tile: Tile, direction: Tile
         ? stairwell.y
         : tile.y;
   for (let step = 1; step <= ESCAPE_CLEARANCE_TILES; step++) {
-    if (!map.isWalkable(edgeX + direction.x * step, edgeY + direction.y * step)) return false;
+    if (!map.isWalkable(edgeX + direction.x * step, edgeY + direction.y * step, 'walker'))
+      return false;
   }
   return true;
 }
@@ -284,7 +285,7 @@ function checkMovement(map: GameMap, seed: number, tally: FloorTally): void {
     ] as const) {
       if (!map.isMobSpawnTile(to.x, to.y)) continue;
       tally.routesTried++;
-      const route = map.findMobPath(from.x, from.y, to.x, to.y, undefined, true);
+      const route = map.findMobPath(from.x, from.y, to.x, to.y, 'walker', undefined, true);
       if (route.length === 0) {
         tally.routesMissing++;
         check(false, `seed ${seed}: no mob route from (${from.x},${from.y}) to (${to.x},${to.y})`);

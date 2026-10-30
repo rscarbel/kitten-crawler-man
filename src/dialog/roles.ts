@@ -80,6 +80,7 @@ export interface MercenaryLines {
   readonly death?: NonEmpty<BarkLine>;
   readonly talk?: NonEmpty<BarkLine>;
   readonly floorEnd?: NonEmpty<BarkLine>;
+  readonly loanEnd?: NonEmpty<BarkLine>;
 }
 
 /**

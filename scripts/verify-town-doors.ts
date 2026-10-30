@@ -113,7 +113,7 @@ for (const worldSeed of WORLD_SEEDS) {
       const ny = tile.y + dy;
       if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
       if (reached[ny * size + nx] === 1) continue;
-      if (!gameMap.isWalkable(nx, ny)) continue;
+      if (!gameMap.isWalkable(nx, ny, 'walker')) continue;
       reached[ny * size + nx] = 1;
       queue.push({ x: nx, y: ny });
     }
@@ -124,7 +124,7 @@ for (const worldSeed of WORLD_SEEDS) {
   for (const entry of gameMap.buildingEntries) {
     const door = entry.doorTile;
     const approach = { x: door.x, y: door.y + APPROACH_DY };
-    const doorOpen = gameMap.isWalkable(door.x, door.y);
+    const doorOpen = gameMap.isWalkable(door.x, door.y, 'walker');
     const approachReached = isReached(approach.x, approach.y);
     if (doorOpen && approachReached) continue;
     const why = [

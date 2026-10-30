@@ -1328,7 +1328,8 @@ section('a gate unlocked far from the player is still heard, from its direction'
 
 section('meeting Dave and his farewell are story cutscenes the step waits on');
 {
-  const { CutsceneDirector } = await import('../src/systems/cutscene/CutsceneDirector.js');
+  const { CutsceneDirector, SILENT_CUE_CLOCK } =
+    await import('../src/systems/cutscene/CutsceneDirector.js');
   const { noWorldActions } = await import('../src/systems/cutscene/cutsceneSteps.js');
   const { Conversation } = await import('../src/dialog/Conversation.js');
   const { StoryDirector } = await import('../src/story/StoryDirector.js');
@@ -1349,6 +1350,7 @@ section('meeting Dave and his farewell are story cutscenes the step waits on');
     },
     playSound: () => {},
     runWorldAction: noWorldActions,
+    cueClock: SILENT_CUE_CLOCK,
   });
   tutorial.setCutscenes(director);
   const story = new StoryDirector();
@@ -1366,6 +1368,7 @@ section('meeting Dave and his farewell are story cutscenes the step waits on');
     who: 'activeCrawler',
     tile: { x: pixelToTile(human.x), y: pixelToTile(human.y) },
     face: 'up',
+    then: 'waitForArrival',
   } as const;
   const startTalk = (): boolean => {
     for (let tick = 0; tick < MAX_START_TICKS && !conversation.isOpen; tick++) {

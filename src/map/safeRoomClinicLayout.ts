@@ -112,7 +112,7 @@ function doorColumnsOnNorthWall(
 ): Set<number> {
   const columns = new Set<number>();
   for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-    if (map.isWalkableIgnoringPermanent(x, bounds.y - 1)) columns.add(x);
+    if (map.isWalkableIgnoringPermanent(x, bounds.y - 1, 'walker')) columns.add(x);
   }
   return columns;
 }

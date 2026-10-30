@@ -13,7 +13,7 @@ import type { Player } from '../Player';
 import { hirelingDownedArrowCandidate, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
 import type { ArrowCandidate } from '../ui/WorldArrow';
 import type { CarriedCompanion } from './companionCarry';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { findSpawnTile } from './MercenarySystem';
 import { hasAiAttention } from './MobUpdateLoop';
@@ -142,7 +142,7 @@ export class AttackCowSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     this.sceneMobs = ctx.roster.mobs;
-    this.crawlers = [ctx.human, ctx.cat];
+    this.crawlers = presentCrawlers(ctx);
     const owner = ctx.human;
     if (this.cow === null) {
       const due = this.admitted && this.state.owned && !this.state.restingUntilFull;
@@ -327,6 +327,7 @@ export class AttackCowSystem implements GameSystem {
   asCarriedCompanion(): CarriedCompanion {
     return {
       body: this.standingCow,
+      followsLiveGroup: this.cow?.owner.isAway !== true,
       landingTile: (map, isAcceptable) => {
         const cow = this.cow;
         return cow === null ? null : findSpawnTile(cow.owner, map, isAcceptable);

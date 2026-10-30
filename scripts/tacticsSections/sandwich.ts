@@ -130,7 +130,7 @@ function makeArena(map: GameMap, playerTile: { x: number; y: number }): Arena {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,

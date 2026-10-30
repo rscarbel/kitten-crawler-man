@@ -32,6 +32,7 @@ import { TILE_SIZE } from '../../core/constants';
 import { ropeLadderFoot } from '../../sprites/art/starlightTent/finaleProps';
 import { postChestBand, type ChestPlacer } from '../kits/ChestKit';
 import type { InteriorExitFixtureSystem } from '../interiorExitFixtures';
+import { OUT_THROUGH_THE_DOOR } from '../interiorTransfer';
 import type { GuardedChest, TreasureChest } from '../TreasureChestSystem';
 import { questMobLevel } from '../questMobLevel';
 
@@ -127,7 +128,11 @@ export class StarlightTentFinale {
   private stage: RingStage;
 
   constructor(private readonly deps: StarlightTentFinaleDeps) {
-    deps.exits.place({ id: 'rope_ladder', at: ropeLadderFixtureAt() });
+    deps.exits.place({
+      id: 'rope_ladder',
+      at: ropeLadderFixtureAt(),
+      destination: OUT_THROUGH_THE_DOOR,
+    });
     if (deps.progress.chestClaimed) {
       this.chest = deps.chests.opened(MAZE_RING_CHEST_TILE, 'wooden');
       this.stage = { kind: 'claimed' };

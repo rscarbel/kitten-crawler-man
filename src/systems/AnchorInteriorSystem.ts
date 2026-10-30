@@ -9,13 +9,9 @@
  * work, and writes every durable answer back into `AnchorQuestProgress`, which
  * outlives both scenes.
  *
- * Two things it deliberately does not do. It never touches
- * `TownMemory.clearedRooms`: the vermin are questline progress rather than a
- * room feature, and marking the nave "cleared" would also silence the stair
- * guards a different questline puts in other buildings. And it owns no combat
- * at all — the vermin join the room's existing `MobRoster`, so the `CombatKit`
- * and `DestructionKit` the scene already built fight and gore them, exactly as
- * `interiorHostiles.ts` states the arrangement.
+ * It owns no combat at all: the vermin are questline progress rather than a
+ * room feature, and they join the room's existing `MobRoster`, so the
+ * `CombatKit` and `DestructionKit` the scene already built fight and gore them.
  */
 
 import {
@@ -45,7 +41,7 @@ import {
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { REPAIR_ROWS } from '../sprites/art/humanFigure';
-import { distinctSpawnTiles, inPlainViewOnTheWayIn } from './interiorHostiles';
+import { distinctSpawnTiles, inPlainViewOnTheWayIn } from './interiorSpawnTiles';
 import type { ShrineVermin } from '../creatures/ShrineVermin';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';

@@ -63,6 +63,7 @@ const { stampSafeRoomClinics } = await import('../src/map/safeRoomClinicLayout.j
 const { stampSafeRoomDecor } = await import('../src/map/safeRoomDecorLayout.js');
 const { InteriorOccupantSystem, scanInteriorFurniture } =
   await import('../src/systems/InteriorOccupantSystem.js');
+const { missingCatsProgressAt } = await import('../src/core/quests/missingCatsProgress.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { drawTownInteriorGroundProps, townInteriorGroundProps, townInteriorPropFigures } =
   await import('../src/systems/townInteriorPropFigures.js');
@@ -141,7 +142,9 @@ for (const { building, floor, floorCount } of storeys) {
   }
   map.releaseTileArt();
 
-  const occupants = InteriorOccupantSystem.forBuilding(map, building.kind, building.id);
+  const occupants = InteriorOccupantSystem.forBuilding(map, building.kind, building.id, {
+    missingCats: missingCatsProgressAt('complete'),
+  });
   for (let frame = 0; frame < WARM_FRAMES; frame++) occupants?.update();
 
   const mapW = map.structure[0]?.length ?? 0;

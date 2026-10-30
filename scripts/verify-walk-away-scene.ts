@@ -240,6 +240,7 @@ function findDriftSetup(
       const driftTileWalkable = map.isWalkable(
         Math.floor(drift.x / TILE_SIZE),
         Math.floor(drift.y / TILE_SIZE),
+        'walker',
       );
       if (driftTileWalkable && townLife.findTalkTarget(drift.x, drift.y) === null) {
         return { citizen, talkFrom, drift };
@@ -261,6 +262,7 @@ async function verifyCitizenWithHireling(): Promise<void> {
   mercenaryRoster.active = {
     id: 'crush',
     name: 'Crush',
+    terms: 'paid',
     contractLevelId: level3.id,
     introduced: true,
   };
@@ -420,14 +422,20 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
       const tiles: Point[] = [];
       for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
         for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-          if (probe.isWalkable(x, y)) tiles.push({ x, y });
+          if (probe.isWalkable(x, y, 'walker')) tiles.push({ x, y });
         }
       }
       const doctorHome = pixels(layout.doctorTile);
       const daveTalkSpot = walkUpTo(probe, daveHome, daveHome).tile;
       const reachesDave = (tile: Point): boolean =>
-        probe.findPath(tile.x, tile.y, daveTalkSpot.x, daveTalkSpot.y, WALK_UP_MAX_PATH_TILES)
-          .length > 0;
+        probe.findPath(
+          tile.x,
+          tile.y,
+          daveTalkSpot.x,
+          daveTalkSpot.y,
+          'walker',
+          WALK_UP_MAX_PATH_TILES,
+        ).length > 0;
       const talkFrom = tiles
         .filter(reachesDave)
         .map(pixels)
@@ -469,7 +477,7 @@ async function verifyDoctorOnAPhone(): Promise<void> {
   const touch = sceneField(scene, 'touch', TouchMoveState);
   const events = canvasEvents(sceneManager);
   const active = scene.pm.active();
-  const inactive = scene.pm.inactive();
+  const inactive = scene.pm.partnerAnywhere();
   const standAt = (at: Point): void => {
     active.x = at.x;
     active.y = at.y;
@@ -557,8 +565,8 @@ async function verifyCutsceneOwnsTheParty(): Promise<void> {
   const active = scene.pm.active();
   active.x = setup.talkFrom.x;
   active.y = setup.talkFrom.y;
-  scene.pm.inactive().x = setup.talkFrom.x;
-  scene.pm.inactive().y = setup.talkFrom.y;
+  scene.pm.partnerAnywhere().x = setup.talkFrom.x;
+  scene.pm.partnerAnywhere().y = setup.talkFrom.y;
 
   const walk = walkUpTo(setup.map, setup.daveHome, {
     x: pixelToTile(active.x),

@@ -6,27 +6,50 @@
  * lead page when their corner of town has something timelier to say. Between
  * them they tell the Fraying, the Hawkfolk and the Carrying, the old circus and
  * Caroline's floating eyes, each from where that resident stands (the canon is
- * the "History and belief" section of `docs/town.md`), and the `reactive` hooks
- * read the game's own questlines through the same `TownDialogContext` the street
+ * the "History and belief" section of `docs/town.md`). A `reactive` hook reads
+ * the game's own questlines through the same `TownDialogContext` the street
  * uses.
  */
 
-import type { TownDialogContext } from '../../systems/townDialog';
 import type { ResidentId } from '../../core/state/residentIds';
 import type { ResidentLines } from '../roles';
+import type { NonEmpty } from '../line';
+import type { MissingCatsDialogView, TownDialogContext } from '../../systems/townDialog';
+import {
+  lodgeCellarHeld,
+  missingTownCats,
+  phaseReached,
+} from '../../core/quests/missingCatsProgress';
+import type { TownCatId } from '../../core/state/townCatIds';
 
-function murderResolved(ctx: TownDialogContext): boolean {
-  return ctx.murder === 'lich_slain' || ctx.murder === 'complete';
+/** What an owner says while their own cat is gone, and once she has walked home. */
+interface OwnCatLines {
+  readonly missing: NonEmpty<string>;
+  readonly home: NonEmpty<string>;
 }
 
-function murderOpen(ctx: TownDialogContext): boolean {
-  return (
-    ctx.murder === 'body_waiting' ||
-    ctx.murder === 'investigation' ||
-    ctx.murder === 'cult_hideout' ||
-    ctx.murder === 'confrontation' ||
-    ctx.murder === 'quill_slain'
-  );
+/**
+ * An owner's reaction to their own cat: her absence while she is gone, her
+ * return once every cat has walked home, and nothing while she is simply at
+ * home. Whether she is gone is the questline's to say, so the stakeout's cat
+ * is missed only from the night she is taken.
+ */
+function ownCatLines(
+  cat: TownCatId,
+  view: MissingCatsDialogView,
+  lines: OwnCatLines,
+): NonEmpty<string> | null {
+  if (missingTownCats(view).includes(cat)) return lines.missing;
+  if (phaseReached(view, 'aftermath')) return lines.home;
+  return null;
+}
+
+/** An owner whose only reaction is to their own cat. */
+function ownCatReaction(
+  cat: TownCatId,
+  lines: OwnCatLines,
+): (ctx: TownDialogContext) => NonEmpty<string> | null {
+  return (ctx) => ownCatLines(cat, ctx.missingCats, lines);
 }
 
 export const RESIDENT_LINES = {
@@ -54,28 +77,27 @@ export const RESIDENT_LINES = {
       ],
       [
         'The tower does not sit on stone. It sits on a crystal, and the crystal is full of people.',
-        'Souls, the deacon would say. The magistrate says "civic reserve" and changes the subject.',
+        'Souls, the deacon would say. The Warden’s proclamations call it "civic reserve" and say nothing more.',
         'Whatever it is, it hums. I have felt it in my teeth every night for forty years.',
         'If it ever stops humming, dearie, do not go and look. Run.',
       ],
     ],
     reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
+      const view = ctx.missingCats;
+      if (view.clues.has('cottage_latch') && !phaseReached(view, 'stakeout')) {
         return [
-          'The humming stopped. I sat here waiting to be ash — and instead the kettle boiled.',
-          'You carried that thing out of the tower. I have no charm big enough to thank you with.',
+          'The whole street thinks an elf climbed my wall and took Thimble. This town would blame elves for the weather, dearie.',
         ];
       }
-      if (murderOpen(ctx)) {
-        return [
-          'Bodies by the well, and the guard calling it beasts. Beasts do not take only the head, dearie.',
-          'Ask who benefits. It is always who benefits. The cards are just a slower way of saying so.',
-        ];
-      }
-      if (murderResolved(ctx)) {
-        return ['The night-killer is done. I slept through till dawn, first time since the frost.'];
-      }
-      return null;
+      return ownCatLines('taloncrest_old_lady_cottage_cat', view, {
+        missing: [
+          'Thimble’s cushion is still by the stove. I plump it every morning like a fool.',
+          'I keep the high window shut now. Bit late for that, I know.',
+        ],
+        home: [
+          'Thimble came in by the window she went out of and sat in my good chair. I have not had the heart to move her.',
+        ],
+      });
     },
   },
   steve_cartwright: {
@@ -106,14 +128,7 @@ export const RESIDENT_LINES = {
         'I keep the shutters closed and I make wheels. Let her watch a man make wheels. Serves her right.',
       ],
     ],
-    reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
-        return [
-          'The whole street shook and the shelf held. That is the best review my joinery will ever get.',
-        ];
-      }
-      return null;
-    },
+    reactive: null,
   },
   wendell: {
     ambient: [
@@ -145,23 +160,7 @@ export const RESIDENT_LINES = {
         'There is also the matter of the milk. I had begun selling it to the inns and taverns here, and a farmer whose dairy produces nothing is a farmer chiefly in theory.',
       ],
     ],
-    reactive: (ctx) => {
-      if (murderOpen(ctx)) {
-        return [
-          "There has been enough disorder lately without people pretending it is ordinary. I have spent too many years repairing the consequences of other people's carelessness.",
-          'A person leaves evidence, whether they intend to or not. Broken hinges, disturbed ground, a door opened the wrong way—everything leaves a mark.',
-          'I should think the guards ought to pay rather more attention to such details. Then again, no one ever asks the carpenter until after the house has fallen down.',
-        ];
-      }
-      if (ctx.doomsday === 'complete') {
-        return [
-          'The tower has fallen, and yet my pasture remains standing. I confess this has restored some of my confidence in foundations.',
-          'I inspected the fence twice afterward. Every post was still where I had put it. There are moments when a builder is permitted a little satisfaction.',
-        ];
-      }
-
-      return null;
-    },
+    reactive: null,
   },
   marta_miller: {
     ambient: [
@@ -174,7 +173,7 @@ export const RESIDENT_LINES = {
     lore: [
       [
         'You will hear the Barracks say they feed this town. They do not. I do.',
-        'Sixteen sacks a week to Quartermaster Dann, at a price the magistrate set in a year when there were roads.',
+        'Sixteen sacks a week to Quartermaster Dann, at a price the tower set in a year when there were roads.',
         'I do not argue. A walled town that goes hungry stops being a walled town very fast — it just becomes a wall.',
         'But do not let anyone tell you the garrison is what keeps us. It is grain. It is always grain.',
       ],
@@ -192,20 +191,21 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
+      const view = ctx.missingCats;
+      if (view.clues.has('mill_hayloft_feather') && !phaseReached(view, 'confession')) {
         return [
-          'Corvin watched the tower from the loft and cried. He has not asked about being a crawler since. Thank you for that, oddly.',
+          'Corvin wanted that feather for his wall. I told him half the town moults on my roof. It is only a feather.',
         ];
       }
-      if (murderResolved(ctx)) {
-        return ['The mill runs at night again. That is what your work bought, in flour.'];
-      }
-      if (murderOpen(ctx)) {
-        return [
-          'I have the girls sleeping in the mill house till this is done. Two doors and a bar on each.',
-        ];
-      }
-      return null;
+      return ownCatLines('taloncrest_mill_farm_cat', view, {
+        missing: [
+          'Chaff kept the mill clear of mice for six years. Without her I hear every one of them all night.',
+          'Corvin leaves the mill door open for Chaff. I have stopped telling him not to.',
+        ],
+        home: [
+          'Chaff was asleep in the hopper this morning, white with flour, like she had never been anywhere.',
+        ],
+      });
     },
   },
   apothecary_fen: {
@@ -237,20 +237,7 @@ export const RESIDENT_LINES = {
         'The third thing is honey, and it is honey because otherwise you would never drink it twice.',
       ],
     ],
-    reactive: (ctx) => {
-      if (murderOpen(ctx)) {
-        return [
-          'The bodies. I was asked to look at one, and I will say to you what I said to the guard: no beast does that.',
-          'The cuts were placed. Placed, crawler. Somebody with an anatomy text and a steady hand.',
-        ];
-      }
-      if (murderResolved(ctx)) {
-        return [
-          'Whoever was cutting has stopped. My hands stopped shaking about a day after. I notice these things professionally.',
-        ];
-      }
-      return null;
-    },
+    reactive: null,
   },
   deacon_aviel: {
     ambient: [
@@ -275,33 +262,47 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
-        return [
-          'The roost kept to its perches, and thou didst not. I shall be some while composing a sermon around that.',
-          'The dome held, and half this parish sheltered beneath it. Whatever passed at the tower, it reached down to us.',
-        ];
+      const view = ctx.missingCats;
+      if (phaseReached(view, 'aftermath')) {
+        switch (view.avielChoice) {
+          case 'exposed':
+            return [
+              'The bells on the tower have stopped. I heard it from the well, on foot, the way I hear everything now.',
+              'I read the names on the seventh day still. The cats are off the list. The rest of it I will carry walking.',
+            ];
+          case 'kept':
+            return [
+              'The bells stopped, and the cats came down the hill in the morning. I watched from the dome and counted them.',
+              'I still owe you a carry. I would rather owe it than have what the Warden promised me.',
+            ];
+          case null:
+            break;
+          default: {
+            const unhandled: never = view.avielChoice;
+            throw new Error(`unhandled Aviel choice ${String(unhandled)}`);
+          }
+        }
       }
-      // The cult-hideout reveal must be checked before the general murder-resolved
-      // line: once the case closes, murderResolved(ctx) is also true, and ranked
-      // below it this branch would never be reached again.
-      if (
-        !murderResolved(ctx) &&
-        (ctx.murder === 'cult_hideout' || ctx.murder === 'confrontation' || ctx.quillNamed)
-      ) {
-        return [
-          'So it was the elves after all, and graver than I feared. Three years I preached against it, to the wrong ears, in the wrong tone.',
-          'Find whoever taught them that Caroline can be made to listen with blood, and end that one. The rest are but parishioners who believed their teacher.',
-        ];
+      switch (view.avielChoice) {
+        case 'exposed':
+          return [
+            'The High Roost took my flight feathers on the dome, before the whole parish. I walk to the well now, like those I used to carry.',
+            'I am kept on to sweep the nave until the Roost sends another.',
+          ];
+        case 'kept':
+          return [
+            'You kept what I did from the High Roost. I owe you a carry, and I will pay it the day you ask.',
+          ];
+        case null:
+          break;
+        default: {
+          const unhandled: never = view.avielChoice;
+          throw new Error(`unhandled Aviel choice ${String(unhandled)}`);
+        }
       }
-      if (murderResolved(ctx)) {
+      if (phaseReached(view, 'posters_up') && !phaseReached(view, 'chase')) {
         return [
-          'The dome fills again on the seventh day. Fear brings a congregation same as relief does, but relief gives more generously.',
-        ];
-      }
-      if (murderOpen(ctx)) {
-        return [
-          'Every one of them was taken from the low streets. This town marks a death near the temple and forgets one in an alley by morning.',
-          'Sit a moment before thou goest back out. No sermon — I would simply rather thou didst not walk straight into it.',
+          'I have added the missing cats to the names we read on the seventh day. The parish thinks it foolish. I do not.',
         ];
       }
       return null;
@@ -336,19 +337,14 @@ export const RESIDENT_LINES = {
         'I do not go past the gate myself and I do not guess at what put the notch there. I hammer it flat and hand it back.',
       ],
     ],
-    reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
-        return [
-          'Forge went out when the tower shook. First time in nine years. Relighting it felt like a small argument won.',
-        ];
-      }
-      if (murderResolved(ctx)) {
-        return [
-          'Word gets to the forge eventually. Whatever you have been doing out there, the steel coming back is in better shape for it.',
-        ];
-      }
-      return null;
-    },
+    reactive: ownCatReaction('taloncrest_smithy_cat', {
+      missing: [
+        'Cinder slept on the warm side of the forge wall. I still bank it of a night for her, out of habit.',
+      ],
+      home: [
+        'Cinder is back on the forge wall. Singed her whiskers the first night, same as every winter.',
+      ],
+    }),
   },
   innkeep_ossie: {
     ambient: [
@@ -382,24 +378,17 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (murderOpen(ctx)) {
-        return [
-          'No rooms after dark until this is done. Not to anyone, whatever you offer me for one.',
-        ];
-      }
-      // Doomsday first. Its stage is armed on the same frame the murders close,
-      // so ranked below them its line could never be reached.
-      if (ctx.doomsday === 'complete') {
-        return [
-          'Still standing, the inn and everything past it. Stew is free today, and I mean all of it.',
-        ];
-      }
-      if (murderResolved(ctx)) {
-        return [
-          'First full house in a month, and that is down to you. Sit. You will not see a bill in this place again.',
-        ];
-      }
-      return null;
+      const view = ctx.missingCats;
+      if (!phaseReached(view, 'posters_up')) return null;
+      return ownCatLines('taloncrest_inn_cat', view, {
+        missing: [
+          'Biscuit’s bowl is still by the hearth. I fill it at night and in the morning it is still full.',
+          'The regulars keep asking after Biscuit. I have run out of things to tell them.',
+        ],
+        home: [
+          'Biscuit walked in the front door at breakfast and sat on the stool under the sign, as if she had been there the whole time.',
+        ],
+      });
     },
   },
   innkeep_brend: {
@@ -415,7 +404,7 @@ export const RESIDENT_LINES = {
     lore: [
       [
         'This is the respectable house, which mostly means the arguments are quieter and the debts are larger.',
-        'Guild factors, the magistrate’s clerks, two of the wool families. They all sit where they always sit.',
+        'Guild factors, the tower clerks, two of the wool families. They all sit where they always sit.',
         'The seating chart in my head has not changed in twenty years. When it changes, something has happened in this town.',
         'It changed last month. I will leave it there for now.',
       ],
@@ -427,40 +416,19 @@ export const RESIDENT_LINES = {
       ],
       [
         'The clerks stopped coming. All of them, the same week.',
-        'Magistrate’s people drank here every seventh night for as long as I have had the lease. Then nothing.',
+        'The tower’s people drank here every seventh night for as long as I have had the lease. Then nothing.',
         'One did come back, alone, and paid for a room he did not sleep in, and left before light.',
-        'I do not gossip about the magistracy. I am simply telling you about my custom, which is my own business to discuss.',
+        'I do not gossip about the tower. I am simply telling you about my custom, which is my own business to discuss.',
       ],
     ],
-    reactive: (ctx) => {
-      // Resolved first. `quillNamed` latches when the letter naming the
-      // schoolteacher is read on the street, and only a checkpoint rewind clears it, so testing it above the
-      // resolved branch left him urging the party to go after a woman whose body
-      // is upstairs — and made the line below it unreachable for the rest of the
-      // game.
-      if (murderResolved(ctx)) {
-        return [
-          'The clerks are back and the seating chart is nearly right again. That is my measure of a town at peace.',
-        ];
-      }
-      if (ctx.murder === 'quill_slain') {
-        return [
-          'Word is she is dead. Word is it did not stop. I have kept a room empty for a magistrate who has not come down those stairs in a long while.',
-        ];
-      }
-      if (ctx.quillNamed || ctx.murder === 'confrontation') {
-        return [
-          'Quill. She sat at the guild corner twice and drank nothing both times. I remember it because nobody does that.',
-          'If you are going after her, do it while the clerks are still frightened of her. Afterwards they will all have been suspicious of her from the start.',
-        ];
-      }
-      if (murderOpen(ctx)) {
-        return [
-          'The good families have their people walking them home now. From the Flagon. Four streets.',
-        ];
-      }
-      return null;
-    },
+    reactive: ownCatReaction('taloncrest_flagon_tavern_cat', {
+      missing: [
+        'Barrel slept on the guild bench for nine years. The factors sit round the empty end now as if it were still taken.',
+      ],
+      home: [
+        'Barrel is back on the guild bench. The factors are pretending not to be pleased about it.',
+      ],
+    }),
   },
   innkeep_marlow: {
     ambient: [
@@ -491,29 +459,7 @@ export const RESIDENT_LINES = {
         'It has stopped holding. Somebody has started settling things that were never struck.',
       ],
     ],
-    reactive: (ctx) => {
-      if (ctx.murder === 'not_started') {
-        return [
-          'Three of my regulars gone this season and no notice on the board for any of them. Ask me again in a week and it will be four.',
-          'Something is working the low streets and the guard will not hear it until it does a murder somewhere with cobbles.',
-        ];
-      }
-      if (murderOpen(ctx)) {
-        return [
-          'Now they care. Now there is a body somewhere respectable and suddenly there is an investigation.',
-          'Try the alley behind here. Whatever it is, it uses the alley — I have had the back door bolted for a fortnight.',
-        ];
-      }
-      if (ctx.doomsday === 'complete') {
-        return ['Whole city nearly went and the Stump did not lose a single glass. Cursed place.'];
-      }
-      if (murderResolved(ctx)) {
-        return [
-          'You went and did it. For my lot, who nobody was counting. Your money is no good in the Stump, and I say that to nobody.',
-        ];
-      }
-      return null;
-    },
+    reactive: null,
   },
   sgt_kessler: {
     ambient: [
@@ -541,29 +487,21 @@ export const RESIDENT_LINES = {
         'There were candles down there. Set out properly, in a ring, and burnt to stubs on a floor nobody is supposed to reach.',
         'Whoever met in that cellar met often and met quietly and did not leave in a hurry.',
         'I reported it up the chain twice. Both times the report came back marked resolved by an office that never sent anyone.',
-        'So now I tell people like you instead. Do with it what the magistracy will not.',
+        'So now I tell people like you instead. Do with it what the tower will not.',
       ],
     ],
     reactive: (ctx) => {
-      if (ctx.murder === 'cult_hideout') {
+      const view = ctx.missingCats;
+      if (lodgeCellarHeld(view)) {
         return [
-          'You are going into the cellar. Good. Take the left branch — the right one floods and they know it.',
-          'Whatever is written on those walls, read it before you burn it. I am asking you once and I will not ask twice.',
+          'I had the elves in my log as thieves. I struck the line out myself, with the one who came up the ladder watching me do it.',
+          'Every wave they sent up that cistern, the lid held. I have written down whose hands were on it.',
         ];
       }
-      if (murderResolved(ctx)) {
+      if (phaseReached(view, 'blame')) {
         return [
-          'They have finally sent me a second pair of boots for this post. That is what a win looks like at my rank.',
-          'What we found in the cellar went to the temple, not the magistracy. Deacon Aviel insisted. So did I.',
+          'Half the row has been to my door asking when I mean to open that lid. They want the elves brought up.',
         ];
-      }
-      if (ctx.quillNamed) {
-        return [
-          'A name at last, and it came out of my cellar. Six years of reports marked resolved by an office that never sent anyone — and now I know which office.',
-        ];
-      }
-      if (murderOpen(ctx)) {
-        return ['Doubled the alley watch. It is still two of us. I have doubled the walking.'];
       }
       return null;
     },
@@ -597,20 +535,7 @@ export const RESIDENT_LINES = {
         'Do the thing you are putting off. Whatever it is. Do it this week.',
       ],
     ],
-    reactive: (ctx) => {
-      if (ctx.doomsday === 'containment' || ctx.doomsday === 'escape') return null;
-      if (ctx.doomsday === 'complete') {
-        return [
-          'Every guard in this room was ready to die in it. You made that unnecessary and none of us know how to say thank you for that.',
-        ];
-      }
-      if (murderOpen(ctx)) {
-        return [
-          'Half the garrison is on night patrol and the other half is pretending to sleep. Take somebody with you out there.',
-        ];
-      }
-      return null;
-    },
+    reactive: null,
   },
   quartermaster_dann: {
     ambient: [
@@ -631,7 +556,7 @@ export const RESIDENT_LINES = {
       [
         'Sixteen sacks a week from the mill at a rate set in the ninth year, and eleven reviews deferred. That is the garrison, on paper.',
         'On paper we are also forty spears. We are nineteen. Eight of those are boys who have not been past the wall.',
-        'So when the magistracy asks me why the issue kit is not new, I write the number down and I send it back up.',
+        'So when the tower asks me why the issue kit is not new, I write the number down and I send it back up the stair.',
         'They will not read it. I write it anyway. Somebody after me is going to want the count.',
       ],
     ],
@@ -662,23 +587,15 @@ export const RESIDENT_LINES = {
         'Somebody bought every lamp in the shop in one go. Six weeks back. Paid in old coin.',
         'Not a crawler. Town clothes, town accent, would not give a name for the book.',
         'Lamps, oil, and forty candles. Forty. For a house nobody in this town has ever been invited to.',
-        'I have thought about it a lot since the killings started. I have not thought of anywhere good to take it.',
+        'I wrote it in the ledger under "unknown". The ledger does not like unknowns, and neither do I.',
       ],
     ],
     reactive: (ctx) => {
-      if (murderOpen(ctx)) {
+      const view = ctx.missingCats;
+      if (view.clues.has('store_tuna_ledger') && !phaseReached(view, 'aftermath')) {
         return [
-          'Ask me about the candles. Everyone asks the guard things. Nobody asks the person who sold the candles.',
-          'Whoever bought out my lamps six weeks ago did it in old coin and would not sign the book. I have written both facts down twice, in case the first copy is not enough for someone to act on it.',
+          'I went back through the tower’s tuna order. Every week for as long as I have kept the book. Nobody up there has ever asked for a saucer.',
         ];
-      }
-      if (ctx.doomsday === 'complete') {
-        return [
-          'Sold out of everything in an hour that night and gave most of it away. The shopkeep has decided to be proud of me about it.',
-        ];
-      }
-      if (murderResolved(ctx)) {
-        return ['Nobody has bought a candle in bulk since. I check. I will always check now.'];
       }
       return null;
     },
@@ -713,22 +630,21 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
+      const view = ctx.missingCats;
+      if (view.phase === 'stakeout') {
+        return ['If you mean to watch my shop all evening, buy something first.'];
+      }
+      if (phaseReached(view, 'posters_up') && !phaseReached(view, 'stakeout')) {
         return [
-          'Sold clean out within the hour that night. Wick gave half of it away before I could tell him to stop. I am choosing to call that good instincts.',
+          'Penny is the last cat this side of the wall. I lock her in the stockroom at night and every morning she is on the roof.',
         ];
       }
-      if (murderResolved(ctx)) {
-        return [
-          'Trade is back to normal hours. Whatever kept people indoors, it is off my books now.',
-        ];
-      }
-      if (murderOpen(ctx)) {
-        return [
-          'People are buying locks and lamp oil like the wall itself is coming down. I am not complaining about the till, only the reason for it.',
-        ];
-      }
-      return null;
+      return ownCatLines('taloncrest_general_store_cat', view, {
+        missing: [
+          'The stockroom was bolted. Penny was on the roof, and then she was not on anything at all.',
+        ],
+        home: ['Penny was asleep in the till drawer this morning, curled up on the day’s takings.'],
+      });
     },
   },
   tattooist_nim: {
@@ -760,14 +676,7 @@ export const RESIDENT_LINES = {
         'So I have started doing very slow, very boring linework whenever the eyes get close. Bore them enough and they drift off to watch someone else.',
       ],
     ],
-    reactive: (ctx) => {
-      if (ctx.doomsday === 'complete') {
-        return [
-          'Every mark in the shop turned to face the tower that night. Every one. I have not slept in the shop since.',
-        ];
-      }
-      return null;
-    },
+    reactive: null,
   },
   janitor_puddles: {
     ambient: [
@@ -830,6 +739,86 @@ export const RESIDENT_LINES = {
     ],
     lore: [['Evening. Welcome to the Cloak & Dagger. Enjoy yourselves.']],
     reactive: null,
+  },
+  taloncrest_apothecary_assistant: {
+    ambient: [
+      'Fen does the remedies. I do the lifting, the bunching and the sweeping. The remedies would not get far without me.',
+      'Fen hung the drying rack at her own height. I have walked into it every morning for four years.',
+      'Folk look at the tusks first and the apron second. In here the apron is the one that matters.',
+      'I sweep the ruin dust out twice a day. The moss in the back does not like it, and neither do I.',
+    ],
+    lore: [
+      [
+        'Four years in this room. Fen took me on because I could lift the still on my own.',
+        'She kept me on because I can tell marsh root from bitterwort by the smell. She cannot, though she will not say so.',
+        'I do the drying room, she does the counter. Customers think the shop is her, and that suits us both.',
+      ],
+      [
+        'The cat is Sage. She came with the shop, or the shop came with her, depending on who you ask.',
+        'She sleeps on the warm end of the still and eats the mice that eat the seed.',
+      ],
+      [
+        'Not many of my kind inside the wall. Enough to fill a table, never a street.',
+        'My grandmother was carried over the fray in the bad year. She weighed more than the Hawkfolk who lifted her, and the two of them argued about it until he died.',
+        'He never once took a fee for it. She sent him a pie every seventh day regardless.',
+      ],
+    ],
+    reactive: (ctx) => {
+      const view = ctx.missingCats;
+      if (view.clues.has('apothecary_tuna_dish') && !phaseReached(view, 'aftermath')) {
+        return [
+          'That dish of tuna in the back room. I never bought it and Fen never bought it. We have asked each other twice now, very politely.',
+        ];
+      }
+      return ownCatLines('taloncrest_apothecary_cat', view, {
+        missing: [
+          'Sage has not been in for her cream. I pour it anyway.',
+          'If Sage turns up out there, tell her Baggi has the good cream.',
+        ],
+        home: [
+          'Sage is back on the warm end of the still, and she has not said where she has been.',
+        ],
+      });
+    },
+  },
+  taloncrest_lodge_cellar_elf: {
+    ambient: [
+      'The lid stays shut from this side now. Kessler and I agree on that much.',
+      'The Hawkfolk on this row take the long way round me in the alley. Kessler’s men stopped doing that after the cellar.',
+      'I light one candle at the lid at night. Kessler pretends not to see it.',
+      'Mind the third board from the lid. It talks.',
+      'My mother was offered a carry in the bad year. She took the cellar stairs instead, and she never told me why.',
+    ],
+    lore: [
+      [
+        'When the old city came apart, the Hawkfolk took people up. We would not be carried. We went down.',
+        'Cellars first, then the cisterns, then the drains under the hill. The better part of a year in the dark.',
+        'We came up knowing every pipe under this town, and the town has kept an eye on its cellars ever since.',
+      ],
+      [
+        'You have seen the mark. An open eye over a cupped hand.',
+        'She chooses whom she speaks to. We hold that she can be made to choose, if you hold a thing up where she can see it.',
+        'A candle, a trinket, a lock of hair. You burn it and you wait. The roost calls that begging. We call them carriers of dead weight.',
+      ],
+      [
+        'The drains under this hill run everywhere the old streets did. Under the plaza, under the temple, all the way under the tower.',
+        'We do not go in under the tower. None of us has ever said why.',
+      ],
+    ],
+    reactive: (ctx) => {
+      const view = ctx.missingCats;
+      if (phaseReached(view, 'aftermath')) {
+        return [
+          'Our cats came up the drain this morning, one after another, wet and cross. A cat always comes back.',
+        ];
+      }
+      if (phaseReached(view, 'captured')) {
+        return ['They took your cat off the fountain. Ours have been up there longer. I am sorry.'];
+      }
+      return [
+        'Whatever takes the cats, it does not come through the drains. We would have smelled it.',
+      ];
+    },
   },
 } as const satisfies Record<ResidentId, ResidentLines>;
 

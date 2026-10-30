@@ -229,6 +229,7 @@ const REGROUP_FRAMES = 900;
 const CRITTER_LOOK: Readonly<Record<DungeonFloorThemeId, CritterLook>> = {
   cellars: 'beetle',
   service_level: 'roach',
+  sewer: 'roach',
 };
 
 // ── Flies ──
@@ -575,7 +576,7 @@ export class DungeonLifeSystem {
   // ── Setup ─────────────────────────────────────────────────────────────────
 
   private isFloor(tileX: number, tileY: number): boolean {
-    return this.deps.gameMap.isWalkable(tileX, tileY);
+    return this.deps.gameMap.isWalkable(tileX, tileY, 'walker');
   }
 
   private isWall(tileX: number, tileY: number): boolean {

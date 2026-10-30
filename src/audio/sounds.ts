@@ -175,6 +175,22 @@ const SFX_IDS = [
   'cat_missile_fire',
   'cat_missile_impact',
   'cat_revived',
+  'cat_sniff_1',
+  'cat_sniff_2',
+  'cat_sniff_3',
+  'cat_sniff_4',
+  'feather_pickup',
+  'hawkfolk_wing_flyby_1',
+  'hawkfolk_wing_flyby_2',
+  'hawkfolk_wing_flyby_3',
+  'hawkfolk_wing_takeoff_1',
+  'hawkfolk_wing_takeoff_2',
+  'hawkfolk_wing_glide_loop',
+  'notice_pin_tack_1',
+  'notice_pin_tack_2',
+  'scent_trail_fade',
+  'tuna_tin_open',
+  'cat_snatched_yowl',
   'cat_splash',
   'belle_demanding_meow',
   'belle_downed',
@@ -1261,6 +1277,22 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   cat_missile_impact: './src/audio/characters/cat/magic_missle_impact.mp3',
   cat_revived: './src/audio/characters/cat/cat_revived.mp3',
   cat_scratch: './src/audio/characters/cat/scratch.mp3',
+  cat_sniff_1: './src/audio/characters/cat/cat_sniff_1.mp3',
+  cat_sniff_2: './src/audio/characters/cat/cat_sniff_2.mp3',
+  cat_sniff_3: './src/audio/characters/cat/cat_sniff_3.mp3',
+  cat_sniff_4: './src/audio/characters/cat/cat_sniff_4.mp3',
+  feather_pickup: './src/audio/effects/missing_cats/feather_pickup.mp3',
+  hawkfolk_wing_flyby_1: './src/audio/effects/missing_cats/hawkfolk_wing_flyby_1.mp3',
+  hawkfolk_wing_flyby_2: './src/audio/effects/missing_cats/hawkfolk_wing_flyby_2.mp3',
+  hawkfolk_wing_flyby_3: './src/audio/effects/missing_cats/hawkfolk_wing_flyby_3.mp3',
+  hawkfolk_wing_takeoff_1: './src/audio/effects/missing_cats/hawkfolk_wing_takeoff_1.mp3',
+  hawkfolk_wing_takeoff_2: './src/audio/effects/missing_cats/hawkfolk_wing_takeoff_2.mp3',
+  hawkfolk_wing_glide_loop: './src/audio/effects/missing_cats/hawkfolk_wing_glide_loop.mp3',
+  notice_pin_tack_1: './src/audio/effects/missing_cats/notice_pin_tack_1.mp3',
+  notice_pin_tack_2: './src/audio/effects/missing_cats/notice_pin_tack_2.mp3',
+  scent_trail_fade: './src/audio/effects/missing_cats/scent_trail_fade.mp3',
+  tuna_tin_open: './src/audio/effects/missing_cats/tuna_tin_open.mp3',
+  cat_snatched_yowl: './src/audio/effects/missing_cats/cat_snatched_yowl.mp3',
   cat_splash: './src/audio/characters/cat/splash.mp3',
   belle_demanding_meow: './src/audio/characters/cat/belle_demanding_meow.mp3',
   belle_downed: './src/audio/characters/cat/belle_downed.mp3',
@@ -2261,8 +2293,11 @@ export const TAVERN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
   'tavern_music_2',
 ];
 
-/** The Town Center Tower's own theme, playing on every floor until the Quill confrontation takes over. */
+/** The Town Center Tower's own theme, playing on every floor. */
 export const TOWER_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['big_tower_1'];
+
+/** The sewer under Taloncrest, every section of it. */
+export const SEWER_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['storm_drain'];
 
 /**
  * The circus soundtrack — shuffled and looping on the grounds and in the calm
@@ -2413,16 +2448,6 @@ export const UNWIRED_SOUND_IDS = [
   'door_creak_2',
   'door_creak_3',
   'door_creak_4',
-  'trapdoor_creak_open',
-  'tower_split_full',
-  'tower_split_descent',
-  'tower_split_ascent',
-  'warden_ritual_battle',
-  'warden_ritual_battle_bound',
-  'rooftop_chase',
-  'rooftop_chase_stakeout',
-  'capture_at_dusk',
-  'reunion_jingle',
 ] as const satisfies ReadonlyArray<SoundId>;
 
 /**

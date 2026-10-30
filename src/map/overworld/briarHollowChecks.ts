@@ -38,7 +38,7 @@ function tileAt(grid: GridView, x: number, y: number): TileContent | undefined {
 
 function isWalkable(grid: GridView, x: number, y: number): boolean {
   const tile = tileAt(grid, x, y);
-  return tile !== undefined && isWalkableTileType(tile);
+  return tile !== undefined && isWalkableTileType(tile, 'walker');
 }
 
 function neighbours(point: TilePoint): TilePoint[] {

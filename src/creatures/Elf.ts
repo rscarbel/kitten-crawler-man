@@ -11,13 +11,8 @@ import { retreatBehindHelper } from './tactics/retreat';
 const ELF_HP = 22;
 const ELF_SPEED = 1.15;
 
-/**
- * How far an elf notices from. Exported for the same reason Miss Quill's cast
- * range is: the tower confrontation's spawn offsets are only correct relative to
- * this number, and a gate holding them to a copy of it would go green the day it
- * moved.
- */
-export const ELF_AGGRO_RANGE_TILES = 8;
+/** How far an elf notices from. */
+const ELF_AGGRO_RANGE_TILES = 8;
 /** Elves keep their distance and cast from afar. */
 const CAST_RANGE_TILES = 5.5;
 /**

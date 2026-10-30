@@ -22,6 +22,7 @@ import { settings } from '../core/input/Settings';
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
+import type { CatAppearance } from '../sprites/catSprite';
 import { mulberry32, subSeed } from '../sprites/person/rng';
 import { ClubPokerSystem } from '../systems/ClubPokerSystem';
 import type { CasinoSeat } from '../systems/ClubCasinoSystem';
@@ -299,14 +300,17 @@ interface PlateSubject {
   readonly avatar: SeatAvatar;
 }
 
-function plateSubjects(): ReadonlyArray<PlateSubject> {
+function plateSubjects(cat: CatAppearance): ReadonlyArray<PlateSubject> {
   return [
     ...REGULAR_IDS.map((id) => ({
       name: POKER_REGULARS[id].name,
       avatar: { kind: 'regular', key: id, look: POKER_REGULARS[id].look } as const,
     })),
     { name: `You (${crawlerDisplayName('human')})`, avatar: { kind: 'crawler', crawler: 'human' } },
-    { name: `You (${crawlerDisplayName('cat')})`, avatar: { kind: 'crawler', crawler: 'cat' } },
+    {
+      name: `You (${crawlerDisplayName('cat')})`,
+      avatar: { kind: 'crawler', crawler: 'cat', appearance: cat },
+    },
     { name: 'Empty seat', avatar: { kind: 'empty' } },
   ];
 }
@@ -1056,7 +1060,7 @@ export class PokerPreviewScene extends PreviewScene {
     const cellWidth = footprint.w + space.lg;
     const cellHeight = footprint.h + space.md;
     const columns = Math.max(1, Math.floor(area.w / cellWidth));
-    const subjects = plateSubjects();
+    const subjects = plateSubjects(this.companion.appearance);
     const rowsPerState = Math.ceil(subjects.length / columns);
     const heading = lineHeightOf(ui, 'label');
     const stateHeight = heading + space.sm + rowsPerState * cellHeight + space.md;

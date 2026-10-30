@@ -156,7 +156,7 @@ export function buildStage(innerWalls: readonly TileSpec[] = []) {
     human: pm.human,
     cat: pm.cat,
     active: pm.active(),
-    inactive: pm.inactive(),
+    partner: pm.presentPartner(),
     activeIsMoving: false,
     roster,
     gameMap: map,

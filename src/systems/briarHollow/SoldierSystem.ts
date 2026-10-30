@@ -464,10 +464,10 @@ export class SoldierSystem {
       state,
       site,
       (tile) =>
-        gameMap.isWalkable(tile.x, tile.y) &&
+        gameMap.isWalkable(tile.x, tile.y, 'walker') &&
         gameMap.structure[tile.y][tile.x].type !== HOLLOW_THRESHOLD,
       {
-        canStand: (tile) => gameMap.isWalkable(tile.x, tile.y),
+        canStand: (tile) => gameMap.isWalkable(tile.x, tile.y, 'walker'),
         talkRangeTiles: VILLAGER_TALK_RANGE_TILES,
       },
     );

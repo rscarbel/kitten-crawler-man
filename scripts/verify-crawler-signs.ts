@@ -305,7 +305,7 @@ function buildFloorModel(map: GameMap, rooms: ReadonlyArray<Rect>): FloorModel {
     for (let startX = 0; startX < size; startX++) {
       const startKey = at(startX, startY);
       if (componentAt[startKey] !== NO_ROOM || roomAt[startKey] !== NO_ROOM) continue;
-      if (!map.isWalkable(startX, startY)) continue;
+      if (!map.isWalkable(startX, startY, 'walker')) continue;
       const component = componentRooms.length;
       const touched = new Set<number>();
       componentRooms.push(touched);
@@ -316,7 +316,7 @@ function buildFloorModel(map: GameMap, rooms: ReadonlyArray<Rect>): FloorModel {
         for (const step of FLOOD_STEPS) {
           const nx = tile.x + step.x;
           const ny = tile.y + step.y;
-          if (!inside(nx, ny) || !map.isWalkable(nx, ny)) continue;
+          if (!inside(nx, ny) || !map.isWalkable(nx, ny, 'walker')) continue;
           const room = roomAt[at(nx, ny)];
           if (room !== NO_ROOM) {
             touched.add(room);
@@ -410,7 +410,7 @@ function exitComponent(model: FloorModel, perimeter: Point, step: Point): number
   const x = perimeter.x + step.x;
   const y = perimeter.y + step.y;
   if (x < 0 || y < 0 || x >= size || y >= size) return null;
-  if (!model.map.isWalkable(perimeter.x, perimeter.y)) return null;
+  if (!model.map.isWalkable(perimeter.x, perimeter.y, 'walker')) return null;
   const component = model.componentAt[y * size + x];
   return component === undefined || component === NO_ROOM ? null : component;
 }
@@ -587,7 +587,7 @@ function reachableFromStart(map: GameMap): Set<number> {
   const size = map.gridSize;
   const seen = new Set<number>();
   const start = map.startTile;
-  if (!map.isWalkable(start.x, start.y)) return seen;
+  if (!map.isWalkable(start.x, start.y, 'walker')) return seen;
   seen.add(tileCoordKey(start.x, start.y));
   const queue: Point[] = [start];
   for (const tile of queue) {
@@ -595,7 +595,7 @@ function reachableFromStart(map: GameMap): Set<number> {
       const nx = tile.x + step.x;
       const ny = tile.y + step.y;
       if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
-      if (seen.has(tileCoordKey(nx, ny)) || !map.isWalkable(nx, ny)) continue;
+      if (seen.has(tileCoordKey(nx, ny)) || !map.isWalkable(nx, ny, 'walker')) continue;
       seen.add(tileCoordKey(nx, ny));
       queue.push({ x: nx, y: ny });
     }
@@ -669,7 +669,7 @@ function independentBranchOutcomes(
   const startRoom = roomIndexAt(model, map.startTile.x, map.startTile.y);
   const removedKeys = new Set(removed.map(tileKeyOf));
   const isWall = (tile: Point): boolean =>
-    !map.isWalkable(tile.x, tile.y) ||
+    !map.isWalkable(tile.x, tile.y, 'walker') ||
     removedKeys.has(tileKeyOf(tile)) ||
     roomIndexAt(model, tile.x, tile.y) === goalRoom;
   const seedKeys = seeds.map(tileKeyOf);
@@ -702,7 +702,7 @@ function independentBranchOutcomes(
       }
       for (const step of ORTHOGONAL_STEPS) {
         const next = { x: tile.x + step.x, y: tile.y + step.y };
-        if (!map.isWalkable(next.x, next.y)) continue;
+        if (!map.isWalkable(next.x, next.y, 'walker')) continue;
         if (roomIndexAt(model, next.x, next.y) === goalRoom) walk.touchesGoal = true;
         if (isWall(next) || steps.has(tileKeyOf(next))) continue;
         steps.set(tileKeyOf(next), here + 1);
@@ -720,7 +720,7 @@ function independentBranchOutcomes(
   if (goalBounds !== undefined) {
     for (let y = goalBounds.y; y < goalBounds.y + goalBounds.h; y++) {
       for (let x = goalBounds.x; x < goalBounds.x + goalBounds.w; x++) {
-        if (!map.isWalkable(x, y) || removedKeys.has(tileKeyOf({ x, y }))) continue;
+        if (!map.isWalkable(x, y, 'walker') || removedKeys.has(tileKeyOf({ x, y }))) continue;
         stepsToGoal.set(tileKeyOf({ x, y }), 0);
         goalQueue.push({ x, y });
       }
@@ -730,7 +730,7 @@ function independentBranchOutcomes(
     const here = stepsToGoal.get(tileKeyOf(tile)) ?? 0;
     for (const step of ORTHOGONAL_STEPS) {
       const next = { x: tile.x + step.x, y: tile.y + step.y };
-      if (!map.isWalkable(next.x, next.y) || removedKeys.has(tileKeyOf(next))) continue;
+      if (!map.isWalkable(next.x, next.y, 'walker') || removedKeys.has(tileKeyOf(next))) continue;
       if (stepsToGoal.has(tileKeyOf(next))) continue;
       stepsToGoal.set(tileKeyOf(next), here + 1);
       goalQueue.push(next);
@@ -787,7 +787,7 @@ function roomJunctionOutcomes(model: FloorModel, room: number): BranchOutcome[] 
   const removed: Point[] = [];
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-      if (model.map.isWalkable(x, y)) removed.push({ x, y });
+      if (model.map.isWalkable(x, y, 'walker')) removed.push({ x, y });
     }
   }
   const touchesRoom = (tile: Point): boolean =>
@@ -870,7 +870,7 @@ function doorwaysConnected(
   const bounds = model.rooms[room];
   const open = (tile: Point): boolean =>
     rectContains(bounds, tile.x, tile.y) &&
-    model.map.isWalkable(tile.x, tile.y) &&
+    model.map.isWalkable(tile.x, tile.y, 'walker') &&
     !blocked.has(tileKeyOf(tile));
   const [origin, ...rest] = doorwayTiles;
   if (origin === undefined || !open(origin)) return false;
@@ -1140,7 +1140,10 @@ function columnsUnderBoard(geometry: BoardGeometry, signX: number): number[] {
 /** Walkable tiles beneath the board on the sign's row, by the player's predicate. */
 function standableUnderBoard(map: GameMap, geometry: BoardGeometry, sign: Point): Point[] {
   return columnsUnderBoard(geometry, sign.x)
-    .filter((x) => map.isWalkable(x, sign.y) || map.isWalkableIgnoringPermanent(x, sign.y))
+    .filter(
+      (x) =>
+        map.isWalkable(x, sign.y, 'walker') || map.isWalkableIgnoringPermanent(x, sign.y, 'walker'),
+    )
     .map((x) => ({ x, y: sign.y }));
 }
 
@@ -1153,9 +1156,12 @@ function checkBoardFootprint(map: GameMap, sign: Point, where: string, stats: Fl
   );
   const covered = columnsUnderBoard(BOARD, sign.x);
   for (const x of covered) {
-    check(!map.isWalkable(x, sign.y), `${where} board column ${x} is walkable for the player`);
     check(
-      map.findPath(map.startTile.x, map.startTile.y, x, sign.y).length === 0,
+      !map.isWalkable(x, sign.y, 'walker'),
+      `${where} board column ${x} is walkable for the player`,
+    );
+    check(
+      map.findPath(map.startTile.x, map.startTile.y, x, sign.y, 'walker').length === 0,
       `${where} board column ${x} is a legal goal for mob pathfinding`,
     );
   }
@@ -1212,7 +1218,9 @@ function lanesConnected(
   blocked: ReadonlySet<number>,
 ): boolean {
   const open = (tile: Point): boolean =>
-    inBounds(window, tile) && map.isWalkable(tile.x, tile.y) && !blocked.has(tileKeyOf(tile));
+    inBounds(window, tile) &&
+    map.isWalkable(tile.x, tile.y, 'walker') &&
+    !blocked.has(tileKeyOf(tile));
   const [origin, ...rest] = targets;
   if (origin === undefined || !open(origin)) return false;
   const seen = new Set<number>([tileKeyOf(origin)]);
@@ -1230,7 +1238,7 @@ function lanesConnected(
 
 /** Walks a real player entity, under the game's own collision, along the map's own path between two tiles. */
 function playerCanWalk(map: GameMap, from: Point, to: Point): boolean {
-  const route = map.findPath(from.x, from.y, to.x, to.y);
+  const route = map.findPath(from.x, from.y, to.x, to.y, 'walker');
   if (route.length === 0) return false;
   const entity = {
     x: from.x * TILE_SIZE,
@@ -1284,7 +1292,7 @@ function mouthAround(
   for (const tile of tiles) {
     for (const step of ORTHOGONAL_STEPS) {
       const next = { x: tile.x + step.x, y: tile.y + step.y };
-      if (keys.has(tileKeyOf(next)) || !map.isWalkable(next.x, next.y)) continue;
+      if (keys.has(tileKeyOf(next)) || !map.isWalkable(next.x, next.y, 'walker')) continue;
       found.set(tileKeyOf(next), next);
     }
   }
@@ -1302,7 +1310,9 @@ function waysOut(
   window: TileBounds,
 ): Point[][] {
   const open = (tile: Point): boolean =>
-    inBounds(window, tile) && map.isWalkable(tile.x, tile.y) && !removed.has(tileKeyOf(tile));
+    inBounds(window, tile) &&
+    map.isWalkable(tile.x, tile.y, 'walker') &&
+    !removed.has(tileKeyOf(tile));
   const placed = new Set<number>();
   const ways: Point[][] = [];
   for (const origin of mouth) {
@@ -1340,7 +1350,7 @@ function reachesAnyRoom(
     if (roomIndexAt(model, tile.x, tile.y) !== NO_ROOM) return true;
     for (const step of ORTHOGONAL_STEPS) {
       const next = { x: tile.x + step.x, y: tile.y + step.y };
-      if (seen.has(tileKeyOf(next)) || !model.map.isWalkable(next.x, next.y)) continue;
+      if (seen.has(tileKeyOf(next)) || !model.map.isWalkable(next.x, next.y, 'walker')) continue;
       seen.add(tileKeyOf(next));
       queue.push(next);
     }
@@ -1370,7 +1380,7 @@ function findJunctions(model: FloorModel): Junction[] {
     y >= 0 &&
     x < size &&
     y < size &&
-    map.isWalkable(x, y) &&
+    map.isWalkable(x, y, 'walker') &&
     roomIndexAt(model, x, y) === NO_ROOM;
 
   const forkKeys = new Set<number>();
@@ -1463,7 +1473,7 @@ function junctionBranches(model: FloorModel, junction: Junction): JunctionBranch
     for (const tile of queue) {
       for (const next of ORTHOGONAL_STEPS) {
         const neighbour = { x: tile.x + next.x, y: tile.y + next.y };
-        if (!map.isWalkable(neighbour.x, neighbour.y)) continue;
+        if (!map.isWalkable(neighbour.x, neighbour.y, 'walker')) continue;
         const room = roomIndexAt(model, neighbour.x, neighbour.y);
         if (room !== NO_ROOM) {
           rooms.add(room);
@@ -1535,7 +1545,7 @@ function walkDistanceToGoal(model: FloorModel, stage: number): Map<number, numbe
   if (bounds !== undefined) {
     for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
       for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-        if (!model.map.isWalkable(x, y)) continue;
+        if (!model.map.isWalkable(x, y, 'walker')) continue;
         distance.set(tileKeyOf({ x, y }), 0);
         queue.push({ x, y });
       }
@@ -1545,7 +1555,8 @@ function walkDistanceToGoal(model: FloorModel, stage: number): Map<number, numbe
     const here = distance.get(tileKeyOf(tile)) ?? 0;
     for (const step of ORTHOGONAL_STEPS) {
       const next = { x: tile.x + step.x, y: tile.y + step.y };
-      if (!model.map.isWalkable(next.x, next.y) || distance.has(tileKeyOf(next))) continue;
+      if (!model.map.isWalkable(next.x, next.y, 'walker') || distance.has(tileKeyOf(next)))
+        continue;
       distance.set(tileKeyOf(next), here + 1);
       queue.push(next);
     }
@@ -1861,7 +1872,7 @@ function searchTerritory(model: FloorModel): { near: Set<number>; far: Set<numbe
     for (const tile of queue) {
       for (const step of ORTHOGONAL_STEPS) {
         const next = { x: tile.x + step.x, y: tile.y + step.y };
-        if (!map.isWalkable(next.x, next.y) || seen.has(tileKeyOf(next))) continue;
+        if (!map.isWalkable(next.x, next.y, 'walker') || seen.has(tileKeyOf(next))) continue;
         if (blocked && roomIndexAt(model, next.x, next.y) === finalGoal) continue;
         seen.add(tileKeyOf(next));
         queue.push(next);
@@ -1992,7 +2003,7 @@ function firstTileBesideBlockingProp(map: GameMap): Point | null {
     for (const [x, tile] of row.entries()) {
       if (!isBlockingDressingTile(tile)) continue;
       const open = ORTHOGONAL_STEPS.map((step) => ({ x: x + step.x, y: y + step.y })).find(
-        (beside) => map.isWalkable(beside.x, beside.y),
+        (beside) => map.isWalkable(beside.x, beside.y, 'walker'),
       );
       if (open !== undefined) return open;
     }
@@ -2017,7 +2028,7 @@ function dominantFloorType(model: FloorModel, room: number, ignored: Point | nul
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
       if (ignored !== null && ignored.x === x && ignored.y === y) continue;
-      if (!model.map.isWalkable(x, y)) continue;
+      if (!model.map.isWalkable(x, y, 'walker')) continue;
       const type = model.map.structure[y][x].type;
       counts.set(type, (counts.get(type) ?? 0) + 1);
     }
@@ -2053,7 +2064,8 @@ function legalSignSeats(
   const floorType = dominantFloorType(model, room, ignoredSign);
   const isIgnored = (tile: Point): boolean =>
     ignoredSign !== null && ignoredSign.x === tile.x && ignoredSign.y === tile.y;
-  const walkable = (tile: Point): boolean => isIgnored(tile) || map.isWalkable(tile.x, tile.y);
+  const walkable = (tile: Point): boolean =>
+    isIgnored(tile) || map.isWalkable(tile.x, tile.y, 'walker');
 
   const doorwayTiles = [...doorwayComponents(model, room)].flatMap((component) =>
     doorwayPerimeters(model, room, component),
@@ -3001,16 +3013,16 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
       }
 
       const mobStanding =
-        map.isWalkable(x, y) &&
+        map.isWalkable(x, y, 'walker') &&
         !map.isStairwellTile(x, y) &&
         map.structure[y][x].type !== CRAWLER_SIGN;
-      check(!map.isWalkable(x, y), `${where} is walkable on the live map`);
+      check(!map.isWalkable(x, y, 'walker'), `${where} is walkable on the live map`);
       check(
-        !map.isWalkableIgnoringPermanent(x, y),
+        !map.isWalkableIgnoringPermanent(x, y, 'walker'),
         `${where} is walkable ignoring permanent blocks`,
       );
       check(!mobStanding, `${where} is standable by the mob movement predicate`);
-      const pathOntoSign = map.findPath(map.startTile.x, map.startTile.y, x, y);
+      const pathOntoSign = map.findPath(map.startTile.x, map.startTile.y, x, y, 'walker');
       check(pathOntoSign.length === 0, `${where} is a legal goal for mob pathfinding`);
     }
 

@@ -379,7 +379,10 @@ function checkBuiltMap(parsed: ParsedPrisonLayout): void {
   let breakable: PrisonTile | null = null;
   for (let y = 0; y < grid.height; y++) {
     for (let x = 0; x < grid.width; x++) {
-      if (mismatch === null && map.isWalkable(x, y) !== isPrisonCrawlerWalkable(grid, x, y)) {
+      if (
+        mismatch === null &&
+        map.isWalkable(x, y, 'walker') !== isPrisonCrawlerWalkable(grid, x, y)
+      ) {
         mismatch = { x, y };
       }
       const code = prisonTileAt(grid, x, y);

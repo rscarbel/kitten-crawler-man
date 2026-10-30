@@ -281,8 +281,13 @@ function cloneFloorItem(item: FloorItem): FloorItem {
 
 export class LootSystem implements GameSystem {
   private pendingLoots: PendingLoot[] = [];
-  /** Reused per-frame party list handed to `creditLoot`. */
+  /**
+   * Reused per-frame lists: `party` is the whole roster `creditLoot` pays shared
+   * coins to, wherever each crawler stands; `pickers` is only the crawlers on
+   * this map, since one away on another map cannot stoop for a pile here.
+   */
   private readonly party: Array<HumanPlayer | CatPlayer> = [];
+  private readonly pickers: Array<HumanPlayer | CatPlayer> = [];
   readonly floorItems: FloorItem[] = [];
   private _itemPickupsThisFrame = 0;
   private _coinPickupsThisFrame = 0;
@@ -420,7 +425,7 @@ export class LootSystem implements GameSystem {
       if (scale === 0) return { x: offsetX, y: offsetY };
       const tileX = Math.floor((x + offsetX) / TILE_SIZE);
       const tileY = Math.floor((y + offsetY) / TILE_SIZE);
-      if (this.gameMap.isWalkable(tileX, tileY)) return { x: offsetX, y: offsetY };
+      if (this.gameMap.isWalkable(tileX, tileY, 'walker')) return { x: offsetX, y: offsetY };
     }
     return { x: 0, y: 0 };
   }
@@ -523,11 +528,14 @@ export class LootSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    const { active, inactive: companion } = ctx;
-    // Hoisted: the party is the same two players for every piece of loot.
+    const { active, partner } = ctx;
     const party = this.party;
     party.length = 0;
-    party.push(active, companion);
+    party.push(ctx.human, ctx.cat);
+    const pickers = this.pickers;
+    pickers.length = 0;
+    pickers.push(active);
+    if (partner !== null) pickers.push(partner);
 
     // Pickup, TTL and compaction in one backwards pass — swap-pop rather than a
     // fresh filtered array every frame.
@@ -540,7 +548,7 @@ export class LootSystem implements GameSystem {
         } else if (loot.collectsOnLanding ?? false) {
           this.creditLoot(loot, loot.owner, party);
         } else if (loot.droppedByPlayer) {
-          for (const player of party) {
+          for (const player of pickers) {
             if (this.isWithinPickupRange(player, loot, DROPPED_PICKUP_RANGE)) {
               this.creditLoot(loot, player, party);
               playPickupGesture(player, loot);
@@ -548,8 +556,8 @@ export class LootSystem implements GameSystem {
             }
           }
         } else {
-          for (const player of party) {
-            if (player !== active && companion.autoTarget?.isAlive) continue;
+          for (const player of pickers) {
+            if (player !== active && partner?.autoTarget?.isAlive === true) continue;
             if (this.isWithinPickupRange(player, loot, LOOT_PICKUP_RANGE)) {
               this.creditLoot(loot, loot.owner, party);
               // The one who stooped for it, not the one it was credited to.
@@ -964,7 +972,7 @@ export class LootSystem implements GameSystem {
       for (let dx = -r; dx <= r; dx++) {
         for (let dy = -r; dy <= r; dy++) {
           if (Math.abs(dx) < r && Math.abs(dy) < r) continue;
-          if (this.gameMap.isWalkable(cx + dx, cy + dy)) {
+          if (this.gameMap.isWalkable(cx + dx, cy + dy, 'walker')) {
             return {
               x: (cx + dx) * ts + HALF_TILE,
               y: (cy + dy) * ts + HALF_TILE,

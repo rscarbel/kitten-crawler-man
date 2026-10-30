@@ -359,7 +359,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: new MobRoster(map, new SpellSystem()),
     gameMap: map,

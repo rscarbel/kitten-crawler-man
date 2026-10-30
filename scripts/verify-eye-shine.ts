@@ -49,6 +49,7 @@ Object.defineProperty(performance, 'now', { value: () => FROZEN_CLOCK_MS, config
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { Mob } = await import('../src/creatures/Mob.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+const { CatAlly } = await import('../src/creatures/CatAlly.js');
 const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
   await import('../src/core/party/mercenaryTemplates.js');
 const { SOLDIER_IDS } = await import('../src/core/quests/villagerIds.js');
@@ -57,6 +58,9 @@ const { GiantWasp } = await import('../src/creatures/GiantWasp.js');
 const { FuzzyNightmare } = await import('../src/creatures/FuzzyNightmare.js');
 const { Lemur } = await import('../src/creatures/Lemur.js');
 const { Elf } = await import('../src/creatures/Elf.js');
+const { SewerGuide } = await import('../src/creatures/SewerGuide.js');
+const { SEWER_GUIDE_WAITING_BARKS, SEWER_GUIDE_HURT_BARKS } =
+  await import('../src/dialog/scripts/scenes/sewerGuide.js');
 const { Cockroach } = await import('../src/creatures/Cockroach.js');
 const { Cow } = await import('../src/creatures/Cow.js');
 const { AttackCow } = await import('../src/creatures/AttackCow.js');
@@ -71,6 +75,7 @@ const { ShieldFairy } = await import('../src/creatures/fairies/ShieldFairy.js');
 const { Goblin } = await import('../src/creatures/Goblin.js');
 const { BathroomGoblin } = await import('../src/creatures/BathroomGoblin.js');
 const { PrisonGoblin } = await import('../src/creatures/PrisonGoblin.js');
+const { TowerGuard } = await import('../src/creatures/TowerGuard.js');
 const { PrisonerGoblin } = await import('../src/creatures/PrisonerGoblin.js');
 const { PrisonCellDoor } = await import('../src/creatures/PrisonCellDoor.js');
 const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
@@ -78,7 +83,6 @@ const { GoblinDynamiter } = await import('../src/creatures/GoblinDynamiter.js');
 const { GoblinBombardier } = await import('../src/creatures/GoblinBombardier.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
-const { Baggi } = await import('../src/creatures/Baggi.js');
 const { DireBear } = await import('../src/creatures/DireBear.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { Kraken } = await import('../src/creatures/Kraken.js');
@@ -93,14 +97,12 @@ const { MazeBellTarget } = await import('../src/creatures/MazeBellTarget.js');
 const { MazeBlockTarget } = await import('../src/creatures/MazeBlockTarget.js');
 const { MazeMirrorTarget } = await import('../src/creatures/MazeMirrorTarget.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
-const { MissQuill } = await import('../src/creatures/MissQuill.js');
 const { Lion } = await import('../src/creatures/Lion.js');
 const { Deinonychus } = await import('../src/creatures/Deinonychus.js');
 const { Necromancer } = await import('../src/creatures/Necromancer.js');
 const { RaisedRatkin } = await import('../src/creatures/RaisedRatkin.js');
 const { Rat } = await import('../src/creatures/Rat.js');
 const { RatkinSoldier } = await import('../src/creatures/RatkinSoldier.js');
-const { Remex } = await import('../src/creatures/Remex.js');
 const { RockGolem } = await import('../src/creatures/RockGolem.js');
 const { RockGolemBoss } = await import('../src/creatures/RockGolemBoss.js');
 const { RuinsGhoul } = await import('../src/creatures/RuinsGhoul.js');
@@ -136,15 +138,13 @@ type MobInstance = InstanceType<typeof Mob>;
  *   faces, so head down the screen facing the camera.
  * - `profileOnly`: a long body drawn only in profile, head at the end it faces;
  *   facing the camera it shows its rightward profile.
- * - `faceMidBody`: a pillar with its face set halfway up, under a crown.
  * - `turnsToFace`: drawn from above and turned to any facing, head always on
  *   show at the end it faces.
  * - `headBelowBack`: a hunched or hovering body whose hump or raised wing
  *   cases stand above its head, so the top of the drawing is its back: in
  *   profile the head leads the way it faces, and face-on it sits under them.
  */
-type HeadEnd =
-  'upright' | 'fromAbove' | 'profileOnly' | 'faceMidBody' | 'turnsToFace' | 'headBelowBack';
+type HeadEnd = 'upright' | 'fromAbove' | 'profileOnly' | 'turnsToFace' | 'headBelowBack';
 
 /** One creature in one state, and whether it should show eyes at all. */
 interface Subject {
@@ -225,6 +225,17 @@ function mazeMirror(kind: (typeof MAZE_MIRROR_KINDS)[number]): MobInstance {
   });
 }
 
+/** A guide standing on its only stop, with nowhere further to lead. */
+function sewerGuideAtRest(): MobInstance {
+  return new SewerGuide({ x: SUBJECT_TILE, y: SUBJECT_TILE }, TILE_SIZE, {
+    stops: [{ x: SUBJECT_TILE, y: SUBJECT_TILE }],
+    mayLeave: () => false,
+    lineAt: () => null,
+    waitingLines: SEWER_GUIDE_WAITING_BARKS,
+    hurtLines: SEWER_GUIDE_HURT_BARKS,
+  });
+}
+
 /** The floor the attack cow is built for; her look is the same on every floor. */
 const ATTACK_COW_EYE_FLOOR = 3;
 
@@ -237,7 +248,9 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   AttackCow: () => [
     eyed('attack cow', new AttackCow(...at, new CatPlayer(...at), ATTACK_COW_EYE_FLOOR, null)),
   ],
-  Baggi: () => [eyed('Baggi', new Baggi(...at))],
+  CatAlly: () => [
+    eyed('Pumpkin', new CatAlly(...at, 'tower_cattery_cellmate', new CatPlayer(...at))),
+  ],
   GravediggerBeetle: () => [
     eyeless('gravedigger larva', beetleAt('larva')),
     eyeless('gravedigger pupa', beetleAt('pupa')),
@@ -250,6 +263,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   ],
   Lemur: () => [eyed('lemur', new Lemur(...at), 'profileOnly')],
   Elf: () => [eyed('elf', new Elf(...at))],
+  SewerGuide: () => [eyed('sewer guide', sewerGuideAtRest())],
   Cockroach: () => [eyed('cockroach', new Cockroach(...at), 'fromAbove')],
   Cow: () => COW_AGES.map((age) => eyed(`cow ${age}`, new Cow(...at, 'holstein', age, () => 0))),
   DarkKnight: () => [eyed('dark knight', new DarkKnight(...at))],
@@ -269,6 +283,10 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   PrisonGoblin: () => [
     eyed('prison gate guard', new PrisonGoblin(...at, 'gateGuard', 1)),
     eyed('prison patrol guard', new PrisonGoblin(...at, 'patrol', 1)),
+  ],
+  TowerGuard: () => [
+    eyed('tower guard a', new TowerGuard(...at, 0)),
+    eyed('tower guard b', new TowerGuard(...at, 1)),
   ],
   PrisonerGoblin: () => [eyed('goblin prisoner', new PrisonerGoblin(...at, 1))],
   PrisonCellDoor: () => [eyeless('prison cell door', new PrisonCellDoor(...at, 'across'))],
@@ -303,7 +321,6 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
       eyed(`hireling ${id}`, new Mercenary(...at, owner, id, getMercenaryTemplate(id).name)),
     );
   },
-  MissQuill: () => [eyed('Miss Quill', new MissQuill(...at, () => undefined))],
   Lion: () => [eyed('lion', new Lion(...at))],
   Deinonychus: () => {
     const owner = new CatPlayer(...at);
@@ -318,7 +335,6 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   Rat: () => [eyed('rat', new Rat(...at))],
   RatkinSoldier: () =>
     SOLDIER_IDS.map((id) => eyed(`ratkin soldier ${id}`, new RatkinSoldier(...at, id))),
-  Remex: () => [eyed('remex', new Remex(...at), 'faceMidBody')],
   RockGolem: () => [eyed('rock golem', new RockGolem(...at))],
   RockGolemBoss: () => [eyed('rock golem boss', new RockGolemBoss(...at))],
   RuinsGhoul: () => [eyed('ruins ghoul', new RuinsGhoul(...at))],
@@ -456,8 +472,6 @@ const HEAD_SHARE_OF_LENGTH = 0.45;
  * its legs and antennae splay out past its head, so its box runs further.
  */
 const FROM_ABOVE_HEAD_SHARE = 0.55;
-/** How far down a `faceMidBody` pillar its face may sit, as a share of its height. */
-const MID_BODY_FACE_SHARE = 0.55;
 /**
  * How far down a `headBelowBack` body its face may sit face-on: raised wing
  * cases above and dangling legs below leave the head halfway down the box.
@@ -574,7 +588,7 @@ function headDepthShare(headEnd: HeadEnd, box: BodyBox, glints: Glints, facing: 
   const fromTop = (glints.y - box.top) / height;
   const fromRight = (box.right - glints.x) / width;
   const fromLeft = (glints.x - box.left) / width;
-  if (headEnd === 'upright' || headEnd === 'faceMidBody') return fromTop;
+  if (headEnd === 'upright') return fromTop;
   if (headEnd === 'turnsToFace') return leadingDepthShare(box, glints, facing);
   if (isSideView(facing) || headEnd === 'profileOnly') return facing.x < 0 ? fromLeft : fromRight;
   if (headEnd === 'headBelowBack') return fromTop;
@@ -597,7 +611,6 @@ function leadingDepthShare(box: BodyBox, glints: Glints, facing: Facing): number
 }
 
 function headShareAllowed(headEnd: HeadEnd, facing: Facing): number {
-  if (headEnd === 'faceMidBody') return MID_BODY_FACE_SHARE;
   if (headEnd === 'headBelowBack' && !isSideView(facing)) return BELOW_BACK_FACE_SHARE;
   if (headEnd === 'fromAbove' || headEnd === 'turnsToFace') return FROM_ABOVE_HEAD_SHARE;
   return HEAD_SHARE_OF_LENGTH;

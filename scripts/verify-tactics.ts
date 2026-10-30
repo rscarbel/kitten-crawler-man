@@ -725,7 +725,7 @@ function traceGuardShove(map: GameMap, mob: Mob, human: HumanPlayer, cat: CatPla
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -752,7 +752,7 @@ function traceGuardShove(map: GameMap, mob: Mob, human: HumanPlayer, cat: CatPla
     maxX = Math.max(maxX, mob.x);
     if (frame === GUARD_KNOCKBACK_FRAMES - 1) shoveEndDistance = centreDistance(mob, human);
     const tile = centreTile(mob);
-    if (!map.isWalkable(tile.x, tile.y)) framesInWall++;
+    if (!map.isWalkable(tile.x, tile.y, 'walker')) framesInWall++;
     if (!isFiledUnderOwnCell(roster.grid, mob)) framesMisfiled++;
     if (Math.floor(mob.x / MOB_GRID_CELL_SIZE) !== startCell) crossedCell = true;
   }
@@ -1081,7 +1081,7 @@ function makeArena(
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -2005,7 +2005,7 @@ function makeTelemetryCtx(
 ): SystemContext {
   const roster = new MobRoster(map, new SpellSystem());
   roster.add(mob);
-  return { human, cat, active: human, inactive: cat, activeIsMoving: false, roster, gameMap: map };
+  return { human, cat, active: human, partner: cat, activeIsMoving: false, roster, gameMap: map };
 }
 
 function runTelemetryFrames(

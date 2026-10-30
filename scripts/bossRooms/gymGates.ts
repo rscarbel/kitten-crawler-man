@@ -106,7 +106,13 @@ export function gymRoomGates(context: RoomGateContext): void {
   if (fronts.length !== racks.length)
     report.fail('a rack has no floor in front of it to lift from');
   for (const front of fronts) {
-    if (!gameMap.isWalkable(Math.floor(front.x / TILE_SIZE), Math.floor(front.y / TILE_SIZE))) {
+    if (
+      !gameMap.isWalkable(
+        Math.floor(front.x / TILE_SIZE),
+        Math.floor(front.y / TILE_SIZE),
+        'walker',
+      )
+    ) {
       report.fail('a rack front tile is not walkable');
     }
   }
@@ -158,7 +164,7 @@ export function gymRoomGates(context: RoomGateContext): void {
       const tile = { x: centre.x + dx, y: centre.y + dy };
       const type = gameMap.structure[tile.y]?.[tile.x]?.type;
       const onProp = type === GYM_RACK || type === GYM_SQUAT_RACK || type === GYM_CABLE_STACK;
-      if (!gameMap.isWalkable(tile.x, tile.y) || onProp) {
+      if (!gameMap.isWalkable(tile.x, tile.y, 'walker') || onProp) {
         report.fail(`a ${rule.type} guard spawns on ${key(tile)}, which is not open floor`);
       }
       if (gym.poweredBeltAt((tile.x + 1 / 2) * TILE_SIZE, (tile.y + 1 / 2) * TILE_SIZE) !== null) {
@@ -200,7 +206,7 @@ function gateBeltRides(context: RoomGateContext, gym: GymRoomSystem): void {
             ty >= bounds.y &&
             tx < bounds.x + bounds.w &&
             ty < bounds.y + bounds.h;
-          if (!inside || !frame.gameMap.isWalkable(tx, ty)) {
+          if (!inside || !frame.gameMap.isWalkable(tx, ty, 'walker')) {
             report.fail(`a belt carried a crawler from ${key(tile)} onto ${tx},${ty}`);
             break;
           }

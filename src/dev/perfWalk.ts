@@ -260,7 +260,7 @@ function walkGridOf(gameMap: GameMap): WalkGrid {
   return {
     width,
     height,
-    isOpen: (x, y) => gameMap.isWalkable(x, y),
+    isOpen: (x, y) => gameMap.isWalkable(x, y, 'walker'),
     isTrip: (x, y) => trips.has(tileKey(x, y, width)) || gameMap.isStairwellTile(x, y),
   };
 }

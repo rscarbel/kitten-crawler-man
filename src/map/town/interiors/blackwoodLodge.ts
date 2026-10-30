@@ -13,11 +13,6 @@
  * cellar lid in the floor south of it is the same lid Kessler's own lines
  * describe — flush with the boards and never opened by an interaction, since
  * the cellar this room sits on is a quest space, not a room this layout owns.
- *
- * The middle of the hall stays open floor on purpose: the cult-hideout
- * encounter fights in this same generated room, spawning its congregation
- * around the room's centre, so everything tall stands against a wall and the
- * floor between them carries only the table and walkable pieces.
  */
 
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';

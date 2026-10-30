@@ -112,7 +112,6 @@ const CIRCUS_STROKE = TOWN_MAP_INK.circusStroke;
 const VILLAGE_STROKE = TOWN_MAP_INK.villageStroke;
 const VILLAGE_DISTRICT_LABEL_COLOR = TOWN_MAP_INK.villageDistrictLabelColor;
 const START_TILE_COLOR = TOWN_MAP_INK.startTileColor;
-const ESCAPE_TILE_COLOR = TOWN_MAP_INK.escapeTileColor;
 const UNKNOWN_TILE_COLOR = TOWN_MAP_INK.unknownTileColor;
 
 /** Schematic fill per tile type. Anything unmapped renders magenta so it is obvious. */
@@ -490,7 +489,6 @@ export class TownMapScene extends PreviewScene {
     }
 
     this.markTile(ctx, this.data.startTile, START_TILE_COLOR);
-    this.markTile(ctx, this.data.doomsdayEscapeTile, ESCAPE_TILE_COLOR);
     this.renderVillageOverlay(ctx);
 
     if (px < NAME_LABEL_MIN_PX_PER_TILE) return;

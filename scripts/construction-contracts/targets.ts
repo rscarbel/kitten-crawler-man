@@ -162,7 +162,7 @@ function interiorSurfaceFault(
       // A walkable prop (a dais, a rug of boards) is floor the party stands on.
       const prop = map.placedInteriorProps.find(
         (placed) =>
-          !TOWN_INTERIOR_PROPS[placed.propId].walkable &&
+          !TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker') &&
           rectContains(placedPropRect(placed), x, y),
       );
       return prop === undefined ? null : `tile (${x},${y}) lies under blocking prop ${prop.id}`;

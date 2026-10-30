@@ -249,12 +249,12 @@ function currentScene(manager: Manager): unknown {
 }
 
 function placeParty(scene: Scene, tile: Tile): void {
-  for (const crawler of scene.pm.players()) placeAt(crawler, tile);
+  for (const crawler of scene.pm.wholeParty()) placeAt(crawler, tile);
 }
 
 function tick(scene: Scene, frames: number): void {
   for (let frame = 0; frame < frames; frame++) {
-    for (const crawler of scene.pm.players()) crawler.hp = crawler.maxHp;
+    for (const crawler of scene.pm.wholeParty()) crawler.hp = crawler.maxHp;
     scene.update();
   }
 }
@@ -290,7 +290,7 @@ function insideBesideGate(room: Room, map: LiveMap): { stand: Tile; gate: Tile }
       [0, -1],
     ] as const) {
       const stand = { x: gate.x + dx, y: gate.y + dy };
-      if (!inRoom(stand) || !map.isWalkable(stand.x, stand.y)) continue;
+      if (!inRoom(stand) || !map.isWalkable(stand.x, stand.y, 'walker')) continue;
       if (map.isStealthGateTile(stand.x, stand.y)) continue;
       const distance = Math.hypot(stand.x - room.guardTile.x, stand.y - room.guardTile.y);
       if (best === null || distance > best.distance) best = { stand, gate, distance };
@@ -335,7 +335,7 @@ function gatewayReachable(map: LiveMap, from: Tile): boolean {
     ] as const) {
       const next = { x: tile.x + dx, y: tile.y + dy };
       const key = next.y * width + next.x;
-      if (seen.has(key) || !map.isWalkableIgnoringBathroomQueue(next.x, next.y)) continue;
+      if (seen.has(key) || !map.isWalkableIgnoringBathroomQueue(next.x, next.y, 'walker')) continue;
       seen.add(key);
       queue.push(next);
     }
@@ -371,6 +371,7 @@ function hireRoster(): ReturnType<typeof createMercenaryRoster> {
   roster.active = {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
+    terms: 'paid',
     contractLevelId: level2.id,
     introduced: true,
   };
@@ -401,7 +402,7 @@ function verifyCompanionsRejoin(scene: Scene, partyTile: Tile, label: string): v
   placeParty(scene, partyTile);
   const party = scene.pm.active();
   for (let frame = 0; frame < REJOIN_FRAMES; frame++) {
-    for (const crawler of scene.pm.players()) {
+    for (const crawler of scene.pm.wholeParty()) {
       crawler.hp = crawler.maxHp;
       placeAt(crawler, partyTile);
     }
@@ -575,7 +576,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   check(guardMarker(outside) === 'exclamation', `${label}: the guard wears '!'`);
   check(map.stealthGateState() === 'locked', `${label}: the gate starts locked`);
   check(
-    room.gateTiles.every((tile) => !map.isWalkable(tile.x, tile.y)),
+    room.gateTiles.every((tile) => !map.isWalkable(tile.x, tile.y, 'walker')),
     `${label}: the locked gate cannot be walked through`,
   );
   check(
@@ -717,7 +718,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   inside.update();
   placeAt(leader, front);
   inside.update();
-  const [insideHuman, insideCat] = inside.pm.players();
+  const [insideHuman, insideCat] = inside.pm.wholeParty();
   const keysInside =
     insideHuman.inventory.countOf(PRISON_KEY_ITEM) + insideCat.inventory.countOf(PRISON_KEY_ITEM);
   check(keysInside === 1, `${label}: walking up within a tile of the pedestal lifts the key`);
@@ -808,7 +809,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
     (human.level === humanBefore.level && human.xp > humanBefore.xp);
   check(humanGained, `${label}: the quest pays XP`);
   check(
-    room.gateTiles.every((tile) => map.isWalkable(tile.x, tile.y)),
+    room.gateTiles.every((tile) => map.isWalkable(tile.x, tile.y, 'walker')),
     `${label}: the open gate can be walked through`,
   );
   check(

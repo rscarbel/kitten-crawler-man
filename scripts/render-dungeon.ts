@@ -724,7 +724,7 @@ function smashView(): DestructiblePropSystem {
         const row =
           besideY >= 0 && besideY < gameMap.structure.length ? gameMap.structure[besideY] : null;
         if (row === null || besideX < 0 || besideX >= row.length) continue;
-        if (!isWalkableTileType(row[besideX])) continue;
+        if (!isWalkableTileType(row[besideX], 'walker')) continue;
         props.destroyInRadius(tileMiddle(tx + dx), tileMiddle(ty + dy), SMASH_REACH_PX, crawler);
         break;
       }

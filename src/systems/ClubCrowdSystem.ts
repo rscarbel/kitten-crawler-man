@@ -787,7 +787,7 @@ export class ClubCrowdSystem {
     const tx = Math.floor((x + TILE_SIZE * TILE_CENTER_X_FRACTION) / TILE_SIZE);
     const ty = Math.floor((y + TILE_SIZE * BODY_CENTER_Y_FRACTION) / TILE_SIZE);
     if (!isClubPatronTile(tx, ty)) return false;
-    return this.map.isWalkable(tx, ty);
+    return this.map.isWalkable(tx, ty, 'walker');
   }
 
   /**
@@ -801,7 +801,8 @@ export class ClubCrowdSystem {
     const tiles: Array<{ x: number; y: number }> = [];
     for (let ty = 1; ty < CLUB_INTERIOR_H - 1; ty++) {
       for (let tx = 1; tx < CLUB_INTERIOR_W - 1; tx++) {
-        if (isClubPatronTile(tx, ty) && this.map.isWalkable(tx, ty)) tiles.push({ x: tx, y: ty });
+        if (isClubPatronTile(tx, ty) && this.map.isWalkable(tx, ty, 'walker'))
+          tiles.push({ x: tx, y: ty });
       }
     }
     this.patronTiles = tiles;

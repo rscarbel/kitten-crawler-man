@@ -420,6 +420,11 @@ export class TownInteriorPropDestructionSystem {
     private readonly payoutRecord: InteriorPayoutRecord,
   ) {}
 
+  /** The map whose placed props this system breaks. */
+  get map(): GameMap {
+    return this.gameMap;
+  }
+
   setActivePlayer(player: HumanPlayer | CatPlayer): void {
     this.lootOwner = player;
   }
@@ -471,6 +476,24 @@ export class TownInteriorPropDestructionSystem {
    */
   destroyInRadius(x: number, y: number, radius: number): boolean {
     return this.damagePropsInRange(x, y, radius, Number.MAX_SAFE_INTEGER, null);
+  }
+
+  /**
+   * Breaks one placed prop where it now lies, whatever its health — a jar
+   * knocked off a ledge smashing on the tile it came down on. Its debris and
+   * any loot are there, not where it stood. Returns whether it broke.
+   */
+  shatterAt(
+    placed: PlacedTownInteriorProp,
+    tile: { readonly x: number; readonly y: number },
+  ): boolean {
+    const propDef = TOWN_INTERIOR_PROPS[placed.propId];
+    const spec = propDef.destructible;
+    if (spec === undefined || this.brokenIds.has(placed.id)) return false;
+    const landed: PlacedTownInteriorProp = { ...placed, tile: { x: tile.x, y: tile.y } };
+    this.breakProp(landed, spec, footprintOf(landed));
+    this.hp.delete(placed.id);
+    return true;
   }
 
   private damagePropsInRange(

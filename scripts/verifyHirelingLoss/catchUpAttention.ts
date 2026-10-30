@@ -66,6 +66,7 @@ function caughtUpWith(hostileColumn: number): boolean {
   roster.active = {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
+    terms: 'paid',
     contractLevelId: level3.id,
     introduced: true,
   };
@@ -74,7 +75,7 @@ function caughtUpWith(hostileColumn: number): boolean {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,

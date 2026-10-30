@@ -316,7 +316,7 @@ export function buildEnvironment(found: FoundRoom): RoomEnvironment {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: new MobRoster(found.gameMap, new SpellSystem()),
     gameMap: found.gameMap,
@@ -628,6 +628,3 @@ export function dressingUnderTest(
     },
   };
 }
-
-/** The states every room has before its own fight states are added. */
-export const BASELINE_ROOM_STATES: readonly BossRoomState[] = ['pre', 'sealed', 'defeated'];

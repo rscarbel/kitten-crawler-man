@@ -1410,7 +1410,13 @@ export class BigRooster extends Mob {
     const map = this.map;
     if (map === null) return false;
     const half = this.tileSize * CENTER_OFFSET;
-    return map.hasWalkableLine(this.x + half, this.y + half, target.x + half, target.y + half);
+    return map.hasWalkableLine(
+      this.x + half,
+      this.y + half,
+      target.x + half,
+      target.y + half,
+      'walker',
+    );
   }
 
   private nearestLoadedSquatRack(): { x: number; y: number } | null {
@@ -1477,7 +1483,7 @@ export class BigRooster extends Mob {
       const insideRoom =
         room === null ||
         (tileX >= room.x && tileY >= room.y && tileX < room.x + room.w && tileY < room.y + room.h);
-      return insideRoom && map.isWalkable(tileX, tileY);
+      return insideRoom && map.isWalkable(tileX, tileY, 'walker');
     };
     const points = [{ x: origin.x, y: origin.y }];
     let x = origin.x;
@@ -2011,7 +2017,8 @@ export class BigRooster extends Mob {
           aheadTileY >= room.y &&
           aheadTileX < room.x + room.w &&
           aheadTileY < room.y + room.h);
-      const groundAhead = insideRoom && (this.map?.isWalkable(aheadTileX, aheadTileY) ?? true);
+      const groundAhead =
+        insideRoom && (this.map?.isWalkable(aheadTileX, aheadTileY, this.mobility) ?? true);
       this.moveWithCollision(hx * step, hy * step);
       const moved =
         groundAhead &&
@@ -2137,7 +2144,7 @@ export class BigRooster extends Mob {
       const tileX = Math.floor(proj.x / ts);
       const tileY = Math.floor(proj.y / ts);
 
-      if (!this.map.isWalkable(tileX, tileY)) {
+      if (!this.map.isWalkable(tileX, tileY, this.mobility)) {
         const prevX = proj.x - proj.vx;
         const prevY = proj.y - proj.vy;
         const prevTX = Math.floor(prevX / ts);
@@ -2145,8 +2152,16 @@ export class BigRooster extends Mob {
 
         // Test each axis from the previous (walkable) position so wall-tile
         // coordinates don't corrupt the other axis's check.
-        const hitsWallOnX = !this.map.isWalkable(Math.floor((prevX + proj.vx) / ts), prevTY);
-        const hitsWallOnY = !this.map.isWalkable(prevTX, Math.floor((prevY + proj.vy) / ts));
+        const hitsWallOnX = !this.map.isWalkable(
+          Math.floor((prevX + proj.vx) / ts),
+          prevTY,
+          this.mobility,
+        );
+        const hitsWallOnY = !this.map.isWalkable(
+          prevTX,
+          Math.floor((prevY + proj.vy) / ts),
+          this.mobility,
+        );
 
         if (hitsWallOnX) proj.vx *= -THROW_BOUNCE_DAMPING;
         if (hitsWallOnY) proj.vy *= -THROW_BOUNCE_DAMPING;
@@ -2159,7 +2174,7 @@ export class BigRooster extends Mob {
         proj.x = prevX + proj.vx;
         proj.y = prevY + proj.vy;
 
-        if (!this.map.isWalkable(Math.floor(proj.x / ts), Math.floor(proj.y / ts))) {
+        if (!this.map.isWalkable(Math.floor(proj.x / ts), Math.floor(proj.y / ts), this.mobility)) {
           this.activeThrow = null;
           return;
         }

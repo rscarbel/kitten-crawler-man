@@ -63,7 +63,7 @@ function placeDownRoom(
     x: Math.round(from.x + (dx / length) * distance),
     y: Math.round(from.y + (dy / length) * distance),
   };
-  if (!frame.gameMap.isWalkable(tile.x, tile.y)) return false;
+  if (!frame.gameMap.isWalkable(tile.x, tile.y, 'walker')) return false;
   crawler.x = tile.x * TILE_SIZE;
   crawler.y = tile.y * TILE_SIZE;
   return true;

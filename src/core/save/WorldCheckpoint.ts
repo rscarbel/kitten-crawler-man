@@ -10,11 +10,9 @@ import type { CloggedBathroomCheckpoint } from '../../systems/cloggedBathroom/cl
 import type { StealthKeySnatchCheckpoint } from '../../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
 import type { DestructionCheckpoint } from '../../systems/kits/DestructionKit';
 import type { DifficultyTelemetryCheckpoint } from '../../systems/DifficultyTelemetrySystem';
-import type { DoomsdayEscapeCheckpoint } from '../../systems/DoomsdayEscapeSystem';
 import type { MercenaryCheckpoint } from '../../systems/MercenarySystem';
 import type { MiniMapCheckpoint } from '../../systems/MiniMapSystem';
 import type { DeinonychusCheckpoint } from '../../systems/DeinonychusSystem';
-import type { MurderMysteryQuestCheckpoint } from '../../systems/MurderMysteryQuestSystem';
 import type { RecallCheckpoint } from '../../systems/RecallSystem';
 import type { SpiderQuestCheckpoint } from '../../systems/SpiderQuestSystem';
 import type { StairwellCheckpoint } from '../../systems/StairwellSystem';
@@ -24,14 +22,15 @@ import type { ShopStockSnapshot } from '../../economy/shopStock';
 import type { BountyProgressCheckpoint } from '../quests/BountyProgress';
 import type { StarlightTentProgressCheckpoint } from '../state/StarlightTentProgress';
 import type { AnchorQuestProgressCheckpoint } from '../quests/AnchorQuestProgress';
+import type { MissingCatsProgressCheckpoint } from '../quests/missingCatsProgress';
 import type { CasinoStateCheckpoint } from '../club/CasinoState';
 import type { TownMemoryCheckpoint } from '../state/TownMemory';
 import type { GameStatsSnapshot } from '../progression/GameStats';
 import type { MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
 import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState';
-import type { MurderQuestProgressCheckpoint } from '../quests/MurderQuestProgress';
 import type { JournalProgressCheckpoint } from '../quests/JournalProgress';
 import type { BriarHollowStateSnapshot } from '../quests/briarHollowState';
+import type { PartySplitSnapshot } from '../party/partySplit';
 
 /**
  * Everything about the floor — and the run — that a safe-room checkpoint has to
@@ -73,8 +72,6 @@ export interface WorldCheckpoint {
   /** Where the stealth gate's key quest stands; the gate itself is in `gameMap`. */
   stealthKeySnatch: StealthKeySnatchCheckpoint;
   spiderQuest: SpiderQuestCheckpoint;
-  murderQuest: MurderMysteryQuestCheckpoint;
-  doomsdayEscape: DoomsdayEscapeCheckpoint;
 
   /** Floor loot and smashable props together — what the destruction kit owns. */
   destruction: DestructionCheckpoint;
@@ -88,7 +85,8 @@ export interface WorldCheckpoint {
    */
   starlightTentProgress: StarlightTentProgressCheckpoint;
   anchorQuestProgress: AnchorQuestProgressCheckpoint;
-  murderQuestProgress: MurderQuestProgressCheckpoint;
+  /** The town's stolen cats: the phase, the clues, the cellar's waves and the choice about Aviel. */
+  missingCatsProgress: MissingCatsProgressCheckpoint;
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
   casinoState: CasinoStateCheckpoint;
@@ -98,6 +96,8 @@ export interface WorldCheckpoint {
   deinonychusPetState: DeinonychusPetStateCheckpoint;
   /** The human crawler's attack cow: owned, her health and her rest, rewound like Deinonychus's. */
   attackCowState: AttackCowStateCheckpoint;
+  /** Whether the party is split, where each group stands, and what the groups left each other. */
+  partySplit: PartySplitSnapshot;
   /** Briar Hollow's quest, structures and soldier orders. Empty on every floor but 3. */
   briarHollow: BriarHollowStateSnapshot;
 

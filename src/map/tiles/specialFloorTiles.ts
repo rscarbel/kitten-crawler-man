@@ -188,7 +188,7 @@ function isSolidAt(structure: TileContent[][], x: number, y: number): boolean {
   if (!withinRows) return true;
   const row = structure[y];
   if (x < 0 || x >= row.length) return true;
-  return !isWalkableTileType(row[x]);
+  return !isWalkableTileType(row[x], 'walker');
 }
 
 function isBarricadeAt(structure: TileContent[][], x: number, y: number): boolean {

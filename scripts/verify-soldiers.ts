@@ -310,7 +310,7 @@ function contextFor(rig: Rig): SystemContext {
     human: rig.human,
     cat: rig.cat,
     active: rig.human,
-    inactive: rig.cat,
+    partner: rig.cat,
     activeIsMoving: rig.human.isMoving,
     roster: rig.roster,
     gameMap,
@@ -361,7 +361,7 @@ function openPatch(): TilePoint {
         let clear = true;
         for (let oy = -PATCH_RADIUS_TILES; oy <= PATCH_RADIUS_TILES && clear; oy++) {
           for (let ox = -PATCH_RADIUS_TILES; ox <= PATCH_RADIUS_TILES && clear; ox++) {
-            if (!gameMap.isWalkable(x + ox, y + oy)) clear = false;
+            if (!gameMap.isWalkable(x + ox, y + oy, 'walker')) clear = false;
           }
         }
         if (clear) return { x, y };
@@ -405,7 +405,15 @@ function giveOrder(
 /** Walks `body` along a friendly A* path to `goal` at a crawler's pace; `each` runs every frame. */
 function walkTo(rig: Rig, body: Player, goal: TilePoint, each: () => void): boolean {
   const start = tileOf(body);
-  const path = gameMap.findPath(start.x, start.y, goal.x, goal.y, WALK_BUDGET_TILES, false);
+  const path = gameMap.findPath(
+    start.x,
+    start.y,
+    goal.x,
+    goal.y,
+    'walker',
+    WALK_BUDGET_TILES,
+    false,
+  );
   if (path.length === 0) return false;
   for (const step of path) {
     const targetX = step.x * TILE_SIZE;
@@ -438,8 +446,8 @@ function tileOutside(tiles: number): TilePoint | null {
       const x = gateOut.x + dx;
       const y = gateOut.y + dy;
       if (tilesOutsideRect(site.palisadeBounds, x, y) < tiles) continue;
-      if (!gameMap.isWalkable(x, y)) continue;
-      const path = gameMap.findPath(gateOut.x, gateOut.y, x, y, WALK_BUDGET_TILES, false);
+      if (!gameMap.isWalkable(x, y, 'walker')) continue;
+      const path = gameMap.findPath(gateOut.x, gateOut.y, x, y, 'walker', WALK_BUDGET_TILES, false);
       if (path.length > 0) return { x, y };
     }
   }
@@ -649,7 +657,9 @@ section('Follow: through the gate and out, within the band');
   );
   check(rig.soldiers.orderFor(id)?.followCrawler === 'human', 'the order follows whoever gave it');
   const out = { x: site.gate.outside.x, y: site.gate.outside.y + FOLLOW_WALK_OUT_TILES };
-  const goal = gameMap.isWalkable(out.x, out.y) ? out : tileOutside(FOLLOW_WALK_OUT_TILES);
+  const goal = gameMap.isWalkable(out.x, out.y, 'walker')
+    ? out
+    : tileOutside(FOLLOW_WALK_OUT_TILES);
   let worstWhileWalking = 0;
   let walkedFrames = 0;
   const walked =

@@ -76,7 +76,6 @@ import type { AchievementManager } from '../src/core/progression/AchievementMana
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 import type { ResidentId } from '../src/core/state/residentIds.js';
 import { buildingDisplayName } from '../src/map/buildingIds.js';
-import { PetNameBook, petWords } from '../src/core/party/petNames.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
 import { plainDeathMessage } from '../src/ui/DeathExplanations.js';
 
@@ -366,7 +365,6 @@ const PHONE_REQUIRED_SURFACES = [
   'follower-menu',
   'chest-reward',
   'quest-reward',
-  'run-complete',
 ] as const;
 
 function isStringArray(value: unknown): value is string[] {
@@ -1414,6 +1412,9 @@ function menusKitOpeners<S>(menusOf: (scene: S) => MenusKit): Opener<S>[] {
 
 /** Longer than the audit settles and plays an entrance for, so the cutscene is still running when audited. */
 const CUTSCENE_AUDIT_WAIT_FRAMES = MAX_SETTLE_FRAMES * 2;
+/** The fade to black is as quick as a script may make it, so the audit is not waiting on it. */
+const CUTSCENE_AUDIT_FADE_FRAMES = 1;
+const CUTSCENE_FADE_SURFACE = 'cutscene-fade';
 
 /** The slice of any scene's cutscene kit the audit drives, whatever world actions the scene has. */
 interface AuditedCutsceneKit extends Pick<CutsceneKit, 'dispose'> {
@@ -1431,6 +1432,34 @@ function cutsceneOpener<S>(kitOf: (scene: S) => AuditedCutsceneKit): Opener<S> {
     (scene) => kitOf(scene).director.play([{ kind: 'wait', frames: CUTSCENE_AUDIT_WAIT_FRAMES }]),
     (scene) => kitOf(scene).dispose(),
   );
+}
+
+/**
+ * A cutscene that has faded the screen to black and holds it there. The
+ * script is started on the scene's next tick, so the scene is stepped until
+ * the fade shows.
+ */
+function cutsceneFadeOpener<S extends SceneUnderAudit>(
+  kitOf: (scene: S) => AuditedCutsceneKit,
+): Opener<S> {
+  return opener<S>(
+    CUTSCENE_FADE_SURFACE,
+    (scene) => {
+      kitOf(scene).director.play([
+        { kind: 'fade', to: 1, frames: CUTSCENE_AUDIT_FADE_FRAMES },
+        { kind: 'wait', frames: CUTSCENE_AUDIT_WAIT_FRAMES },
+      ]);
+      stepUntilOpen(scene, CUTSCENE_FADE_SURFACE);
+    },
+    (scene) => kitOf(scene).dispose(),
+  );
+}
+
+/** Steps `scene` until `surfaceId` shows, for a surface that opens part-way into something it runs. */
+function stepUntilOpen(scene: SceneUnderAudit, surfaceId: string): void {
+  for (let frame = 0; frame < MAX_SETTLE_FRAMES && !scene.ui.isOpen(surfaceId); frame++) {
+    step(scene);
+  }
 }
 
 /** The Reward Chest, opened by a paid award waiting in the human's queue. */
@@ -1524,6 +1553,7 @@ function townOpeners(): Opener<Town>[] {
       (scene) => scene['aiChallenges'],
     ),
     cutsceneOpener<Town>((scene) => scene['cutscenes']),
+    cutsceneFadeOpener<Town>((scene) => scene['cutscenes']),
     menu(
       'wipe-hold',
       (scene) =>
@@ -1571,38 +1601,6 @@ function townOpeners(): Opener<Town>[] {
       (scene) => scene['levelCompleteScreen'].activate('Taloncrest', null, noop),
       (scene) => {
         scene['levelCompleteScreen']['active'] = false;
-      },
-    ),
-    menu(
-      'run-complete',
-      (scene) =>
-        scene['runCompleteScreen'].activate(
-          {
-            framesPlayed: 0,
-            deaths: 0,
-            damageDealt: 0,
-            damageTaken: 0,
-            potionsUsed: 0,
-            goldEarned: 0,
-            achievementsUnlocked: 0,
-            achievementsTotal: 0,
-            humanLevel: 1,
-            catLevel: 1,
-            deinonychusLevel: null,
-            deinonychusWords: petWords(new PetNameBook(), 'deinonychus'),
-            totalKills: 0,
-            bossesDefeated: 0,
-            mercenariesHired: 0,
-            mercenariesLost: 0,
-            deinonychusPets: 0,
-            cowPets: 0,
-            midgePets: 0,
-            topKills: [],
-          },
-          { onKeepExploring: noop, onMainMenu: noop },
-        ),
-      (scene) => {
-        scene['runCompleteScreen']['active'] = false;
       },
     ),
     menu(
@@ -1892,6 +1890,16 @@ const { indoorsConstructionSource } =
   await import('../src/systems/briarHollow/ConstructionSystem.js');
 
 type Interior = InstanceType<typeof BuildingInteriorScene>;
+const { TowerStoreysSystem } = await import('../src/systems/tower/TowerStoreysSystem.js');
+
+/** The tower's storeys, the encounter every storey of the tower runs. */
+function towerStoreysOf(scene: Interior): InstanceType<typeof TowerStoreysSystem> {
+  const encounter = scene['encounter'];
+  if (!(encounter instanceof TowerStoreysSystem)) {
+    throw new Error('the tower is not running its storeys');
+  }
+  return encounter;
+}
 type Entry = (typeof town.buildingEntries)[number];
 
 const SAMPLE_READABLE = {
@@ -1986,6 +1994,7 @@ function roomOpeners(): Opener<Interior>[] {
     ),
     ...aiInteractionOpeners<Interior>((scene) => scene['aiInteractions'], null),
     cutsceneOpener<Interior>((scene) => scene['cutscenes']),
+    cutsceneFadeOpener<Interior>((scene) => scene['cutscenes']),
     menu(
       'conversation',
       (scene) => void scene['conversation'].open(haltingRequest()),
@@ -2065,7 +2074,7 @@ function interiorCases(): InteriorCase[] {
   };
   const casinoSeat = (scene: Interior) => ({
     active: () => scene.pm.active(),
-    companion: () => scene.pm.inactive(),
+    companion: () => scene.pm.partnerAnywhere(),
   });
   const closeWheel = (scene: Interior): void => {
     wheelOf(scene).resetForReview();
@@ -2076,7 +2085,7 @@ function interiorCases(): InteriorCase[] {
     const poker = club(scene)['poker'];
     const active = scene.pm.active();
     active.coins += POKER_STAKES.penny.buyIn * POKER_AUDIT_BUY_INS;
-    poker.buyIn('penny', active, scene.pm.inactive());
+    poker.buyIn('penny', active, scene.pm.partnerAnywhere());
     poker.dismissRules();
     const table = poker.pokerTable;
     if (table === null) throw new Error('the poker table did not seat the party');
@@ -2168,6 +2177,27 @@ function interiorCases(): InteriorCase[] {
           },
           (scene) => scene['towerStairs']?.closeMenu(),
         ),
+        menu(
+          'tower-gatehouse-capture-fade',
+          (scene) => {
+            towerStoreysOf(scene)['capture'].begin();
+            stepUntilOpen(scene, 'tower-gatehouse-capture-fade');
+          },
+          (scene) => towerStoreysOf(scene)['capture'].cancel(),
+        ),
+        menu(
+          'tower-archive-capture-fade',
+          (scene) => {
+            const capture = towerStoreysOf(scene)['archive']['capture'];
+            capture.begin();
+            // The archive's capture is stepped only on its own storey, so it
+            // is run on by hand to the dark.
+            for (let frame = 0; frame < MAX_SETTLE_FRAMES && capture.alpha < 1; frame++) {
+              capture.step();
+            }
+          },
+          (scene) => towerStoreysOf(scene)['archive']['capture'].cancel(),
+        ),
       ],
     },
     {
@@ -2178,14 +2208,14 @@ function interiorCases(): InteriorCase[] {
         menu('club-market-shop', (scene) => club(scene)['marketShop'].open(), closeClub),
         menu(
           'blackjack-rules',
-          (scene) => club(scene)['casino'].openTable(scene.pm.active(), scene.pm.inactive()),
+          (scene) => club(scene)['casino'].openTable(scene.pm.active(), scene.pm.partnerAnywhere()),
           closeClub,
         ),
         menu(
           'club-casino',
           (scene) => {
             const casino = club(scene)['casino'];
-            casino.openTable(scene.pm.active(), scene.pm.inactive());
+            casino.openTable(scene.pm.active(), scene.pm.partnerAnywhere());
             casino.dismissRules();
           },
           closeClub,

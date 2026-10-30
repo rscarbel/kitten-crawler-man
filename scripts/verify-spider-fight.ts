@@ -685,7 +685,7 @@ function buildLab(options: LabOptions): Lab {
       human,
       cat,
       active: human,
-      inactive: cat,
+      partner: cat,
       activeIsMoving: false,
       roster,
       gameMap: map,
@@ -752,7 +752,8 @@ function step(lab: Lab, moves: Moves = NO_MOVES): void {
     // Slow ground slows every step, the reader's and the escape walk's alike,
     // exactly as the movement phase scales a real crawler's.
     const footing = footingSpeedFactor(player, lab.map);
-    if (canMove) pushPlayerWithCollision(player, move.x * footing, move.y * footing, lab.map);
+    if (canMove)
+      pushPlayerWithCollision(player, move.x * footing, move.y * footing, lab.map, player.mobility);
     clampToLab(player);
     player.isMoving = canMove;
   }
@@ -1866,10 +1867,11 @@ function freeFramesToEscape(scenario: Scenario): number {
     const body = {
       x: her.x + scenario.towardPlayer.x * scenario.lockDistance - HALF_TILE,
       y: her.y + scenario.towardPlayer.y * scenario.lockDistance - HALF_TILE,
+      isCrossingFooting: false,
     };
     for (let frame = 1; frame <= FRAME_SEARCH_CEILING && frame < fewest; frame++) {
       const gapBefore = distance(centreOf(body), her);
-      pushPlayerWithCollision(body, walk.x, walk.y, map);
+      pushPlayerWithCollision(body, walk.x, walk.y, map, 'walker');
       clampToLab(body);
       const gapAfter = distance(centreOf(body), her);
       const pressesIntoHer = gapAfter < SEPARATION_RADIUS && gapAfter < gapBefore;
@@ -3002,10 +3004,10 @@ function lockCanBeWalkedOutOf(lab: Lab, attack: DamagingAttack, victim: Player):
   const lockFrames = SPIDER_ATTACK_TIMELINES[attack].lockFrames;
   for (let direction = 0; direction < ESCAPE_DIRECTIONS; direction++) {
     const walk = escapeDirection(direction);
-    const body = { x: victim.x, y: victim.y };
+    const body = { x: victim.x, y: victim.y, isCrossingFooting: false };
     for (let frame = 0; frame < lockFrames; frame++) {
       const gapBefore = distance(centreOf(body), her);
-      pushPlayerWithCollision(body, walk.x, walk.y, lab.map);
+      pushPlayerWithCollision(body, walk.x, walk.y, lab.map, 'walker');
       clampToLab(body);
       const gapAfter = distance(centreOf(body), her);
       if (gapAfter < SEPARATION_RADIUS && gapAfter < gapBefore) break;
@@ -4173,7 +4175,7 @@ function companionsSmashEggs(): void {
     const ctx: SystemContext = {
       ...lab.ctx(),
       active: humanIsActive ? human : cat,
-      inactive: companion,
+      partner: companion,
     };
     let targeted = false;
     for (let frame = 0; frame < COMPANION_EGG_FRAMES && !targeted; frame++) {
@@ -4485,10 +4487,10 @@ function walkShortfall(lab: Lab, player: Player, dir: Vec, threats: readonly Thr
     READER_MAX_LOOKAHEAD_STEPS,
     Math.max(READER_LOOKAHEAD_STEPS, ...threats.map((t) => t.atStrike ?? 0)),
   );
-  const probe = { x: player.x, y: player.y };
+  const probe = { x: player.x, y: player.y, isCrossingFooting: false };
   const worst = threats.map(() => Infinity);
   for (let stepIndex = 1; stepIndex <= horizon; stepIndex++) {
-    pushPlayerWithCollision(probe, dir.x, dir.y, lab.map);
+    pushPlayerWithCollision(probe, dir.x, dir.y, lab.map, player.mobility);
     const here = centreOf(probe);
     threats.forEach((threat, index) => {
       const bitesNow = threat.atStrike === null || threat.atStrike === stepIndex;
@@ -4530,8 +4532,8 @@ function readerStep(
   for (let index = 0; index < READER_DIRECTIONS; index++) {
     const angle = (index / READER_DIRECTIONS) * Math.PI * 2;
     const dir = { x: Math.cos(angle) * PLAYER_SPEED, y: Math.sin(angle) * PLAYER_SPEED };
-    const firstStep = { x: player.x, y: player.y };
-    pushPlayerWithCollision(firstStep, dir.x, dir.y, lab.map);
+    const firstStep = { x: player.x, y: player.y, isCrossingFooting: false };
+    pushPlayerWithCollision(firstStep, dir.x, dir.y, lab.map, player.mobility);
     const afterOne = centreOf(firstStep);
     const progress =
       goal === null ? distance(afterOne, me) : distance(me, goal) - distance(afterOne, goal);
@@ -4593,7 +4595,7 @@ const TANK_BUDGET_SECONDS = 120;
 function campWaypoint(lab: Lab, me: Vec, camp: Vec): Vec {
   const myTile = { x: Math.floor(me.x / TILE_SIZE), y: Math.floor(me.y / TILE_SIZE) };
   const labSpanTiles = labSite.bounds.w + labSite.bounds.h;
-  const route = lab.map.findPath(myTile.x, myTile.y, camp.x, camp.y, labSpanTiles);
+  const route = lab.map.findPath(myTile.x, myTile.y, camp.x, camp.y, 'walker', labSpanTiles);
   const next = route[1] ?? camp;
   return tileCentre(next.x, next.y);
 }
@@ -4940,7 +4942,7 @@ function nearestOpenTile(map: GameMap, from: Vec, taken: readonly Vec[]): Vec {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
         const tile = { x: from.x + dx, y: from.y + dy };
         const isTaken = taken.some((other) => other.x === tile.x && other.y === tile.y);
-        if (!isTaken && map.isWalkable(tile.x, tile.y)) return tile;
+        if (!isTaken && map.isWalkable(tile.x, tile.y, 'walker')) return tile;
       }
     }
   }
@@ -5153,7 +5155,7 @@ const WEB_SITE: LabSite = {
     for (let y = LAB_BOUNDS.y; y < LAB_BOUNDS.y + LAB_BOUNDS.h; y++) {
       for (let x = LAB_BOUNDS.x; x < LAB_BOUNDS.x + LAB_BOUNDS.w; x++) {
         const tile = map.structure[y][x];
-        if (!isWalkableTileType(tile)) continue;
+        if (!isWalkableTileType(tile, 'walker')) continue;
         placeProp(tile, LAB_WEB);
         webTiles.push({ x, y });
       }

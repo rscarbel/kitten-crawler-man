@@ -68,7 +68,7 @@ function standBesideFenna(rig: SiegeRig, stand: Stand): boolean {
   const fy = Math.round(fenna.y / TILE_SIZE);
   for (let dy = -SEARCH_RADIUS_TILES; dy <= SEARCH_RADIUS_TILES; dy++) {
     for (let dx = -SEARCH_RADIUS_TILES; dx <= SEARCH_RADIUS_TILES; dx++) {
-      if (!rig.map.isWalkable(fx + dx, fy + dy)) continue;
+      if (!rig.map.isWalkable(fx + dx, fy + dy, 'walker')) continue;
       standAt(rig.human, fx + dx, fy + dy);
       if (villagers?.talkTarget(rig.human) !== fenna) continue;
       const fennaTiles = Math.hypot(fenna.x - rig.human.x, fenna.y - rig.human.y) / TILE_SIZE;

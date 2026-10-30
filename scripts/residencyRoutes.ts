@@ -12,7 +12,7 @@ import { z } from 'zod';
  * difference the report prints, the one that saw more first.
  */
 export const RESIDENCY_FLOORS = {
-  '3': { routes: ['tour', 'direct'], compare: ['tour', 'direct'] },
+  '3': { routes: ['tour', 'direct', 'cattery'], compare: ['tour', 'direct'] },
   'scaled-city': { routes: ['walk', 'arrive'], compare: ['walk', 'arrive'] },
 } as const satisfies Record<
   string,

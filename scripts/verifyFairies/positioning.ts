@@ -183,7 +183,7 @@ function buildFloor(grid: TileGrid, rooms: readonly RectSpec[], start: RectSpec)
     human: pm.human,
     cat: pm.cat,
     active: pm.active(),
-    inactive: pm.inactive(),
+    partner: pm.presentPartner(),
     activeIsMoving: false,
     roster,
     gameMap: map,

@@ -26,7 +26,7 @@ import {
   poseOnSegments,
   tileCentrePx,
   type CompiledGuard,
-  type CompiledPrison,
+  type CompiledStealth,
   type GuardPose,
   type GuardSegment,
 } from './prisonPatrols';
@@ -174,7 +174,7 @@ function walkPath(
 
 /** Whether a guard standing in `pose` on `frame` of the shared clock has the point in its flashlight. */
 export function guardSeesPoint(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   pose: GuardPose,
   frame: number,
   point: PrisonPoint,
@@ -191,7 +191,7 @@ export function guardSeesPoint(
  * noise was made on, which the guard's art and so its lens follow.
  */
 export function respondToNoise(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   guard: CompiledGuard,
   pose: GuardPose,
   frame: number,

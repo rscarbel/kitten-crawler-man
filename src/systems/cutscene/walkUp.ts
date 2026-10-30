@@ -1,5 +1,10 @@
 import type { GameMap } from '../../map/GameMap';
-import type { CutsceneFacing, CutsceneTile, WalkToStep } from './cutsceneSteps';
+import {
+  ACTIVE_CRAWLER,
+  type CutsceneFacing,
+  type CutsceneTile,
+  type WalkToStep,
+} from './cutsceneSteps';
 
 interface StandSpot {
   readonly dx: number;
@@ -35,14 +40,21 @@ function facingToward(from: CutsceneTile, to: CutsceneTile): CutsceneFacing {
 export function walkUpTo(map: GameMap, speaker: CutsceneTile, crawler: CutsceneTile): WalkToStep {
   for (const spot of STAND_SPOTS) {
     const tile = { x: speaker.x + spot.dx, y: speaker.y + spot.dy };
-    if (map.isWalkable(tile.x, tile.y)) {
-      return { kind: 'walkTo', who: 'activeCrawler', tile, face: spot.face };
+    if (map.isWalkable(tile.x, tile.y, 'walker')) {
+      return {
+        kind: 'walkTo',
+        who: ACTIVE_CRAWLER,
+        tile,
+        face: spot.face,
+        then: 'waitForArrival',
+      };
     }
   }
   return {
     kind: 'walkTo',
-    who: 'activeCrawler',
+    who: ACTIVE_CRAWLER,
     tile: crawler,
     face: facingToward(crawler, speaker),
+    then: 'waitForArrival',
   };
 }

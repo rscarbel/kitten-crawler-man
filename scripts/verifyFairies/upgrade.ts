@@ -242,7 +242,7 @@ function roomReachesStart(map: GameMap, room: TileRect, blocked: TileRect | null
     y >= 0 &&
     x < columns &&
     y < rows &&
-    map.isWalkableIgnoringPuzzleChokes(x, y) &&
+    map.isWalkableIgnoringPuzzleChokes(x, y, 'walker') &&
     (blocked === null || !isTileInRect(x, y, blocked));
   const seen = new Uint8Array(rows * columns);
   const frontier: { x: number; y: number }[] = [];

@@ -42,7 +42,7 @@ import {
 import { drawDangerCircle } from '../sprites/dangerTelegraph';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 import type { GroundHazardSource, HazardEscape } from './GroundHazardSource';
 import { type CircleHazardZone, escapeFromCircleZones } from './circleHazardEscape';
@@ -390,6 +390,7 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
     const settleWalkable = this.deps.gameMap.isWalkable(
       Math.floor((flight.toX + rollX) / TILE_SIZE),
       Math.floor((flight.toY + rollY) / TILE_SIZE),
+      'walker',
     );
     const settleX = settleWalkable ? flight.toX + rollX : flight.toX;
     const settleY = settleWalkable ? flight.toY + rollY : flight.toY;
@@ -508,7 +509,7 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
       thrower: charge.thrower,
       source: charge.source,
     };
-    applyGoblinBlastToBodies(blast, [ctx.human, ctx.cat], this.mobsNear(ctx, x, y, radiusPx));
+    applyGoblinBlastToBodies(blast, presentCrawlers(ctx), this.mobsNear(ctx, x, y, radiusPx));
 
     const siege = this.deps.siegeStructures();
     if (siege !== null) {

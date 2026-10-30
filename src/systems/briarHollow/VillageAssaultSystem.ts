@@ -800,6 +800,7 @@ class WithdrawDirective implements SiegeDirective {
         from.y,
         walk.lane.spawn.x,
         walk.lane.spawn.y,
+        'walker',
         WITHDRAW_PATH_SEARCH_TILES,
         true,
       );

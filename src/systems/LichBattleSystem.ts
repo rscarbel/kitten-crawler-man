@@ -1,8 +1,15 @@
 /**
- * LichBattleSystem — the four-phase choreography of the magistrate's office.
+ * LichBattleSystem — the Warden's fight at the top of the tower.
+ *
+ * It opens inside the ritual circle. While any pillar of the circle still
+ * holds a bound cat the Lich cannot be hurt: the cat unbinds the pillars one
+ * by one while the human holds the Lich off, and the carrier the party's
+ * choice sent comes in through the observatory window to carry one cat out. A
+ * circle with no cat left in it opens straight onto the onslaught.
  *
  * `TheLich` keeps its own kit (soul bolts, grasping hands, a raised escort) and
- * fights with it in the first and last phases. In between, this system takes the
+ * fights with it through the binding, the onslaught and the reckoning. In
+ * between the last two, this system takes the
  * body away from it twice: once to pin it against the north wall behind a
  * gauntlet of fire the party has to thread, and once to put it out of reach
  * raining warned orbs until it tires. What changes between phases is what the
@@ -24,7 +31,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { DamageSource, Player } from '../Player';
-import type { SystemContext } from './GameSystem';
+import { type SystemContext, presentCrawlers } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { BarkLine } from '../dialog/line';
 import { handsConeCovers, TheLich } from '../creatures/TheLich';
@@ -33,6 +40,26 @@ import { drawDangerCircle, drawDangerTile } from '../sprites/dangerTelegraph';
 import { drawSoulBurst, prewarmSoulBurst } from '../sprites/skeletonEffectsSprite';
 import { drawFireWave, WAVE_MIN_LOOP_FRAMES } from '../sprites/fireWaveSprite';
 import { drawLichOrb } from '../sprites/lichOrbSprite';
+import {
+  BINDING_PILLAR_SHATTER_FRAMES,
+  drawBindingPillarShatter,
+} from '../sprites/art/townInterior/rooms/towerStoreys';
+import type { TowerCarrierKind } from '../sprites/art/towerCarrierFigure';
+import type { CatLook } from '../sprites/looks/catLook';
+import {
+  CARRIER_AT_WINDOW_SHARE,
+  CarrierView,
+  carrierFlightPose,
+  carrierHoldsCat,
+} from './lichCarrierFlight';
+import { CatPlayer } from '../creatures/CatPlayer';
+import {
+  ChannelInteraction,
+  type ChannelInteractionDef,
+  type ChannelStep,
+} from './MashInteraction';
+import { REPAIR_ROWS } from '../sprites/art/humanFigure';
+import type { WorkChannelBuilder } from './WorkChannel';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import {
@@ -41,6 +68,15 @@ import {
   LICH_TANTRUM_BARK,
 } from '../dialog/scripts/scenes/lich';
 import {
+  BINDING_CHANNEL_FRAMES,
+  BINDING_DAMAGE_SETBACK_SHARE,
+  BindingCircle,
+  bindingSparesCrawler,
+  ChannelReturnGate,
+  pillarChannelSpots,
+  walkableNeighbours,
+  type BindingTick,
+  type CarrierStage,
   columnBurns,
   canHoldGap,
   DODGE_SURVIVAL_FRAMES,
@@ -229,6 +265,33 @@ const FLOAT_PATH_INSET_TILES = 1;
  */
 const FLOAT_STATION_REACHED_PX = LICH_FLOAT_SPEED * 2;
 
+// ── The binding ──────────────────────────────────────────────────────────────
+
+/**
+ * From the crawler's centre to the pillar's: the tile beside it, and the half
+ * tile short of it at which the companion's drive stops walking her there.
+ */
+const PILLAR_REACH_TILES = 1.6;
+/** How far the pillar's art stands above its footprint, so the prompt and the bar clear it. */
+const PILLAR_ART_RISE_PX = 22;
+/**
+ * Only the cat can unbind a pillar: the bound cats answer to one of their own.
+ * The human's rows are never played, and are named only because every channel
+ * names some.
+ */
+const PILLAR_CHANNEL_DEF: ChannelInteractionDef = {
+  framesRequired: BINDING_CHANNEL_FRAMES,
+  damageSetbackShare: BINDING_DAMAGE_SETBACK_SHARE,
+  deed: 'unbind the cat',
+  humanRows: REPAIR_ROWS,
+  barStyle: 'channel',
+  reachTiles: PILLAR_REACH_TILES,
+  artRisePx: PILLAR_ART_RISE_PX,
+};
+/** A pillar's work starting and breaking is heard under the fight, not over it. */
+const PILLAR_CUE_VOLUME = 0.5;
+const OBJECTIVE_BINDING_CAT_WORKING = 'Hold the Lich off while Belle unbinds the cat';
+
 // ── HUD ──────────────────────────────────────────────────────────────────────
 
 const DODGE_BAR_LABEL = 'Survive the rain';
@@ -236,16 +299,18 @@ const CENTER_OFFSET = 0.5;
 const FRAMES_PER_SECOND = 60;
 
 /** What the boss bar says the player should be doing, per phase. */
-const OBJECTIVE_ONSLAUGHT = 'It has been keeping the magistrate’s appointments. End it.';
+const OBJECTIVE_ONSLAUGHT = 'It has worn that mask over this town for years. End it.';
 const OBJECTIVE_FIREWALL = 'Thread the fire. Reach the Lich.';
 const OBJECTIVE_RECKONING = 'Finish it';
 
 /** Banner cards, one per phase change. */
-const FIREWALL_BANNER_TITLE = 'THE APPOINTMENT';
+const BINDING_BROKEN_BANNER_TITLE = 'THE CIRCLE IS BROKEN';
+const BINDING_BROKEN_BANNER_SUBTITLE = 'No cat holds it now. The Lich can be hurt.';
+const FIREWALL_BANNER_TITLE = 'THE OLD CITY BURNS';
 const FIREWALL_BANNER_SUBTITLE = 'Thread the fire. Reach the Lich.';
 const TANTRUM_BANNER_TITLE = 'THE TANTRUM';
 const TANTRUM_BANNER_SUBTITLE = 'Survive the rain until the Lich tires.';
-const RECKONING_BANNER_TITLE = 'NOTHING LEFT TO SIGN';
+const RECKONING_BANNER_TITLE = 'THE SEAM CLOSES';
 const RECKONING_BANNER_SUBTITLE = 'Finish it.';
 
 /** Volume for the wave ignition, which fires once per wave and would otherwise dominate. */
@@ -316,6 +381,46 @@ export interface LichBattleHooks {
   openBark(line: BarkLine, onClosed: () => void): void;
   /** Raises the phase card. */
   showBanner(title: string, subtitle: string): void;
+  /** The circle's last pillar has gone dark, and the Lich can be hurt. */
+  onBindingBroken(): void;
+}
+
+/** One pillar of the circle as the fight is handed it: whose it is, and where it stands. */
+export interface LichBindingPillar {
+  readonly id: string;
+  readonly tile: TilePos;
+}
+
+/**
+ * The circle the fight opens inside: the pillars still lit, every pillar in
+ * the order the carrier prefers them, and who comes in through the
+ * observatory window, saying what.
+ */
+export interface LichBinding {
+  readonly boundPillars: ReadonlyArray<LichBindingPillar>;
+  readonly carrierOrder: ReadonlyArray<string>;
+  /** The tile the carrier flies in from and back out to: under the observatory window. */
+  readonly carrierWindow: TilePos;
+  readonly carrier: TowerCarrierKind;
+  readonly carrierArrives: BarkLine;
+  /** The look of the cat bound to a pillar, so the carrier can be drawn carrying her out. */
+  catLookAt(pillarId: string): CatLook | null;
+  /** A pillar has gone dark, by a crawler's paws or the carrier's. */
+  onPillarShattered(id: string): void;
+}
+
+/** One lit pillar: where it stands, the tiles a crawler can work it from, and the work. */
+interface PillarWork {
+  readonly id: string;
+  readonly tile: TilePos;
+  readonly spots: ReadonlyArray<TilePos>;
+  readonly channel: ChannelInteraction;
+}
+
+/** Where the fight has sent the companion: a pillar, and the tile beside it she works it from. */
+interface PillarOrder {
+  readonly pillar: PillarWork;
+  readonly spot: TilePos;
 }
 
 /**
@@ -333,7 +438,17 @@ interface RoomBounds {
 }
 
 export class LichBattleSystem implements GroundHazardSource {
-  private readonly machine = new LichPhaseMachine();
+  private readonly machine: LichPhaseMachine;
+  private readonly circle: BindingCircle<string>;
+  private readonly pillars: ReadonlyArray<PillarWork>;
+  private readonly returnGate = new ChannelReturnGate();
+  /** The pillar and tile the fight last sent the companion to, or null. */
+  private pillarOrder: PillarOrder | null = null;
+  /** Whether the companion was last held off her pillar because its ground was threatened. */
+  private companionHeldOffPillar = false;
+  private readonly carrierView: CarrierView | null;
+  /** Set when the carrier comes in, until it is framed in the window and has said its line. */
+  private carrierBarkOwed = false;
   private readonly gapPlanner: FirewallGapPlanner;
   private readonly orbPlanner: OrbRainPlanner;
   private readonly bounds: RoomBounds;
@@ -342,6 +457,8 @@ export class LichBattleSystem implements GroundHazardSource {
   private waves: FireWave[] = [];
   private warnings: OrbWarning[] = [];
   private bursts: OrbBurst[] = [];
+  /** Pillars breaking, drawn over their broken art until the stone has settled. */
+  private shatters: OrbBurst[] = [];
 
   private slideLegs: ReadonlyArray<SlideLeg> = [];
   private slideFramesLeft = 0;
@@ -397,8 +514,17 @@ export class LichBattleSystem implements GroundHazardSource {
     private readonly audio: AudioManager | null,
     private readonly companion: CompanionDirector | null,
     private readonly hooks: LichBattleHooks,
+    private readonly binding: LichBinding | null = null,
   ) {
     const rng = mulberry32(LICH_BATTLE_SEED);
+    const boundPillars = binding?.boundPillars ?? [];
+    this.machine = new LichPhaseMachine(boundPillars.length > 0);
+    this.circle = new BindingCircle(
+      boundPillars.map((pillar) => pillar.id),
+      binding?.carrierOrder ?? [],
+    );
+    this.carrierView =
+      binding === null ? null : new CarrierView(binding.carrier, (id) => binding.catLookAt(id));
     this.gapPlanner = new FirewallGapPlanner(rng);
     this.orbPlanner = new OrbRainPlanner(rng);
     this.bounds = findWalkableBounds(map);
@@ -407,7 +533,7 @@ export class LichBattleSystem implements GroundHazardSource {
       maxCol: this.bounds.maxCol,
       minRow: this.bounds.minRow,
       maxRow: this.bounds.maxRow,
-      isWalkable: (col, row) => this.map.isWalkable(col, row),
+      isWalkable: (col, row) => this.map.isWalkable(col, row, 'walker'),
     };
     this.lastObservedHp = lich.hp;
     lich.battleDriver = {
@@ -415,7 +541,9 @@ export class LichBattleSystem implements GroundHazardSource {
       drivesMovement: () => this.drivesMovement(),
       isDazed: () => this.isDazed(),
       healCeilingFraction: () => this.healCeilingFraction(),
+      spares: (target) => this.spares(target),
     };
+    this.pillars = boundPillars.map((pillar) => this.pillarWork(pillar));
     // Registration with the companion is deliberately not done here. It happens
     // from `update`, every frame, because a storey change clears the list and
     // coming back has to restore it — and one path that always runs beats a
@@ -499,6 +627,10 @@ export class LichBattleSystem implements GroundHazardSource {
   /** The boss bar's objective line for whatever the fight is asking right now. */
   get objectiveLine(): string {
     switch (this.machine.phase) {
+      case 'binding':
+        return this.channellingPillar !== null
+          ? OBJECTIVE_BINDING_CAT_WORKING
+          : `Belle: unbind the lit pillars (${this.circle.bound.size} left)`;
       case 'onslaught':
         return OBJECTIVE_ONSLAUGHT;
       case 'firewall':
@@ -521,9 +653,9 @@ export class LichBattleSystem implements GroundHazardSource {
    */
   private healCeilingFraction(): number {
     const aboveFirewallLine = this.lich.hp / this.lich.maxHp > FIREWALL_TRIGGER_HP_FRACTION;
-    return this.machine.phase === 'onslaught' && aboveFirewallLine
-      ? 1
-      : FIREWALL_TRIGGER_HP_FRACTION;
+    const beforeTheFirewall =
+      this.machine.phase === 'binding' || this.machine.phase === 'onslaught';
+    return beforeTheFirewall && aboveFirewallLine ? 1 : FIREWALL_TRIGGER_HP_FRACTION;
   }
 
   private blocksDamage(): boolean {
@@ -570,6 +702,11 @@ export class LichBattleSystem implements GroundHazardSource {
     this.lastObservedHp = this.lich.hp;
 
     this.tickBursts();
+    // The carrier finishes its flight out after the circle breaks: the last
+    // pillar it frees can be the one that breaks it, and a carrier only
+    // ticked inside the binding would hang over the window for the rest of
+    // the fight.
+    if (this.machine.phase !== 'binding') this.answerCarrier(this.circle.tick(null));
     // Above the slide's early return, so an orb halfway down keeps falling
     // through a scripted descent instead of hanging in the air for its length.
     // The result is banked rather than acted on here: only the tantrum's float
@@ -585,6 +722,9 @@ export class LichBattleSystem implements GroundHazardSource {
     this.unresolvedHits = 0;
 
     switch (this.machine.phase) {
+      case 'binding':
+        this.updateBinding(ctx);
+        break;
       case 'onslaught':
         if (this.machine.observeHealth(this.lich.hp / this.lich.maxHp)) this.enterFirewall(ctx);
         break;
@@ -598,6 +738,292 @@ export class LichBattleSystem implements GroundHazardSource {
         this.updateReckoning(ctx);
         break;
     }
+  }
+
+  // ── The opening: the binding ───────────────────────────────────────────────
+
+  private pillarWork(pillar: LichBindingPillar): PillarWork {
+    return {
+      id: pillar.id,
+      tile: pillar.tile,
+      spots: pillarChannelSpots(this.orbRoom, pillar.tile),
+      channel: new ChannelInteraction({
+        def: PILLAR_CHANNEL_DEF,
+        footprint: { x: pillar.tile.col, y: pillar.tile.row, w: 1, h: 1 },
+        onPress: (step) => this.onPillarStep(pillar, step),
+      }),
+    };
+  }
+
+  private onPillarStep(pillar: LichBindingPillar, step: ChannelStep): void {
+    switch (step.kind) {
+      case 'started':
+        this.audio?.play('charging_up_1', { volume: PILLAR_CUE_VOLUME });
+        return;
+      case 'paused':
+        return;
+      case 'interrupted':
+        this.audio?.play('powering_off', { volume: PILLAR_CUE_VOLUME });
+        return;
+      case 'finished':
+        if (this.circle.shatter(pillar.id)) this.pillarGoesDark(pillar.id);
+        return;
+      default: {
+        const unhandled: never = step;
+        throw new Error(`unhandled channel step ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+
+  private pillarGoesDark(id: string): void {
+    const work = this.pillars.find((pillar) => pillar.id === id);
+    if (work !== undefined) {
+      work.channel.pause();
+      this.bursts.push({ tile: work.tile, framesLeft: ORB_BURST_FRAMES });
+      this.shatters.push({ tile: work.tile, framesLeft: BINDING_PILLAR_SHATTER_FRAMES });
+    }
+    this.audio?.play('magic_ball_impact');
+    this.binding?.onPillarShattered(id);
+  }
+
+  /** The pillar a crawler is working this frame, or null. */
+  get channellingPillar(): string | null {
+    return this.pillars.find((pillar) => pillar.channel.isChannelling)?.id ?? null;
+  }
+
+  private updateBinding(ctx: SystemContext): void {
+    for (const pillar of this.pillars) {
+      if (this.circle.workable(pillar.id)) pillar.channel.tick(false);
+      else pillar.channel.pause();
+    }
+    this.answerCarrier(this.circle.tick(this.channellingPillar));
+    this.sayCarrierLineAtWindow();
+    if (!this.circle.shieldsLich) {
+      if (this.machine.registerBindingBroken()) this.enterOnslaught();
+      return;
+    }
+    this.directCompanionToPillar(ctx);
+  }
+
+  private answerCarrier(tick: BindingTick<string>): void {
+    switch (tick.kind) {
+      case 'none':
+      case 'carrier_gone':
+        return;
+      case 'carrier_arrives':
+        this.carrierBarkOwed = true;
+        return;
+      case 'carrier_frees':
+        this.pillarGoesDark(tick.pillar);
+        return;
+      default: {
+        const unhandled: never = tick;
+        throw new Error(`unhandled binding tick ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+
+  /**
+   * The carrier's one line, held until it is framed in the observatory
+   * window: the bark halts the room, and a line read over an empty window
+   * would leave the player to guess who said it.
+   */
+  private sayCarrierLineAtWindow(): void {
+    if (!this.carrierBarkOwed) return;
+    if (this.circle.carrierStage !== 'arriving') return;
+    if (this.circle.carrierStageProgress < CARRIER_AT_WINDOW_SHARE) return;
+    this.carrierBarkOwed = false;
+    const bark = this.binding?.carrierArrives;
+    if (bark !== undefined) this.hooks.openBark(bark, () => undefined);
+  }
+
+  private enterOnslaught(): void {
+    for (const pillar of this.pillars) pillar.channel.pause();
+    this.companion?.clearDirective();
+    this.pillarOrder = null;
+    this.companionHeldOffPillar = false;
+    this.hooks.onBindingBroken();
+    this.hooks.showBanner(BINDING_BROKEN_BANNER_TITLE, BINDING_BROKEN_BANNER_SUBTITLE);
+    this.audio?.play('skeleton_lord_chant');
+  }
+
+  /**
+   * The Lich leaves the crawler working a pillar alone while anybody else
+   * stands to be fought. Read from the mob's side, so it is answered from the
+   * crawlers held since the last frame.
+   */
+  private spares(target: Player): boolean {
+    const isChannelling = this.pillars.some((pillar) => pillar.channel.worker === target);
+    const anotherStands = this.crawlers.some(
+      (crawler) => crawler !== target && crawler.isAlive && !crawler.isKnockedOut,
+    );
+    return bindingSparesCrawler(this.machine.phase, isChannelling, anotherStands);
+  }
+
+  /**
+   * Sends the cat to a lit pillar and starts her working it, while the player
+   * steers the human.
+   *
+   * The spot she works from is scored by the same danger field her hazard
+   * escape reads ({@link dangerFieldFrom}), so the order and the flee rule
+   * agree on what is dangerous; and once it has been threatened the
+   * {@link ChannelReturnGate} keeps her off it until it has stayed clear long
+   * enough that the cast which threatened it is over. While held off she is
+   * told to stand wherever her escape has taken her, so the order never pulls
+   * her back across the ground she fled.
+   */
+  private directCompanionToPillar(ctx: SystemContext): void {
+    const cat = ctx.cat;
+    if (this.companion === null || ctx.partner !== cat) return;
+    if (!cat.isAlive || cat.isKnockedOut) return;
+    const order = this.companionPillar(cat);
+    this.pillarOrder = order;
+    if (order === null) {
+      this.companionHeldOffPillar = false;
+      this.companion.clearDirective();
+      return;
+    }
+    const { pillar, spot } = order;
+    const inReach = pillar.channel.inReach(cat);
+    const workTile = inReach ? tileOf(cat) : spot;
+    const threatened = this.dangerFieldFrom(workTile)(workTile) > 0;
+    const mayGo = this.returnGate.tick(threatened);
+    this.companionHeldOffPillar = !mayGo;
+    if (!mayGo) {
+      pillar.channel.pause();
+      this.companion.setDirective({ x: cat.x, y: cat.y, hold: true });
+      return;
+    }
+    if (!inReach) {
+      this.companion.setDirective({ x: spot.col * TILE_SIZE, y: spot.row * TILE_SIZE, hold: true });
+      return;
+    }
+    // In reach is far enough: told to stand where she is, she stops, and the
+    // work starts on the frame she has. Held to the tile itself, she could be
+    // kept a step short of it by a body in the way for as long as it stood there.
+    this.companion.setDirective({ x: cat.x, y: cat.y, hold: true });
+    if (!cat.isMoving && !pillar.channel.isChannelling) pillar.channel.beginDirected(cat);
+  }
+
+  /**
+   * The pillar she is working or was last sent to, while it is still hers to
+   * work; else the lit pillar whose nearest working tile is the shortest walk
+   * away. Measured as a walk rather than a straight line, because a pillar is
+   * in the way of the tile behind it.
+   */
+  private companionPillar(cat: CatPlayer): PillarOrder | null {
+    const kept = this.pillarOrder;
+    if (kept !== null && this.circle.workable(kept.pillar.id)) return kept;
+    const spotsOf = new Map<string, PillarWork>();
+    for (const pillar of this.pillars) {
+      if (!this.circle.workable(pillar.id)) continue;
+      for (const spot of pillar.spots) spotsOf.set(tileKey(spot), pillar);
+    }
+    if (spotsOf.size === 0) return null;
+    const from = tileOf(cat);
+    const visited = new Set<string>([tileKey(from)]);
+    let frontier: TilePos[] = [from];
+    while (frontier.length > 0) {
+      for (const tile of frontier) {
+        const pillar = spotsOf.get(tileKey(tile));
+        if (pillar !== undefined) return { pillar, spot: tile };
+      }
+      const next: TilePos[] = [];
+      for (const tile of frontier) {
+        for (const neighbour of walkableNeighbours(this.orbRoom, tile)) {
+          const key = tileKey(neighbour);
+          if (visited.has(key)) continue;
+          visited.add(key);
+          next.push(neighbour);
+        }
+      }
+      frontier = next;
+    }
+    return null;
+  }
+
+  /** Interact from the cat beside a lit pillar starts her unbinding it. Returns whether it did. */
+  tryInteract(active: WorkChannelBuilder): boolean {
+    if (this.machine.phase !== 'binding' || !(active instanceof CatPlayer)) return false;
+    const pillar = this.pillars.find(
+      (work) => this.circle.workable(work.id) && work.channel.wouldInteract(active),
+    );
+    return pillar?.channel.tryInteract(active) ?? false;
+  }
+
+  /** The prompt over a lit pillar the steered cat stands beside, and every pillar's progress. */
+  renderInteractionPrompts(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: WorkChannelBuilder,
+  ): void {
+    if (this.machine.phase !== 'binding') return;
+    for (const pillar of this.pillars) {
+      if (!this.circle.workable(pillar.id)) continue;
+      pillar.channel.renderProgress(ctx, camX, camY);
+    }
+    if (!(active instanceof CatPlayer)) return;
+    for (const pillar of this.pillars) {
+      if (!this.circle.workable(pillar.id)) continue;
+      if (pillar.channel.renderPrompt(ctx, camX, camY, active)) return;
+    }
+  }
+
+  /** The pillars still lit, by id. */
+  get litPillars(): ReadonlySet<string> {
+    return this.circle.bound;
+  }
+
+  /** Each pillar the fight opened with, where it stands, and the tiles a crawler can work it from. */
+  get pillarSpots(): ReadonlyArray<{
+    readonly id: string;
+    readonly tile: TilePos;
+    readonly spots: ReadonlyArray<TilePos>;
+  }> {
+    return this.pillars.map(({ id, tile, spots }) => ({ id, tile, spots }));
+  }
+
+  get carrierStage(): CarrierStage {
+    return this.circle.carrierStage;
+  }
+
+  /** The pillar the carrier is on, from the frame it comes in until it is gone. */
+  get carrierPillar(): string | null {
+    return this.circle.carrierPillar;
+  }
+
+  /** The pillar whose cat the carrier has off the floor, drawn in its talons rather than by the room; null while it has none. */
+  get pillarOfCatInTalons(): string | null {
+    const pillar = this.circle.carrierPillar;
+    if (pillar === null) return null;
+    const held = carrierHoldsCat(this.circle.carrierStage, this.circle.carrierStageProgress);
+    return held ? pillar : null;
+  }
+
+  /** The tile the fight last sent the companion to, to work a pillar from, or null. */
+  get companionSpotOrder(): TilePos | null {
+    return this.pillarOrder?.spot ?? null;
+  }
+
+  /** Whether the companion is being kept off her pillar because its ground is threatened. */
+  get companionHeldBack(): boolean {
+    return this.companionHeldOffPillar;
+  }
+
+  private renderCarrier(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const binding = this.binding;
+    const pillarId = this.circle.carrierPillar;
+    if (binding === null || pillarId === null) return;
+    const pillar = this.pillars.find((work) => work.id === pillarId);
+    if (pillar === undefined) return;
+    const pose = carrierFlightPose(
+      this.circle.carrierStage,
+      this.circle.carrierStageProgress,
+      binding.carrierWindow,
+      pillar.tile,
+    );
+    this.carrierView?.render(ctx, camX, camY, pose, pillarId);
   }
 
   // ── Phase 2: the firewall ──────────────────────────────────────────────────
@@ -726,7 +1152,7 @@ export class LichBattleSystem implements GroundHazardSource {
   private gapStandableFrom(gapStart: number, spawnRow: number): boolean {
     for (let col = gapStart; col < gapStart + FIREWALL_GAP_WIDTH_TILES; col++) {
       for (let row = spawnRow; row <= this.bounds.maxRow; row++) {
-        if (!this.map.isWalkable(col, row)) return false;
+        if (!this.map.isWalkable(col, row, 'walker')) return false;
       }
     }
     return true;
@@ -815,8 +1241,8 @@ export class LichBattleSystem implements GroundHazardSource {
    * safe as every other, and the shortest walk is the one that ends soonest.
    */
   private parkCompanionAtBackWall(ctx: SystemContext): void {
-    if (this.companion === null) return;
-    const col = clamp(tileOf(ctx.inactive).col, this.bounds.minCol, this.bounds.maxCol);
+    if (this.companion === null || ctx.partner === null) return;
+    const col = clamp(tileOf(ctx.partner).col, this.bounds.minCol, this.bounds.maxCol);
     this.companion.setDirective({
       x: col * TILE_SIZE,
       y: this.southmostWalkableRow(col) * TILE_SIZE,
@@ -825,8 +1251,8 @@ export class LichBattleSystem implements GroundHazardSource {
   }
 
   private directCompanionToGap(ctx: SystemContext): void {
-    if (this.companion === null) return;
-    const lane = this.companionLaneColumn(tileOf(ctx.inactive).row);
+    if (this.companion === null || ctx.partner === null) return;
+    const lane = this.companionLaneColumn(tileOf(ctx.partner).row);
     this.orderedLaneColumn = lane;
     if (lane === null) return;
     this.companion.setDirective({
@@ -1010,7 +1436,7 @@ export class LichBattleSystem implements GroundHazardSource {
       this.orbRoom,
       tileOf(ctx.active),
       this.warnings.map((warning) => warning.tile),
-      this.companionAsBystander(ctx.inactive),
+      ctx.partner === null ? null : this.companionAsBystander(ctx.partner),
     );
     if (target === null) return;
     this.warnings.push({ tile: target, framesLeft: ORB_WARNING_FRAMES, dealsDamage: true });
@@ -1169,7 +1595,7 @@ export class LichBattleSystem implements GroundHazardSource {
    */
   private southmostWalkableRow(col: number): number {
     for (let row = this.bounds.maxRow; row >= this.bounds.minRow; row--) {
-      if (this.map.isWalkable(col, row)) return row;
+      if (this.map.isWalkable(col, row, 'walker')) return row;
     }
     return this.bounds.maxRow;
   }
@@ -1230,7 +1656,7 @@ export class LichBattleSystem implements GroundHazardSource {
     for (let row = top + 1; row <= bottom; row++) ring.push({ col: right, row });
     for (let col = right - 1; col >= left; col--) ring.push({ col, row: bottom });
     for (let row = bottom - 1; row > top; row--) ring.push({ col: left, row });
-    return ring.filter((station) => this.map.isWalkable(station.col, station.row));
+    return ring.filter((station) => this.map.isWalkable(station.col, station.row, 'walker'));
   }
 
   private moveLichTo(ctx: SystemContext, x: number, y: number): void {
@@ -1253,7 +1679,7 @@ export class LichBattleSystem implements GroundHazardSource {
    */
   private burnsTile(col: number, row: number, gapStart: number): boolean {
     if (!columnBurns(col, gapStart)) return false;
-    return this.map.isWalkable(col, row);
+    return this.map.isWalkable(col, row, 'walker');
   }
 
   private tilesFromLich(crawler: Player): number {
@@ -1412,9 +1838,17 @@ export class LichBattleSystem implements GroundHazardSource {
     const bodyRadius = this.lichBodyRadius;
     const insideBody = (col: number, row: number): boolean =>
       Math.hypot(col * TILE_SIZE - lich.x, row * TILE_SIZE - lich.y) < bodyRadius;
+    // A tile just clear of the body can still only be reached by walking
+    // through it: the separation then holds the body where it stands, in
+    // whatever it was fleeing, for as long as the step stays the answer.
+    const firstStepCutsBody = (col: number, row: number): boolean => {
+      const isFirstStep = Math.max(Math.abs(col - from.col), Math.abs(row - from.row)) === 1;
+      return isFirstStep && this.clearanceFromLich(x, y, { col, row }) < bodyRadius;
+    };
     const roomAroundLich: OrbRainRoom = {
       ...this.orbRoom,
-      isWalkable: (col, row) => this.orbRoom.isWalkable(col, row) && !insideBody(col, row),
+      isWalkable: (col, row) =>
+        this.orbRoom.isWalkable(col, row) && !insideBody(col, row) && !firstStepCutsBody(col, row),
     };
     const clearanceFromLich = (step: TilePos): number => this.clearanceFromLich(x, y, step);
     return stepTowardSafety(
@@ -1544,6 +1978,16 @@ export class LichBattleSystem implements GroundHazardSource {
       );
     }
 
+    for (const shatter of this.shatters) {
+      drawBindingPillarShatter(
+        ctx,
+        (shatter.tile.col + CENTER_OFFSET) * TILE_SIZE - camX,
+        (shatter.tile.row + 1) * TILE_SIZE - camY,
+        TILE_SIZE,
+        1 - shatter.framesLeft / BINDING_PILLAR_SHATTER_FRAMES,
+      );
+    }
+
     for (const burst of this.bursts) {
       drawSoulBurst(
         ctx,
@@ -1553,6 +1997,8 @@ export class LichBattleSystem implements GroundHazardSource {
         1 - burst.framesLeft / ORB_BURST_FRAMES,
       );
     }
+
+    this.renderCarrier(ctx, camX, camY);
   }
 
   /** The dodge clock, stacked under the boss bar for the phase that has one. */
@@ -1585,9 +2031,12 @@ export class LichBattleSystem implements GroundHazardSource {
       if (burst.framesLeft > 0) surviving.push(burst);
     }
     this.bursts = surviving;
+    for (const shatter of this.shatters) shatter.framesLeft--;
+    this.shatters = this.shatters.filter((shatter) => shatter.framesLeft > 0);
   }
 
   private clearHazards(): void {
+    for (const pillar of this.pillars) pillar.channel.pause();
     this.waves = [];
     this.warnings = [];
     this.bursts = [];
@@ -1608,6 +2057,7 @@ export class LichBattleSystem implements GroundHazardSource {
    * there when the party returns.
    */
   leaveFloor(ctx: SystemContext): void {
+    for (const pillar of this.pillars) pillar.channel.pause();
     if (this.slideFramesLeft === 0) return;
     for (const leg of this.slideLegs) {
       // The Lich goes through `moveLichTo`, never a bare write: a mob teleported
@@ -1637,6 +2087,7 @@ export class LichBattleSystem implements GroundHazardSource {
    */
   dispose(): void {
     this.clearHazards();
+    this.carrierView?.dispose();
     this.companion?.clearDirective();
     this.lich.battleDriver = null;
   }
@@ -1645,7 +2096,7 @@ export class LichBattleSystem implements GroundHazardSource {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function livingCrawlers(ctx: SystemContext): ReadonlyArray<Player> {
-  return [ctx.human, ctx.cat].filter((crawler) => crawler.isAlive);
+  return presentCrawlers(ctx).filter((crawler) => crawler.isAlive);
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -1662,6 +2113,10 @@ function tileOf(body: { x: number; y: number }): TilePos {
 /** How finely a walk is sampled for the tiles it rounds onto: well under the narrowest sliver of a tile a corner cut crosses. */
 const WALK_SAMPLES_PER_TILE = 16;
 const WALK_SAMPLE_SPACING_PX = TILE_SIZE / WALK_SAMPLES_PER_TILE;
+
+function tileKey(tile: TilePos): string {
+  return `${tile.col},${tile.row}`;
+}
 
 function tileDistance(a: TilePos, b: TilePos): number {
   return Math.hypot(a.col - b.col, a.row - b.row);
@@ -1749,7 +2204,7 @@ function findWalkableBounds(map: GameMap): RoomBounds {
   for (let row = 0; row < map.structure.length; row++) {
     const cells = map.structure[row];
     for (let col = 0; col < cells.length; col++) {
-      if (!map.isWalkable(col, row)) continue;
+      if (!map.isWalkable(col, row, 'walker')) continue;
       minCol = Math.min(minCol, col);
       maxCol = Math.max(maxCol, col);
       minRow = Math.min(minRow, row);

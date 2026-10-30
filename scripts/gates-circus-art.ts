@@ -513,7 +513,7 @@ for (const contract of TILE_CONTRACTS) {
   const gameMap = testMap(contract.tile);
   check(
     'registries',
-    !isWalkableTileType(gameMap.structure[TEST_TILE][TEST_TILE]),
+    !isWalkableTileType(gameMap.structure[TEST_TILE][TEST_TILE], 'walker'),
     scope,
     'is walkable',
   );

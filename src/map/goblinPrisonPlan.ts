@@ -18,6 +18,7 @@ import {
   type PrisonLayout,
   type PrisonRect,
   type PrisonSectionId,
+  type StealthLayout,
 } from './goblinPrisonLayouts';
 
 /** One grid tile, in tile coordinates. */
@@ -54,17 +55,25 @@ export interface PrisonHoldingCell {
   readonly hall: PrisonTile;
 }
 
-export interface ParsedPrisonLayout {
-  readonly layout: PrisonLayout;
+/**
+ * A floor crossed by stealth, as its patrols are compiled against it: the
+ * grid its lights are cast on, and the named points its scripts walk between.
+ */
+export interface StealthFloor {
+  readonly layout: StealthLayout;
   readonly grid: PrisonGrid;
+  readonly waypoints: ReadonlyMap<string, PrisonTile>;
+  readonly anchors: ReadonlyMap<string, PrisonTile>;
+}
+
+export interface ParsedPrisonLayout extends StealthFloor {
+  readonly layout: PrisonLayout;
   readonly entry: PrisonTile;
   readonly exits: ReadonlyArray<PrisonTile>;
   readonly pedestal: PrisonTile;
   /** The floor tile south of the pedestal, where the key is lifted from. */
   readonly pedestalFront: PrisonTile;
   readonly holdingCells: ReadonlyArray<PrisonHoldingCell>;
-  readonly waypoints: ReadonlyMap<string, PrisonTile>;
-  readonly anchors: ReadonlyMap<string, PrisonTile>;
 }
 
 /** Every problem a layout's rows have, reported together so one run fixes them all. */

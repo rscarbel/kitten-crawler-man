@@ -171,7 +171,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,
@@ -308,7 +308,7 @@ function crawlerMove(
       dressings.getHazardEscapeVector(probeX, probeY) !== null;
     const tileX = Math.floor((probeX + TILE_SIZE / 2) / TILE_SIZE);
     const tileY = Math.floor((probeY + TILE_SIZE / 2) / TILE_SIZE);
-    if (!marked && gameMap.isWalkable(tileX, tileY)) return turned;
+    if (!marked && gameMap.isWalkable(tileX, tileY, 'walker')) return turned;
   }
   return heading;
 }

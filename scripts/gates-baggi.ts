@@ -1,19 +1,17 @@
 /**
- * Art gates for Baggi: the living orc on the biped rig and her corpse.
+ * Art gates for Baggi, the orc on the biped rig.
  *
  * What a typecheck cannot see and these do:
  *
- *   G1  structure — every row of hers, and the corpse, stays inside its cell
+ *   G1  structure — every row of hers stays inside its cell
  *   G2  the states the sprite wrapper asks for all exist (an unknown state
  *       draws nothing and says nothing)
  *   G3  she is green: the orc read rests on the skin swap reaching the paint
  *   G4  her tusks show — near-white ink in the head band, above the apron
  *   G5  baking frame 0 of every one of her rows leaves the human's idle frame 0
  *       byte-identical to a bake of it taken before hers
- *   G6  the corpse is in a pool of blood, wet, and is visibly her: blood-red
- *       ink, a specular sheen on it, her green skin and her plum coat
- *   G7  she reads as a woman by her hair: plaits lie down her chest, below the jaw
- *   G8  and by her silhouette: the skirt's hem stands wider than her shoulders
+ *   G6  she reads as a woman by her hair: plaits lie down her chest, below the jaw
+ *   G7  and by her silhouette: the skirt's hem stands wider than her shoulders
  *
  * Run by `npm run render:baggi` before it writes any review image.
  */
@@ -26,9 +24,8 @@ import {
   missingStateFailures,
   nothingMeasuredFailures,
 } from './figureGates.js';
-import { BAGGI_FIGURE } from '../src/sprites/art/baggiFigure.js';
-import { BAGGI_STANDING_STATE, BAGGI_WALK_STATE } from '../src/sprites/baggiSprite.js';
-import { BAGGI_CORPSE_FIGURE, BAGGI_CORPSE_STATE } from '../src/sprites/art/baggiCorpseArt.js';
+import { BAGGI_FIGURE, baggiStateName } from '../src/sprites/art/baggiFigure.js';
+import { BAGGI_DRAWN_STATES } from '../src/sprites/baggiSprite.js';
 import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
 import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
@@ -87,39 +84,13 @@ function solidPixels(cell: CellPixels): number {
 
 // ── Colour classes ───────────────────────────────────────────────────────────
 
-/** Green dominates both other channels by a clear margin: her skin, living or dead. */
+/** Green dominates both other channels by a clear margin: her skin. */
 const GREEN_MARGIN = 10;
 const isGreenSkin: Classifier = ([r, g, b]) => g > r + GREEN_MARGIN && g > b + GREEN_MARGIN;
 
 /** Every channel near white: a tusk. Her eye whites and the apron sit well under this. */
 const TUSK_FLOOR = 185;
 const isTusk: Classifier = ([r, g, b]) => Math.min(r, g, b) >= TUSK_FLOOR;
-
-/** Red well over twice green and blue: blood, from the deep middle to the film. */
-const BLOOD_RED_RATIO = 2;
-const BLOOD_MIN_RED = 30;
-const isBlood: Classifier = ([r, g, b]) =>
-  r >= BLOOD_MIN_RED && r > g * BLOOD_RED_RATIO && r > b * BLOOD_RED_RATIO;
-
-/**
- * The specular streak over blood: the near-white sheen blended over red comes
- * out a pale pink, red leading and green and blue level. The cream apron is the
- * only other pale ink, and its blue falls well under its green.
- */
-const SHEEN_MIN_RED = 120;
-const SHEEN_RED_LEAD = 15;
-const SHEEN_GREEN_BLUE_SPREAD = 10;
-const SHEEN_MIN_GREEN = 70;
-const isSheen: Classifier = ([r, g, b]) =>
-  r >= SHEEN_MIN_RED &&
-  r - g >= SHEEN_RED_LEAD &&
-  g >= SHEEN_MIN_GREEN &&
-  Math.abs(g - b) <= SHEEN_GREEN_BLUE_SPREAD;
-
-/** Her plum coat: red leading, blue over green — no other ink on her runs that way. */
-const COAT_MIN_RED = 80;
-const COAT_BLUE_LEAD = 10;
-const isCoat: Classifier = ([r, g, b]) => r >= COAT_MIN_RED && r > b && b >= g + COAT_BLUE_LEAD;
 
 /**
  * Her hair: a dark warm brown, red over green over blue. The plum dress runs
@@ -134,21 +105,13 @@ const isHair: Classifier = ([r, g, b]) =>
 // ── G1, G2 ───────────────────────────────────────────────────────────────────
 
 function structureFailures(): string[] {
-  return [
-    ...figureStructuralFailures(BAGGI_FIGURE).map((f) => `G1 ${f}`),
-    ...figureStructuralFailures(BAGGI_CORPSE_FIGURE).map((f) => `G1 ${f}`),
-  ];
+  return figureStructuralFailures(BAGGI_FIGURE).map((f) => `G1 ${f}`);
 }
 
 function stateFailures(): string[] {
-  const figure = BAGGI_FIGURE;
-  const names = [BAGGI_STANDING_STATE, BAGGI_WALK_STATE];
-  return [
-    ...missingStateFailures(figure, names, 'drawBaggiSprite').map((f) => `G2 ${f}`),
-    ...missingStateFailures(BAGGI_CORPSE_FIGURE, [BAGGI_CORPSE_STATE], 'drawBaggiCorpse').map(
-      (f) => `G2 ${f}`,
-    ),
-  ];
+  return missingStateFailures(BAGGI_FIGURE, BAGGI_DRAWN_STATES, 'drawBaggiSprite').map(
+    (f) => `G2 ${f}`,
+  );
 }
 
 // ── G3, G4 ───────────────────────────────────────────────────────────────────
@@ -200,7 +163,7 @@ function widestInk(cell: CellPixels, fromRow: number, toRow: number): number {
 
 function livingFailures(): string[] {
   const figure = BAGGI_FIGURE;
-  const state = BAGGI_STANDING_STATE;
+  const state = baggiStateName('idle', 'front');
   const failures: string[] = [];
   let measuredFrames = 0;
   for (let frame = 0; frame < frameCountOf(figure, state); frame++) {
@@ -233,7 +196,7 @@ function livingFailures(): string[] {
     );
     if (plaits < MIN_PLAIT_PIXELS) {
       failures.push(
-        `G7 ${state} frame ${frame}: ${plaits} hair pixels on her chest (want ≥ ${MIN_PLAIT_PIXELS}) — ` +
+        `G6 ${state} frame ${frame}: ${plaits} hair pixels on her chest (want ≥ ${MIN_PLAIT_PIXELS}) — ` +
           'the plaits are not reaching below the jaw',
       );
     }
@@ -245,7 +208,7 @@ function livingFailures(): string[] {
     const hem = widestInk(cell, bandRow(box, HEM_BAND_FROM), bandRow(box, HEM_BAND_TO));
     if (hem < shoulders * MIN_HEM_OVER_SHOULDER) {
       failures.push(
-        `G8 ${state} frame ${frame}: skirt hem ${hem}px against shoulders ${shoulders}px ` +
+        `G7 ${state} frame ${frame}: skirt hem ${hem}px against shoulders ${shoulders}px ` +
           `(want ≥ ${MIN_HEM_OVER_SHOULDER}×) — the silhouette is square, not an A-line`,
       );
     }
@@ -278,52 +241,6 @@ function lookIsolationFailures(): string[] {
   return [];
 }
 
-// ── G6 ───────────────────────────────────────────────────────────────────────
-
-/** The pool and the stains together are a real share of the cell's ink, not a trim. */
-const MIN_BLOOD_SHARE = 0.25;
-const MIN_SHEEN_PIXELS = 30;
-/**
- * The pool lies past her shoulders, in the left of the cell; the claw marks'
- * bleed on the apron and the rose patch are the same pale pink as the sheen, so
- * the sheen is only counted where the pool is and the body is not.
- */
-const POOL_COLUMN_SHARE = 0.4;
-
-function poolColumnEnd(cell: CellPixels): number {
-  return Math.round(cell.width * POOL_COLUMN_SHARE);
-}
-const MIN_CORPSE_SKIN_PIXELS = 150;
-const MIN_CORPSE_COAT_PIXELS = 400;
-
-function corpseFailures(): string[] {
-  const cell = pixelsOf(BAGGI_CORPSE_FIGURE, BAGGI_CORPSE_STATE, 0);
-  const solid = solidPixels(cell);
-  const failures = nothingMeasuredFailures(solid, 'solid corpse ink').map((f) => `G6 ${f}`);
-  if (solid === 0) return failures;
-  const bloodShare = countPixels(cell, isBlood) / solid;
-  if (bloodShare < MIN_BLOOD_SHARE) {
-    failures.push(
-      `G6 blood is ${percent(bloodShare)} of the corpse's ink (want ≥ ${percent(MIN_BLOOD_SHARE)})`,
-    );
-  }
-  const sheen = countPixels(cell, isSheen, 0, cell.height, poolColumnEnd(cell));
-  if (sheen < MIN_SHEEN_PIXELS) {
-    failures.push(
-      `G6 ${sheen} sheen pixels on the pool (want ≥ ${MIN_SHEEN_PIXELS}) — it reads as paint`,
-    );
-  }
-  const skin = countPixels(cell, isGreenSkin);
-  if (skin < MIN_CORPSE_SKIN_PIXELS) {
-    failures.push(`G6 ${skin} green skin pixels on the body (want ≥ ${MIN_CORPSE_SKIN_PIXELS})`);
-  }
-  const coat = countPixels(cell, isCoat);
-  if (coat < MIN_CORPSE_COAT_PIXELS) {
-    failures.push(`G6 ${coat} plum coat pixels on the body (want ≥ ${MIN_CORPSE_COAT_PIXELS})`);
-  }
-  return failures;
-}
-
 /** Every Baggi gate failure, one message each. */
 export function baggiGateFailures(): string[] {
   return [
@@ -331,6 +248,5 @@ export function baggiGateFailures(): string[] {
     ...stateFailures(),
     ...livingFailures(),
     ...lookIsolationFailures(),
-    ...corpseFailures(),
   ];
 }

@@ -24,6 +24,8 @@ export const RESIDENT_IDS = [
   'janitor_grout',
   'sydney',
   'brandon',
+  'taloncrest_apothecary_assistant',
+  'taloncrest_lodge_cellar_elf',
 ] as const;
 
 export type ResidentId = (typeof RESIDENT_IDS)[number];

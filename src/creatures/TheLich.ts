@@ -18,13 +18,10 @@ import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 import type { SkeletonSummonRequest } from './SkeletonLord';
 
 /**
- * The Lich — the thing that has been wearing Magistrate Featherfall's office.
- *
- * Featherfall died weeks before the murders started. Somebody still kept his
- * appointments, still signed his letters, still suspected nothing on his behalf;
- * that somebody is a clerk-robed revenant that has been running a magistracy
- * from behind a corpse, and it fights the way it has been governing — at arm's
- * length, from behind a queue of subordinates it can raise more of.
+ * The Lich — the Warden at the top of the tower, who died in the bad year and
+ * did not stay dead. It still sends its proclamations down in the same hand, and
+ * it fights the way it has been governing — at arm's length, from behind a
+ * queue of subordinates it can raise more of.
  *
  * Its kit is deliberately the Skeleton Lord's, which the bounty board owns and
  * which nothing here may touch: soul bolts down a mid-range band, a telegraphed
@@ -37,11 +34,7 @@ import type { SkeletonSummonRequest } from './SkeletonLord';
  */
 
 /**
- * Base health, before the encounter's spawn level multiplies it. Levelled as
- * the confrontation spawns it, this clears Miss Quill's own bar — the thing
- * that has been running the magistracy behind her is the real fight in the
- * room, and a shorter bar than the fight the player just finished would read
- * as an anticlimax rather than the reveal it is.
+ * Base health, before the encounter's spawn level multiplies it.
  *
  * The pool is sized for a fight in four parts rather than one: the opening
  * phase alone spends the 40% that used to be the whole encounter, and the three
@@ -78,6 +71,8 @@ export interface LichBattleDriver {
    * fight's bar back where it was before a phase the party has already fought.
    */
   healCeilingFraction(): number;
+  /** Whether the Lich leaves `target` alone when it chooses whom to fight. */
+  spares(target: Player): boolean;
 }
 
 /**
@@ -101,7 +96,7 @@ export function handsConeCovers(cone: HandsCone, x: number, y: number): boolean 
   if (Math.hypot(dx, dy) > cone.rangePx) return false;
   return Math.abs(normaliseAngle(Math.atan2(dy, dx) - cone.facingAngle)) <= cone.halfAngle;
 }
-/** Marginally quicker than the Skeleton Lord: the office is small and it kites. */
+/** Marginally quicker than the Skeleton Lord: the room is small and it kites. */
 const LICH_SPEED = 0.85;
 const AGGRO_RANGE_TILES = 15;
 
@@ -118,7 +113,7 @@ export const LICH_MAX_SPEED = PLAYER_SPEED * LICH_MAX_SPEED_RATIO;
 /**
  * The band it wants to fight from, tightened against the Skeleton Lord's.
  *
- * The magistrate's office is one room. A band sized for open ground would have
+ * The top of the tower is one room. A band sized for open ground would have
  * the Lich backed into a wall for most of the fight, where the retreat leg of
  * its repositioning does nothing and it simply stands still.
  *
@@ -131,11 +126,11 @@ const PREFERRED_MIN_TILES = 4.5;
 const PREFERRED_MAX_TILES = 6.5;
 
 /**
- * Quest-boss reward, between Miss Quill's 600 and the bounty bosses' band: it
- * is the last thing standing between the party and the end of the questline.
+ * Quest-boss reward, above the bounty bosses' band: it is the last thing
+ * standing between the party and the end of the questline.
  */
 const LICH_XP = 900;
-/** In line with the Quill fight's own payout rather than with a bounty's. */
+/** In line with a quest boss's payout rather than with a bounty's. */
 const COIN_DROP_MIN = 35;
 const COIN_DROP_MAX = 70;
 const CENTER_OFFSET = 0.5;
@@ -212,8 +207,8 @@ const SUMMON_ARCHER_COUNT = 1;
  * Living escorts the Lich may hold at once.
  *
  * Far below the Skeleton Lord's, and for a reason that is a property of the
- * room rather than of the creature: this fight happens in the magistrate's
- * office, and a crowd that would merely be thick on open ground makes a single
+ * room rather than of the creature: this fight happens in one room at the top
+ * of the tower, and a crowd that would merely be thick on open ground makes a single
  * chamber impassable — the party cannot sidestep the cone it is being warned
  * about if there is nowhere left to step.
  */
@@ -278,7 +273,7 @@ export class TheLich extends Mob {
   }
   displayName = 'The Lich';
   description =
-    'A clerk-robed revenant with a magistrate’s seal at its belt and nothing under the hood but green fire.';
+    'A clerk-robed revenant with the Warden’s seal at its belt and nothing under the hood but green fire.';
 
   /**
    * How many raised skeletons this caster is allowed to hold.
@@ -345,7 +340,7 @@ export class TheLich extends Mob {
   private readonly preferredMaxPx: number;
   private readonly handsRangePx: number;
 
-  /** The murder quest's final boss; its fight is scripted, not a boss room. */
+  /** The tower's final boss; its fight is scripted, not a boss room. */
   override get countsAsBossKill(): boolean {
     return true;
   }
@@ -483,7 +478,12 @@ export class TheLich extends Mob {
     if (this.summonCooldown > 0) this.summonCooldown--;
     if (this.eruptionTimer > 0) this.eruptionTimer--;
 
-    const nearest = this.acquireTarget(targets, this.aggroRangePx);
+    const driver = this.battleDriver;
+    const nearest = this.acquireTarget(
+      targets,
+      this.aggroRangePx,
+      driver === null ? undefined : (target) => !driver.spares(target),
+    );
     this.currentTarget = nearest;
     this.isAggro = nearest !== null;
 
@@ -802,8 +802,8 @@ export class TheLich extends Mob {
     if (this.eruptionTimer > 0) this.renderEruption(ctx, sx, sy, tileSize);
 
     ctx.save();
-    // The same tell Miss Quill's capacitor shield uses, so a refused hit reads
-    // as a mechanic in both halves of this room rather than as a missed swing.
+    // A refused hit flashes bright, so it reads as a mechanic rather than as a
+    // missed swing.
     if (this.blockedHitFlashTimer > 0) ctx.filter = 'brightness(3)';
     const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
       drawTheLichSprite(ctx, sx, sy, tileSize, {

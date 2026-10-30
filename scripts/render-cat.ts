@@ -159,7 +159,9 @@ function main(): void {
   // how a gate goes red on art nobody touched.
   // Every look, not only the one painted: the looks share the rows and the
   // part frames, so a change made for one can break the other.
-  for (const look of CAT_LOOKS) {
+  // A town cat is not among them, so the one painted is gated too.
+  const gated = CAT_LOOKS.includes(CAT_LOOK) ? CAT_LOOKS : [...CAT_LOOKS, CAT_LOOK];
+  for (const look of gated) {
     console.log(`Gating ${look.id}…`);
     const figure = look === CAT_LOOK ? CAT_FIGURE : catFigureFor(look, outfitOf(look, WORN));
     reportFigureGates(`cat:${look.id}`, catGateFailures(look, figure));

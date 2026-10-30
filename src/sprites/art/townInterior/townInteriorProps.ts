@@ -27,6 +27,12 @@
  */
 
 import {
+  LEDGE_RISE_TILES,
+  PASSABLE_BY_EVERYONE,
+  PASSABLE_BY_NOBODY,
+  type PassableBy,
+} from '../../../map/mobility';
+import {
   TOWN_TILE_SCALE,
   footprintBox,
   withFootprintClip,
@@ -55,6 +61,7 @@ import type { AnchorKind } from '../../../systems/InteriorOccupantSystem';
 import { WOOD_SMASHING_SOUNDS, type SoundId } from '../../../audio/sounds';
 import type { InteriorAmbienceCue } from '../../../systems/interiorAmbienceCues';
 import type { PropFlameSite } from './propFlames';
+import type { InteractionPerformer } from '../../../core/party/interactionPerformer';
 import {
   paintCatPortrait,
   paintDairyChurn,
@@ -289,14 +296,30 @@ import {
   paintRecordsCabinet,
   paintPigeonholeWall,
   paintScrivenerDesk,
-  paintMagistrateDesk,
   paintArchiveBoxes,
   paintWritBoard,
-  paintCoilBench,
   paintConduitCoil,
-  paintPetitionCounter,
   paintTowerHearth,
 } from './rooms/townCenterTower';
+import {
+  paintWardConduitSluice,
+  paintCisternCulvert,
+  paintStairPortcullis,
+  paintStairPortcullisRaised,
+  paintCatteryCage,
+  paintRitualCircle,
+  paintBindingPillar,
+} from './rooms/towerStoreys';
+import {
+  LOOSE_THING_VARIANT,
+  paintDumbwaiterBell,
+  paintDumbwaiterHatch,
+  paintLarderDoor,
+  paintLooseKeyRing,
+  paintLooseShelfBoard,
+  paintPortcullisChain,
+  paintWardStone,
+} from './rooms/towerWorks';
 import {
   allocCanvas,
   BYTES_PER_MEGABYTE,
@@ -448,11 +471,8 @@ export type TownInteriorExamineId =
   | 'records_cabinet'
   | 'pigeonhole_wall'
   | 'scrivener_desk'
-  | 'magistrate_desk'
   | 'writ_board'
-  | 'coil_bench'
-  | 'conduit_coil'
-  | 'petition_counter';
+  | 'conduit_coil';
 export type TownInteriorSearchId = 'chest' | 'coat_hook' | 'drawer_unit' | 'open_crate';
 export type TownInteriorUseId =
   | 'shop_bell'
@@ -464,10 +484,28 @@ export type TownInteriorUseId =
   | 'throw_dart'
   | 'biting_stool';
 
+/** Absent, anyone may perform the interaction. */
+interface PerformedBy {
+  readonly performer?: InteractionPerformer;
+}
+
+/**
+ * What a placed prop offers a crawler who presses interact beside it. Every
+ * kind may be held to a performer; `knock_off` (a thing batted off a ledge
+ * so it falls) always is, and its fall and landing are the placed
+ * instance's, written in the layout (`knockableProp`).
+ */
 export type TownInteriorInteraction =
-  | { readonly kind: 'examine'; readonly id: TownInteriorExamineId }
-  | { readonly kind: 'search'; readonly id: TownInteriorSearchId }
-  | { readonly kind: 'use'; readonly id: TownInteriorUseId };
+  | ({ readonly kind: 'examine'; readonly id: TownInteriorExamineId } & PerformedBy)
+  | ({ readonly kind: 'search'; readonly id: TownInteriorSearchId } & PerformedBy)
+  | ({ readonly kind: 'use'; readonly id: TownInteriorUseId } & PerformedBy)
+  | { readonly kind: 'knock_off'; readonly performer: InteractionPerformer };
+
+/** The interactions answered with a line in the room's conversation, rather than by moving the prop. */
+export type TownInteriorDialogInteraction = Exclude<TownInteriorInteraction, { kind: 'knock_off' }>;
+
+/** Only something that climbs reaches a prop left on a ledge or a shelf top. */
+const CLIMBERS_PERFORM: InteractionPerformer = { kind: 'mobility', classes: ['climber'] };
 
 /** Warm ember glow used by the hearth and forge brazier — no shared ramp covers open flame. */
 const FLAME_CORE: RGB = [252, 208, 120];
@@ -519,8 +557,18 @@ const GOODS_PAN: RGB = [96, 98, 104];
 /** The one counter tile variant that carries the till and scales. */
 const COUNTER_TILL_VARIANT = 2;
 
-/** Whether a prop stands free on the floor or is mounted against a wall face. */
-export type TownInteriorPropMount = 'free' | 'wall';
+/**
+ * Where a prop sits relative to the room's walls.
+ *
+ * - `free`: stands anywhere on the floor.
+ * - `wall`: stands on the floor row in front of a wall, its back to the face,
+ *   any part of it drawn up onto the face rising out of its art headroom.
+ * - `wall_face`: set into the wall face itself. Its painter fills its own
+ *   footprint, so the footprint must be the wall's face tiles, with floor
+ *   directly south; on a floor tile it reads as a frame lying on the boards.
+ *   `wallFaceMisplacements` holds every layout to this.
+ */
+export type TownInteriorPropMount = 'free' | 'wall' | 'wall_face';
 
 /**
  * A footprint size in tiles. Every prop anchors on its bottom-left tile
@@ -546,11 +594,14 @@ export interface TownInteriorPropDef {
   readonly footprint: TownInteriorFootprint;
   /** How many tiles of art rise above the footprint — the frame's headroom, not a hard clip. */
   readonly artHeightTiles: number;
-  /** Whether the footprint blocks movement. A rug is the one prop in this set that does not. */
-  readonly walkable: boolean;
+  /**
+   * Who may stand on the footprint: nobody for most furniture, everyone for a
+   * rug, climbers alone for a top a cat walks along.
+   */
+  readonly passableBy: PassableBy;
   /**
    * Whether the footprint blocks sight. Left `undefined` to mean "matches
-   * `walkable`'s inverse", which is every ported room's existing behaviour —
+   * whether walkers are kept off it", which is every ported room's existing behaviour —
    * see the "sight is not a walk line" memory for why a future low-but-solid
    * prop (a wall it should still be possible to see over) would need this
    * wired through per-instance, which this framework does not yet do.
@@ -2503,13 +2554,24 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   records_cabinet: 1.45,
   pigeonhole_wall: 1.75,
   scrivener_desk: 1.0,
-  magistrate_desk: 1.3,
   archive_boxes: 1.0,
   writ_board: 1.6,
-  coil_bench: 1.25,
   conduit_coil: 2.1,
-  petition_counter: 1.1,
   tower_hearth: 1.0,
+  ward_conduit_sluice: 1.2,
+  cistern_culvert: 0,
+  stair_portcullis: 1.5,
+  stair_portcullis_raised: 1.5,
+  cattery_cage: 0.6,
+  dumbwaiter_hatch: 1.3,
+  dumbwaiter_bell: 1.1,
+  larder_door: 1.3,
+  portcullis_chain: 1.9,
+  ward_stone: 0.9,
+  knockable_key_ring: 1.0,
+  knockable_shelf_board: 0.8,
+  ritual_circle: 0,
+  binding_pillar: 1.0,
 };
 
 function frameHeightFor(id: string): number {
@@ -2700,6 +2762,108 @@ function paintJars(ctx: Ctx, frame: TownPropFrame, variant: number, rng: Rng): v
       ctx.fill();
       inkOutline(ctx, frame.tileScale);
     }
+  });
+}
+
+const HALF_SHARE = 0.5;
+
+/** How many depths a pressure plate is painted at, from resting proud of the floor to sunk home. */
+export const PRESSURE_PLATE_SINK_STEPS = 4;
+/** The slab's inset from its frame's edge, as a share of the tile. */
+const PLATE_FRAME_INSET = 0.12;
+/** How far the slab stands proud of the floor at rest, as a share of the tile. */
+const PLATE_REST_LIFT = 0.14;
+const PLATE_FRAME_SHADE = 0.18;
+const PLATE_SLAB_SHADE_RESTING = 0.62;
+const PLATE_SLAB_SHADE_SUNK = 0.28;
+const PLATE_LIP_SHADE = 0.85;
+const PLATE_LIP_HEIGHT = 0.05;
+const PLATE_GROOVE_ALPHA = 0.55;
+const PLATE_GROOVE_WIDTH = 0.04;
+/** The shadow the frame's top edge throws across a sunk slab, as a share of the tile at full depth. */
+const PLATE_SUNK_SHADOW_HEIGHT = 0.16;
+const PLATE_SUNK_SHADOW_ALPHA = 0.5;
+
+/** A square stone slab set in a dark frame; deeper variants have sunk further into it. */
+function paintPressurePlate(ctx: Ctx, frame: TownPropFrame, variant: number, _rng: Rng): void {
+  withFootprintClip(ctx, frame, () => {
+    const box = footprintBox(frame);
+    const scale = frame.tileScale;
+    const stone = stoneRamp();
+    const sunk = variant / (PRESSURE_PLATE_SINK_STEPS - 1);
+    const inset = scale * PLATE_FRAME_INSET;
+    ctx.fillStyle = rgb(sampleRamp(stone, PLATE_FRAME_SHADE));
+    ctx.fillRect(
+      box.left + inset * HALF_SHARE,
+      box.top + inset * HALF_SHARE,
+      box.width - inset,
+      box.bottom - box.top - inset,
+    );
+    const lift = scale * PLATE_REST_LIFT * (1 - sunk);
+    const slabLeft = box.left + inset;
+    const slabTop = box.top + inset - lift;
+    const slabWidth = box.width - inset * 2;
+    const slabHeight = box.bottom - box.top - inset * 2;
+    const slabShade =
+      PLATE_SLAB_SHADE_RESTING + (PLATE_SLAB_SHADE_SUNK - PLATE_SLAB_SHADE_RESTING) * sunk;
+    ctx.fillStyle = rgb(sampleRamp(stone, slabShade));
+    ctx.fillRect(slabLeft, slabTop, slabWidth, slabHeight);
+    ctx.fillStyle = rgb(sampleRamp(stone, PLATE_LIP_SHADE));
+    ctx.fillRect(slabLeft, slabTop, slabWidth, scale * PLATE_LIP_HEIGHT * (1 - sunk));
+    ctx.strokeStyle = rgba(TOWN_INK, PLATE_GROOVE_ALPHA);
+    ctx.lineWidth = scale * PLATE_GROOVE_WIDTH;
+    ctx.strokeRect(slabLeft, slabTop, slabWidth, slabHeight);
+    ctx.fillStyle = rgba(TOWN_INK, PLATE_SUNK_SHADOW_ALPHA * sunk);
+    ctx.fillRect(slabLeft, slabTop, slabWidth, scale * PLATE_SUNK_SHADOW_HEIGHT * sunk);
+  });
+}
+
+const LOOSE_JAR_WIDTH = 0.42;
+const LOOSE_JAR_HEIGHT = 0.5;
+const LOOSE_JAR_SHADE = 0.5;
+const LOOSE_JAR_RIM_SHADE = 0.72;
+const LOOSE_JAR_RIM_HEIGHT = 0.06;
+const LOOSE_JAR_NECK_SHARE = 0.45;
+const LOOSE_JAR_SHOULDER_SHARE = 0.25;
+const LOOSE_JAR_BELLY_SHARE = 0.55;
+const LOOSE_JAR_BELLY_WIDTH = 0.6;
+
+/** One clay jar standing alone, small enough to be batted off a ledge: on the floor (variant 0) or up on a shelf top (1). */
+function paintLooseJar(ctx: Ctx, frame: TownPropFrame, variant: number, _rng: Rng): void {
+  withFootprintClip(ctx, frame, () => {
+    if (variant === LOOSE_THING_VARIANT.shelf_top) {
+      ctx.translate(0, -frame.tileScale * LEDGE_RISE_TILES);
+    }
+    const box = footprintBox(frame);
+    contactShadow(ctx, frame);
+    const clay = getTownRamp('oc_cloth_ember');
+    const width = frame.tileScale * LOOSE_JAR_WIDTH;
+    const height = frame.tileScale * LOOSE_JAR_HEIGHT;
+    const centreX = box.centreX;
+    const top = box.bottom - height;
+    const neck = width * LOOSE_JAR_NECK_SHARE * HALF_SHARE;
+    const belly = width * LOOSE_JAR_BELLY_WIDTH;
+    ctx.fillStyle = rgb(sampleRamp(clay, LOOSE_JAR_SHADE));
+    ctx.beginPath();
+    ctx.moveTo(centreX - neck, top);
+    ctx.quadraticCurveTo(
+      centreX - belly,
+      top + height * LOOSE_JAR_SHOULDER_SHARE,
+      centreX - belly * LOOSE_JAR_BELLY_SHARE,
+      box.bottom,
+    );
+    ctx.lineTo(centreX + belly * LOOSE_JAR_BELLY_SHARE, box.bottom);
+    ctx.quadraticCurveTo(
+      centreX + belly,
+      top + height * LOOSE_JAR_SHOULDER_SHARE,
+      centreX + neck,
+      top,
+    );
+    ctx.closePath();
+    ctx.fill();
+    inkOutline(ctx, frame.tileScale);
+    ctx.fillStyle = rgb(sampleRamp(clay, LOOSE_JAR_RIM_SHADE));
+    ctx.fillRect(centreX - neck, top, neck * 2, frame.tileScale * LOOSE_JAR_RIM_HEIGHT);
   });
 }
 
@@ -3582,7 +3746,7 @@ type TownInteriorPropExtras = Pick<
 function def<const E extends TownInteriorPropExtras = TownInteriorPropExtras>(
   id: string,
   footprint: TownInteriorFootprint,
-  walkable: boolean,
+  passableBy: PassableBy,
   anchors: ReadonlyArray<AnchorKind>,
   mount: TownInteriorPropMount,
   variants: number,
@@ -3593,7 +3757,7 @@ function def<const E extends TownInteriorPropExtras = TownInteriorPropExtras>(
     id,
     footprint,
     artHeightTiles: frameHeightFor(id),
-    walkable,
+    passableBy,
     anchors,
     mount,
     variants,
@@ -3603,17 +3767,25 @@ function def<const E extends TownInteriorPropExtras = TownInteriorPropExtras>(
 }
 
 export const TOWN_INTERIOR_PROPS = {
-  still: def('still', { w: 3, h: 2 }, false, [], 'free', 1, paintStill, {
+  still: def('still', { w: 3, h: 2 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintStill, {
     interaction: { kind: 'examine', id: 'still' },
   }),
-  herb_bundle_rack: def('herb_bundle_rack', ONE_BY_ONE, false, [], 'wall', 2, paintHerbBundleRack),
+  herb_bundle_rack: def(
+    'herb_bundle_rack',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintHerbBundleRack,
+  ),
   // Two tiles deep so the cabinet's own footprint closes the strip between
   // it and the partition behind — a one-row cabinet would leave a sealed,
   // unreachable pocket of floor there.
   apothecary_drawer_wall: def(
     'apothecary_drawer_wall',
     { w: 6, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
@@ -3627,7 +3799,7 @@ export const TOWN_INTERIOR_PROPS = {
   apothecary_counter: def(
     'apothecary_counter',
     { w: 4, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['counter'],
     'free',
     2,
@@ -3636,14 +3808,14 @@ export const TOWN_INTERIOR_PROPS = {
   herb_drying_rack: def(
     'herb_drying_rack',
     { w: 5, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
     paintHerbDryingRack,
     { interaction: { kind: 'examine', id: 'herb_drying_rack' } },
   ),
-  herb_bins: def('herb_bins', { w: 2, h: 1 }, false, [], 'free', 1, paintHerbBins, {
+  herb_bins: def('herb_bins', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintHerbBins, {
     destructible: DESTRUCTIBLE_CRATE,
     interaction: { kind: 'examine', id: 'herb_bins' },
   }),
@@ -3652,7 +3824,7 @@ export const TOWN_INTERIOR_PROPS = {
   remedy_display: def(
     'remedy_display',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['shelf'],
     'free',
     2,
@@ -3662,27 +3834,63 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'remedy_display' },
     },
   ),
-  specimen_case: def('specimen_case', { w: 2, h: 1 }, false, [], 'free', 1, paintSpecimenCase, {
-    interaction: { kind: 'examine', id: 'specimen_case' },
-  }),
-  potted_bay: def('potted_bay', ONE_BY_ONE, false, [], 'free', 1, paintPottedBay, {
+  specimen_case: def(
+    'specimen_case',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintSpecimenCase,
+    {
+      interaction: { kind: 'examine', id: 'specimen_case' },
+    },
+  ),
+  potted_bay: def('potted_bay', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintPottedBay, {
     destructible: DESTRUCTIBLE_JARS,
   }),
-  sorting_table: def('sorting_table', { w: 2, h: 1 }, false, [], 'free', 1, paintSortingTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  potting_bench: def('potting_bench', { w: 2, h: 1 }, false, [], 'free', 1, paintPottingBench, {
-    destructible: DESTRUCTIBLE_TABLE,
-    interaction: { kind: 'examine', id: 'potting_bench' },
-  }),
-  live_herb_pots: def('live_herb_pots', ONE_BY_ONE, false, [], 'free', 2, paintLiveHerbPots, {
-    destructible: DESTRUCTIBLE_JARS,
-    interaction: { kind: 'examine', id: 'live_herb_pots' },
-  }),
-  book_stack: def('book_stack', ONE_BY_ONE, false, [], 'free', 2, paintBookStack, {
+  sorting_table: def(
+    'sorting_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintSortingTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  potting_bench: def(
+    'potting_bench',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintPottingBench,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+      interaction: { kind: 'examine', id: 'potting_bench' },
+    },
+  ),
+  live_herb_pots: def(
+    'live_herb_pots',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintLiveHerbPots,
+    {
+      destructible: DESTRUCTIBLE_JARS,
+      interaction: { kind: 'examine', id: 'live_herb_pots' },
+    },
+  ),
+  book_stack: def('book_stack', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintBookStack, {
     interaction: { kind: 'examine', id: 'book_stack' },
   }),
-  hedge_stool: def('hedge_stool', ONE_BY_ONE, false, [], 'free', 1, paintHedgeStool, {
+  hedge_stool: def('hedge_stool', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintHedgeStool, {
     interaction: { kind: 'use', id: 'biting_stool' },
   }),
   // Old Lori's composed centrepieces: the hearth carries the `hearth`
@@ -3692,7 +3900,7 @@ export const TOWN_INTERIOR_PROPS = {
   witch_hearth: def(
     'witch_hearth',
     { w: 3, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['hearth'],
     'wall',
     1,
@@ -3703,15 +3911,32 @@ export const TOWN_INTERIOR_PROPS = {
       ambientSound: HEARTH_CRACKLE,
     },
   ),
-  jar_dresser: def('jar_dresser', { w: 3, h: 1 }, false, ['shelf'], 'wall', 1, paintJarDresser, {
-    destructible: DESTRUCTIBLE_SHELF,
-    interaction: { kind: 'examine', id: 'witch_jars' },
-  }),
-  drying_beam: def('drying_beam', { w: 3, h: 1 }, false, [], 'wall', 1, paintDryingBeam),
+  jar_dresser: def(
+    'jar_dresser',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['shelf'],
+    'wall',
+    1,
+    paintJarDresser,
+    {
+      destructible: DESTRUCTIBLE_SHELF,
+      interaction: { kind: 'examine', id: 'witch_jars' },
+    },
+  ),
+  drying_beam: def(
+    'drying_beam',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintDryingBeam,
+  ),
   witch_worktable: def(
     'witch_worktable',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
@@ -3721,21 +3946,47 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'witch_worktable' },
     },
   ),
-  cat_armchair: def('cat_armchair', ONE_BY_ONE, false, [], 'free', 1, paintCatArmchair, {
-    interaction: { kind: 'examine', id: 'cottage_familiar' },
-  }),
-  book_heap: def('book_heap', { w: 2, h: 1 }, false, [], 'free', 1, paintBookHeap, {
+  cat_armchair: def(
+    'cat_armchair',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintCatArmchair,
+    {
+      interaction: { kind: 'examine', id: 'cottage_familiar' },
+    },
+  ),
+  book_heap: def('book_heap', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintBookHeap, {
     interaction: { kind: 'examine', id: 'book_stack' },
   }),
-  crock_cluster: def('crock_cluster', ONE_BY_ONE, false, [], 'free', 2, paintCrockCluster, {
-    destructible: DESTRUCTIBLE_JARS,
-    interaction: { kind: 'examine', id: 'jars' },
-  }),
-  cottage_bed: def('cottage_bed', { w: 2, h: 1 }, false, [], 'free', 1, paintCottageBed),
+  crock_cluster: def(
+    'crock_cluster',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintCrockCluster,
+    {
+      destructible: DESTRUCTIBLE_JARS,
+      interaction: { kind: 'examine', id: 'jars' },
+    },
+  ),
+  cottage_bed: def(
+    'cottage_bed',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintCottageBed,
+  ),
   birdcage_stand: def(
     'birdcage_stand',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
@@ -3744,228 +3995,394 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'birdcage' },
     },
   ),
-  broom: def('broom', ONE_BY_ONE, false, [], 'wall', 1, paintBroom),
-  mushroom_basket: def('mushroom_basket', ONE_BY_ONE, false, [], 'free', 2, paintMushroomBasket, {
-    destructible: DESTRUCTIBLE_BASKET,
-    interaction: { kind: 'examine', id: 'mushroom_basket' },
-  }),
-  altar: def('altar', { w: 4, h: 1 }, false, ['table'], 'free', 1, paintAltarStone, {
+  broom: def('broom', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintBroom),
+  mushroom_basket: def(
+    'mushroom_basket',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintMushroomBasket,
+    {
+      destructible: DESTRUCTIBLE_BASKET,
+      interaction: { kind: 'examine', id: 'mushroom_basket' },
+    },
+  ),
+  altar: def('altar', { w: 4, h: 1 }, PASSABLE_BY_NOBODY, ['table'], 'free', 1, paintAltarStone, {
     interaction: { kind: 'examine', id: 'altar_stone' },
   }),
-  lectern: def('lectern', ONE_BY_ONE, false, [], 'free', 1, paintLectern, {
+  lectern: def('lectern', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintLectern, {
     interaction: { kind: 'examine', id: 'lectern' },
   }),
-  sky_banner: def('sky_banner', ONE_BY_ONE, false, [], 'wall', 1, paintSkyBanner, {
+  sky_banner: def('sky_banner', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintSkyBanner, {
     interaction: { kind: 'examine', id: 'sky_banner' },
   }),
   scripture_shelf: def(
     'scripture_shelf',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     ['shelf'],
     'free',
     2,
     paintScriptureShelf,
     { interaction: { kind: 'examine', id: 'scripture_shelf' } },
   ),
-  temple_dais: def('temple_dais', { w: 14, h: 3 }, true, [], 'free', 1, paintTempleDais),
-  sky_window: def('sky_window', { w: 4, h: 2 }, true, [], 'wall', 1, paintSkyWindow, {
-    interaction: { kind: 'examine', id: 'sky_window' },
-  }),
+  temple_dais: def(
+    'temple_dais',
+    { w: 14, h: 3 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintTempleDais,
+  ),
+  sky_window: def(
+    'sky_window',
+    { w: 4, h: 2 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'wall',
+    1,
+    paintSkyWindow,
+    {
+      interaction: { kind: 'examine', id: 'sky_window' },
+    },
+  ),
   temple_candelabrum: def(
     'temple_candelabrum',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     2,
     paintTempleCandelabrum,
     { destructible: DESTRUCTIBLE_CANDELABRUM },
   ),
-  perch_stand: def('perch_stand', ONE_BY_ONE, false, [], 'free', 2, paintPerchStand, {
+  perch_stand: def('perch_stand', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintPerchStand, {
     interaction: { kind: 'examine', id: 'perch_stand' },
   }),
-  votive_rack: def('votive_rack', { w: 2, h: 1 }, false, [], 'free', 1, paintVotiveRack, {
-    interaction: { kind: 'examine', id: 'votive_rack' },
-  }),
-  sky_font: def('sky_font', ONE_BY_ONE, false, [], 'free', 1, paintSkyFont, {
+  votive_rack: def(
+    'votive_rack',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintVotiveRack,
+    {
+      interaction: { kind: 'examine', id: 'votive_rack' },
+    },
+  ),
+  sky_font: def('sky_font', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintSkyFont, {
     interaction: { kind: 'examine', id: 'sky_font' },
   }),
-  offering_table: def('offering_table', { w: 2, h: 1 }, false, [], 'free', 1, paintOfferingTable, {
-    interaction: { kind: 'use', id: 'offering_bowl' },
-  }),
-  needle_tray: def('needle_tray', ONE_BY_ONE, false, [], 'free', 1, paintNeedleTray, {
+  offering_table: def(
+    'offering_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintOfferingTable,
+    {
+      interaction: { kind: 'use', id: 'offering_bowl' },
+    },
+  ),
+  needle_tray: def('needle_tray', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintNeedleTray, {
     interaction: { kind: 'examine', id: 'needle_tray' },
   }),
-  feather_chart: def('feather_chart', { w: 2, h: 1 }, false, [], 'wall', 1, paintFeatherChart, {
-    interaction: { kind: 'examine', id: 'feather_chart' },
-  }),
+  feather_chart: def(
+    'feather_chart',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintFeatherChart,
+    {
+      interaction: { kind: 'examine', id: 'feather_chart' },
+    },
+  ),
   // The Quiet Needle's composed pieces. The chair carries the `bench` anchor
   // Nim works at, the pigment cabinet the `shelf` anchor the room's slate of
   // rates is propped against, and the waiting room's two tables the `table`
   // anchors both waiting customers stand at — so each big piece also does the
   // job the tile it replaces used to.
-  flash_wall: def('flash_wall', { w: 4, h: 1 }, false, [], 'wall', 2, paintFlashWall, {
+  flash_wall: def('flash_wall', { w: 4, h: 1 }, PASSABLE_BY_NOBODY, [], 'wall', 2, paintFlashWall, {
     interaction: { kind: 'examine', id: 'flash_wall' },
   }),
-  ink_chair: def('ink_chair', { w: 3, h: 1 }, false, [], 'free', 1, paintInkChair, {
+  ink_chair: def('ink_chair', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintInkChair, {
     interaction: { kind: 'examine', id: 'ink_chair' },
   }),
   pigment_cabinet: def(
     'pigment_cabinet',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['shelf'],
     'wall',
     1,
     paintPigmentCabinet,
     { interaction: { kind: 'examine', id: 'pigment_cabinet' } },
   ),
-  arm_lamp: def('arm_lamp', ONE_BY_ONE, false, [], 'free', 2, paintArmLamp, {
+  arm_lamp: def('arm_lamp', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintArmLamp, {
     destructible: DESTRUCTIBLE_LAMP,
   }),
-  grinding_bench: def('grinding_bench', { w: 2, h: 1 }, false, [], 'wall', 1, paintGrindingBench, {
-    destructible: DESTRUCTIBLE_TABLE,
-    interaction: { kind: 'examine', id: 'grinding_bench' },
-  }),
-  settee: def('settee', { w: 3, h: 1 }, false, [], 'free', 2, paintSettee, {
+  grinding_bench: def(
+    'grinding_bench',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintGrindingBench,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+      interaction: { kind: 'examine', id: 'grinding_bench' },
+    },
+  ),
+  settee: def('settee', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 2, paintSettee, {
     destructible: DESTRUCTIBLE_CHAIR,
   }),
-  low_table: def('low_table', { w: 2, h: 1 }, false, ['table'], 'free', 1, paintLowTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  side_table: def('side_table', ONE_BY_ONE, false, ['table'], 'free', 1, paintSideTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  coat_stand: def('coat_stand', ONE_BY_ONE, false, [], 'free', 1, paintCoatStand, {
+  low_table: def(
+    'low_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintLowTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  side_table: def(
+    'side_table',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintSideTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  coat_stand: def('coat_stand', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintCoatStand, {
     interaction: { kind: 'search', id: 'coat_hook' },
   }),
-  counter: def('counter', ONE_BY_ONE, false, ['counter'], 'free', 3, paintCounter),
-  table_small: def('table_small', ONE_BY_ONE, false, ['table'], 'free', 3, paintTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  table_medium: def('table_medium', { w: 2, h: 1 }, false, ['table'], 'free', 2, paintTable),
-  chair: def('chair', ONE_BY_ONE, false, [], 'free', 1, paintChair, {
+  counter: def('counter', ONE_BY_ONE, PASSABLE_BY_NOBODY, ['counter'], 'free', 3, paintCounter),
+  table_small: def(
+    'table_small',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    3,
+    paintTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  table_medium: def(
+    'table_medium',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    2,
+    paintTable,
+  ),
+  chair: def('chair', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintChair, {
     destructible: DESTRUCTIBLE_CHAIR,
   }),
   // One segment of a church pew, placed one per column across a row so the
   // row reads as a continuous bench — see `paintPew`'s own doc comment.
-  pew: def('pew', ONE_BY_ONE, false, [], 'free', 2, paintPew, {
+  pew: def('pew', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintPew, {
     destructible: DESTRUCTIBLE_CHAIR,
   }),
-  stool: def('stool', ONE_BY_ONE, false, [], 'free', 2, paintStool, {
+  stool: def('stool', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintStool, {
     destructible: DESTRUCTIBLE_STOOL,
   }),
-  bench_seat: def('bench_seat', { w: 2, h: 1 }, false, [], 'free', 1, paintBenchSeat, {
+  bench_seat: def('bench_seat', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintBenchSeat, {
     interaction: { kind: 'use', id: 'bench_seat' },
   }),
-  shelving_unit: def('shelving_unit', ONE_BY_ONE, false, ['shelf'], 'free', 3, paintShelving, {
-    destructible: DESTRUCTIBLE_SHELF,
-  }),
+  shelving_unit: def(
+    'shelving_unit',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['shelf'],
+    'free',
+    3,
+    paintShelving,
+    {
+      destructible: DESTRUCTIBLE_SHELF,
+    },
+  ),
   wall_shelf_goods: def(
     'wall_shelf_goods',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     ['shelf'],
     'wall',
     3,
     paintWallShelfGoods,
   ),
-  hanging_tools: def('hanging_tools', ONE_BY_ONE, false, [], 'wall', 2, paintHangingTools, {
-    destructible: DESTRUCTIBLE_HANGING_TOOLS,
-  }),
-  window_dressing: def('window_dressing', ONE_BY_ONE, false, [], 'wall', 1, (ctx, f, v) =>
-    paintWindowDressing(ctx, f, v),
+  hanging_tools: def(
+    'hanging_tools',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintHangingTools,
+    {
+      destructible: DESTRUCTIBLE_HANGING_TOOLS,
+    },
   ),
-  notice_board: def('notice_board', ONE_BY_ONE, false, ['board'], 'wall', 1, paintNoticeBoard, {
-    interaction: { kind: 'examine', id: 'price_board' },
-  }),
-  lamp_candle: def('lamp_candle', ONE_BY_ONE, false, [], 'wall', 1, (ctx, f) =>
+  window_dressing: def(
+    'window_dressing',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall_face',
+    1,
+    (ctx, f, v) => paintWindowDressing(ctx, f, v),
+  ),
+  notice_board: def(
+    'notice_board',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['board'],
+    'wall',
+    1,
+    paintNoticeBoard,
+    {
+      interaction: { kind: 'examine', id: 'price_board' },
+    },
+  ),
+  lamp_candle: def('lamp_candle', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, (ctx, f) =>
     paintLampCandle(ctx, f),
   ),
-  barrel: def('barrel', ONE_BY_ONE, false, ['crate'], 'free', 2, paintBarrel, {
+  barrel: def('barrel', ONE_BY_ONE, PASSABLE_BY_NOBODY, ['crate'], 'free', 2, paintBarrel, {
     destructible: DESTRUCTIBLE_BARREL,
   }),
-  crate: def('crate', ONE_BY_ONE, false, ['crate'], 'free', 1, paintCrate, {
+  crate: def('crate', ONE_BY_ONE, PASSABLE_BY_NOBODY, ['crate'], 'free', 1, paintCrate, {
     destructible: DESTRUCTIBLE_CRATE,
   }),
-  sack: def('sack', ONE_BY_ONE, false, [], 'free', 1, paintSack, {
+  sack: def('sack', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintSack, {
     destructible: DESTRUCTIBLE_SACK,
   }),
-  bed_single: def('bed_single', ONE_BY_ONE, false, [], 'free', 1, paintBed),
+  bed_single: def('bed_single', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintBed),
   // Two tiles wide, one mantel, one firebox: `paintHearth` scales to its own
   // footprint, so a broad fireplace is the same painter over a wider box.
-  hearth_wide: def('hearth_wide', { w: 2, h: 1 }, false, ['hearth'], 'wall', 1, paintHearth, {
-    interaction: { kind: 'use', id: 'hearth' },
-    flames: [{ x: 1, rise: 0.08, size: 0.5, style: 'hearth' }],
-    ambientSound: HEARTH_CRACKLE,
-  }),
-  forge_brazier: def('forge_brazier', ONE_BY_ONE, false, ['forge'], 'free', 1, paintForgeBrazier, {
-    destructible: DESTRUCTIBLE_BRAZIER,
-    flames: [{ x: 0.5, rise: FORGE_BRAZIER_BOWL_RISE, size: 1, style: 'brazier' }],
-    ambientSound: BRAZIER_CRACKLE,
-  }),
+  hearth_wide: def(
+    'hearth_wide',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['hearth'],
+    'wall',
+    1,
+    paintHearth,
+    {
+      interaction: { kind: 'use', id: 'hearth' },
+      flames: [{ x: 1, rise: 0.08, size: 0.5, style: 'hearth' }],
+      ambientSound: HEARTH_CRACKLE,
+    },
+  ),
+  forge_brazier: def(
+    'forge_brazier',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['forge'],
+    'free',
+    1,
+    paintForgeBrazier,
+    {
+      destructible: DESTRUCTIBLE_BRAZIER,
+      flames: [{ x: 0.5, rise: FORGE_BRAZIER_BOWL_RISE, size: 1, style: 'brazier' }],
+      ambientSound: BRAZIER_CRACKLE,
+    },
+  ),
   // A wide runner for a counter or a hearth's own approach — one continuous
   // mat with one border and one fringe. `paintRugRunner` scales to its own
   // footprint, so the same painter also
   // backs every other size below — a short run, a squarish area rug or a
   // wide ring mat, never several small rugs whose borders repeat and read
   // as floor tiling.
-  rug_runner: def('rug_runner', { w: 6, h: 1 }, true, [], 'free', 4, (ctx, f, v) =>
+  rug_runner: def('rug_runner', { w: 6, h: 1 }, PASSABLE_BY_EVERYONE, [], 'free', 4, (ctx, f, v) =>
     paintRugRunner(ctx, f, v),
   ),
-  rug_runner_3: def('rug_runner_3', { w: 3, h: 1 }, true, [], 'free', 4, (ctx, f, v) =>
-    paintRugRunner(ctx, f, v),
+  rug_runner_3: def(
+    'rug_runner_3',
+    { w: 3, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    4,
+    (ctx, f, v) => paintRugRunner(ctx, f, v),
   ),
-  rug_runner_4: def('rug_runner_4', { w: 4, h: 1 }, true, [], 'free', 4, (ctx, f, v) =>
-    paintRugRunner(ctx, f, v),
+  rug_runner_4: def(
+    'rug_runner_4',
+    { w: 4, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    4,
+    (ctx, f, v) => paintRugRunner(ctx, f, v),
   ),
-  rug_runner_5: def('rug_runner_5', { w: 5, h: 1 }, true, [], 'free', 4, (ctx, f, v) =>
-    paintRugRunner(ctx, f, v),
+  rug_runner_5: def(
+    'rug_runner_5',
+    { w: 5, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    4,
+    (ctx, f, v) => paintRugRunner(ctx, f, v),
   ),
   // Rectangular area rugs — a room's own centre mat rather than a runner
   // meant to line a wall or a counter approach.
-  rug_small: def('rug_small', { w: 2, h: 2 }, true, [], 'free', 4, (ctx, f, v) =>
+  rug_small: def('rug_small', { w: 2, h: 2 }, PASSABLE_BY_EVERYONE, [], 'free', 4, (ctx, f, v) =>
     paintRugRunner(ctx, f, v),
   ),
-  rug_medium: def('rug_medium', { w: 3, h: 2 }, true, [], 'free', 4, (ctx, f, v) =>
+  rug_medium: def('rug_medium', { w: 3, h: 2 }, PASSABLE_BY_EVERYONE, [], 'free', 4, (ctx, f, v) =>
     paintRugRunner(ctx, f, v),
   ),
-  rug_large: def('rug_large', { w: 4, h: 3 }, true, [], 'free', 4, (ctx, f, v) =>
+  rug_large: def('rug_large', { w: 4, h: 3 }, PASSABLE_BY_EVERYONE, [], 'free', 4, (ctx, f, v) =>
     paintRugRunner(ctx, f, v),
   ),
   // The barracks' own sparring-ring mat: one composed image across the
   // whole ring rather than 36 separate 1×1 tiles.
-  rug_ring: def('rug_ring', { w: 9, h: 4 }, true, [], 'free', 2, (ctx, f, v) =>
+  rug_ring: def('rug_ring', { w: 9, h: 4 }, PASSABLE_BY_EVERYONE, [], 'free', 2, (ctx, f, v) =>
     paintRugRunner(ctx, f, v),
   ),
-  jars: def('jars', ONE_BY_ONE, false, [], 'free', 2, paintJars, {
+  jars: def('jars', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintJars, {
     destructible: DESTRUCTIBLE_JARS,
     interaction: { kind: 'examine', id: 'jars' },
   }),
   crockery_shelf: def(
     'crockery_shelf',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     ['shelf'],
     'free',
     2,
     paintCrockeryShelf,
     { destructible: DESTRUCTIBLE_CROCKERY },
   ),
-  basket: def('basket', ONE_BY_ONE, false, [], 'free', 2, paintBasket, {
+  basket: def('basket', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintBasket, {
     destructible: DESTRUCTIBLE_BASKET,
   }),
-  oil_lamp: def('oil_lamp', ONE_BY_ONE, false, [], 'free', 1, paintOilLamp, {
+  oil_lamp: def('oil_lamp', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintOilLamp, {
     destructible: DESTRUCTIBLE_LAMP,
   }),
-  chest: def('chest', ONE_BY_ONE, false, [], 'free', 1, paintChest, {
+  chest: def('chest', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintChest, {
     interaction: { kind: 'search', id: 'chest' },
   }),
   coat_hook: def(
     'coat_hook',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     2,
@@ -3974,13 +4391,13 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'search', id: 'coat_hook' },
     },
   ),
-  drawer_unit: def('drawer_unit', ONE_BY_ONE, false, [], 'free', 1, paintDrawerUnit, {
+  drawer_unit: def('drawer_unit', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintDrawerUnit, {
     interaction: { kind: 'search', id: 'drawer_unit' },
   }),
   shop_bell: def(
     'shop_bell',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
@@ -3990,54 +4407,104 @@ export const TOWN_INTERIOR_PROPS = {
   offering_bowl: def(
     'offering_bowl',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
     (ctx, f, v) => paintOfferingBowl(ctx, f, v),
     { interaction: { kind: 'use', id: 'offering_bowl' } },
   ),
-  open_crate: def('open_crate', ONE_BY_ONE, false, ['crate'], 'free', 1, paintOpenCrate, {
-    interaction: { kind: 'search', id: 'open_crate' },
-  }),
-  potion_shelf: def('potion_shelf', ONE_BY_ONE, false, ['shelf'], 'free', 3, paintPotionShelf, {
-    destructible: DESTRUCTIBLE_BOTTLE_SHELF,
-  }),
-  perch_rail: def('perch_rail', ONE_BY_ONE, false, [], 'wall', 1, (ctx, f) =>
+  open_crate: def(
+    'open_crate',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['crate'],
+    'free',
+    1,
+    paintOpenCrate,
+    {
+      interaction: { kind: 'search', id: 'open_crate' },
+    },
+  ),
+  potion_shelf: def(
+    'potion_shelf',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['shelf'],
+    'free',
+    3,
+    paintPotionShelf,
+    {
+      destructible: DESTRUCTIBLE_BOTTLE_SHELF,
+    },
+  ),
+  perch_rail: def('perch_rail', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, (ctx, f) =>
     paintPerchRail(ctx, f),
   ),
-  feather_duster: def('feather_duster', ONE_BY_ONE, false, [], 'wall', 1, (ctx, f, _v, rng) =>
-    paintFeatherDuster(ctx, f, 0, rng),
+  feather_duster: def(
+    'feather_duster',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    (ctx, f, _v, rng) => paintFeatherDuster(ctx, f, 0, rng),
   ),
-  anvil: def('anvil', { w: 2, h: 1 }, false, [], 'free', 1, paintAnvil, {
+  anvil: def('anvil', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintAnvil, {
     interaction: { kind: 'examine', id: 'anvil' },
   }),
-  grindstone: def('grindstone', ONE_BY_ONE, false, [], 'free', 1, paintGrindstone, {
+  grindstone: def('grindstone', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintGrindstone, {
     interaction: { kind: 'use', id: 'grindstone' },
   }),
-  blade_rack: def('blade_rack', { w: 3, h: 1 }, false, [], 'wall', 2, paintBladeRack, {
+  blade_rack: def('blade_rack', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'wall', 2, paintBladeRack, {
     interaction: { kind: 'examine', id: 'blade_rack' },
   }),
-  quench_trough: def('quench_trough', { w: 2, h: 1 }, false, [], 'free', 1, paintQuenchTrough),
-  coal_bin: def('coal_bin', ONE_BY_ONE, false, [], 'free', 1, paintCoalBin),
-  forge: def('forge', { w: 3, h: 2 }, false, [], 'free', 1, paintForge, {
+  quench_trough: def(
+    'quench_trough',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintQuenchTrough,
+  ),
+  coal_bin: def('coal_bin', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintCoalBin),
+  forge: def('forge', { w: 3, h: 2 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintForge, {
     interaction: { kind: 'examine', id: 'forge' },
     flames: FORGE_FLAMES,
     ambientSound: FORGE_ROAR,
   }),
-  bar_stock: def('bar_stock', { w: 2, h: 1 }, false, [], 'wall', 1, paintBarStock),
+  bar_stock: def('bar_stock', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'wall', 1, paintBarStock),
   // Carries the smithy's `table` anchor: the forge hall's one bench is
   // where a waiting customer stands.
-  vice_bench: def('vice_bench', { w: 3, h: 1 }, false, ['table'], 'free', 1, paintViceBench, {
-    interaction: { kind: 'examine', id: 'vice_bench' },
-  }),
-  smith_bellows: def('smith_bellows', { w: 2, h: 2 }, false, [], 'wall', 1, paintSmithBellows, {
-    interaction: { kind: 'examine', id: 'smith_bellows' },
-  }),
+  vice_bench: def(
+    'vice_bench',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintViceBench,
+    {
+      interaction: { kind: 'examine', id: 'vice_bench' },
+    },
+  ),
+  smith_bellows: def(
+    'smith_bellows',
+    { w: 2, h: 2 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintSmithBellows,
+    {
+      interaction: { kind: 'examine', id: 'smith_bellows' },
+    },
+  ),
   smith_tool_wall: def(
     'smith_tool_wall',
     { w: 4, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     2,
@@ -4051,106 +4518,202 @@ export const TOWN_INTERIOR_PROPS = {
   smith_counter: def(
     'smith_counter',
     { w: 4, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['counter'],
     'free',
     1,
     paintSmithCounter,
   ),
-  coal_heap: def('coal_heap', { w: 2, h: 1 }, false, [], 'free', 1, paintCoalHeap),
+  coal_heap: def('coal_heap', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintCoalHeap),
   ironmongery_table: def(
     'ironmongery_table',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
     paintIronmongeryTable,
     { interaction: { kind: 'examine', id: 'ironmongery_table' } },
   ),
-  mail_stand: def('mail_stand', ONE_BY_ONE, false, [], 'free', 1, paintMailStand, {
+  mail_stand: def('mail_stand', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintMailStand, {
     interaction: { kind: 'examine', id: 'mail_stand' },
   }),
-  slack_tub: def('slack_tub', ONE_BY_ONE, false, [], 'free', 1, paintSlackTub, {
+  slack_tub: def('slack_tub', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintSlackTub, {
     destructible: DESTRUCTIBLE_BARREL,
   }),
-  forge_floor: def('forge_floor', { w: 7, h: 3 }, true, [], 'free', 1, paintForgeFloor),
-  mandrel_swage: def('mandrel_swage', { w: 2, h: 1 }, false, [], 'free', 1, paintMandrelSwage),
+  forge_floor: def(
+    'forge_floor',
+    { w: 7, h: 3 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintForgeFloor,
+  ),
+  mandrel_swage: def(
+    'mandrel_swage',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintMandrelSwage,
+  ),
   // Two finished wheels leaning on the wall; `use` trues one the way the
   // grindstone lets a crawler put an edge to the smithy's stone.
   wheelwright_stand: def(
     'wheelwright_stand',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
     paintFinishedWheels,
     { interaction: { kind: 'use', id: 'wheelwright_stand' } },
   ),
-  wagon_bed: def('wagon_bed', { w: 5, h: 2 }, false, [], 'free', 1, paintWagonBed, {
+  wagon_bed: def('wagon_bed', { w: 5, h: 2 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintWagonBed, {
     interaction: { kind: 'examine', id: 'wagon_bed' },
   }),
-  lathe: def('lathe', { w: 3, h: 1 }, false, [], 'wall', 1, paintLathe, {
+  lathe: def('lathe', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'wall', 1, paintLathe, {
     interaction: { kind: 'examine', id: 'lathe' },
   }),
   // The workshop's one `table` anchor: the wheelwright stands at his bench.
-  joiner_bench: def('joiner_bench', { w: 5, h: 1 }, false, ['table'], 'wall', 1, paintJoinerBench, {
-    interaction: { kind: 'examine', id: 'joiner_bench' },
-  }),
+  joiner_bench: def(
+    'joiner_bench',
+    { w: 5, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'wall',
+    1,
+    paintJoinerBench,
+    {
+      interaction: { kind: 'examine', id: 'joiner_bench' },
+    },
+  ),
   wheel_build_stand: def(
     'wheel_build_stand',
     { w: 2, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
     paintWheelBuildStand,
     { interaction: { kind: 'examine', id: 'wheel_build_stand' } },
   ),
-  timber_rack: def('timber_rack', { w: 3, h: 2 }, false, [], 'wall', 1, paintTimberRack, {
-    interaction: { kind: 'examine', id: 'timber_rack' },
-  }),
-  sawhorse: def('sawhorse', { w: 2, h: 1 }, false, [], 'free', 1, paintSawhorse),
-  shaving_horse: def('shaving_horse', { w: 2, h: 1 }, false, [], 'free', 1, paintShavingHorse, {
-    interaction: { kind: 'examine', id: 'shaving_horse' },
-  }),
-  target_board: def('target_board', ONE_BY_ONE, false, [], 'free', 1, paintTargetBoard, {
-    interaction: { kind: 'examine', id: 'target_board' },
-  }),
-  firewood_stack: def('firewood_stack', { w: 3, h: 1 }, false, [], 'wall', 1, paintFirewoodStack, {
-    interaction: { kind: 'examine', id: 'firewood_stack' },
-  }),
-  spoke_tub: def('spoke_tub', ONE_BY_ONE, false, [], 'free', 1, paintSpokeTub, {
+  timber_rack: def(
+    'timber_rack',
+    { w: 3, h: 2 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintTimberRack,
+    {
+      interaction: { kind: 'examine', id: 'timber_rack' },
+    },
+  ),
+  sawhorse: def('sawhorse', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintSawhorse),
+  shaving_horse: def(
+    'shaving_horse',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintShavingHorse,
+    {
+      interaction: { kind: 'examine', id: 'shaving_horse' },
+    },
+  ),
+  target_board: def(
+    'target_board',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintTargetBoard,
+    {
+      interaction: { kind: 'examine', id: 'target_board' },
+    },
+  ),
+  firewood_stack: def(
+    'firewood_stack',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintFirewoodStack,
+    {
+      interaction: { kind: 'examine', id: 'firewood_stack' },
+    },
+  ),
+  spoke_tub: def('spoke_tub', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintSpokeTub, {
     destructible: DESTRUCTIBLE_BASKET,
   }),
-  glue_pot: def('glue_pot', ONE_BY_ONE, false, [], 'free', 1, paintGluePot, {
+  glue_pot: def('glue_pot', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintGluePot, {
     destructible: DESTRUCTIBLE_BRAZIER,
   }),
-  axle_set: def('axle_set', { w: 3, h: 1 }, false, [], 'free', 1, paintAxleSet, {
+  axle_set: def('axle_set', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintAxleSet, {
     interaction: { kind: 'examine', id: 'axle_set' },
   }),
   // Flat and walkable, drawn with the floor like a rug.
-  plank_pile: def('plank_pile', { w: 2, h: 1 }, false, [], 'free', 1, paintPlankPile),
-  shavings_floor: def('shavings_floor', { w: 2, h: 1 }, true, [], 'free', 2, paintShavingsFloor),
-  armour_stand: def('armour_stand', ONE_BY_ONE, false, [], 'free', 1, paintArmourStand, {
-    interaction: { kind: 'examine', id: 'armour_stand' },
-  }),
+  plank_pile: def('plank_pile', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintPlankPile),
+  shavings_floor: def(
+    'shavings_floor',
+    { w: 2, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    2,
+    paintShavingsFloor,
+  ),
+  armour_stand: def(
+    'armour_stand',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintArmourStand,
+    {
+      interaction: { kind: 'examine', id: 'armour_stand' },
+    },
+  ),
   // Three rows deep so the hurst platform, the stones and the sack out
   // front all sit on blocked floor; the mill room is built around it.
-  millstone: def('millstone', { w: 4, h: 3 }, false, [], 'free', 1, paintMillWorks, {
+  millstone: def('millstone', { w: 4, h: 3 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintMillWorks, {
     interaction: { kind: 'examine', id: 'millstone' },
   }),
-  grain_scale: def('grain_scale', { w: 2, h: 1 }, false, [], 'free', 1, paintSteelyardScale, {
-    interaction: { kind: 'examine', id: 'grain_scale' },
-  }),
-  crawler_scraps: def('crawler_scraps', ONE_BY_ONE, false, [], 'free', 1, paintCrawlerScraps, {
-    interaction: { kind: 'examine', id: 'crawler_scraps' },
-  }),
-  field_log: def('field_log', ONE_BY_ONE, false, [], 'free', 1, paintFieldLog, {
+  grain_scale: def(
+    'grain_scale',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintSteelyardScale,
+    {
+      interaction: { kind: 'examine', id: 'grain_scale' },
+    },
+  ),
+  crawler_scraps: def(
+    'crawler_scraps',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintCrawlerScraps,
+    {
+      interaction: { kind: 'examine', id: 'crawler_scraps' },
+    },
+  ),
+  field_log: def('field_log', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintFieldLog, {
     interaction: { kind: 'examine', id: 'field_log' },
   }),
-  cellar_hatch: def('cellar_hatch', ONE_BY_ONE, true, [], 'free', 1, (ctx, f, v) =>
+  cellar_hatch: def('cellar_hatch', ONE_BY_ONE, PASSABLE_BY_EVERYONE, [], 'free', 1, (ctx, f, v) =>
     paintCellarHatch(ctx, f, v),
   ),
   // Blackwood Lodge's composed pieces. The briefing table carries the
@@ -4159,7 +4722,7 @@ export const TOWN_INTERIOR_PROPS = {
   lodge_map_table: def(
     'lodge_map_table',
     { w: 4, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['table'],
     'free',
     1,
@@ -4169,7 +4732,7 @@ export const TOWN_INTERIOR_PROPS = {
   lodge_bunk: def(
     'lodge_bunk',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     LODGE_BUNK_VARIANTS,
@@ -4179,7 +4742,7 @@ export const TOWN_INTERIOR_PROPS = {
   lodge_spear_rack: def(
     'lodge_spear_rack',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     2,
@@ -4189,44 +4752,77 @@ export const TOWN_INTERIOR_PROPS = {
   lodge_duty_board: def(
     'lodge_duty_board',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
     paintLodgeDutyBoard,
     { interaction: { kind: 'examine', id: 'lodge_duty_board' } },
   ),
-  lodge_stove: def('lodge_stove', { w: 2, h: 1 }, false, [], 'wall', 1, paintLodgeStove, {
-    interaction: { kind: 'examine', id: 'lodge_stove' },
-    flames: LODGE_STOVE_FLAMES,
-    ambientSound: STOVE_CRACKLE,
-  }),
-  lodge_kit_pegs: def('lodge_kit_pegs', { w: 3, h: 1 }, false, [], 'wall', 2, paintLodgeKitPegs),
+  lodge_stove: def(
+    'lodge_stove',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintLodgeStove,
+    {
+      interaction: { kind: 'examine', id: 'lodge_stove' },
+      flames: LODGE_STOVE_FLAMES,
+      ambientSound: STOVE_CRACKLE,
+    },
+  ),
+  lodge_kit_pegs: def(
+    'lodge_kit_pegs',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintLodgeKitPegs,
+  ),
   kessler_footlocker: def(
     'kessler_footlocker',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
     paintKesslerFootlocker,
     { interaction: { kind: 'examine', id: 'field_log' } },
   ),
-  cellar_trapdoor: def('cellar_trapdoor', { w: 4, h: 3 }, true, [], 'free', 1, paintCellarTrapdoor),
+  cellar_trapdoor: def(
+    'cellar_trapdoor',
+    { w: 4, h: 3 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintCellarTrapdoor,
+  ),
   // Wendell's rooms. The drafting table, plan chest and roll bin never carry
   // an interaction and never break: the drawings on and in them belong to his
   // own story, not to the room, so nothing here may read, take or scatter them.
-  drafting_table: def('drafting_table', { w: 3, h: 1 }, false, [], 'wall', 1, paintDraftingStation),
-  plan_chest: def('plan_chest', { w: 2, h: 1 }, false, [], 'free', 2, paintPlanChest),
-  roll_bin: def('roll_bin', ONE_BY_ONE, false, [], 'free', 1, paintRollBin),
-  tool_wall: def('tool_wall', { w: 3, h: 1 }, false, [], 'wall', 1, paintToolWall, {
+  drafting_table: def(
+    'drafting_table',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintDraftingStation,
+  ),
+  plan_chest: def('plan_chest', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 2, paintPlanChest),
+  roll_bin: def('roll_bin', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintRollBin),
+  tool_wall: def('tool_wall', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'wall', 1, paintToolWall, {
     destructible: DESTRUCTIBLE_HANGING_TOOLS,
     interaction: { kind: 'examine', id: 'tool_wall' },
   }),
   door_on_trestles: def(
     'door_on_trestles',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
@@ -4236,7 +4832,7 @@ export const TOWN_INTERIOR_PROPS = {
   builders_hearth: def(
     'builders_hearth',
     { w: 3, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['hearth'],
     'wall',
     1,
@@ -4247,78 +4843,190 @@ export const TOWN_INTERIOR_PROPS = {
       ambientSound: HEARTH_CRACKLE,
     },
   ),
-  good_chair: def('good_chair', ONE_BY_ONE, false, [], 'free', 1, paintGoodChair, {
+  good_chair: def('good_chair', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintGoodChair, {
     destructible: DESTRUCTIBLE_CHAIR,
   }),
-  dairy_wall: def('dairy_wall', { w: 3, h: 1 }, false, [], 'wall', 1, paintDairyWall, {
+  dairy_wall: def('dairy_wall', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'wall', 1, paintDairyWall, {
     interaction: { kind: 'examine', id: 'dairy_wall' },
   }),
-  churn_stand: def('churn_stand', { w: 2, h: 1 }, false, [], 'free', 2, paintChurnStand, {
-    interaction: { kind: 'examine', id: 'milk_churn' },
-  }),
-  milking_stool: def('milking_stool', ONE_BY_ONE, false, [], 'free', 1, paintMilkingStool, {
-    destructible: DESTRUCTIBLE_STOOL,
-  }),
-  feed_stack: def('feed_stack', { w: 2, h: 1 }, false, [], 'free', 1, paintFeedStack, {
+  churn_stand: def(
+    'churn_stand',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintChurnStand,
+    {
+      interaction: { kind: 'examine', id: 'milk_churn' },
+    },
+  ),
+  milking_stool: def(
+    'milking_stool',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintMilkingStool,
+    {
+      destructible: DESTRUCTIBLE_STOOL,
+    },
+  ),
+  feed_stack: def('feed_stack', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintFeedStack, {
     destructible: DESTRUCTIBLE_SACK,
     interaction: { kind: 'examine', id: 'feed_sacks' },
   }),
-  made_cot: def('made_cot', { w: 2, h: 1 }, false, [], 'free', 1, paintMadeCot),
-  pail_stack: def('pail_stack', ONE_BY_ONE, false, [], 'free', 1, paintPailStack),
-  door_peg_post: def('door_peg_post', ONE_BY_ONE, false, [], 'free', 2, paintDoorPegPost),
-  boot_tray: def('boot_tray', ONE_BY_ONE, false, [], 'free', 2, paintBootTray),
-  offcut_box: def('offcut_box', ONE_BY_ONE, false, [], 'free', 1, paintOffcutBox),
-  stair_shelf: def('stair_shelf', { w: 2, h: 1 }, false, [], 'free', 1, paintStairShelf),
-  timber_stack: def('timber_stack', { w: 3, h: 1 }, false, [], 'free', 1, paintTimberStack),
-  tool_chest: def('tool_chest', { w: 2, h: 1 }, false, [], 'free', 1, paintToolChest, {
+  made_cot: def('made_cot', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintMadeCot),
+  pail_stack: def('pail_stack', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintPailStack),
+  door_peg_post: def(
+    'door_peg_post',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintDoorPegPost,
+  ),
+  boot_tray: def('boot_tray', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintBootTray),
+  offcut_box: def('offcut_box', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintOffcutBox),
+  stair_shelf: def(
+    'stair_shelf',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintStairShelf,
+  ),
+  timber_stack: def(
+    'timber_stack',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintTimberStack,
+  ),
+  tool_chest: def('tool_chest', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintToolChest, {
     interaction: { kind: 'search', id: 'chest' },
   }),
-  supper_table: def('supper_table', { w: 2, h: 1 }, false, ['table'], 'free', 1, paintSupperTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  pot_rack: def('pot_rack', ONE_BY_ONE, false, [], 'wall', 1, paintPotRack),
-  flour_bin: def('flour_bin', ONE_BY_ONE, false, [], 'free', 1, paintFlourBin, {
+  supper_table: def(
+    'supper_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintSupperTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  pot_rack: def('pot_rack', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintPotRack),
+  flour_bin: def('flour_bin', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintFlourBin, {
     interaction: { kind: 'examine', id: 'flour_bin' },
   }),
-  sieve_rack: def('sieve_rack', ONE_BY_ONE, false, [], 'wall', 1, paintSieveRack, {
+  sieve_rack: def('sieve_rack', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintSieveRack, {
     interaction: { kind: 'examine', id: 'sieve_rack' },
   }),
-  hand_cart: def('hand_cart', ONE_BY_ONE, false, [], 'free', 1, paintHandCart),
+  hand_cart: def('hand_cart', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintHandCart),
   // Marta's hearth carries the `hearth` anchor she stands at, and the table
   // and the kneading trough each carry a `table` anchor: the roster seats two
   // occupants at tables, and an anchor is one per placed instance.
-  farm_hearth: def('farm_hearth', { w: 4, h: 2 }, false, ['hearth'], 'wall', 1, paintFarmHearth, {
-    interaction: { kind: 'use', id: 'hearth' },
-    flames: FARM_HEARTH_FLAMES,
-    ambientSound: HEARTH_CRACKLE,
-  }),
-  farm_table: def('farm_table', { w: 3, h: 2 }, false, ['table'], 'free', 1, paintFarmTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  bake_trough: def('bake_trough', { w: 2, h: 1 }, false, ['table'], 'free', 1, paintBakeTrough, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  farm_dresser: def('farm_dresser', { w: 3, h: 1 }, false, [], 'wall', 1, paintFarmDresser, {
-    destructible: DESTRUCTIBLE_CROCKERY,
-    interaction: { kind: 'examine', id: 'farm_dresser' },
-  }),
-  larder_shelf: def('larder_shelf', { w: 2, h: 1 }, false, [], 'wall', 1, paintLarderShelf, {
-    destructible: DESTRUCTIBLE_SHELF,
-    interaction: { kind: 'examine', id: 'larder_shelf' },
-  }),
-  corvin_pallet: def('corvin_pallet', { w: 2, h: 1 }, false, [], 'wall', 1, paintCorvinPallet),
+  farm_hearth: def(
+    'farm_hearth',
+    { w: 4, h: 2 },
+    PASSABLE_BY_NOBODY,
+    ['hearth'],
+    'wall',
+    1,
+    paintFarmHearth,
+    {
+      interaction: { kind: 'use', id: 'hearth' },
+      flames: FARM_HEARTH_FLAMES,
+      ambientSound: HEARTH_CRACKLE,
+    },
+  ),
+  farm_table: def(
+    'farm_table',
+    { w: 3, h: 2 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintFarmTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  bake_trough: def(
+    'bake_trough',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintBakeTrough,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  farm_dresser: def(
+    'farm_dresser',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintFarmDresser,
+    {
+      destructible: DESTRUCTIBLE_CROCKERY,
+      interaction: { kind: 'examine', id: 'farm_dresser' },
+    },
+  ),
+  larder_shelf: def(
+    'larder_shelf',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintLarderShelf,
+    {
+      destructible: DESTRUCTIBLE_SHELF,
+      interaction: { kind: 'examine', id: 'larder_shelf' },
+    },
+  ),
+  corvin_pallet: def(
+    'corvin_pallet',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintCorvinPallet,
+  ),
   flour_sack_stack: def(
     'flour_sack_stack',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     2,
     paintFlourSackStack,
     { destructible: DESTRUCTIBLE_SACK, interaction: { kind: 'examine', id: 'flour_sacks' } },
   ),
-  flour_drift: def('flour_drift', { w: 3, h: 1 }, true, [], 'free', 1, paintFlourDrift),
-  grain_bin: def('grain_bin', { w: 2, h: 1 }, false, [], 'free', 1, paintGrainBin, {
+  flour_drift: def(
+    'flour_drift',
+    { w: 3, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintFlourDrift,
+  ),
+  grain_bin: def('grain_bin', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintGrainBin, {
     destructible: DESTRUCTIBLE_CRATE,
   }),
   // The General Store's fittings. A goods wall carries the `shelf` anchor on
@@ -4326,17 +5034,35 @@ export const TOWN_INTERIOR_PROPS = {
   // of these fittings is breakable — they are the shop's built-in joinery,
   // not furniture — so the store's breakables are its barrels, sacks, crocks
   // and crates.
-  goods_wall: def('goods_wall', { w: 4, h: 1 }, false, ['shelf'], 'wall', 4, paintGoodsWall, {
-    interaction: { kind: 'examine', id: 'goods_wall' },
-  }),
-  potion_cabinet: def('potion_cabinet', { w: 2, h: 1 }, false, [], 'wall', 1, paintPotionCabinet, {
-    interaction: { kind: 'examine', id: 'potion_cabinet' },
-  }),
+  goods_wall: def(
+    'goods_wall',
+    { w: 4, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['shelf'],
+    'wall',
+    4,
+    paintGoodsWall,
+    {
+      interaction: { kind: 'examine', id: 'goods_wall' },
+    },
+  ),
+  potion_cabinet: def(
+    'potion_cabinet',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintPotionCabinet,
+    {
+      interaction: { kind: 'examine', id: 'potion_cabinet' },
+    },
+  ),
   // One section, one `counter` anchor: the keeper is the counter's only owner.
   store_counter: def(
     'store_counter',
     { w: 5, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['counter'],
     'free',
     1,
@@ -4345,7 +5071,7 @@ export const TOWN_INTERIOR_PROPS = {
   counter_bell_end: def(
     'counter_bell_end',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
@@ -4357,19 +5083,28 @@ export const TOWN_INTERIOR_PROPS = {
   display_table: def(
     'display_table',
     { w: 3, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['shelf'],
     'free',
     2,
     paintDisplayTable,
   ),
-  bulk_bins: def('bulk_bins', { w: 3, h: 1 }, false, ['crate'], 'free', 1, paintBulkBins, {
-    interaction: { kind: 'examine', id: 'bulk_bins' },
-  }),
+  bulk_bins: def(
+    'bulk_bins',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['crate'],
+    'free',
+    1,
+    paintBulkBins,
+    {
+      interaction: { kind: 'examine', id: 'bulk_bins' },
+    },
+  ),
   tool_barrel: def(
     'tool_barrel',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     ['crate'],
     'free',
     1,
@@ -4381,95 +5116,173 @@ export const TOWN_INTERIOR_PROPS = {
   dynamite_crate: def(
     'dynamite_crate',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
     (ctx, f, v) => paintDynamiteCrate(ctx, f, v),
     { interaction: { kind: 'examine', id: 'dynamite_crate' } },
   ),
-  clerk_desk: def('clerk_desk', { w: 2, h: 1 }, false, [], 'free', 1, paintClerkDesk, {
+  clerk_desk: def('clerk_desk', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintClerkDesk, {
     interaction: { kind: 'examine', id: 'ledger_desk' },
   }),
-  stock_stack: def('stock_stack', { w: 2, h: 2 }, false, ['crate'], 'free', 1, paintStockStack),
+  stock_stack: def(
+    'stock_stack',
+    { w: 2, h: 2 },
+    PASSABLE_BY_NOBODY,
+    ['crate'],
+    'free',
+    1,
+    paintStockStack,
+  ),
   crock_stack: def(
     'crock_stack',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
     (ctx, f, v) => paintCrockStack(ctx, f, v),
     { destructible: DESTRUCTIBLE_CROCKERY },
   ),
-  sack_pile: def('sack_pile', { w: 2, h: 1 }, false, [], 'free', 2, (ctx, f, v) =>
+  sack_pile: def('sack_pile', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 2, (ctx, f, v) =>
     paintSackPile(ctx, f, v),
   ),
   // The Sleeping Cat Inn's composed pieces. The bar is built in sections so
   // each carries its own `counter` anchor: one for Ossie behind it, one for a
   // customer leaning on the near end.
-  inn_hearth: def('inn_hearth', { w: 3, h: 2 }, false, ['hearth'], 'wall', 1, paintInnHearth, {
-    interaction: { kind: 'use', id: 'hearth' },
-    flames: INN_HEARTH_FLAMES,
-    ambientSound: HEARTH_CRACKLE,
-  }),
-  inn_back_bar: def('inn_back_bar', { w: 6, h: 1 }, false, [], 'wall', 1, paintInnBackBar, {
-    interaction: { kind: 'examine', id: 'slate_menu' },
-  }),
-  inn_bar: def('inn_bar', { w: 3, h: 1 }, false, ['counter'], 'free', 2, paintInnBar),
-  inn_dresser: def('inn_dresser', { w: 2, h: 1 }, false, [], 'wall', 1, paintInnDresser, {
-    destructible: DESTRUCTIBLE_CROCKERY,
-  }),
-  cat_stool: def('cat_stool', ONE_BY_ONE, false, [], 'free', 1, paintCatStool),
-  fireside_chair: def('fireside_chair', ONE_BY_ONE, false, [], 'free', 1, paintFiresideChair, {
-    destructible: DESTRUCTIBLE_CHAIR,
-  }),
-  log_basket: def('log_basket', ONE_BY_ONE, false, [], 'free', 1, paintLogBasket, {
+  inn_hearth: def(
+    'inn_hearth',
+    { w: 3, h: 2 },
+    PASSABLE_BY_NOBODY,
+    ['hearth'],
+    'wall',
+    1,
+    paintInnHearth,
+    {
+      interaction: { kind: 'use', id: 'hearth' },
+      flames: INN_HEARTH_FLAMES,
+      ambientSound: HEARTH_CRACKLE,
+    },
+  ),
+  inn_back_bar: def(
+    'inn_back_bar',
+    { w: 6, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintInnBackBar,
+    {
+      interaction: { kind: 'examine', id: 'slate_menu' },
+    },
+  ),
+  inn_bar: def('inn_bar', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, ['counter'], 'free', 2, paintInnBar),
+  inn_dresser: def(
+    'inn_dresser',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintInnDresser,
+    {
+      destructible: DESTRUCTIBLE_CROCKERY,
+    },
+  ),
+  cat_stool: def('cat_stool', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintCatStool),
+  fireside_chair: def(
+    'fireside_chair',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintFiresideChair,
+    {
+      destructible: DESTRUCTIBLE_CHAIR,
+    },
+  ),
+  log_basket: def('log_basket', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintLogBasket, {
     destructible: DESTRUCTIBLE_BASKET,
   }),
-  inn_table: def('inn_table', { w: 3, h: 1 }, false, ['table'], 'free', 2, paintInnTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  inn_bench: def('inn_bench', { w: 3, h: 1 }, false, [], 'free', 1, paintInnBench, {
+  inn_table: def(
+    'inn_table',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    2,
+    paintInnTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  inn_bench: def('inn_bench', { w: 3, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintInnBench, {
     destructible: DESTRUCTIBLE_CHAIR,
   }),
-  inn_guest_bed: def('inn_guest_bed', { w: 2, h: 2 }, false, [], 'free', 2, paintInnGuestBed),
-  inn_cot: def('inn_cot', { w: 1, h: 2 }, false, [], 'free', 2, paintInnCot),
+  inn_guest_bed: def(
+    'inn_guest_bed',
+    { w: 2, h: 2 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintInnGuestBed,
+  ),
+  inn_cot: def('inn_cot', { w: 1, h: 2 }, PASSABLE_BY_NOBODY, [], 'free', 2, paintInnCot),
   // One braided-rug painter scaled to three footprints: the hearth and
   // supper-queue mats, a bedside mat, and a runner.
-  rag_rug: def('rag_rug', { w: 4, h: 3 }, true, [], 'free', 2, paintRagRug),
-  rag_rug_small: def('rag_rug_small', { w: 3, h: 2 }, true, [], 'free', 2, paintRagRug),
-  rag_runner: def('rag_runner', { w: 4, h: 1 }, true, [], 'free', 2, paintRagRug),
-  washstand: def('washstand', ONE_BY_ONE, false, [], 'free', 1, paintWashstand, {
+  rag_rug: def('rag_rug', { w: 4, h: 3 }, PASSABLE_BY_EVERYONE, [], 'free', 2, paintRagRug),
+  rag_rug_small: def(
+    'rag_rug_small',
+    { w: 3, h: 2 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    2,
+    paintRagRug,
+  ),
+  rag_runner: def('rag_runner', { w: 4, h: 1 }, PASSABLE_BY_EVERYONE, [], 'free', 2, paintRagRug),
+  washstand: def('washstand', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintWashstand, {
     destructible: DESTRUCTIBLE_JARS,
   }),
   cat_portrait: def(
     'cat_portrait',
     ONE_BY_ONE,
-    false,
+    PASSABLE_BY_NOBODY,
     [],
-    'wall',
+    'wall_face',
     1,
     (ctx, f) => paintCatPortrait(ctx, f),
     { interaction: { kind: 'examine', id: 'cat_portrait' } },
   ),
-  dairy_churn: def('dairy_churn', ONE_BY_ONE, false, [], 'free', 1, paintDairyChurn, {
+  dairy_churn: def('dairy_churn', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintDairyChurn, {
     interaction: { kind: 'examine', id: 'dairy_churn' },
   }),
-  cask_rack: def('cask_rack', { w: 2, h: 1 }, false, [], 'free', 1, paintCaskRack),
-  tab_ledger: def('tab_ledger', ONE_BY_ONE, false, [], 'wall', 1, paintTabLedger, {
+  cask_rack: def('cask_rack', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintCaskRack),
+  tab_ledger: def('tab_ledger', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintTabLedger, {
     interaction: { kind: 'examine', id: 'tab_ledger' },
   }),
-  trophy_banner: def('trophy_banner', ONE_BY_ONE, false, [], 'wall', 1, paintTrophyBanner, {
-    interaction: { kind: 'examine', id: 'trophy_banner' },
-  }),
+  trophy_banner: def(
+    'trophy_banner',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintTrophyBanner,
+    {
+      interaction: { kind: 'examine', id: 'trophy_banner' },
+    },
+  ),
   // The Horned Flagon's composed pieces. The feast table and the trestles
   // are built in sections so every section carries its own `table` anchor:
   // the hall seats a full house, and an unposted occupant takes one each.
   flagon_hearth: def(
     'flagon_hearth',
     { w: 4, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['hearth'],
     'wall',
     1,
@@ -4480,23 +5293,67 @@ export const TOWN_INTERIOR_PROPS = {
       ambientSound: HEARTH_CRACKLE,
     },
   ),
-  guild_booth: def('guild_booth', { w: 4, h: 1 }, false, [], 'wall', 1, paintGuildBooth, {
-    interaction: { kind: 'examine', id: 'guild_booth' },
-  }),
-  booth_screen: def('booth_screen', { w: 1, h: 2 }, false, [], 'free', 1, paintBoothScreen),
-  booth_table: def('booth_table', { w: 2, h: 1 }, false, ['table'], 'free', 1, paintBoothTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  feast_table: def('feast_table', { w: 2, h: 1 }, false, ['table'], 'free', 3, paintFeastTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  feast_bench: def('feast_bench', { w: 2, h: 1 }, false, [], 'free', 1, paintFeastBench, {
-    interaction: { kind: 'examine', id: 'feast_bench' },
-  }),
+  guild_booth: def(
+    'guild_booth',
+    { w: 4, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintGuildBooth,
+    {
+      interaction: { kind: 'examine', id: 'guild_booth' },
+    },
+  ),
+  booth_screen: def(
+    'booth_screen',
+    { w: 1, h: 2 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintBoothScreen,
+  ),
+  booth_table: def(
+    'booth_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintBoothTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  feast_table: def(
+    'feast_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    3,
+    paintFeastTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  feast_bench: def(
+    'feast_bench',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintFeastBench,
+    {
+      interaction: { kind: 'examine', id: 'feast_bench' },
+    },
+  ),
   flagon_back_bar: def(
     'flagon_back_bar',
     { w: 5, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
@@ -4505,11 +5362,28 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'flagon_back_bar' },
     },
   ),
-  flagon_bar: def('flagon_bar', { w: 5, h: 1 }, false, ['counter'], 'free', 1, paintFlagonBar),
-  flagon_trophy: def('flagon_trophy', ONE_BY_ONE, false, [], 'wall', 2, paintFlagonTrophy, {
-    interaction: { kind: 'examine', id: 'flagon_trophy' },
-  }),
-  torchere: def('torchere', ONE_BY_ONE, false, [], 'free', 1, paintTorchere, {
+  flagon_bar: def(
+    'flagon_bar',
+    { w: 5, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['counter'],
+    'free',
+    1,
+    paintFlagonBar,
+  ),
+  flagon_trophy: def(
+    'flagon_trophy',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintFlagonTrophy,
+    {
+      interaction: { kind: 'examine', id: 'flagon_trophy' },
+    },
+  ),
+  torchere: def('torchere', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintTorchere, {
     destructible: DESTRUCTIBLE_BRAZIER,
     flames: TORCHERE_FLAMES,
     ambientSound: TORCHERE_BURN,
@@ -4517,7 +5391,7 @@ export const TOWN_INTERIOR_PROPS = {
   trestle_table: def(
     'trestle_table',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['table'],
     'free',
     2,
@@ -4526,30 +5400,55 @@ export const TOWN_INTERIOR_PROPS = {
       destructible: DESTRUCTIBLE_TABLE,
     },
   ),
-  flagon_carpet: def('flagon_carpet', { w: 12, h: 4 }, true, [], 'free', 1, paintFlagonCarpet),
-  flagon_hearth_rug: def(
-    'flagon_hearth_rug',
-    { w: 4, h: 1 },
-    true,
+  flagon_carpet: def(
+    'flagon_carpet',
+    { w: 12, h: 4 },
+    PASSABLE_BY_EVERYONE,
     [],
     'free',
     1,
     paintFlagonCarpet,
   ),
-  flagon_runner: def('flagon_runner', { w: 3, h: 4 }, true, [], 'free', 1, paintFlagonCarpet),
-  coat_rack: def('coat_rack', ONE_BY_ONE, false, [], 'free', 1, paintCoatRack, {
+  flagon_hearth_rug: def(
+    'flagon_hearth_rug',
+    { w: 4, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintFlagonCarpet,
+  ),
+  flagon_runner: def(
+    'flagon_runner',
+    { w: 3, h: 4 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintFlagonCarpet,
+  ),
+  coat_rack: def('coat_rack', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintCoatRack, {
     interaction: { kind: 'search', id: 'coat_hook' },
   }),
-  flagon_chair: def('flagon_chair', ONE_BY_ONE, false, [], 'free', 1, paintFlagonChair, {
-    destructible: DESTRUCTIBLE_CHAIR,
-  }),
-  deal_bench: def('deal_bench', { w: 2, h: 1 }, false, [], 'free', 1, paintDealBench, {
+  flagon_chair: def(
+    'flagon_chair',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintFlagonChair,
+    {
+      destructible: DESTRUCTIBLE_CHAIR,
+    },
+  ),
+  deal_bench: def('deal_bench', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintDealBench, {
     destructible: DESTRUCTIBLE_CHAIR,
   }),
   flagon_sideboard: def(
     'flagon_sideboard',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'free',
     1,
@@ -4558,10 +5457,10 @@ export const TOWN_INTERIOR_PROPS = {
       destructible: DESTRUCTIBLE_CROCKERY,
     },
   ),
-  dartboard: def('dartboard', ONE_BY_ONE, false, [], 'wall', 1, paintDartboard, {
+  dartboard: def('dartboard', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintDartboard, {
     interaction: { kind: 'use', id: 'throw_dart' },
   }),
-  bolted_door: def('bolted_door', ONE_BY_ONE, false, [], 'wall', 1, paintBoltedDoor, {
+  bolted_door: def('bolted_door', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintBoltedDoor, {
     interaction: { kind: 'examine', id: 'bolted_door' },
   }),
   // The Sunken Stump's pieces. The bar is built in sections so each carries
@@ -4570,7 +5469,7 @@ export const TOWN_INTERIOR_PROPS = {
   stump_back_shelf: def(
     'stump_back_shelf',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     2,
@@ -4579,34 +5478,87 @@ export const TOWN_INTERIOR_PROPS = {
       destructible: DESTRUCTIBLE_JARS,
     },
   ),
-  stump_bar: def('stump_bar', { w: 3, h: 1 }, false, ['counter'], 'free', 2, paintStumpBar),
-  chalk_tally: def('chalk_tally', ONE_BY_ONE, false, [], 'wall', 1, paintChalkTally, {
+  stump_bar: def(
+    'stump_bar',
+    { w: 3, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['counter'],
+    'free',
+    2,
+    paintStumpBar,
+  ),
+  chalk_tally: def('chalk_tally', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintChalkTally, {
     interaction: { kind: 'examine', id: 'chalk_tally' },
   }),
-  dice_table: def('dice_table', { w: 2, h: 1 }, false, ['table'], 'free', 1, paintDiceTable, {
-    interaction: { kind: 'examine', id: 'dice_table' },
-  }),
-  stump_table: def('stump_table', { w: 2, h: 1 }, false, ['table'], 'free', 2, paintStumpTable, {
-    destructible: DESTRUCTIBLE_TABLE,
-  }),
-  barrel_table: def('barrel_table', ONE_BY_ONE, false, ['table'], 'free', 2, paintBarrelTable, {
-    destructible: DESTRUCTIBLE_BARREL,
-  }),
-  keg_stack: def('keg_stack', { w: 2, h: 1 }, false, ['crate'], 'free', 1, paintKegStack, {
-    destructible: DESTRUCTIBLE_BARREL,
-  }),
-  junk_heap: def('junk_heap', ONE_BY_ONE, false, [], 'free', 1, paintJunkHeap, {
+  dice_table: def(
+    'dice_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    1,
+    paintDiceTable,
+    {
+      interaction: { kind: 'examine', id: 'dice_table' },
+    },
+  ),
+  stump_table: def(
+    'stump_table',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    2,
+    paintStumpTable,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+    },
+  ),
+  barrel_table: def(
+    'barrel_table',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['table'],
+    'free',
+    2,
+    paintBarrelTable,
+    {
+      destructible: DESTRUCTIBLE_BARREL,
+    },
+  ),
+  keg_stack: def(
+    'keg_stack',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['crate'],
+    'free',
+    1,
+    paintKegStack,
+    {
+      destructible: DESTRUCTIBLE_BARREL,
+    },
+  ),
+  junk_heap: def('junk_heap', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 1, paintJunkHeap, {
     destructible: DESTRUCTIBLE_CRATE,
   }),
-  floor_stain: def('floor_stain', ONE_BY_ONE, true, [], 'free', 3, paintFloorStain),
-  smoky_lamp: def('smoky_lamp', ONE_BY_ONE, false, [], 'wall', 1, paintSmokyLamp, {
+  floor_stain: def('floor_stain', ONE_BY_ONE, PASSABLE_BY_EVERYONE, [], 'free', 3, paintFloorStain),
+  smoky_lamp: def('smoky_lamp', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'wall', 1, paintSmokyLamp, {
     destructible: DESTRUCTIBLE_LAMP,
   }),
-  stump_stove: def('stump_stove', ONE_BY_ONE, false, ['hearth'], 'wall', 1, paintStumpStove, {
-    interaction: { kind: 'use', id: 'hearth' },
-    flames: STUMP_STOVE_FLAMES,
-    ambientSound: STOVE_CRACKLE,
-  }),
+  stump_stove: def(
+    'stump_stove',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['hearth'],
+    'wall',
+    1,
+    paintStumpStove,
+    {
+      interaction: { kind: 'use', id: 'hearth' },
+      flames: STUMP_STOVE_FLAMES,
+      ambientSound: STOVE_CRACKLE,
+    },
+  ),
   // The Barracks' composed pieces. The counter, the dummies, the muster board
   // and the briefing table each carry the anchor the one-tile fixtures they
   // stand in for used to, so Dann, Pell, the recruit at the board and the
@@ -4614,7 +5566,7 @@ export const TOWN_INTERIOR_PROPS = {
   garrison_weapon_rack: def(
     'garrison_weapon_rack',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     2,
@@ -4624,7 +5576,7 @@ export const TOWN_INTERIOR_PROPS = {
   armour_stand_row: def(
     'armour_stand_row',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
@@ -4634,37 +5586,81 @@ export const TOWN_INTERIOR_PROPS = {
   issue_counter: def(
     'issue_counter',
     { w: 5, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['counter'],
     'free',
     1,
     paintIssueCounter,
     { interaction: { kind: 'examine', id: 'issue_counter' } },
   ),
-  straw_dummy: def('straw_dummy', ONE_BY_ONE, false, ['dummy'], 'free', 2, paintStrawDummy, {
-    interaction: { kind: 'examine', id: 'straw_dummy' },
-  }),
-  pell_post: def('pell_post', ONE_BY_ONE, false, ['dummy'], 'free', 2, paintPellPost, {
+  straw_dummy: def(
+    'straw_dummy',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['dummy'],
+    'free',
+    2,
+    paintStrawDummy,
+    {
+      interaction: { kind: 'examine', id: 'straw_dummy' },
+    },
+  ),
+  pell_post: def('pell_post', ONE_BY_ONE, PASSABLE_BY_NOBODY, ['dummy'], 'free', 2, paintPellPost, {
     interaction: { kind: 'examine', id: 'pell_post' },
   }),
-  archery_butt: def('archery_butt', { w: 2, h: 1 }, false, [], 'wall', 1, paintArcheryButt, {
-    interaction: { kind: 'examine', id: 'archery_butt' },
-  }),
-  drill_slate: def('drill_slate', { w: 2, h: 1 }, false, [], 'wall', 1, paintDrillSlate, {
-    interaction: { kind: 'examine', id: 'drill_slate' },
-  }),
-  water_trough: def('water_trough', { w: 2, h: 1 }, false, [], 'free', 1, paintWaterTrough, {
-    destructible: DESTRUCTIBLE_BARREL,
-  }),
-  sandbags: def('sandbags', { w: 2, h: 1 }, false, [], 'free', 2, paintSandbags, {
+  archery_butt: def(
+    'archery_butt',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintArcheryButt,
+    {
+      interaction: { kind: 'examine', id: 'archery_butt' },
+    },
+  ),
+  drill_slate: def(
+    'drill_slate',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    1,
+    paintDrillSlate,
+    {
+      interaction: { kind: 'examine', id: 'drill_slate' },
+    },
+  ),
+  water_trough: def(
+    'water_trough',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintWaterTrough,
+    {
+      destructible: DESTRUCTIBLE_BARREL,
+    },
+  ),
+  sandbags: def('sandbags', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 2, paintSandbags, {
     destructible: DESTRUCTIBLE_SACK,
   }),
-  bunk_bed: def('bunk_bed', { w: 2, h: 1 }, false, [], 'free', 2, paintBunkBed),
-  muster_board: def('muster_board', { w: 4, h: 1 }, false, ['board'], 'wall', 1, paintMusterBoard),
+  bunk_bed: def('bunk_bed', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 2, paintBunkBed),
+  muster_board: def(
+    'muster_board',
+    { w: 4, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['board'],
+    'wall',
+    1,
+    paintMusterBoard,
+  ),
   briefing_table: def(
     'briefing_table',
     { w: 4, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['table'],
     'free',
     1,
@@ -4674,19 +5670,36 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'briefing_table' },
     },
   ),
-  merc_desk: def('merc_desk', { w: 2, h: 1 }, false, [], 'free', 1, paintMercDesk, {
+  merc_desk: def('merc_desk', { w: 2, h: 1 }, PASSABLE_BY_NOBODY, [], 'free', 1, paintMercDesk, {
     destructible: DESTRUCTIBLE_TABLE,
     interaction: { kind: 'examine', id: 'merc_desk' },
   }),
-  sparring_ring: def('sparring_ring', { w: 9, h: 4 }, true, [], 'free', 1, paintSparringRing),
-  records_cabinet: def('records_cabinet', ONE_BY_ONE, false, [], 'wall', 2, paintRecordsCabinet, {
-    destructible: DESTRUCTIBLE_SHELF,
-    interaction: { kind: 'examine', id: 'records_cabinet' },
-  }),
+  sparring_ring: def(
+    'sparring_ring',
+    { w: 9, h: 4 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintSparringRing,
+  ),
+  records_cabinet: def(
+    'records_cabinet',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintRecordsCabinet,
+    {
+      destructible: DESTRUCTIBLE_SHELF,
+      interaction: { kind: 'examine', id: 'records_cabinet' },
+    },
+  ),
   pigeonhole_wall: def(
     'pigeonhole_wall',
     { w: 3, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     [],
     'wall',
     1,
@@ -4696,7 +5709,7 @@ export const TOWN_INTERIOR_PROPS = {
   scrivener_desk: def(
     'scrivener_desk',
     { w: 2, h: 1 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['table'],
     'free',
     2,
@@ -4706,32 +5719,46 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'scrivener_desk' },
     },
   ),
-  magistrate_desk: def(
-    'magistrate_desk',
-    { w: 4, h: 1 },
-    false,
-    ['table'],
+  archive_boxes: def(
+    'archive_boxes',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    ['crate'],
+    'free',
+    2,
+    paintArchiveBoxes,
+    {
+      destructible: DESTRUCTIBLE_CRATE,
+    },
+  ),
+  writ_board: def(
+    'writ_board',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    ['board'],
+    'wall',
+    1,
+    paintWritBoard,
+    {
+      interaction: { kind: 'examine', id: 'writ_board' },
+    },
+  ),
+  conduit_coil: def(
+    'conduit_coil',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
     'free',
     1,
-    paintMagistrateDesk,
-    { interaction: { kind: 'examine', id: 'magistrate_desk' } },
+    paintConduitCoil,
+    {
+      interaction: { kind: 'examine', id: 'conduit_coil' },
+    },
   ),
-  archive_boxes: def('archive_boxes', ONE_BY_ONE, false, ['crate'], 'free', 2, paintArchiveBoxes, {
-    destructible: DESTRUCTIBLE_CRATE,
-  }),
-  writ_board: def('writ_board', { w: 2, h: 1 }, false, ['board'], 'wall', 1, paintWritBoard, {
-    interaction: { kind: 'examine', id: 'writ_board' },
-  }),
-  coil_bench: def('coil_bench', { w: 3, h: 1 }, false, [], 'free', 1, paintCoilBench, {
-    interaction: { kind: 'examine', id: 'coil_bench' },
-  }),
-  conduit_coil: def('conduit_coil', ONE_BY_ONE, false, [], 'free', 1, paintConduitCoil, {
-    interaction: { kind: 'examine', id: 'conduit_coil' },
-  }),
   tower_hearth: def(
     'tower_hearth',
     { w: 4, h: 2 },
-    false,
+    PASSABLE_BY_NOBODY,
     ['hearth'],
     'wall',
     1,
@@ -4742,15 +5769,160 @@ export const TOWN_INTERIOR_PROPS = {
       ambientSound: HEARTH_CRACKLE,
     },
   ),
-  petition_counter: def(
-    'petition_counter',
-    { w: 5, h: 1 },
-    false,
-    ['counter'],
+  /** Something with a body standing on it presses it down; a plate set reads whether all of its plates are down. */
+  pressure_plate: def(
+    'pressure_plate',
+    ONE_BY_ONE,
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    PRESSURE_PLATE_SINK_STEPS,
+    paintPressurePlate,
+  ),
+  knockable_jar: def(
+    'knockable_jar',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintLooseJar,
+    {
+      destructible: DESTRUCTIBLE_JARS,
+      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM },
+    },
+  ),
+  /** A ring of keys on a shelf top, a cat's paw away from the floor; a variant per `LOOSE_THING_VARIANT`. */
+  knockable_key_ring: def(
+    'knockable_key_ring',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintLooseKeyRing,
+    {
+      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM },
+    },
+  ),
+  /** A loose shelf board on a shelf top; knocked over, it lies across a hole. A variant per `LOOSE_THING_VARIANT`. */
+  knockable_shelf_board: def(
+    'knockable_shelf_board',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    2,
+    paintLooseShelfBoard,
+    {
+      interaction: { kind: 'knock_off', performer: CLIMBERS_PERFORM },
+    },
+  ),
+  /** Set into a side wall, the floor before it open; a variant per `WALL_FITTING_VARIANT`. */
+  dumbwaiter_hatch: def(
+    'dumbwaiter_hatch',
+    ONE_BY_ONE,
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    2,
+    paintDumbwaiterHatch,
+  ),
+  /** The hatch's bell pull, on the same wall; a variant per `WALL_FITTING_VARIANT`. */
+  dumbwaiter_bell: def(
+    'dumbwaiter_bell',
+    ONE_BY_ONE,
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    2,
+    paintDumbwaiterBell,
+  ),
+  /**
+   * The larder's door; a variant per `LARDER_DOOR_VARIANT`. Built open to
+   * everyone, so the larder is a room of the storey whatever its state: the
+   * tower's storey works hold the doorway shut while it is locked.
+   */
+  larder_door: def('larder_door', ONE_BY_ONE, PASSABLE_BY_EVERYONE, [], 'free', 2, paintLarderDoor),
+  portcullis_chain: def(
+    'portcullis_chain',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
     'free',
     1,
-    paintPetitionCounter,
-    { interaction: { kind: 'examine', id: 'petition_counter' } },
+    paintPortcullisChain,
+  ),
+  /** A standing stone feeding a ward line; a variant per `WARD_STONE_VARIANT`. */
+  ward_stone: def('ward_stone', ONE_BY_ONE, PASSABLE_BY_NOBODY, [], 'free', 2, paintWardStone),
+  /** Variant 0 runs, its ward light carried out on the water; 1 is wound shut and dark. */
+  ward_conduit_sluice: def(
+    'ward_conduit_sluice',
+    { w: 2, h: 1 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintWardConduitSluice,
+  ),
+  /** The sewer culvert's mouth in the west wall, laid flat over the wall tile and the floor tile it seeps onto. */
+  cistern_culvert: def(
+    'cistern_culvert',
+    { w: 2, h: 1 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintCisternCulvert,
+  ),
+  /** Dropped over a spiral stair's block, which is drawn under it and shows through the bars. */
+  stair_portcullis: def(
+    'stair_portcullis',
+    { w: 2, h: 2 },
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    1,
+    paintStairPortcullis,
+  ),
+  stair_portcullis_raised: def(
+    'stair_portcullis_raised',
+    { w: 2, h: 2 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    1,
+    paintStairPortcullisRaised,
+  ),
+  /** Variant 0 latched, 1 swung open; the cat inside is drawn by its own system. */
+  cattery_cage: def(
+    'cattery_cage',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'wall',
+    2,
+    paintCatteryCage,
+  ),
+  /** Variant 0 dark, 1 lit. */
+  ritual_circle: def(
+    'ritual_circle',
+    { w: 4, h: 4 },
+    PASSABLE_BY_EVERYONE,
+    [],
+    'free',
+    2,
+    paintRitualCircle,
+  ),
+  /** Variant 0 dormant, 1 lit, 2 shattered. */
+  binding_pillar: def(
+    'binding_pillar',
+    ONE_BY_ONE,
+    PASSABLE_BY_NOBODY,
+    [],
+    'free',
+    3,
+    paintBindingPillar,
   ),
 } as const satisfies Record<string, TownInteriorPropDef>;
 
@@ -4767,11 +5939,25 @@ export type StatefulTownInteriorPropId = {
   [K in TownInteriorPropId]: TownInteriorPropTable[K] extends
     | { readonly destructible: TownInteriorDestructibleSpec }
     | { readonly interaction: { readonly kind: 'search' } }
+    | { readonly interaction: { readonly kind: 'knock_off' } }
     ? K
     : never;
 }[TownInteriorPropId];
 
 export type StatelessTownInteriorPropId = Exclude<TownInteriorPropId, StatefulTownInteriorPropId>;
+
+/**
+ * Props a crawler can knock off a ledge. Each is placed with its fall and its
+ * landing (`knockableProp`), and is stateful: where it came to rest is the
+ * room's to remember.
+ */
+export type KnockableTownInteriorPropId = {
+  [K in TownInteriorPropId]: TownInteriorPropTable[K] extends {
+    readonly interaction: { readonly kind: 'knock_off' };
+  }
+    ? K
+    : never;
+}[TownInteriorPropId];
 
 export function isTownInteriorPropId(value: string): value is TownInteriorPropId {
   return Object.prototype.hasOwnProperty.call(TOWN_INTERIOR_PROPS, value);

@@ -8,7 +8,7 @@
  * depend on the floor it stands on, and some service-level drums hold oil.
  */
 
-import type { DungeonFloorThemeId } from '../../map/dungeon/floorTheme';
+import type { GeneratedFloorThemeId } from '../../map/dungeon/floorTheme';
 import { isOilDrum, onServiceLevel } from '../../map/dungeon/propVariants';
 import type { BreakMaterial, SmashCue } from './breakMaterials';
 import type { PropKind } from '../../sprites/art/destructiblePropArt';
@@ -24,7 +24,7 @@ export const THEMED_PROP_MATERIALS = {
   bookshelf: { cellars: ['wood', 'paper'], service_level: ['metal', 'paper'] },
   torch: { cellars: ['metal', 'wood', 'cloth'], service_level: ['electrical', 'glass', 'metal'] },
   brazier: { cellars: ['metal'], service_level: ['metal'] },
-} as const satisfies Record<PropKind, Record<DungeonFloorThemeId, Materials>>;
+} as const satisfies Record<PropKind, Record<GeneratedFloorThemeId, Materials>>;
 
 const THEME_SMASH_CUES = {
   barrel: { cellars: 'wood', service_level: 'iron' },
@@ -33,7 +33,7 @@ const THEME_SMASH_CUES = {
   bookshelf: { cellars: 'wood', service_level: 'iron' },
   torch: { cellars: 'wood', service_level: 'iron' },
   brazier: { cellars: 'iron', service_level: 'iron' },
-} as const satisfies Record<PropKind, Record<DungeonFloorThemeId, SmashCue>>;
+} as const satisfies Record<PropKind, Record<GeneratedFloorThemeId, SmashCue>>;
 
 const DRUM_SHADES = ['#25313b', '#3a4b59', '#566a7a', '#93a6b4'] as const;
 const OIL_DRUM_SHADES = ['#141618', '#25292c', '#3f4448', '#9a7f2a'] as const;
@@ -45,7 +45,11 @@ const DRUM_BRAZIER_SHADES = ['#25292c', '#3a2c24', '#ff8a1e', '#e2450f'] as cons
 /** What a break leaves spread round its wreckage, beyond the wreckage itself. */
 export type ThemedPropSpill = 'oil' | 'supply_boxes' | 'books' | 'coals';
 
-function themeId(): DungeonFloorThemeId {
+/**
+ * Whose version of a prop stands on this floor. Only the generated floors have
+ * props of their own; any other theme furnishes itself from the cellars' stock.
+ */
+function themeId(): GeneratedFloorThemeId {
   return onServiceLevel() ? 'service_level' : 'cellars';
 }
 

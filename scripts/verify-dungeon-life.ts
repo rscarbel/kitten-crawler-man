@@ -429,7 +429,7 @@ function tick(
 
 function offFloor(gameMap: GameMap, positions: ReadonlyArray<WorldPoint>): number {
   return positions.filter(
-    (p) => !gameMap.isWalkable(Math.floor(p.x / TILE_SIZE), Math.floor(p.y / TILE_SIZE)),
+    (p) => !gameMap.isWalkable(Math.floor(p.x / TILE_SIZE), Math.floor(p.y / TILE_SIZE), 'walker'),
   ).length;
 }
 
@@ -561,6 +561,7 @@ function checkSurpriseBursts(gameMap: GameMap, level: DungeonFloorNumber, label:
   const centreIsFloor = gameMap.isWalkable(
     Math.floor(at.x / TILE_SIZE),
     Math.floor(at.y / TILE_SIZE),
+    'walker',
   );
   check(!centreIsFloor || anyBurst, `${label}: no surprise burst came out onto open floor`);
   let worstOffFloor = offFloor(gameMap, life.burstPositions());
@@ -789,7 +790,7 @@ function checkFliesOverRemains(gameMap: GameMap, level: DungeonFloorNumber, labe
   // Struck from a floor tile beside it, as a crawler would, reaching just
   // past the pile's centre.
   for (const [dx, dy] of NEIGHBOURS) {
-    if (!gameMap.isWalkable(lone.x + dx, lone.y + dy)) continue;
+    if (!gameMap.isWalkable(lone.x + dx, lone.y + dy, 'walker')) continue;
     const fromX = (lone.x + dx + HALF) * TILE_SIZE;
     const fromY = (lone.y + dy + HALF) * TILE_SIZE;
     props.destroyInRadius(fromX, fromY, TILE_SIZE * SMASH_REACH_TILES, crawler);

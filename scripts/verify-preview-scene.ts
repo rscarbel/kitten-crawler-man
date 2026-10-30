@@ -35,7 +35,6 @@ const { CatPreviewScene } = await import('../src/scenes/CatPreviewScene.js');
 const { CAT_ROWS } = await import('../src/sprites/art/catFigure.js');
 const { catGripOf } = await import('../src/sprites/art/catSockets.js');
 const { MOUTH_CARRY_VISUAL_IDS } = await import('../src/sprites/held/heldVisualIds.js');
-const { activeCatFigure, activeCatLook } = await import('../src/sprites/catSprite.js');
 const { CAT_LOOKS } = await import('./catLooks.js');
 const { FACING_VIEWS } = await import('../src/sprites/facingView.js');
 const { catLookOf, ITEM_DEF, isItemId, wearerAllows } =
@@ -197,8 +196,9 @@ for (const look of CAT_LOOKS) {
   window.location.search = '';
   check(
     `&look=${look.id} paints her as ${look.id}`,
-    activeCatLook().id === look.id && activeCatFigure().id.startsWith(`cat:${look.id}`),
-    activeCatFigure().id,
+    scene.rowAppearance.look.id === look.id &&
+      scene.rowAppearance.figure.id.startsWith(`cat:${look.id}`),
+    scene.rowAppearance.figure.id,
   );
   check(
     '?cat=<row> opens on that row',
@@ -272,7 +272,7 @@ for (const look of CAT_LOOKS) {
   if (firstGarment === undefined) {
     console.log('  --   no item is drawn as a garment on her; outfit pick not replayed');
   } else {
-    const bareFigure = activeCatFigure().id;
+    const bareFigure = scene.rowAppearance.figure.id;
     const garmentIndex = scene.outfitChoices.findIndex(
       (outfit) => outfit.items.length === 1 && outfit.items[0] === firstGarment,
     );
@@ -280,15 +280,15 @@ for (const look of CAT_LOOKS) {
     scene.step(1);
     check(
       `picking ${ITEM_DEF[firstGarment].name} puts it on her sprite`,
-      activeCatFigure().id !== bareFigure,
-      `${scene.outfit.label}: ${activeCatFigure().id}`,
+      scene.rowAppearance.figure.id !== bareFigure,
+      `${scene.outfit.label}: ${scene.rowAppearance.figure.id}`,
     );
     while (scene.outfit.items.length > 0) scene.tap('outfit');
     scene.step(1);
     check(
       'and stepping round to bare takes it off',
-      activeCatFigure().id === bareFigure,
-      activeCatFigure().id,
+      scene.rowAppearance.figure.id === bareFigure,
+      scene.rowAppearance.figure.id,
     );
   }
 

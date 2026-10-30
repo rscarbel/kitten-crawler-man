@@ -92,7 +92,7 @@ import type { TopBandEntry } from '../../ui/hud/topBand';
 import { drawEyePair, eyesOpenAt } from '../lighting/eyeShine';
 import { LIGHTING_TUNING } from '../lighting/lightingTuning';
 import { beginAboveDarkness, flushAboveDarkness } from '../lighting/aboveDarkness';
-import type { SystemContext } from '../GameSystem';
+import { type SystemContext, presentCrawlers } from '../GameSystem';
 import {
   bodyTouchesGuard,
   castDisc,
@@ -580,7 +580,7 @@ export class GoblinPrisonSystem {
   // ── Frame ─────────────────────────────────────────────────────────────────
 
   update(ctx: SystemContext): void {
-    this.crawlers = [ctx.human, ctx.cat];
+    this.crawlers = presentCrawlers(ctx);
     this.active = ctx.active;
     this.grid = ctx.roster.grid;
     this.tickChips();
@@ -972,7 +972,7 @@ export class GoblinPrisonSystem {
   private throwInCell(ctx: SystemContext): void {
     const cell = elementAt(this.cells, 0);
     if (cell === undefined) return;
-    this.placeInCell(cell, [ctx.active, ctx.inactive]);
+    this.placeInCell(cell, ctx.partner === null ? [ctx.active] : [ctx.active, ctx.partner]);
     if (cell.door.broken) cell.door.reboard();
     cell.door.brokenBy = null;
     this.deps.map.setBodyBlock(cell.cell.door.x, cell.cell.door.y, true);

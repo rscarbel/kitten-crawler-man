@@ -24,6 +24,7 @@
  */
 
 import { PAINTED_CATS, PLAYER_CAT, type PaintedCat } from '../characters/characterLooks';
+import { TOWN_CATS } from '../systems/critters/TownCats';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import {
   catLookOf,
@@ -46,10 +47,9 @@ import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals
 import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
 import {
   CatAnimator,
+  CatAppearance,
   catCellFor,
   drawCatSprite,
-  prewarmCatSprite,
-  setCatLook,
   type CatOneShot,
   type CatOneShotState,
   type CatCell,
@@ -123,8 +123,13 @@ const COMPASS: ReadonlyArray<Heading> = [
 
 /** How the row pane makes her animator and selection reach a row. */
 type RowDrive =
-  | { readonly kind: 'walk'; readonly carrying?: boolean }
-  | { readonly kind: 'idle'; readonly carrying?: boolean }
+  | { readonly kind: 'walk'; readonly carrying?: boolean; readonly scampering?: boolean }
+  | {
+      readonly kind: 'idle';
+      readonly carrying?: boolean;
+      readonly sitting?: boolean;
+      readonly talking?: boolean;
+    }
   | { readonly kind: 'oneShot'; readonly action: CatOneShot }
   | { readonly kind: 'knockedOut' };
 
@@ -138,6 +143,11 @@ const MINE: RowDrive = { kind: 'oneShot', action: 'mine' };
 const CARRY_WALK: RowDrive = { kind: 'walk', carrying: true };
 const CARRY_IDLE: RowDrive = { kind: 'idle', carrying: true };
 const THROW: RowDrive = { kind: 'oneShot', action: 'throw' };
+const SCAMPER: RowDrive = { kind: 'walk', scampering: true };
+const HOP_UP: RowDrive = { kind: 'oneShot', action: 'hop_up' };
+const HOP_DOWN: RowDrive = { kind: 'oneShot', action: 'hop_down' };
+const SQUEEZE: RowDrive = { kind: 'oneShot', action: 'squeeze' };
+const TALK: RowDrive = { kind: 'idle', talking: true };
 
 /** Exhaustive over her rows, so a row added to the figure cannot go unreachable here. */
 const ROW_DRIVES: Readonly<Record<CatState, RowDrive>> = {
@@ -149,6 +159,9 @@ const ROW_DRIVES: Readonly<Record<CatState, RowDrive>> = {
   idle_side: IDLE,
   idle_side_west: IDLE,
   idle_away: IDLE,
+  sit: { kind: 'idle', sitting: true },
+  scamper_side: SCAMPER,
+  scamper_side_west: SCAMPER,
   look_around: { kind: 'oneShot', action: 'look_around' },
   groom_paw: { kind: 'oneShot', action: 'groom_paw' },
   groom_flank: { kind: 'oneShot', action: 'groom_flank' },
@@ -183,6 +196,26 @@ const ROW_DRIVES: Readonly<Record<CatState, RowDrive>> = {
   throw_side: THROW,
   throw_side_west: THROW,
   throw_away: THROW,
+  hop_up: HOP_UP,
+  hop_up_side: HOP_UP,
+  hop_up_side_west: HOP_UP,
+  hop_up_away: HOP_UP,
+  hop_down: HOP_DOWN,
+  hop_down_side: HOP_DOWN,
+  hop_down_side_west: HOP_DOWN,
+  hop_down_away: HOP_DOWN,
+  squeeze: SQUEEZE,
+  squeeze_side: SQUEEZE,
+  squeeze_side_west: SQUEEZE,
+  squeeze_away: SQUEEZE,
+  talk: TALK,
+  talk_side: TALK,
+  talk_side_west: TALK,
+  talk_away: TALK,
+  paw_bat: { kind: 'oneShot', action: 'paw_bat' },
+  sniff: { kind: 'oneShot', action: 'sniff' },
+  latch_paw: { kind: 'oneShot', action: 'latch_paw' },
+  channel: { kind: 'oneShot', action: 'channel' },
 };
 
 function isCatState(name: string): name is CatState {
@@ -213,11 +246,15 @@ const PREVIEW_ROWS: ReadonlyArray<PreviewRow> = CAT_ROWS.flatMap((row) =>
 
 /** One row looped through a private animator, so a one-shot runs at its in-game length. */
 class RowPlayback {
-  private readonly animator = new CatAnimator();
+  private readonly animator: CatAnimator;
   private walkFrame = 0;
   private restTicks = 0;
 
-  constructor(readonly row: PreviewRow) {
+  constructor(
+    readonly row: PreviewRow,
+    appearance: CatAppearance,
+  ) {
+    this.animator = new CatAnimator(appearance);
     this.playOneShot();
   }
 
@@ -254,6 +291,9 @@ class RowPlayback {
       isKnockedOut: drive.kind === 'knockedOut',
       oneShot: drive.kind === 'oneShot' ? this.oneShotState(drive.action) : null,
       carrying: drive.kind !== 'oneShot' && drive.kind !== 'knockedOut' && drive.carrying === true,
+      sitting: drive.kind === 'idle' && drive.sitting === true,
+      talking: drive.kind === 'idle' && drive.talking === true,
+      scampering: drive.kind === 'walk' && drive.scampering === true,
     };
   }
 
@@ -263,15 +303,16 @@ class RowPlayback {
   }
 }
 
-/**
- * The cat `&look=` names, the player's cat by default, made the sprite's active look as
- * it is chosen: every cat the scene makes after this paints in it.
- */
+/** Every cat the preview can paint: the registry's cats, then the town's. */
+const PREVIEW_CATS: readonly PaintedCat[] = [
+  ...PAINTED_CATS,
+  ...Object.values(TOWN_CATS).map((cat) => ({ displayName: cat.displayName, look: cat.look })),
+];
+
+/** The cat `&look=` names, the player's cat by default. */
 function selectPreviewCat(): PaintedCat {
   const wanted = new URLSearchParams(window.location.search).get('look');
-  const cat = PAINTED_CATS.find((candidate) => candidate.look.id === wanted) ?? PLAYER_CAT;
-  setCatLook(cat.look);
-  return cat;
+  return PREVIEW_CATS.find((candidate) => candidate.look.id === wanted) ?? PLAYER_CAT;
 }
 
 function initialRowIndex(): number {
@@ -445,13 +486,15 @@ function tickCat(cat: CatPlayer): void {
 }
 
 export class CatPreviewScene extends PreviewScene {
-  /** Who she is painted as; the first field, so no cat below is made in another look. */
+  /** Who she is painted as; the first field, so every cat below is made in it. */
   private readonly cat = selectPreviewCat();
+  /** The row pane's own cat, at the crawler's tier so every row of the figure can be shown. */
+  readonly rowAppearance = new CatAppearance('crawler', this.cat.look);
   private rowIndex = initialRowIndex();
-  private playback = new RowPlayback(PREVIEW_ROWS[this.rowIndex]);
-  private readonly live = new CatPlayer(0, 0, TILE_SIZE);
+  private playback = new RowPlayback(PREVIEW_ROWS[this.rowIndex], this.rowAppearance);
+  private readonly live = new CatPlayer(0, 0, TILE_SIZE, this.cat.look);
   private readonly compass: readonly CatPlayer[] = COMPASS.map(
-    () => new CatPlayer(0, 0, TILE_SIZE),
+    () => new CatPlayer(0, 0, TILE_SIZE, this.cat.look),
   );
   private readonly outfits = catOutfits();
   private outfitIndex = 0;
@@ -464,7 +507,7 @@ export class CatPreviewScene extends PreviewScene {
 
   constructor() {
     super();
-    prewarmCatSprite();
+    this.rowAppearance.prewarm();
     this.compass.forEach((cat, index) => {
       cat.facingX = COMPASS[index].x;
       cat.facingY = COMPASS[index].y;
@@ -546,7 +589,7 @@ export class CatPreviewScene extends PreviewScene {
 
   private advanceRow(): void {
     this.rowIndex = (this.rowIndex + 1) % PREVIEW_ROWS.length;
-    this.playback = new RowPlayback(PREVIEW_ROWS[this.rowIndex]);
+    this.playback = new RowPlayback(PREVIEW_ROWS[this.rowIndex], this.rowAppearance);
   }
 
   private nextOutfit(): void {
@@ -558,6 +601,7 @@ export class CatPreviewScene extends PreviewScene {
       for (const id of previous.items) cat.inventory.unequipById(id);
       for (const id of this.outfit.items) cat.inventory.equipByItemId(id);
     }
+    this.rowAppearance.dress(catGarmentsWearing(this.outfit.items));
   }
 
   private nextTool(): void {
@@ -580,7 +624,7 @@ export class CatPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return `cat preview — ?cat&look=${PAINTED_CATS.map((cat) => cat.look.id).join('|')}`;
+    return `cat preview — ?cat&look=${PREVIEW_CATS.map((cat) => cat.look.id).join('|')}`;
   }
 
   protected previewCaptions(): readonly string[] {
@@ -663,7 +707,7 @@ export class CatPreviewScene extends PreviewScene {
       const paneWidth = size * PANE_SIZE_TILES;
       const caption = `${size}px — ${cell.state}[${cell.frame}]`;
       const tile = this.drawPane(ctx, x, paneTop, paneWidth, size, [caption]);
-      drawCatSprite(ctx, tile.x, tile.y, size, state, cell, this.rowHeld);
+      drawCatSprite(ctx, this.rowAppearance, tile.x, tile.y, size, cell, state, this.rowHeld);
       x += paneWidth + PANE_GAP;
     }
 

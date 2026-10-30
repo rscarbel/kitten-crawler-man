@@ -46,6 +46,7 @@ const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { createCasinoState } = await import('../src/core/club/CasinoState.js');
 const { InteriorOccupantSystem } = await import('../src/systems/InteriorOccupantSystem.js');
+const { missingCatsProgressAt } = await import('../src/core/quests/missingCatsProgress.js');
 const { createShopStock } = await import('../src/economy/shopStock.js');
 const { CloakAndDaggerSystem } = await import('../src/systems/CloakAndDaggerSystem.js');
 
@@ -83,7 +84,9 @@ const club = new CloakAndDaggerSystem(
   createShopStock(),
   (id) => partyOwnsGear([human, cat], id),
 );
-const residents = InteriorOccupantSystem.forBuilding(map, building.kind, building.id);
+const residents = InteriorOccupantSystem.forBuilding(map, building.kind, building.id, {
+  missingCats: missingCatsProgressAt('complete'),
+});
 const people = residents?.people ?? [];
 
 for (let frame = 0; frame < WARM_FRAMES; frame++) {

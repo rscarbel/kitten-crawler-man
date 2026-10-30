@@ -268,7 +268,7 @@ function playFrame(): PlayFrame {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,

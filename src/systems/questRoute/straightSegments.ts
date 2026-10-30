@@ -4,6 +4,7 @@
  * waypoints a party can walk straight at.
  */
 
+import type { MobilityClass } from '../../map/mobility';
 import { TILE_SIZE } from '../../core/constants';
 import type { GameMap } from '../../map/GameMap';
 import type { TilePoint } from '../../map/town/townPlan';
@@ -15,10 +16,15 @@ function tileCentrePx(tile: TilePoint): { readonly x: number; readonly y: number
 }
 
 /** Whether a body could walk straight from `from` to `to`: `hasWalkableLine`, centre to centre. */
-export function isStraightWalk(gameMap: GameMap, from: TilePoint, to: TilePoint): boolean {
+export function isStraightWalk(
+  gameMap: GameMap,
+  from: TilePoint,
+  to: TilePoint,
+  mobility: MobilityClass,
+): boolean {
   const a = tileCentrePx(from);
   const b = tileCentrePx(to);
-  return gameMap.hasWalkableLine(a.x, a.y, b.x, b.y);
+  return gameMap.hasWalkableLine(a.x, a.y, b.x, b.y, mobility);
 }
 
 /** Distance in tiles from `point` to the segment `a`–`b`. */
@@ -50,6 +56,7 @@ function lineFollowsWalk(
   from: number,
   to: number,
   limits: StraightSegmentLimits,
+  mobility: MobilityClass,
 ): boolean {
   const a = walk[from];
   const b = walk[to];
@@ -57,7 +64,7 @@ function lineFollowsWalk(
   for (let index = from + 1; index < to; index++) {
     if (distanceToSegment(walk[index], a, b) > limits.maxDeviationTiles) return false;
   }
-  return isStraightWalk(gameMap, a, b);
+  return isStraightWalk(gameMap, a, b, mobility);
 }
 
 /**
@@ -70,13 +77,15 @@ export function straightSegments(
   gameMap: GameMap,
   walk: readonly TilePoint[],
   limits: StraightSegmentLimits,
+  mobility: MobilityClass,
 ): readonly number[] {
   const ends: number[] = [];
   const last = walk.length - 1;
   let anchor = 0;
   while (anchor < last) {
     let reach = anchor + 1;
-    while (reach < last && lineFollowsWalk(gameMap, walk, anchor, reach + 1, limits)) reach++;
+    while (reach < last && lineFollowsWalk(gameMap, walk, anchor, reach + 1, limits, mobility))
+      reach++;
     ends.push(reach);
     anchor = reach;
   }

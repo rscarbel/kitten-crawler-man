@@ -124,7 +124,7 @@ function forecourtProbe(site: CircusSite): TilePoint {
  */
 function readPockets(site: CircusSite): Pocket[] {
   const escapeRadius = site.radiusTiles + POCKET_ESCAPE_MARGIN_TILES;
-  const walkable = (tile: TilePoint): boolean => site.map.isWalkable(tile.x, tile.y);
+  const walkable = (tile: TilePoint): boolean => site.map.isWalkable(tile.x, tile.y, 'walker');
   const reached = flood(
     forecourtProbe(site),
     (tile) => radiusOf(site, tile) <= escapeRadius && walkable(tile),
@@ -180,7 +180,7 @@ function readBands(site: CircusSite): Map<BandName, BandReading> {
   for (const [name, tiles] of bandTiles(site)) {
     readings.set(name, {
       tiles: tiles.length,
-      blocked: tiles.filter((tile) => !site.map.isWalkable(tile.x, tile.y)),
+      blocked: tiles.filter((tile) => !site.map.isWalkable(tile.x, tile.y, 'walker')),
     });
   }
   return readings;
@@ -232,7 +232,7 @@ function readUnreachableRimProps(site: CircusSite): GroundsReading['unreachableR
   const escapeRadius = site.radiusTiles + POCKET_ESCAPE_MARGIN_TILES;
   const reached = flood(
     forecourtProbe(site),
-    (tile) => radiusOf(site, tile) <= escapeRadius && site.map.isWalkable(tile.x, tile.y),
+    (tile) => radiusOf(site, tile) <= escapeRadius && site.map.isWalkable(tile.x, tile.y, 'walker'),
   );
   const steps: readonly TilePoint[] = [
     { x: 1, y: 0 },
@@ -255,7 +255,7 @@ export function measureGrounds(site: CircusSite): GroundsReading {
   let blockedTiles = 0;
   const blockedByType = new Map<number, number>();
   for (const tile of discTiles(site)) {
-    if (site.map.isWalkable(tile.x, tile.y)) continue;
+    if (site.map.isWalkable(tile.x, tile.y, 'walker')) continue;
     blockedTiles++;
     const type = site.map.structure[tile.y][tile.x].type;
     blockedByType.set(type, (blockedByType.get(type) ?? 0) + 1);

@@ -90,6 +90,11 @@ import {
   HOLLOW_PLANK_RAMP,
   PASTURE_GRASS_RAMP,
   TILLED_SOIL_RAMP,
+  SEWER_BRICK_RAMP,
+  SEWER_MORTAR_RAMP,
+  SEWER_WALKWAY_RAMP,
+  SEWER_CHANNEL_RAMP,
+  SEWER_SILT_RAMP,
 } from './palette';
 
 export interface PaintContext {
@@ -3830,6 +3835,187 @@ const circusLot: Material = {
 /** Wet mud is a little darker than the dry track the same earth makes. */
 const CIRCUS_LOT_MUD_SHADE = 0.88;
 
+// ── the storm drain under the town ─────────────────────────────────────────
+//
+// A brick tunnel with stone walkways beside its channels. Everything is wet, so
+// the variation is a tonal wash of damp rather than marks: the walkway must stay
+// a quiet backdrop for a fight on it, and the channel bed has to read as a
+// different, lower surface the moment its water is drained.
+
+const SEWER_BRICK_COURSES_PER_TILE = 4;
+const SEWER_BRICK_BLOCKS_PER_COURSE_PER_TILE = 2;
+const SEWER_BRICK_JOINT_PX = 1.2;
+const SEWER_BRICK_JOINT_STRENGTH = 0.5;
+const SEWER_BRICK_BOND_OFFSET = 0.5;
+const SEWER_BRICK_EDGE_BAND_PX = 1;
+const SEWER_BRICK_TOP_LIGHT = 1.08;
+const SEWER_BRICK_BOTTOM_SHADOW = 0.88;
+const SEWER_BRICK_TONE_FLOOR = 0.3;
+const SEWER_BRICK_TONE_SPREAD = 0.34;
+const SEWER_BRICK_GRAIN_STRENGTH = 0.1;
+const SEWER_BRICK_JOINT_WANDER_PX = 0.6;
+const SEWER_BRICK_DAMP_COUNT = 3;
+const SEWER_BRICK_DAMP_MIN_RADIUS = 6;
+const SEWER_BRICK_DAMP_MAX_RADIUS = 16;
+const SEWER_BRICK_DAMP_ALPHA = 0.16;
+const SEWER_BRICK_DAMP_SOFTNESS = 1;
+const SEWER_BRICK_DAMP_SALT = 131;
+
+/**
+ * The brick lining a channel's sides: small engineering bricks in a stretcher
+ * bond, joints pointed flush so a run of it reads as one built surface rather
+ * than as a grid.
+ */
+const sewerBrick: Material = {
+  id: 'sewer_brick',
+  label: 'Sewer brick (channel walls)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCoursedBlocks(ctx, {
+      coursesPerTile: SEWER_BRICK_COURSES_PER_TILE,
+      blocksPerCoursePerTile: SEWER_BRICK_BLOCKS_PER_COURSE_PER_TILE,
+      ramp: SEWER_BRICK_RAMP,
+      jointRamp: SEWER_MORTAR_RAMP,
+      jointPx: SEWER_BRICK_JOINT_PX,
+      jointStrength: SEWER_BRICK_JOINT_STRENGTH,
+      bondOffset: SEWER_BRICK_BOND_OFFSET,
+      edgeBandPx: SEWER_BRICK_EDGE_BAND_PX,
+      topLight: SEWER_BRICK_TOP_LIGHT,
+      bottomShadow: SEWER_BRICK_BOTTOM_SHADOW,
+      toneFloor: SEWER_BRICK_TONE_FLOOR,
+      toneSpread: SEWER_BRICK_TONE_SPREAD,
+      grainStrength: SEWER_BRICK_GRAIN_STRENGTH,
+      jointWanderPx: SEWER_BRICK_JOINT_WANDER_PX,
+    });
+    paintSpeckles(ctx, ctx.detail + SEWER_BRICK_DAMP_SALT, {
+      count: SEWER_BRICK_DAMP_COUNT,
+      minRadius: SEWER_BRICK_DAMP_MIN_RADIUS,
+      maxRadius: SEWER_BRICK_DAMP_MAX_RADIUS,
+      ramp: { ...SEWER_BRICK_RAMP, mid: SEWER_BRICK_RAMP.shadow },
+      alpha: SEWER_BRICK_DAMP_ALPHA,
+      softness: SEWER_BRICK_DAMP_SOFTNESS,
+    });
+  },
+};
+
+const SEWER_WALKWAY_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.4, contrast: 0.7 };
+const SEWER_WALKWAY_DAMP_COUNT = 3;
+const SEWER_WALKWAY_DAMP_MIN_RADIUS = 8;
+const SEWER_WALKWAY_DAMP_MAX_RADIUS = 20;
+const SEWER_WALKWAY_DAMP_ALPHA = 0.2;
+const SEWER_WALKWAY_DAMP_SOFTNESS = 1;
+const SEWER_WALKWAY_DAMP_SALT = 137;
+const SEWER_WALKWAY_SHEEN_COUNT = 1.5;
+const SEWER_WALKWAY_SHEEN_MIN_RADIUS = 4;
+const SEWER_WALKWAY_SHEEN_MAX_RADIUS = 10;
+const SEWER_WALKWAY_SHEEN_ALPHA = 0.08;
+const SEWER_WALKWAY_SHEEN_SOFTNESS = 1;
+const SEWER_WALKWAY_SHEEN_SALT = 139;
+const SEWER_WALKWAY_GRAIN_SALT = 149;
+
+/**
+ * The sewer's calm bulk floor: jointless wet stone. Damp gathers in broad soft
+ * pools and the odd film of standing water catches the light, both too faint
+ * to read as marks — see rule 3 at the top of this file.
+ */
+const sewerWalkway: Material = {
+  id: 'sewer_walkway',
+  label: 'Sewer wet stone walkway (calm bulk floor)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, SEWER_WALKWAY_RAMP, SEWER_WALKWAY_GROUND);
+    paintSpeckles(ctx, ctx.detail + SEWER_WALKWAY_DAMP_SALT, {
+      count: SEWER_WALKWAY_DAMP_COUNT,
+      minRadius: SEWER_WALKWAY_DAMP_MIN_RADIUS,
+      maxRadius: SEWER_WALKWAY_DAMP_MAX_RADIUS,
+      ramp: { ...SEWER_WALKWAY_RAMP, mid: SEWER_WALKWAY_RAMP.shadow },
+      alpha: SEWER_WALKWAY_DAMP_ALPHA,
+      softness: SEWER_WALKWAY_DAMP_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + SEWER_WALKWAY_SHEEN_SALT, {
+      count: SEWER_WALKWAY_SHEEN_COUNT,
+      minRadius: SEWER_WALKWAY_SHEEN_MIN_RADIUS,
+      maxRadius: SEWER_WALKWAY_SHEEN_MAX_RADIUS,
+      ramp: { ...SEWER_WALKWAY_RAMP, mid: SEWER_WALKWAY_RAMP.light },
+      alpha: SEWER_WALKWAY_SHEEN_ALPHA,
+      softness: SEWER_WALKWAY_SHEEN_SOFTNESS,
+    });
+    paintMineralGrain(ctx, SEWER_WALKWAY_RAMP, ctx.detail + SEWER_WALKWAY_GRAIN_SALT);
+  },
+};
+
+const SEWER_CHANNEL_COURSES_PER_TILE = 3;
+const SEWER_CHANNEL_BLOCKS_PER_COURSE_PER_TILE = 1.5;
+const SEWER_CHANNEL_JOINT_PX = 1;
+const SEWER_CHANNEL_JOINT_STRENGTH = 0.28;
+const SEWER_CHANNEL_BOND_OFFSET = 0.5;
+const SEWER_CHANNEL_EDGE_BAND_PX = 0.8;
+const SEWER_CHANNEL_TOP_LIGHT = 1.04;
+const SEWER_CHANNEL_BOTTOM_SHADOW = 0.94;
+const SEWER_CHANNEL_TONE_FLOOR = 0.36;
+const SEWER_CHANNEL_TONE_SPREAD = 0.2;
+const SEWER_CHANNEL_GRAIN_STRENGTH = 0.08;
+const SEWER_CHANNEL_JOINT_WANDER_PX = 0.8;
+const SEWER_CHANNEL_SILT_COUNT = 3;
+const SEWER_CHANNEL_SILT_MIN_RADIUS = 6;
+const SEWER_CHANNEL_SILT_MAX_RADIUS = 16;
+const SEWER_CHANNEL_SILT_ALPHA = 0.3;
+const SEWER_CHANNEL_SILT_SOFTNESS = 1;
+const SEWER_CHANNEL_SILT_SALT = 151;
+const SEWER_CHANNEL_GRIT_COUNT = 5;
+const SEWER_CHANNEL_GRIT_MIN_RADIUS = 0.6;
+const SEWER_CHANNEL_GRIT_MAX_RADIUS = 1.4;
+const SEWER_CHANNEL_GRIT_ALPHA = 0.35;
+const SEWER_CHANNEL_GRIT_SOFTNESS = 0.5;
+const SEWER_CHANNEL_GRIT_SALT = 157;
+
+/**
+ * A channel's bed: brick laid larger than the lining's and worn nearly
+ * jointless by the flow, under a film of silt that settles across the joints.
+ */
+const sewerChannel: Material = {
+  id: 'sewer_channel',
+  label: 'Sewer channel bed (silted invert)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCoursedBlocks(ctx, {
+      coursesPerTile: SEWER_CHANNEL_COURSES_PER_TILE,
+      blocksPerCoursePerTile: SEWER_CHANNEL_BLOCKS_PER_COURSE_PER_TILE,
+      ramp: SEWER_CHANNEL_RAMP,
+      jointRamp: { ...SEWER_CHANNEL_RAMP, mid: SEWER_CHANNEL_RAMP.shadow },
+      jointPx: SEWER_CHANNEL_JOINT_PX,
+      jointStrength: SEWER_CHANNEL_JOINT_STRENGTH,
+      bondOffset: SEWER_CHANNEL_BOND_OFFSET,
+      edgeBandPx: SEWER_CHANNEL_EDGE_BAND_PX,
+      topLight: SEWER_CHANNEL_TOP_LIGHT,
+      bottomShadow: SEWER_CHANNEL_BOTTOM_SHADOW,
+      toneFloor: SEWER_CHANNEL_TONE_FLOOR,
+      toneSpread: SEWER_CHANNEL_TONE_SPREAD,
+      grainStrength: SEWER_CHANNEL_GRAIN_STRENGTH,
+      jointWanderPx: SEWER_CHANNEL_JOINT_WANDER_PX,
+    });
+    paintSpeckles(ctx, ctx.detail + SEWER_CHANNEL_SILT_SALT, {
+      count: SEWER_CHANNEL_SILT_COUNT,
+      minRadius: SEWER_CHANNEL_SILT_MIN_RADIUS,
+      maxRadius: SEWER_CHANNEL_SILT_MAX_RADIUS,
+      ramp: SEWER_SILT_RAMP,
+      alpha: SEWER_CHANNEL_SILT_ALPHA,
+      softness: SEWER_CHANNEL_SILT_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + SEWER_CHANNEL_GRIT_SALT, {
+      count: SEWER_CHANNEL_GRIT_COUNT,
+      minRadius: SEWER_CHANNEL_GRIT_MIN_RADIUS,
+      maxRadius: SEWER_CHANNEL_GRIT_MAX_RADIUS,
+      ramp: { ...SEWER_CHANNEL_RAMP, mid: SEWER_CHANNEL_RAMP.shadow },
+      alpha: SEWER_CHANNEL_GRIT_ALPHA,
+      softness: SEWER_CHANNEL_GRIT_SOFTNESS,
+    });
+  },
+};
+
 export const MATERIALS: ReadonlyArray<Material> = [
   grass,
   verge,
@@ -3874,6 +4060,9 @@ export const MATERIALS: ReadonlyArray<Material> = [
   serviceWashroom,
   stationPlate,
   stationStripe,
+  sewerBrick,
+  sewerWalkway,
+  sewerChannel,
 ];
 
 export function getMaterial(id: string): Material {

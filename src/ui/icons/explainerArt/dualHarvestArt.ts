@@ -33,12 +33,14 @@ import { TOOL_TIER_BASIC } from '../../../core/items/gathering/toolTiers';
 import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
 import {
   CAT_WORK_SWING_DURATION_TICKS,
+  catCellFor,
   drawCatSprite,
   prewarmCatHold,
-  prewarmCatSprite,
   type CatHeldDraw,
   type CatOneShotState,
+  type CatSpriteState,
 } from '../../../sprites/catSprite';
+import { EXPLAINER_CAT } from './explainerCat';
 import { selectFacing } from '../../../sprites/facingView';
 import { workingToolHeldVisual } from '../../../sprites/held/heldVisuals';
 import { CAT_WORK_SWING_TICKS } from '../../../systems/WorkChannel';
@@ -144,19 +146,12 @@ function drawCat(
   const working = frame >= SWITCH_AT;
   const held: CatHeldDraw | null =
     working && CAT_PICKAXE !== null ? { look: CAT_PICKAXE, phase: 0, hold: 'mine' } : null;
-  drawCatSprite(
-    ctx,
-    tile.x,
-    tile.y,
-    STAGE_TILE,
-    {
-      facing: CAT_FACING,
-      oneShot: catOneShot(frame),
-      working: working ? 'mine' : null,
-    },
-    undefined,
-    held,
-  );
+  const state: CatSpriteState = {
+    facing: CAT_FACING,
+    oneShot: catOneShot(frame),
+    working: working ? 'mine' : null,
+  };
+  drawCatSprite(ctx, EXPLAINER_CAT, tile.x, tile.y, STAGE_TILE, catCellFor(state), state, held);
 }
 
 function drawMarker(
@@ -279,6 +274,6 @@ export function drawDualHarvestScene(
 
 /** Queues the cat's idle and mining rows so the page never paints a cold figure mid-swing. */
 export function prewarmDualHarvestArt(): void {
-  prewarmCatSprite();
-  prewarmCatHold('mine', CAT_FACING, false);
+  EXPLAINER_CAT.prewarm();
+  prewarmCatHold(EXPLAINER_CAT, 'mine', CAT_FACING, false);
 }

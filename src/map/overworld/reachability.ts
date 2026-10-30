@@ -174,5 +174,5 @@ export const NO_REGION = -1;
  */
 function isWalkableAt(grid: GridView, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= grid.size || y >= grid.size) return false;
-  return isWalkableTileType(grid.cells[y][x]);
+  return isWalkableTileType(grid.cells[y][x], 'walker');
 }

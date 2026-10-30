@@ -37,7 +37,7 @@ const NOTHING_BROKEN: ReadonlySet<string> = new Set();
 
 /** Whether a placed prop lies flat on the floor and so belongs in the ground layer. */
 function liesOnFloor(placed: PlacedTownInteriorProp): boolean {
-  return TOWN_INTERIOR_PROPS[placed.propId].walkable;
+  return TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker');
 }
 
 function drawPlaced(

@@ -8,7 +8,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
-import { PartyTrail, routeTrailBetween } from './partyTrail';
+import { PartyTrail, trailGroundOn } from './partyTrail';
 import {
   contractIsCurrent,
   hirelingStartingHp,
@@ -24,9 +24,14 @@ import type { Rect } from '../ui/core/geom';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { hasAiAttention } from './MobUpdateLoop';
-import type { CarriedCompanion } from './companionCarry';
+import { companionLeader, type CarriedCompanion } from './companionCarry';
 import { hirelingShouldCatchUp } from '../creatures/mercenaries/hirelingCatchUp';
 import { worldViewWidth, worldViewHeight } from '../core/rendering/Viewport';
+import {
+  WHOLE_PARTY_PRESENT,
+  type CompanionRef,
+  type PartyPresence,
+} from '../core/party/partySplit';
 
 /**
  * A point-in-time copy of the spawn state, for the in-run safe-room checkpoint.
@@ -136,6 +141,7 @@ export class MercenarySystem implements GameSystem {
       readonly y: number;
     }) => boolean = () => false,
     private readonly feedback: HirelingFeedback = SILENT_FEEDBACK,
+    private readonly presence: PartyPresence = WHOLE_PARTY_PRESENT,
   ) {
     if (levelId !== null) roster.floorLevelId = levelId;
   }
@@ -149,8 +155,9 @@ export class MercenarySystem implements GameSystem {
     this.trail =
       spacingPx === null
         ? null
-        : new PartyTrail(spacingPx, (from, to) =>
-            this.trailMap === null ? null : routeTrailBetween(this.trailMap, from, to),
+        : new PartyTrail(
+            spacingPx,
+            trailGroundOn(() => this.trailMap),
           );
     if (spacingPx === null && this.merc !== null) this.merc.walksTrail = false;
   }
@@ -182,25 +189,34 @@ export class MercenarySystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    const { gameMap, active } = ctx;
-    this.reviverCandidates = [ctx.human, ctx.cat];
+    const { gameMap, active, partner } = ctx;
+    const presentCrawlers = partner === null ? [active] : [active, partner];
+    this.reviverCandidates = presentCrawlers;
     this.sceneMobs = ctx.roster.mobs;
 
     this.sweepCorpse(ctx.roster.mobs, ctx.roster.grid);
     this.announceDeath();
 
-    if (!this.spawnAttempted) {
-      this.spawnAttempted = this.spawn(active, gameMap, ctx.roster);
+    const hired = this.roster.active;
+    const hireRef: CompanionRef | null =
+      hired === null ? null : { kind: 'mercenary', hire: hired.id };
+    const owner = hireRef === null ? active : this.ownerOf(hireRef, ctx);
+    if (!this.spawnAttempted && owner !== null) {
+      this.spawnAttempted = this.spawn(owner, gameMap, ctx.roster);
     }
 
     const merc = this.merc;
-    if (!merc?.isAlive) return;
+    if (merc !== null && owner === null) {
+      this.dismissForTransition(ctx.roster.mobs, ctx.roster.grid);
+      return;
+    }
+    if (!merc?.isAlive || owner === null) return;
 
-    merc.owner = active;
+    merc.owner = owner;
     merc.cat = ctx.cat;
     merc.allMobs = ctx.roster.mobs;
     this.allies.length = 0;
-    this.allies.push(ctx.human, ctx.cat);
+    this.allies.push(...presentCrawlers);
     for (const extra of ctx.extraTargets ?? []) {
       if (extra !== merc) this.allies.push(extra);
     }
@@ -208,7 +224,7 @@ export class MercenarySystem implements GameSystem {
     this.catchUpIfLeftBehind(merc, gameMap, ctx.roster.grid);
     this.trailMap = gameMap;
     merc.walksTrail = this.trail !== null;
-    this.trail?.tick(ctx.inactive, merc);
+    this.trail?.tick(partner ?? owner, merc);
 
     const heal = merc.tickSurvival();
     if (heal?.kind === 'potion') this.feedback.sound(POTION_SOUND);
@@ -378,6 +394,7 @@ export class MercenarySystem implements GameSystem {
   asCarriedCompanion(): CarriedCompanion {
     return {
       body: this.activeMerc,
+      followsLiveGroup: this.merc?.owner.isAway !== true,
       landingTile: (map, isAcceptable) => {
         const merc = this.merc;
         return merc === null ? null : findSpawnTile(merc.owner, map, isAcceptable);
@@ -453,6 +470,19 @@ export class MercenarySystem implements GameSystem {
   endContractForFloor(): void {
     this.merc?.bark('floor_end');
     this.roster.active = null;
+  }
+
+  /**
+   * The Warden is gone, and the tower loan with him. A lent hire says goodbye
+   * and walks with the party until it leaves the scene, as at a floor's end.
+   *
+   * @returns whether a loan was running and has now ended.
+   */
+  endTowerLoan(): boolean {
+    if (this.roster.active?.terms !== 'tower_loan') return false;
+    this.merc?.bark('loan_end');
+    this.roster.active = null;
+    return true;
   }
 
   /**
@@ -538,6 +568,23 @@ export class MercenarySystem implements GameSystem {
     }
     this.merc = null;
     this.spawnAttempted = false;
+  }
+
+  /** The crawler the hire follows; null when its group is away from this map. */
+  private ownerOf(hire: CompanionRef, ctx: SystemContext): Player | null {
+    const leader = companionLeader(this.presence, hire, ctx);
+    switch (leader.kind) {
+      case 'together':
+        return ctx.active;
+      case 'away':
+        return null;
+      case 'group':
+        return leader.crawler;
+      default: {
+        const unreachable: never = leader;
+        return unreachable;
+      }
+    }
   }
 
   /**

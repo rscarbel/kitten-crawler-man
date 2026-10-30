@@ -295,7 +295,7 @@ function injectSceneFault(scene: Scene, active: Fault | null): void {
     }
     case 'buff-wrong-duration':
     case 'buff-stacks':
-      for (const crawler of scene.pm.players()) {
+      for (const crawler of scene.pm.wholeParty()) {
         const applyStatus = crawler.applyStatus.bind(crawler);
         crawler.applyStatus = (effect) => {
           if (effect.type !== REFRESHED_STATUS) {
@@ -314,7 +314,7 @@ function injectSceneFault(scene: Scene, active: Fault | null): void {
       return;
     case 'buff-no-speed':
     case 'speed-outlives-buff':
-      for (const crawler of scene.pm.players()) {
+      for (const crawler of scene.pm.wholeParty()) {
         const prototype: unknown = Object.getPrototypeOf(crawler);
         if (typeof prototype !== 'object' || prototype === null) continue;
         let everRefreshed = false;
@@ -374,7 +374,7 @@ function tileOf(entity: { readonly x: number; readonly y: number }): Tile {
 
 /** Ticks `frames` frames with both crawlers pinned where they stand and topped up, so a stray blow cannot end the run. */
 function tickPinned(scene: Scene, frames: number, onFrame?: () => void): void {
-  const [human, cat] = scene.pm.players();
+  const [human, cat] = scene.pm.wholeParty();
   const humanAt = { x: human.x, y: human.y };
   const catAt = { x: cat.x, y: cat.y };
   for (let frame = 0; frame < frames; frame++) {
@@ -400,7 +400,7 @@ function framesLost(scene: Scene, frames: number): number {
 function reachableTiles(map: LiveMap, start: Tile): Set<number> {
   const size = map.gridSize;
   const seen = new Set<number>();
-  if (!map.isWalkable(start.x, start.y)) return seen;
+  if (!map.isWalkable(start.x, start.y, 'walker')) return seen;
   seen.add(tileIndex(start.x, start.y, size));
   const queue: Tile[] = [start];
   // A for-of over an array visits what is pushed onto it mid-loop, which is the flood.
@@ -408,7 +408,7 @@ function reachableTiles(map: LiveMap, start: Tile): Set<number> {
     for (const step of NEIGHBOUR_STEPS) {
       const next = { x: tile.x + step.x, y: tile.y + step.y };
       const key = tileIndex(next.x, next.y, size);
-      if (seen.has(key) || !map.isWalkable(next.x, next.y)) continue;
+      if (seen.has(key) || !map.isWalkable(next.x, next.y, 'walker')) continue;
       seen.add(key);
       queue.push(next);
     }
@@ -514,7 +514,7 @@ async function buildRig(worldSeed: number): Promise<Rig | null> {
 function verifyClock(rig: Rig, copy: BathroomCopy, label: string): void {
   const { scene } = rig;
   const bathroom = scene.cloggedBathroom;
-  for (const crawler of scene.pm.players()) placeAt(crawler, copy.room.pipeWallStandTile);
+  for (const crawler of scene.pm.wholeParty()) placeAt(crawler, copy.room.pipeWallStandTile);
 
   const lostBefore = framesLost(scene, RUNNING_CHECK_FRAMES);
   check(
@@ -584,7 +584,7 @@ function goblinState(goblin: Goblin): GoblinState {
 /** Every number the party earns or the run counts, as one comparable string. */
 function progressSnapshot(rig: Rig): string {
   const { scene } = rig;
-  const [human, cat] = scene.pm.players();
+  const [human, cat] = scene.pm.wholeParty();
   const destruction = scene['destruction'];
   const loot = destruction.loot.captureCheckpoint();
   const {
@@ -614,7 +614,7 @@ function progressSnapshot(rig: Rig): string {
 function standingTileBeside(map: LiveMap, goblin: Goblin, goblins: readonly Goblin[]): Tile | null {
   const at = tileOf(goblin);
   const beside = NEIGHBOUR_STEPS.map((step) => ({ x: at.x + step.x, y: at.y + step.y }));
-  const open = beside.find((tile) => map.isWalkable(tile.x, tile.y));
+  const open = beside.find((tile) => map.isWalkable(tile.x, tile.y, 'walker'));
   if (open !== undefined) return open;
   const taken = new Set(
     goblins.map((other) => tileIndex(tileOf(other).x, tileOf(other).y, map.gridSize)),
@@ -622,7 +622,7 @@ function standingTileBeside(map: LiveMap, goblin: Goblin, goblins: readonly Gobl
   return (
     beside.find(
       (tile) =>
-        map.isWalkableIgnoringBathroomQueue(tile.x, tile.y) &&
+        map.isWalkableIgnoringBathroomQueue(tile.x, tile.y, 'walker') &&
         !taken.has(tileIndex(tile.x, tile.y, map.gridSize)),
     ) ?? null
   );
@@ -636,7 +636,7 @@ function faceToward(crawler: Crawler, from: Tile, to: Tile): void {
 /** Throws one `kind` of blow at `goblin` through the weapon's own system and plays it out. */
 function throwBlow(rig: Rig, kind: DamageKind, goblin: Goblin, stand: Tile): void {
   const { scene } = rig;
-  const [human, cat] = scene.pm.players();
+  const [human, cat] = scene.pm.wholeParty();
   const target = tileOf(goblin);
   const attacker = kind === 'catMelee' || kind === 'missile' ? cat : human;
   if (!attacker.isActive) scene.pm.switchActive();
@@ -783,13 +783,13 @@ function verifyCompanions(rig: Rig, copy: BathroomCopy, label: string): void {
     if (scene.pm.cat.isActive !== activeIsCat) scene.pm.switchActive();
     let picked = 0;
     placeAt(scene.pm.active(), stand);
-    placeAt(scene.pm.inactive(), stand);
+    placeAt(scene.pm.partnerAnywhere(), stand);
     for (let frame = 0; frame < COMPANION_WATCH_FRAMES; frame++) {
       scene.update();
-      for (const crawler of scene.pm.players()) {
+      for (const crawler of scene.pm.wholeParty()) {
         if (crawler.autoTarget instanceof BathroomGoblin) picked++;
       }
-      for (const crawler of scene.pm.players()) {
+      for (const crawler of scene.pm.wholeParty()) {
         crawler.hp = crawler.maxHp;
       }
     }
@@ -930,7 +930,9 @@ function verifySolve(rig: Rig, copy: BathroomCopy, label: string): void {
   check(bathroom.isSolved, `${label}: the win fixes the bathroom`);
   check(map.bathroomPlumbingState === 'fixed', `${label}: the win fixes the plumbing`);
   for (const other of bathroom.copies) {
-    const stillBlocked = blockedTilesOf(other).filter((tile) => !map.isWalkable(tile.x, tile.y));
+    const stillBlocked = blockedTilesOf(other).filter(
+      (tile) => !map.isWalkable(tile.x, tile.y, 'walker'),
+    );
     check(
       stillBlocked.length === 0,
       `${label}: copy ${other.index} still has ${stillBlocked.length} blocked tile(s) after the fix`,
@@ -1127,7 +1129,7 @@ function verifyDeathRewind(rig: Rig, copy: BathroomCopy, label: string): void {
     map.bathroomPlumbingState === 'broken',
     `${label}: a death after an unsaved fix leaves the pipes fixed`,
   );
-  const open = blockedTilesOf(copy).filter((tile) => map.isWalkable(tile.x, tile.y));
+  const open = blockedTilesOf(copy).filter((tile) => map.isWalkable(tile.x, tile.y, 'walker'));
   check(open.length === 0, `${label}: ${open.length} queue tile(s) open after the rewind`);
   const outOfLine = copy.line.filter((slot) => !slot.goblin.holdsPlace);
   check(

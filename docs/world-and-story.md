@@ -46,11 +46,25 @@ when it is shown.
 
 ## Dave
 
-- An adventurer like the player. He hit a ceiling and concluded that one
-  person alone eventually can't move the needle: it takes allies and many
-  capable people working together.
-- Now he spends his skill and knowledge helping others.
-- Caroline chose to talk to him once, which is how he knows the history.
+- An adventurer like the player. Before the player, Caroline chose Dave, and
+  she talked to him because of it. That is how he knows the history.
+- He crawled with a cat named Pumpkin. They reached Taloncrest's tower, where
+  Pumpkin was taken. Dave believed her dead and went on alone.
+- Alone, he hit a ceiling and concluded that one person can't move the needle:
+  it takes allies and many capable people working together.
+- Now he spends his skill and knowledge helping others. He will not help put
+  another cat in front of that tower.
+- Pumpkin is not dead. She has lived wild in Taloncrest ever since; she lets
+  the tower catch her for its tuna and always walks back out. Dave does not
+  know, until the town's cats come home: then she walks into the Sleeping Cat
+  Inn's taproom while he is in it. That conversation is the hardest the game
+  has; in it he says where he learned that one person can't change anything,
+  and ends it with the town's saying, the one he once added "usually" to.
+  Afterwards she lives in the taproom with him for good, there even while he
+  is out of the room. She speaks in her own lowercase voice, about food and
+  doors.
+- On the human's way into the tower, his advice is plain: the guards don't
+  hit, they throw you out; stay behind the elf in the drain; take the hire.
 - Good at practical advice: red ground means move, step away from the
   lizardman's tongue. Survival tactics are his.
 - He does **not** know exactly which bosses are ahead or where. That is
@@ -132,6 +146,18 @@ holds only `<text>`; never type either into a line.
   three tutorial beats, so the floor-1 beats follow on. When a run missed it
   (a reload before it was heard), the first safe room tells it in its place
   and Dave stays in that room.
+
+- **The tower, two sides.** Once Belle is carried off the party is split
+  and the questline is told in chapters that take turns between her and the
+  human, each opening behind a "Meanwhile…" card. The cards carry one plain
+  hint each; the lines that own a moment are few and short: Belle and the
+  cellmate hiding from the burning wards, and the reunion at the top of the
+  kitchen stair. The reunion is the human and Belle catching up on what each
+  side sent the other (a key ring down, tuna up, a note asking for it), Belle
+  introducing the cat she was caged beside, and one fact for the climb: the
+  Warden knows they are inside, and only Belle can see the wards that move
+  now. The cellmate keeps her lowercase voice about food. No line there names
+  the human or assumes their body.
 
 ## Editing guide
 

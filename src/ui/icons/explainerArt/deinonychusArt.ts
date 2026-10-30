@@ -17,7 +17,13 @@ import {
   SUMMON_BUTTON_WIDTH,
 } from '../../../systems/DeinonychusSystem';
 import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
-import { drawCatSprite, prewarmCatSprite, type CatOneShotState } from '../../../sprites/catSprite';
+import {
+  catCellFor,
+  drawCatSprite,
+  type CatOneShotState,
+  type CatSpriteState,
+} from '../../../sprites/catSprite';
+import { EXPLAINER_CAT } from './explainerCat';
 import { selectFacing } from '../../../sprites/facingView';
 import { figureFrameCount } from '../../../sprites/figure/figureDef';
 import { prewarmFigureState } from '../../../sprites/figure/figureFrameCache';
@@ -486,10 +492,11 @@ function drawCat(
   options: { readonly active: boolean; readonly oneShot?: CatOneShotState | null },
 ): void {
   drawShadow(ctx, cx);
-  drawCatSprite(ctx, tileLeft(cx), tileTop(), ACTOR_TILE, {
+  const state: CatSpriteState = {
     facing: selectFacing(1, 0),
     oneShot: options.oneShot ?? null,
-  });
+  };
+  drawCatSprite(ctx, EXPLAINER_CAT, tileLeft(cx), tileTop(), ACTOR_TILE, catCellFor(state), state);
   if (options.active) {
     const headY = FOOT_Y - ACTOR_TILE * CAT_HEAD_TILES;
     drawActivePlayerMarker(ctx, cx, headY - MARKER_GAP, MARKER_RADIUS);
@@ -1245,7 +1252,7 @@ function drawDeinonychusHealthBar(
 export function prewarmDeinonychusExplainerArt(stage: DeinonychusStage): void {
   prewarmDeinonychusWalk(stage);
   prewarmDeinonychusCombat(stage);
-  prewarmCatSprite();
+  EXPLAINER_CAT.prewarm();
   const goblin = goblinFigure(GOBLIN_ARCHETYPE);
   for (const state of GOBLIN_STATES_DRAWN) prewarmFigureState(goblin, state);
 }

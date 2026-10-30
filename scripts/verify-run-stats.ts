@@ -170,7 +170,7 @@ function makeStage(): Stage {
     human: pm.human,
     cat: pm.cat,
     active: pm.active(),
-    inactive: pm.inactive(),
+    partner: pm.presentPartner(),
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -294,11 +294,12 @@ section("A hireling's blow counts once, credited to the party");
   roster.active = {
     id: HIRELING_TEMPLATE.id,
     name: HIRELING_TEMPLATE.name,
+    terms: 'paid',
     contractLevelId: FLOOR,
     introduced: true,
   };
   const system = new MercenarySystem(roster, FLOOR);
-  const ctx: SystemContext = { ...stage.ctx, active: human, inactive: cat };
+  const ctx: SystemContext = { ...stage.ctx, active: human, partner: cat };
   system.update(ctx);
   const merc = system.activeMerc;
   check(merc !== null, 'the hireling reports for duty');

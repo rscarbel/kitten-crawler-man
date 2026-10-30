@@ -70,7 +70,7 @@ const LIT_STREET_NAMES: ReadonlySet<string> = new Set([
   'Low Street',
   "King's Road",
   'club service alley',
-  'murder alley',
+  'low quarter alley',
 ]);
 
 /** Tiles between consecutive lamps along one street. */
@@ -931,7 +931,7 @@ export class TownDecorSystem implements GameSystem {
     // `IgnoringPermanent` for the reason `TownPropSystem.findFreeTile` gives: the
     // overworld map instance outlives a trip into a building, so a prop's own
     // block would make re-placement pick a different tile every trip.
-    return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y);
+    return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y, 'walker');
   }
 
   private reserve(tile: TileXY): void {
@@ -1012,7 +1012,7 @@ export class TownDecorSystem implements GameSystem {
         const key = tileKey(nx, ny);
         if (seen.has(key)) continue;
         if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
-        if (!this.gameMap.isWalkableIgnoringPermanent(nx, ny)) continue;
+        if (!this.gameMap.isWalkableIgnoringPermanent(nx, ny, 'walker')) continue;
         seen.add(key);
         queue.push({ x: nx, y: ny });
       }

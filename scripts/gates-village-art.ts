@@ -296,7 +296,11 @@ const plainFloor = centreTilePixels(testMap(null), { overlay: false });
 for (const contract of TILE_CONTRACTS) {
   const scope = `tile ${contract.name}`;
   const gameMap = testMap(contract.tile);
-  check(!isWalkableTileType(gameMap.structure[TEST_TILE][TEST_TILE]), scope, 'is walkable');
+  check(
+    !isWalkableTileType(gameMap.structure[TEST_TILE][TEST_TILE], 'walker'),
+    scope,
+    'is walkable',
+  );
   const sightY = (TEST_TILE + 1 / 2) * TILE_SIZE;
   const sightClear = gameMap.hasLineOfSight(
     TILE_SIZE / 2,

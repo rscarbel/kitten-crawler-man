@@ -158,7 +158,7 @@ export function renderLevelUpFlash(
   camY: number,
   pm: PlayerManager,
 ): void {
-  for (const p of pm.players()) {
+  for (const p of pm.presentCrawlers()) {
     if (p.levelUpFlash <= 0 || !p.levelUpStat) continue;
     const alpha = p.levelUpFlash / LEVEL_UP_FLASH_DURATION;
     const rise = (1 - alpha) * LEVEL_UP_RISE_DISTANCE;
@@ -188,7 +188,7 @@ export function renderStatBoostFlash(
   camY: number,
   pm: PlayerManager,
 ): void {
-  for (const p of pm.players()) {
+  for (const p of pm.presentCrawlers()) {
     if (p.statBoostFlashFrame <= 0 || p.statBoostFlashStat === null) continue;
     const stat = p.statBoostFlashStat;
     const elapsed = STAT_BOOST_FLASH_FRAMES - p.statBoostFlashFrame;

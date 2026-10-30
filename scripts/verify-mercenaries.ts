@@ -135,6 +135,7 @@ function hireOf(id: MercenaryTemplateId, contractLevelId = FLOOR): HiredMercenar
   return {
     id,
     name: getMercenaryTemplate(id).name,
+    terms: 'paid',
     contractLevelId,
     introduced: true,
   };
@@ -192,7 +193,7 @@ function roundTripHolds(id: MercenaryTemplateId, parse: Parser, restore: Restore
 
 /** A saved roster whose hire is `active`, with the rest of it intact. */
 function savedRosterWith(active: unknown): unknown {
-  return { active, lastDeceased: DECEASED_NAME };
+  return { active, lastDeceased: DECEASED_NAME, towerLoanSigned: false };
 }
 
 // Undefined is what makes `parsePersistedWorldState` reject the whole save.
@@ -210,6 +211,7 @@ function otherFloorContractStaysEnded(restore: Restorer): boolean {
   const snapshot: MercenaryRosterCheckpoint = {
     active: hireOf('tumbledown', OTHER_FLOOR),
     lastDeceased: null,
+    towerLoanSigned: false,
   };
   const roster = rosterOn(FLOOR);
   restore(roster, snapshot);
@@ -219,7 +221,11 @@ function otherFloorContractStaysEnded(restore: Restorer): boolean {
 /** The parser as it would be if it repaired a bad hire by dropping it. */
 const hireDroppingParser: Parser = (value) =>
   parseMercenaryRosterCheckpoint(value) ??
-  parseMercenaryRosterCheckpoint({ active: null, lastDeceased: DECEASED_NAME });
+  parseMercenaryRosterCheckpoint({
+    active: null,
+    lastDeceased: DECEASED_NAME,
+    towerLoanSigned: false,
+  });
 
 /** A parser that forgets which floor a contract was signed on. */
 const floorForgettingParser: Parser = (value) => {
@@ -322,7 +328,7 @@ function buildShell(hire: HiredMercenary | null): ShellHarness {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,
@@ -775,11 +781,17 @@ function checkDismissAsksFirst(): void {
   const roster = createMercenaryRoster();
   roster.floorLevelId = FLOOR;
   const hire = MERCENARY_TEMPLATES[0];
-  roster.active = { id: hire.id, name: hire.name, contractLevelId: FLOOR, introduced: true };
+  roster.active = {
+    id: hire.id,
+    name: hire.name,
+    terms: 'paid',
+    contractLevelId: FLOOR,
+    introduced: true,
+  };
   // Read through a call so the desk's own writes to the roster are seen,
   // rather than the contract this check just assigned.
   const signedHireId = (): string | null => roster.active?.id ?? null;
-  const desk = new MercenaryGuildSystem(roster, null);
+  const desk = new MercenaryGuildSystem(roster, null, () => false);
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(1, 0, TILE_SIZE);
   const { root, settle } = desktopRoot();

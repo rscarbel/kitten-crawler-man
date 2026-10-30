@@ -21,6 +21,14 @@ export const MUSIC_STEM_SETS = {
   rooftop_chase: ['rooftop_chase', 'rooftop_chase_stakeout'],
 } as const satisfies Record<string, readonly [MusicBusId, ...MusicBusId[]]>;
 
+/**
+ * The tower piece's beat and bar on its own clock, in seconds: 96 BPM in 4/4,
+ * with the downbeat of bar 1 at 0 s. Every stem of `tower_split` keeps them,
+ * so the bell storey swings its bells to whichever stem is playing.
+ */
+export const TOWER_SPLIT_BEAT_S = 0.625;
+export const TOWER_SPLIT_BAR_S = 2.5;
+
 export type MusicStemSetId = keyof typeof MUSIC_STEM_SETS;
 
 /** The stems of `S`. */

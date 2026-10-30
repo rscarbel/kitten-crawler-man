@@ -36,6 +36,9 @@ export interface Readable {
   readonly body: ReadonlyArray<string>;
 }
 
+/** The General Store's order book, whose first entry is the tower's standing order for tuna, grown sixfold the month the cats began to go. */
+export const STORE_ORDER_BOOK_ID = 'store_order_book';
+
 const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new Map([
   [
     'taloncrest_old_lady_cottage',
@@ -143,7 +146,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
           'Neat columns: item, source, cost, sold. Most lines are ordinary — honey, marsh root, clean linen, four kinds of moss.',
           'One line repeats down the whole page in a heavier hand: "ANTIDOTE — components: purchased at a loss. Do not raise the price."',
           "Further down, out of the columns entirely, a list of dates: every storm this year, and beside each one how many paces the ruins' edge had shifted by morning. The last figure is underlined twice.",
-          'And, dated this week: "Asked to examine a body. Told the guard what I found. Was thanked, and asked not to write it down. Writing it down."',
+          'And, dated this week, in a much larger hand that is not Fen\'s: "SAGE NOT BACK. Saucer out by the step. Do not move the saucer."',
         ],
       },
     ],
@@ -209,7 +212,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
         medium: 'book',
         body: [
           'Not a reservation book — a map. Twenty years of who sits where, drawn and redrawn on tracing leaves laid over one another.',
-          "The guild corner. The wool families along the north wall. The magistrate's clerks, seventh night, the two tables by the fire, every leaf for twenty years.",
+          'The guild corner. The wool families along the north wall. The tower clerks, seventh night, the two tables by the fire, every leaf for twenty years.',
           "The topmost leaf is nearly empty. The clerks' tables are drawn in and left blank.",
           'In the margin: "6 weeks. Ask B. — no. Do not ask anyone."',
         ],
@@ -239,7 +242,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
     [
       {
         id: 'miller_requisition',
-        title: 'Requisition, Office of the Magistrate',
+        title: 'Requisition, by Order of the Warden',
         where: 'spiked on a nail by the door',
         anchor: 'table',
         medium: 'sheet',
@@ -256,15 +259,18 @@ const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new
     'taloncrest_general_store',
     [
       {
-        id: 'store_order_book',
+        id: STORE_ORDER_BOOK_ID,
         title: 'The Order Book',
         where: 'on the shelf where the clerk left it',
         anchor: 'shelf',
         medium: 'book',
         body: [
-          'What the shop has ordered in, month by month, and how fast it went back out.',
+          'What the shop has ordered in, month by month, and how fast it went back out. The first page is the standing orders.',
+          'Tinned tuna, for the tower: two tins a week, charged to the tower and collected by a tower guard after closing. The same two tins, week after week, for as far back as the book goes.',
+          'Then, this month, the two is crossed out and "12" is written over it.',
+          'In the margin, in a young hand: "Twelve a week! The whole town buys maybe a tin a month over the counter. Asked the guard what the tower wants with so much fish. He said he only carries it."',
           'Rope: steady. Chalk: steady. Lamp oil: steady, steady, steady, and then a single line six weeks ago that empties the column.',
-          'Beside that line, in a young hand: "40 candles + all oil. Old coin. Would not sign. Town clothes."',
+          'Beside that line, in the same young hand: "40 candles + all oil. Old coin. Would not sign. Town clothes."',
           'Health potions run out inside a day, every day, and the reorder note has been the same for two years: "double it." It has been doubled four times.',
         ],
       },

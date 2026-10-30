@@ -59,7 +59,7 @@ const WALL_MATERIAL_BY_BUILDING: ReadonlyMap<BuildingId, TownInteriorWallMateria
   // of the tent everywhere else.
   ['taloncrest_circus_tent', 'canvas'],
   // The tower is dressed stone outside to the top of its spire, and the
-  // magistrate's seat is not a building anyone plastered over.
+  // Warden's seat is not a building anyone plastered over.
   ['taloncrest_tower', 'stone'],
 ]);
 

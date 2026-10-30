@@ -35,6 +35,7 @@ import {
   prisonStateAt,
   tileCentrePx,
   type CompiledPrison,
+  type CompiledStealth,
   type PrisonLight,
   type PrisonState,
 } from '../src/systems/stealthKeySnatch/prisonPatrols.js';
@@ -61,12 +62,12 @@ const OPPOSITE: ReadonlyArray<number> = STEPS.map((step) =>
 
 /** Every frame's state and cast lights for one compiled prison, computed once. */
 export interface PrisonTimeline {
-  readonly compiled: CompiledPrison;
+  readonly compiled: CompiledStealth;
   readonly states: ReadonlyArray<PrisonState>;
   readonly lights: ReadonlyArray<ReadonlyArray<PrisonLight>>;
 }
 
-export function buildTimeline(compiled: CompiledPrison): PrisonTimeline {
+export function buildTimeline(compiled: CompiledStealth): PrisonTimeline {
   const states: PrisonState[] = [];
   const lights: Array<ReadonlyArray<PrisonLight>> = [];
   for (let frame = 0; frame < compiled.cycleFrames; frame++) {
@@ -211,7 +212,7 @@ interface SolverSpace {
 }
 
 function spaceOf(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   lit: LitTables,
   blocked?: (x: number, y: number) => boolean,
 ): SolverSpace {
@@ -231,7 +232,7 @@ function stateId(space: SolverSpace, quantum: number, tile: number, slot: number
 }
 
 /** The start state for a party standing together on `tile` at quantum 0. */
-export function startState(compiled: CompiledPrison, lit: LitTables, tile: PrisonTile): number {
+export function startState(compiled: CompiledStealth, lit: LitTables, tile: PrisonTile): number {
   const width = compiled.parsed.grid.width;
   return (0 * lit.tileCount + tile.y * width + tile.x) * FOLLOWER_SLOTS + SAME_TILE;
 }
@@ -267,7 +268,7 @@ function neighbourIndex(space: SolverSpace, tile: number, dir: number): number {
  * goal tile, never on a lit position.
  */
 export function solve(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   lit: LitTables,
   starts: ReadonlyArray<number>,
   goals: ReadonlyArray<PrisonTile>,
@@ -370,7 +371,7 @@ export function solve(
 
 /** The fewest-steps walk between two tiles, ignoring every light. */
 export function shortestWalk(
-  compiled: CompiledPrison,
+  compiled: CompiledStealth,
   from: PrisonTile,
   to: PrisonTile,
   blocked?: (x: number, y: number) => boolean,

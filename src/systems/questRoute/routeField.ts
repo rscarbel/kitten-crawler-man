@@ -10,6 +10,7 @@
  * when it was built, and the guide that owns it decides when to build again.
  */
 
+import type { MobilityClass } from '../../map/mobility';
 import { MinHeap } from '../../core/util/MinHeap';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
@@ -112,10 +113,11 @@ export function isRouteStep(
   y: number,
   doorways: ReadonlySet<number>,
   goalKeys: ReadonlySet<number>,
+  mobility: MobilityClass,
 ): boolean {
   const key = tileCoordKey(x, y);
   if (goalKeys.has(key)) return true;
-  if (!gameMap.isWalkable(x, y) || gameMap.isStairwellTile(x, y)) return false;
+  if (!gameMap.isWalkable(x, y, mobility) || gameMap.isStairwellTile(x, y)) return false;
   return !doorways.has(key);
 }
 
@@ -125,11 +127,15 @@ export function isRouteStep(
  * character's own tile, a stall's counter), the open tiles round the
  * footprint instead. Empty when nothing round it is open either.
  */
-export function goalTilesForTarget(gameMap: GameMap, target: TrackerTarget): TilePoint[] {
+export function goalTilesForTarget(
+  gameMap: GameMap,
+  target: TrackerTarget,
+  mobility: MobilityClass,
+): TilePoint[] {
   const width = target.widthTiles ?? 1;
   const footprint: TilePoint[] = [];
   for (let x = target.x; x < target.x + width; x++) {
-    if (gameMap.isWalkable(x, target.y)) footprint.push({ x, y: target.y });
+    if (gameMap.isWalkable(x, target.y, mobility)) footprint.push({ x, y: target.y });
   }
   if (footprint.length > 0) return footprint;
 
@@ -139,7 +145,7 @@ export function goalTilesForTarget(gameMap: GameMap, target: TrackerTarget): Til
     for (let x = target.x - 1; x <= target.x + width; x++) {
       const onFootprint = y === target.y && x >= target.x && x < target.x + width;
       if (onFootprint) continue;
-      if (!isRouteStep(gameMap, x, y, doorways, new Set())) continue;
+      if (!isRouteStep(gameMap, x, y, doorways, new Set(), mobility)) continue;
       around.push({ x, y });
     }
   }
@@ -163,6 +169,7 @@ export class RouteFieldBuilder {
     private readonly gameMap: GameMap,
     goals: readonly TilePoint[],
     buffers: RouteField,
+    private readonly mobility: MobilityClass,
   ) {
     const goalKeys = new Set(goals.map((goal) => tileCoordKey(goal.x, goal.y)));
     this.field = { ...buffers, goalKeys };
@@ -185,7 +192,14 @@ export class RouteFieldBuilder {
     if (!isInside(columns, rows, x, y)) return false;
     const index = tileIndex(x, y, columns);
     if (passable[index] === UNREAD) {
-      const standable = isRouteStep(this.gameMap, x, y, this.doorways, this.field.goalKeys);
+      const standable = isRouteStep(
+        this.gameMap,
+        x,
+        y,
+        this.doorways,
+        this.field.goalKeys,
+        this.mobility,
+      );
       passable[index] = standable ? PASSABLE : NOT_PASSABLE;
     }
     return passable[index] === PASSABLE;
@@ -282,9 +296,15 @@ export function routeFieldBuffers(gameMap: GameMap, reuse: RouteField | null): R
 export function buildRouteField(
   gameMap: GameMap,
   goals: readonly TilePoint[],
+  mobility: MobilityClass,
   reuse: RouteField | null = null,
 ): RouteField {
-  const builder = new RouteFieldBuilder(gameMap, goals, routeFieldBuffers(gameMap, reuse));
+  const builder = new RouteFieldBuilder(
+    gameMap,
+    goals,
+    routeFieldBuffers(gameMap, reuse),
+    mobility,
+  );
   builder.step(Infinity);
   const field = builder.result();
   if (field === null) throw new Error('a route field built without a budget did not finish');

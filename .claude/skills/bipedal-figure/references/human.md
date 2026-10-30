@@ -497,8 +497,7 @@ nothing over them. Each
 outfit is a figure of its own (`humanFigureWearing`), keyed by its sorted
 garment ids, each spread from `undressedHumanFigure(look)`
 (`src/sprites/art/humanFigure.ts`); the default outfit is one of them. Only the outfit he
-wears is resident: `setOutfit('human', …)` (`src/sprites/outfits.ts`, through
-`setHumanOutfit` in `humanSprite.ts`) releases the old figure outright
+wears is resident: `setHumanOutfit` (`humanSprite.ts`) releases the old figure outright
 (`releaseFigure`) and prewarms the new one's always-drawn rows.
 `HumanPlayer.onEquipmentChanged` marks his outfit stale, and the private
 `dressInGear` applies it — at once, or on his next draw for a change made while

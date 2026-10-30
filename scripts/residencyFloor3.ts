@@ -10,6 +10,9 @@
  *   interiors (the inn with the safe room and a shop among them), then Briar
  *   Hollow, stood in for longer than either cache's idle window.
  * - `direct`: arrival, then straight to Briar Hollow, the same wait.
+ * - `cattery`: the questline at its cattery chapter, so the split carries
+ *   Belle to her cage at the top of the tower, among Pumpkin and the town's
+ *   seven caged cats, stood in for the same wait: every cat look on one screen.
  *
  * Import only after the browser shim is installed.
  */
@@ -30,6 +33,7 @@ import type {
   RESIDENCY_FLOORS,
   ResidencySnapshot,
   RetainerPath,
+  RouteMeasure,
   RouteResult,
 } from './residencyRoutes.js';
 import { installFakeAudio } from './audioHarness.js';
@@ -57,6 +61,11 @@ import { citizenFigureRows, type CitizenFigure } from '../src/creatures/citizenF
 import { RATKIN_CAST_PREWARM_ORDER } from '../src/sprites/ratkinCastSprite.js';
 import { ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
 import type { BuildingId } from '../src/map/buildingIds.js';
+import { figureCacheByteBudget } from '../src/sprites/figure/figureFrameCache.js';
+import {
+  getFigureCacheStats,
+  setFigureCacheStatsRecording,
+} from '../src/sprites/figure/figureCacheStats.js';
 
 export type Floor3Route = (typeof RESIDENCY_FLOORS)['3']['routes'][number];
 
@@ -97,6 +106,15 @@ const DESTINATION_WAIT_FRAMES =
   Math.max(IDLE_FRAMES_BEFORE_RELEASE, RECENTLY_DRAWN_FRAMES) + DESTINATION_MARGIN_FRAMES;
 /** Where the cat trails the walking human, so both crawlers stay on screen. */
 const CAT_TRAIL_PX = TILE_SIZE;
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+const MEGABYTE_PLACES = 1;
+/** What every cat look's figure id starts with, so the cattery's cats can be told from the rest. */
+const CAT_FIGURE_PREFIX = 'cat:';
+
+function megabytes(bytes: number): string {
+  return (bytes / BYTES_PER_MEGABYTE).toFixed(MEGABYTE_PLACES);
+}
+
 /** Every sound fails to fetch headless, by design; one warning per sound would bury the report. */
 const SILENT_AUDIO_WARNING = '[AudioManager] Failed to load';
 
@@ -367,6 +385,58 @@ export async function runFloor3Route(
     return 'visited';
   }
 
+  /**
+   * The questline's split carries Belle from the street to her cage, and the
+   * party stands there past both caches' idle windows. Returns what the cats'
+   * figures cost against the figure cache's budget.
+   */
+  async function standInTheCattery(): Promise<RouteMeasure[]> {
+    let waited = 0;
+    while (
+      waited < MAX_ARRIVAL_FRAMES &&
+      (!(current instanceof BuildingInteriorScene) ||
+        currentScene().arrivalLoadingOpen ||
+        environmentPaintDepth() > 0 ||
+        figurePrewarmDepth() > 0 ||
+        renderQuality.isLoadingCovered)
+    ) {
+      await runFrame();
+      waited++;
+      if (waited % FRAMES_PER_SECOND === 0) await dismissConversations();
+    }
+    if (!(current instanceof BuildingInteriorScene)) {
+      throw new Error(`the split never carried Belle to the cattery in ${waited} frames`);
+    }
+    await dismissConversations();
+    await snapshot('cattery, arrived');
+    let evictions = 0;
+    setFigureCacheStatsRecording(true);
+    for (let frame = 0; frame < DESTINATION_WAIT_FRAMES; frame++) {
+      await runFrame();
+      evictions += getFigureCacheStats().evictions;
+      if (frame % FRAMES_PER_SECOND === 0) await dismissConversations();
+    }
+    setFigureCacheStatsRecording(false);
+    await snapshot('cattery, after the wait');
+    const last = snapshots[snapshots.length - 1];
+    const catFigures = last.figures.filter((figure) => figure.id.startsWith(CAT_FIGURE_PREFIX));
+    const catBytes = catFigures.reduce((sum, figure) => sum + figure.bytes, 0);
+    return [
+      {
+        label: 'cat figures resident',
+        value:
+          `${catFigures.length}, ${megabytes(catBytes)} MB: ` +
+          catFigures.map((figure) => `${figure.id} ${megabytes(figure.bytes)}`).join(', '),
+      },
+      {
+        label: 'figure cache',
+        value:
+          `${megabytes(last.figureCacheBytes)} MB of a ${megabytes(figureCacheByteBudget())} MB ` +
+          `budget; ${evictions} evictions over the wait`,
+      },
+    ];
+  }
+
   /** The tour's doors: the three it must see first, then the nearest unvisited each time. */
   function tourDoors(entries: readonly BuildingEntry[]): BuildingEntry[] {
     const candidates = entries.filter((entry) => !TOUR_SKIPPED_BUILDINGS.has(entry.id));
@@ -395,8 +465,27 @@ export async function runFloor3Route(
       worldSeed: WORLD_SEED,
       skipIntro: true,
       audio,
+      ...(route === 'cattery' ? { devMissingCatsPhase: 'cattery' as const } : {}),
     }),
   );
+
+  if (route === 'cattery') {
+    const measures = await standInTheCattery();
+    if (thrown.length > 0) notes.push(`${thrown.length} frame(s) threw; first: ${thrown[0]}`);
+    return {
+      floor: '3',
+      route,
+      frames,
+      seconds: (performance.now() - startedAt) / MS_PER_SECOND,
+      tracked: tracker.trackedCount,
+      snapshots,
+      retainers: [],
+      measures,
+      notes,
+      crowdFigureIds: [],
+      standByFigureIds: [],
+    };
+  }
   let arrivalFrames = 0;
   while (
     arrivalFrames < MAX_ARRIVAL_FRAMES &&

@@ -86,7 +86,7 @@
         "row": 7,
         "frameCount": 16,
         "patchTiles": 2,
-        "label": "River water (static base \u2014 motion is a render overlay)"
+        "label": "River water (static base — motion is a render overlay)"
       },
       "highland": {
         "row": 8,
@@ -348,6 +348,24 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Starlight Tent backstage canvas (wall mass)"
+      },
+      "sewer_brick": {
+        "row": 10,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Sewer brick (channel walls)"
+      },
+      "sewer_walkway": {
+        "row": 11,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Sewer wet stone walkway (calm bulk floor)"
+      },
+      "sewer_channel": {
+        "row": 12,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Sewer channel bed (silted invert)"
       }
     }
   }

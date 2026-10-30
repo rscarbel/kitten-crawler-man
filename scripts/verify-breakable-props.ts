@@ -39,7 +39,7 @@ import {
   TORCH,
   type TileContent,
 } from '../src/map/tileTypes';
-import { setDungeonFloorTheme, type DungeonFloorThemeId } from '../src/map/dungeon/floorTheme';
+import { setDungeonFloorTheme, type GeneratedFloorThemeId } from '../src/map/dungeon/floorTheme';
 import { boneScatterVariant, isOilDrum, propVariantIndex } from '../src/map/dungeon/propVariants';
 import { isWalkableTileType } from '../src/map/walkability';
 import { drawDecorationTile } from '../src/map/tiles/decorationTiles';
@@ -103,7 +103,10 @@ const EXPECTED_SHEET = {
   brazier: { cellars: 'brazier', service_level: 'drum_brazier' },
   bone_pile: { cellars: 'bone_pile', service_level: 'bone_pile' },
   slumped_skeleton: { cellars: 'slumped_skeleton', service_level: 'slumped_skeleton' },
-} as const satisfies Record<(typeof KINDS)[number]['kind'], Record<DungeonFloorThemeId, SpriteKey>>;
+} as const satisfies Record<
+  (typeof KINDS)[number]['kind'],
+  Record<GeneratedFloorThemeId, SpriteKey>
+>;
 
 /** What each floor's version of a prop is chiefly made of. */
 const EXPECTED_CHIEF_MATERIAL = {
@@ -115,7 +118,7 @@ const EXPECTED_CHIEF_MATERIAL = {
   brazier: { cellars: 'metal', service_level: 'metal' },
 } as const;
 
-const THEMES: ReadonlyArray<DungeonFloorThemeId> = ['cellars', 'service_level'];
+const THEMES: ReadonlyArray<GeneratedFloorThemeId> = ['cellars', 'service_level'];
 
 const failures: string[] = [];
 const fail = (message: string) => failures.push(message);
@@ -275,7 +278,7 @@ for (const theme of THEMES) {
     const destructibles = new DestructiblePropSystem(gameMap, loot, FLOOR_NUMBER);
     const propTile = gameMap.structure[BREAK_TILE][BREAK_TILE];
     propTile.type = type;
-    if (isWalkableTileType(propTile))
+    if (isWalkableTileType(propTile, 'walker'))
       fail(`${label}: tile type is walkable, so it would not block`);
     const crawler = new HumanPlayer(BREAK_TILE, BREAK_TILE + CRAWLER_TILES_SOUTH, TILE_SIZE);
     const blastX = (BREAK_TILE + TILE_CENTRE) * TILE_SIZE;
@@ -284,7 +287,7 @@ for (const theme of THEMES) {
       fail(`${label}: a blast beside it reported no hit`);
     }
     if (propTile.type === type) fail(`${label}: still standing after the blast`);
-    if (!isWalkableTileType(propTile)) fail(`${label}: its tile did not open to floor`);
+    if (!isWalkableTileType(propTile, 'walker')) fail(`${label}: its tile did not open to floor`);
     const wreckage = destructibles.captureCheckpoint().wreckage;
     if (
       !wreckage.some((w) => w.kind === kind && w.tileX === BREAK_TILE && w.tileY === BREAK_TILE)

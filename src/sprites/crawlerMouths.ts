@@ -12,7 +12,8 @@ import { HUMAN_ROW_TABLE } from './art/humanFigure';
 import { catMouthInTile, catRowFacesWest, catRowView } from './art/catFigure';
 import { isTurnedView } from './facingView';
 import { activeHumanLook, type HumanRowSelection } from './humanSprite';
-import { activeCatLook, type CatCell } from './catSprite';
+import type { CatCell } from './catSprite';
+import type { CatLook } from './looks/catLook';
 
 const humanMouthByCell = new Map<string, FigureMouth | null>();
 const catMouthByCell = new Map<string, FigureMouth | null>();
@@ -42,9 +43,8 @@ export function humanMouthOf(selection: HumanRowSelection): FigureMouth | null {
   return found;
 }
 
-/** The cat crawler's mouth on `cell`, in tile fractions; null when she faces away. */
-export function catMouthOf(cell: CatCell): FigureMouth | null {
-  const look = activeCatLook();
+/** The mouth of a cat painted as `look` on `cell`, in tile fractions; null when she faces away. */
+export function catMouthOf(look: CatLook, cell: CatCell): FigureMouth | null {
   const key = `${look.id}:${cell.state}:${cell.frame}:${String(cell.flipX)}`;
   const known = catMouthByCell.get(key);
   if (known !== undefined) return known;

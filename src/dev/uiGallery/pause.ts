@@ -366,10 +366,10 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
         target: { x: 18, y: 14 },
       },
       {
-        id: 'murders',
-        name: 'The Krasue Murders',
+        id: 'bathroom',
+        name: 'The Clogged Bathroom',
         status: 'failed',
-        objective: 'The trail went cold',
+        objective: 'The water got there first',
       },
       { id: 'rats', name: 'Rat Problem', status: 'completed', objective: 'Cellar cleared' },
     ],

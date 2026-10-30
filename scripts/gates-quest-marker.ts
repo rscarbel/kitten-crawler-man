@@ -39,7 +39,6 @@ const { setQuestBeaconViewer } = await import('../src/sprites/questBeacon.js');
 const { QuestNPC } = await import('../src/creatures/QuestNPC.js');
 const { Townsperson } = await import('../src/creatures/Townsperson.js');
 const { Shady } = await import('../src/creatures/Shady.js');
-const { Baggi } = await import('../src/creatures/Baggi.js');
 const { Cow } = await import('../src/creatures/Cow.js');
 const { Rat } = await import('../src/creatures/Rat.js');
 const { ShrineVermin } = await import('../src/creatures/ShrineVermin.js');
@@ -185,7 +184,6 @@ function mobSubject(
 function namedSubjects(): Subject[] {
   const mother = new QuestNPC(WORLD_TILE, WORLD_TILE, 'gate');
   const shady = new Shady(WORLD_TILE, WORLD_TILE, TILE_SIZE);
-  const baggi = new Baggi(WORLD_TILE, WORLD_TILE, TILE_SIZE);
   const cow = new Cow(WORLD_TILE, WORLD_TILE, TILE_SIZE, 'holstein', 'adult', () => 0);
   const calf = new Cow(WORLD_TILE, WORLD_TILE, TILE_SIZE, 'jersey', 'calf', () => 0);
   const vermin = new ShrineVermin(WORLD_TILE, WORLD_TILE, TILE_SIZE);
@@ -224,7 +222,6 @@ function namedSubjects(): Subject[] {
       (m) => (shady.markerType = m ? 'exclamation' : 'none'),
       (ctx, camX, camY) => shady.renderMarker(ctx, camX, camY, TILE_SIZE),
     ),
-    mobSubject('Baggi', baggi, (m) => (baggi.markerType = m ? 'exclamation' : 'none')),
     mobSubject('cow', cow, (m) => (cow.questMarker = m ? 'exclamation' : 'none')),
     mobSubject('calf', calf, (m) => (calf.questMarker = m ? 'exclamation' : 'none')),
     {

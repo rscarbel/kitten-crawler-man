@@ -158,7 +158,7 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: [],
   },
   {
-    name: "Miss Quill's summoned krasue",
+    name: 'a summoned krasue',
     build: () => summonedKrasue(),
     isExpectedClass: (mob) => mob instanceof Krasue && mob.isSummon,
     expected: [],
@@ -229,7 +229,7 @@ function makeArena(map: GameMap, humanTile: TilePoint, catTile: TilePoint): Aren
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -960,7 +960,7 @@ function traceKrasueShove(map: GameMap, tile: TilePoint, harness: TacticsHarness
     if (frame === GUARD_KNOCKBACK_FRAMES - 1)
       shoveEndDistance = centreDistance(krasue, arena.human);
     const standing = centreTile(krasue);
-    if (!map.isWalkable(standing.x, standing.y)) framesInWall++;
+    if (!map.isWalkable(standing.x, standing.y, 'walker')) framesInWall++;
     if (!isFiledUnderOwnCell(arena.roster.grid, krasue)) framesMisfiled++;
   }
   arena.loop.dispose();
@@ -970,7 +970,7 @@ function traceKrasueShove(map: GameMap, tile: TilePoint, harness: TacticsHarness
 /** The column of the first wall east of `from` along its row. */
 function firstWallEastOf(map: GameMap, from: TilePoint): number {
   let x = from.x;
-  while (map.isWalkable(x, from.y)) x++;
+  while (map.isWalkable(x, from.y, 'walker')) x++;
   return x;
 }
 

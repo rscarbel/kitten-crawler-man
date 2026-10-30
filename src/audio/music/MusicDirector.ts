@@ -67,12 +67,13 @@ export type MusicClaimOwner =
   | 'free_spins'
   | 'defend_quest'
   | 'starlight_tent_maze'
-  | 'night_attack'
   | 'escort'
   | 'siege'
   | 'boss'
-  | 'flooded_pump_room'
   | 'tower_finale'
+  | 'tower_split'
+  | 'flooded_pump_room'
+  | 'missing_cats'
   | 'keyboard_hero'
   | 'player'
   | 'ai_director';
@@ -410,6 +411,17 @@ export class MusicDirector implements MusicPlayerControls {
   get audibleTrack(): MusicBusId | null {
     const current = this.current;
     return current?.audible === true ? current.id : null;
+  }
+
+  /**
+   * How far into its recording the song really sounding now stands, in
+   * seconds, or null when nothing is audible: for a room that keeps time to
+   * the music it is playing.
+   */
+  get audiblePositionS(): number | null {
+    const current = this.current;
+    if (current?.audible !== true) return null;
+    return current.handle?.positionS() ?? current.offsetS;
   }
 
   /** The song playing or waiting on audio to play, or null. */

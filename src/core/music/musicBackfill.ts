@@ -24,9 +24,9 @@ import {
   SPIDER_QUEST_PHASE_ORDER,
   type PersistedWorldState,
 } from '../save/PersistedWorldState';
-import { MURDER_QUEST_STAGE_ORDER, type MurderQuestStage } from '../quests/MurderQuestProgress';
 import { phaseAtLeast, type VillageQuestPhase } from '../quests/villageQuestPhase';
 import { blueprintsPhaseAtLeast } from '../quests/blueprintsQuestPhase';
+import { phaseReached, type MissingCatsPhase } from '../quests/missingCatsProgress';
 import { JACKPOT_FLOOR } from '../../systems/casino/slots/slotBets';
 import type { PlayerSnapshot } from '../save/playerSnapshotFormat';
 import { allResidents } from '../../systems/townResidents';
@@ -49,7 +49,8 @@ const BRIAR_HOLLOW_QUEST_ID = 'briar_hollow_plea' as const satisfies QuestId;
 
 /** Kill tallies are keyed by each creature's display name. */
 const GROTESQUE_SPIDER_NAME = 'Grotesque Spider';
-const MISS_QUILL_NAME = 'Miss Quill';
+const LICH_NAME = 'The Lich';
+const LICH_BOSS_TYPE = 'the_lich' as const satisfies Parameters<typeof bossFightTracks>[0];
 const RUINS_GHOUL_NAME = 'Ruins Ghoul';
 const SHRINE_VERMIN_NAME = 'Shrine Vermin';
 
@@ -58,7 +59,6 @@ const CLUB_ACHIEVEMENTS: readonly AchievementId[] = [
   'bartenders_choice',
   'casino_jackpot',
 ];
-const DOOMSDAY_ACHIEVEMENTS: readonly AchievementId[] = ['disaster_averted', 'out_before_the_fall'];
 
 const INNKEEPER_IDS: ReadonlySet<ResidentId> = new Set([
   'innkeep_ossie',
@@ -91,10 +91,6 @@ function bossTracksAt(levelId: LevelId, indices: readonly number[]): MusicTrackI
 
 function atLeast<T>(order: readonly T[], value: T, threshold: T): boolean {
   return order.indexOf(value) >= order.indexOf(threshold);
-}
-
-function murderStageAtLeast(stage: MurderQuestStage, threshold: MurderQuestStage): boolean {
-  return atLeast(MURDER_QUEST_STAGE_ORDER, stage, threshold);
 }
 
 /**
@@ -158,10 +154,8 @@ export function musicUnlocksFromProgress(
   const earnedFreeSpin = (questId: string): boolean => freeSpinsEarnedBy.includes(questId);
   const snaps = [progress.humanSnap, progress.catSnap];
 
-  const murderStage = persisted?.murderQuestProgress.stage ?? 'not_started';
   const villagePhase = persisted?.briarHollow.quest.phase ?? 'unmet';
   const blueprintsPhase = persisted?.briarHollow.blueprints.phase ?? 'unoffered';
-  const doomsdayStarted = (persisted?.doomsday.stage ?? 'inactive') !== 'inactive';
   const bountiesCompleted = (persisted?.bountyProgress.bountiesCompleted ?? 0) > 0;
   const villageQuestBegun = villagePhase !== 'unmet';
   const briarHollowPleaPaid = earnedFreeSpin(BRIAR_HOLLOW_QUEST_ID);
@@ -176,10 +170,7 @@ export function musicUnlocksFromProgress(
   const residentHomes = allResidents()
     .filter((resident) => talkedTo.has(resident.id))
     .map((resident) => resident.home);
-  const rememberedBuildings = [
-    ...(townMemory?.clearedRooms ?? []),
-    ...(townMemory?.paidOutInteriorProps ?? []),
-  ]
+  const rememberedBuildings = (townMemory?.paidOutInteriorProps ?? [])
     .map(buildingOfRoomKey)
     .filter((id) => id !== undefined);
   const rememberedBuilding = (id: BuildingId): boolean => rememberedBuildings.includes(id);
@@ -214,8 +205,7 @@ export function musicUnlocksFromProgress(
   const bountyBossNames = Object.values(persisted?.bountyProgress.namesByType ?? {}).flatMap(
     (names) => names ?? [],
   );
-  const killedBossOnBossMusic3 =
-    killed(GROTESQUE_SPIDER_NAME) || killed(MISS_QUILL_NAME) || bountyBossNames.some(killed);
+  const killedBossOnBossMusic3 = killed(GROTESQUE_SPIDER_NAME) || bountyBossNames.some(killed);
   if (killedBossOnBossMusic3 || bountiesCompleted) {
     unlock(['boss_music_3']);
   }
@@ -232,7 +222,6 @@ export function musicUnlocksFromProgress(
   if (
     achieved(['quest_defend_npc']) ||
     atLeast(DEFEND_QUEST_PHASE_ORDER, defendPhase, 'countdown') ||
-    murderStageAtLeast(murderStage, 'cult_hideout') ||
     blueprintsPhaseAtLeast(blueprintsPhase, 'midge_delivered')
   ) {
     unlock(['brace_for_the_horde']);
@@ -298,17 +287,19 @@ export function musicUnlocksFromProgress(
     killed(SHRINE_VERMIN_NAME);
   if (templeVisited) unlock(TEMPLE_MUSIC_TRACKS);
 
-  const towerClimbed =
-    murderStageAtLeast(murderStage, 'quill_slain') ||
-    rememberedBuilding('taloncrest_tower') ||
-    doomsdayStarted;
-  if (towerClimbed) unlock(TOWER_MUSIC_TRACKS);
+  const lichSlain = killed(LICH_NAME);
+  if (rememberedBuilding('taloncrest_tower') || lichSlain) unlock(TOWER_MUSIC_TRACKS);
+  if (lichSlain) unlock(bossFightTracks(LICH_BOSS_TYPE));
 
-  const lichFought =
-    murderStageAtLeast(murderStage, 'lich_slain') ||
-    doomsdayStarted ||
-    achieved(DOOMSDAY_ACHIEVEMENTS);
-  if (lichFought) unlock(['boss_music_2']);
+  const missingCats = persisted?.missingCatsProgress;
+  const missingCatsReached = (phase: MissingCatsPhase): boolean =>
+    missingCats !== undefined && phaseReached(missingCats, phase);
+  if (missingCatsReached('stakeout')) unlock(['rooftop_chase']);
+  if (missingCatsReached('sewer')) unlock(['storm_drain']);
+  if (missingCatsReached('ascent')) unlock(['tower_split_full']);
+  if (missingCatsReached('complete')) {
+    unlock(['old_friends', 'taloncrest_cats_home']);
+  }
 
   return unlocks;
 }

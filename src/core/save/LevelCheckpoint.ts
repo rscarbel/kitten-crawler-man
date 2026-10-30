@@ -3,6 +3,7 @@ import type { AchievementManager } from '../progression/AchievementManager';
 import type { PlayerSnapshot } from './playerSnapshotFormat';
 import type { WorldCheckpoint } from './WorldCheckpoint';
 import type { PartyCraftsState } from '../labour/partyCrafts';
+import type { BuildingId } from '../../map/buildingIds';
 
 /**
  * In-run checkpoint captured at a save point, alongside the save it mirrors in
@@ -41,6 +42,11 @@ export interface LevelCheckpoint {
   /** Pixel position the party respawns at — a safe room's centre, or the tile where it entered town. */
   respawnX: number;
   respawnY: number;
+  /**
+   * The building the paired save was written for (`SavedWorld.savedIndoorsIn`),
+   * so a rewind owes the same move back inside it that a reload would.
+   */
+  savedIndoorsIn: BuildingId | null;
   /**
    * Time spent on the floor at the save. Restoring it gives a respawn the
    * time the save had, not the time the death left.

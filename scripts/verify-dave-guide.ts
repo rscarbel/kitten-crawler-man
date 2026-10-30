@@ -228,7 +228,7 @@ async function openFloorOne(
 }
 
 function standParty(scene: Scene, tile: Point): void {
-  for (const crawler of [scene.pm.active(), scene.pm.inactive()]) {
+  for (const crawler of [scene.pm.active(), scene.pm.partnerAnywhere()]) {
     crawler.x = tile.x * TILE_SIZE;
     crawler.y = tile.y * TILE_SIZE;
   }
@@ -246,7 +246,7 @@ function tileOutside(
       { x: bounds.x + Math.floor(bounds.w / 2), y: bounds.y - reach },
       { x: bounds.x + Math.floor(bounds.w / 2), y: bounds.y + bounds.h - 1 + reach },
     ];
-    const found = candidates.find((tile) => map.isWalkable(tile.x, tile.y));
+    const found = candidates.find((tile) => map.isWalkable(tile.x, tile.y, 'walker'));
     if (found !== undefined) return found;
   }
   return null;

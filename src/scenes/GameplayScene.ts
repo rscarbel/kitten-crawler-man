@@ -28,7 +28,7 @@ import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSyst
 import type { SystemContext } from '../systems/GameSystem';
 import type { FlyTargets, RewardFlySystem } from '../systems/RewardFlySystem';
 import { SaveIndicator } from '../ui/SaveIndicator';
-import { keepInteractionPromptsClearOf } from '../ui/InteractionPrompt';
+import { anchorInteractionFocus, keepInteractionPromptsClearOf } from '../ui/InteractionPrompt';
 import type { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import type { EventBus } from '../core/EventBus';
 import { displayHp } from '../core/party/crawlerFormulas';
@@ -40,6 +40,7 @@ import type { Rect } from '../ui/core/geom';
 import { toCssRect, type HudSurface } from '../ui/hud/HudSurface';
 import type { HudToasts } from '../ui/hud/toasts';
 import { liveHudLayout } from '../ui/hud/liveHudLayout';
+import type { CatSenseCue } from '../systems/senses/CatSenseCue';
 import type {
   CoinModel,
   SkillPointsModel,
@@ -105,6 +106,8 @@ export abstract class GameplayScene extends Scene {
   }
   /** Coins/items flying to this scene's own HUD — each concrete scene owns its own instance. */
   protected abstract readonly rewardFly: RewardFlySystem;
+  /** Whether Belle could use her senses here; her HUD card and the switch button show it. */
+  protected abstract readonly catSenseCue: CatSenseCue;
   /** The "Saving... / Game Saved" toast — shared so it reads the same in every scene a save can happen in. */
   protected readonly saveIndicator = new SaveIndicator();
 
@@ -127,8 +130,14 @@ export abstract class GameplayScene extends Scene {
     return this.pm.active();
   }
 
-  protected inactive(): HumanPlayer | CatPlayer {
-    return this.pm.inactive();
+  /** The crawler not being steered when it is on this map; null while it is away in a split. */
+  protected presentPartner(): HumanPlayer | CatPlayer | null {
+    return this.pm.presentPartner();
+  }
+
+  /** The crawler not being steered, wherever it is: for the HUD's roster, rewards and the save only. */
+  protected partnerAnywhere(): HumanPlayer | CatPlayer {
+    return this.pm.partnerAnywhere();
   }
 
   /**
@@ -143,8 +152,20 @@ export abstract class GameplayScene extends Scene {
     barks: CrawlerBarkSystem,
     isHidden: (crawler: HumanPlayer | CatPlayer) => boolean = NEVER_HIDDEN,
   ): void {
-    if (!isHidden(this.human)) keepPromptsClearOfCrawler(ctx, this.human, camX, camY, barks);
-    if (!isHidden(this.cat)) keepPromptsClearOfCrawler(ctx, this.cat, camX, camY, barks);
+    for (const crawler of this.pm.presentCrawlers()) {
+      if (!isHidden(crawler)) keepPromptsClearOfCrawler(ctx, crawler, camX, camY, barks);
+    }
+  }
+
+  /**
+   * Ranks this frame's interact prompts by how near they are to the crawler
+   * the player is steering. Call once per frame, with `ctx` in the world's
+   * space, before any prompt is raised.
+   */
+  protected anchorPromptFocus(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const active = this.active();
+    const halfTile = TILE_SIZE / 2;
+    anchorInteractionFocus(ctx, active.x + halfTile - camX, active.y + halfTile - camY);
   }
 
   /**
@@ -267,7 +288,7 @@ export abstract class GameplayScene extends Scene {
 
   /** Both crawlers' unit frames, the active one first. */
   protected hudCrawlerFrames(): readonly [UnitFrameModel, UnitFrameModel] {
-    return [this.unitFrameModel(this.active()), this.unitFrameModel(this.inactive())];
+    return [this.unitFrameModel(this.active()), this.unitFrameModel(this.partnerAnywhere())];
   }
 
   private unitFrameModel(player: HumanPlayer | CatPlayer): UnitFrameModel {
@@ -305,6 +326,8 @@ export abstract class GameplayScene extends Scene {
       xpMax: player.xpNeededForNextLevel,
       status,
       skillPoints: player.unspentPoints,
+      presence: player.isAway ? 'away' : 'here',
+      senseCue: player === this.cat && this.catSenseCue.showing,
     };
   }
 

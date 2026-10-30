@@ -18,6 +18,7 @@
 
 import { MinHeap } from '../../../core/util/MinHeap';
 import type { GameMap } from '../../../map/GameMap';
+import type { MobilityClass } from '../../../map/mobility';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { HOLLOW_GATE } from '../../../map/tileTypes';
 import { isPavedTileType } from '../../../map/town/tileGrid';
@@ -27,6 +28,9 @@ import { doorwayKeys } from '../../doorwayTiles';
 import { straightSegments, type StraightSegmentLimits } from '../../questRoute/straightSegments';
 import { tileCoordKey } from '../../../map/tileIndex';
 import { garrisonGreen } from './garrisonGreen';
+
+/** How Midge moves: a cow keeps to the floor, so her road is planned and drawn for a walker. */
+export const MIDGE_MOBILITY = 'walker' as const satisfies MobilityClass;
 
 /** A step along a road, lane or bridge. */
 const ROAD_STEP_COST = 1;
@@ -124,12 +128,12 @@ export function isEscortStep(
   y: number,
   doorways: ReadonlySet<number> = doorwayKeys(gameMap),
 ): boolean {
-  if (!gameMap.isWalkable(x, y) || gameMap.isStairwellTile(x, y)) return false;
+  if (!gameMap.isWalkable(x, y, MIDGE_MOBILITY) || gameMap.isStairwellTile(x, y)) return false;
   return !doorways.has(tileCoordKey(x, y));
 }
 
 function hasBlockedNeighbour(gameMap: GameMap, x: number, y: number): boolean {
-  return ROUTE_STEPS.some(([dx, dy]) => !gameMap.isWalkable(x + dx, y + dy));
+  return ROUTE_STEPS.some(([dx, dy]) => !gameMap.isWalkable(x + dx, y + dy, MIDGE_MOBILITY));
 }
 
 function hasOffRoadNeighbour(gameMap: GameMap, x: number, y: number): boolean {
@@ -222,10 +226,12 @@ export function escortWaypoints(
   gameMap: GameMap,
   walk: readonly TilePoint[],
 ): readonly EscortWaypoint[] {
-  return straightSegments(gameMap, walk, ESCORT_WAYPOINT_LIMITS).map((routeIndex) => ({
-    tile: walk[routeIndex],
-    routeIndex,
-  }));
+  return straightSegments(gameMap, walk, ESCORT_WAYPOINT_LIMITS, MIDGE_MOBILITY).map(
+    (routeIndex) => ({
+      tile: walk[routeIndex],
+      routeIndex,
+    }),
+  );
 }
 
 const routesByMap = new WeakMap<GameMap, EscortRoute | null>();

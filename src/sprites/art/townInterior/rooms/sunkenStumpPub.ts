@@ -7,8 +7,7 @@
  * broken stools, and the spills nobody has mopped.
  *
  * The back door is the door's face on the north wall, not a second exit: the
- * alley behind it belongs to the town plan's exterior geometry, which the
- * murder mystery's route is built on.
+ * alley behind it belongs to the town plan's exterior geometry.
  *
  * Registered into `TOWN_INTERIOR_PROPS` in `../townInteriorProps.ts`; the
  * layout that places these lives in `src/map/town/interiors/sunkenStumpPub.ts`.

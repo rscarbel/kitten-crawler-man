@@ -534,7 +534,7 @@ function systemContextOf(world: FakeWorld): SystemContext {
     human: world.human,
     cat: world.cat,
     active,
-    inactive: active === world.human ? world.cat : world.human,
+    partner: active === world.human ? world.cat : world.human,
     activeIsMoving: false,
     roster: new MobRoster(world.map, new SpellSystem()),
     gameMap: world.map,

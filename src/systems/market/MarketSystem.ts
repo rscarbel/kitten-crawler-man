@@ -275,7 +275,7 @@ export class MarketSystem implements GameSystem {
   private isTileFree(tile: TileXY): boolean {
     const key = tileKey(tile.x, tile.y);
     if (this.reserved.has(key) || this.doorwayKeepClear.has(key)) return false;
-    return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y);
+    return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y, 'walker');
   }
 
   private makeVendor(def: VendorDef, span: readonly [TileXY, TileXY]): Townsperson {

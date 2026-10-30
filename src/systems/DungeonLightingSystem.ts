@@ -102,6 +102,7 @@ const FALLBACK_AMBIENT: AmbientLevel = 'dim';
 const FLOOR_FALLBACK_COLOUR: Readonly<Record<DungeonFloorThemeId, LightColour>> = {
   cellars: 'warm',
   service_level: 'cool_white',
+  sewer: 'sickly',
 };
 
 /** The cache covers this many times the view, so a walk repaints it rarely. */

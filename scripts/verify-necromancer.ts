@@ -194,7 +194,7 @@ class TestFlow implements SiegeFlowQuery {
     if (ref !== null && isStandingStructure(this.defense, ref)) {
       return 1 + this.defense.hp(ref) / TestFlow.CHEW_RATE;
     }
-    return gameMap.isWalkableForHostile(tileX, tileY) ? 1 : Infinity;
+    return gameMap.isWalkableForHostile(tileX, tileY, 'walker') ? 1 : Infinity;
   }
 
   rebuild(): void {
@@ -304,7 +304,7 @@ function makeRig(): Rig {
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap,
@@ -729,7 +729,7 @@ for (let stream = 0; stream < HOME_STREAMS; stream++) {
       const landing = necro.lastBlinkLanding;
       if (
         landing === null ||
-        !gameMap.isWalkableForHostile(landing.x, landing.y) ||
+        !gameMap.isWalkableForHostile(landing.x, landing.y, 'walker') ||
         isInsidePalisadeTile(site, landing.x, landing.y) ||
         field.distanceAt(landing.x, landing.y) < NECRO_MIN_WALL_DISTANCE_TILES
       ) {
@@ -1081,7 +1081,7 @@ function openRow(length: number): SiegeTile {
       let clear = true;
       for (let dy = -2; dy <= 2 && clear; dy++) {
         for (let dx = 0; dx <= length && clear; dx++) {
-          if (!gameMap.isWalkableForHostile(x + dx, y + dy)) clear = false;
+          if (!gameMap.isWalkableForHostile(x + dx, y + dy, 'walker')) clear = false;
         }
       }
       if (clear) return { x, y };

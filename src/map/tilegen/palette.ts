@@ -567,3 +567,54 @@ export const DECON_PAINT_RAMP: Ramp = {
   light: [218, 190, 104],
   accent: [232, 208, 132],
 };
+
+/**
+ * The storm drain's brick: a fired red gone brown and cold under years of wet,
+ * held as dark as a dungeon wall ramp so its lifted face still sits well under
+ * both sewer floors.
+ */
+export const SEWER_BRICK_RAMP: Ramp = {
+  shadow: [30, 22, 19],
+  mid: [52, 37, 31],
+  light: [68, 50, 41],
+  accent: [82, 63, 52],
+};
+
+/** The lime mortar between the drain's bricks, stained to the brick's own value. */
+export const SEWER_MORTAR_RAMP: Ramp = {
+  shadow: [28, 28, 24],
+  mid: [46, 46, 40],
+  light: [60, 60, 52],
+  accent: [72, 72, 62],
+};
+
+/**
+ * The walkway's stone, always damp: a cool grey pulled toward green, so wet
+ * stone reads apart from floor 2's dry concrete by hue as well as by its sheen.
+ */
+export const SEWER_WALKWAY_RAMP: Ramp = {
+  shadow: [72, 76, 68],
+  mid: [106, 110, 100],
+  light: [130, 134, 122],
+  accent: [148, 152, 140],
+};
+
+/**
+ * The channel's invert: brick worn smooth by the flow and filmed over with silt,
+ * a value step under the walkway and browner, so a drained channel reads as a
+ * different surface rather than as a shadow on the walkway.
+ */
+export const SEWER_CHANNEL_RAMP: Ramp = {
+  shadow: [50, 44, 34],
+  mid: [78, 70, 54],
+  light: [96, 88, 68],
+  accent: [112, 104, 82],
+};
+
+/** Silt laid down where the flow slackens: a greener, softer brown than the invert. */
+export const SEWER_SILT_RAMP: Ramp = {
+  shadow: [56, 54, 38],
+  mid: [80, 78, 56],
+  light: [98, 96, 70],
+  accent: [112, 110, 82],
+};

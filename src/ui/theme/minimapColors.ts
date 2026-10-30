@@ -44,6 +44,10 @@ import {
   PASTURE_GRASS,
   PEBBLE_SCATTER,
   PLAZA_STONE,
+  STORM_DRAIN_GRATE,
+  CAT_LEDGE,
+  CAT_GAP,
+  FLOOR_DROP,
   RIVER_ROCK,
   ROCK_DEPOSIT,
   SAFE_ROOM_BANNER,
@@ -165,6 +169,17 @@ export function minimapTileColor(type: number): string {
       return '#8e7a5c'; // the two main streets, lighter so the spine reads at a glance
     case PLAZA_STONE:
       return '#a89c86';
+    case STORM_DRAIN_GRATE:
+      return '#3d3e40';
+    // A cat's beam or shelf top: timber, lighter than the floor below it.
+    case CAT_LEDGE:
+      return '#8a6a44';
+    // A gap only a cat fits through: a dark notch in the wall line.
+    case CAT_GAP:
+      return '#1e1a16';
+    // A hole through the floor: darker than any floor round it.
+    case FLOOR_DROP:
+      return '#0a0908';
     case GARDEN_PLANTING:
       return '#5f7a34'; // planted bed — a shade greener than the verge it sits on
     case FENCE:

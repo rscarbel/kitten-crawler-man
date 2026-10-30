@@ -104,7 +104,7 @@ function makeArena(map: GameMap, humanTile: TilePoint, catTile: TilePoint): Aren
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,

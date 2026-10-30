@@ -16,7 +16,7 @@ import { pick, rangeInt, type Rng } from '../sprites/person/rng';
 
 // ── Phase machine ────────────────────────────────────────────────────────────
 
-export type LichBattlePhase = 'onslaught' | 'firewall' | 'tantrum' | 'reckoning';
+export type LichBattlePhase = 'binding' | 'onslaught' | 'firewall' | 'tantrum' | 'reckoning';
 
 /** Where the tantrum is: out of reach raining orbs, or grounded and open. */
 export type TantrumMode = 'float' | 'daze';
@@ -44,23 +44,27 @@ export type TantrumTick = 'none' | 'daze_started' | 'daze_expired';
  * The fight's order of events, and the only thing allowed to change it.
  *
  * Every transition method moves strictly forward through
- * `onslaught → firewall → tantrum → reckoning` and refuses when called from any
- * other phase, so a stray call from a system that has lost track of where the
- * fight is cannot skip a stage or walk one back.
+ * `binding → onslaught → firewall → tantrum → reckoning` and refuses when
+ * called from any other phase, so a stray call from a system that has lost
+ * track of where the fight is cannot skip a stage or walk one back. A fight
+ * with no cat left bound in the circle opens at the onslaught.
  *
- * There is deliberately no capture/restore pair. A party death in the
- * magistrate's office turns them out of the tower, and climbing back rebuilds
- * the encounter from `MurderQuestProgress` with a fresh Lich at full health —
- * which is the restart-at-onslaught behaviour a snapshot would have had to
+ * There is deliberately no capture/restore pair. A party death at the top of
+ * the tower turns them out of it, and climbing back rebuilds the encounter
+ * with a fresh Lich at full health — which is the restart-at-onslaught behaviour a snapshot would have had to
  * reproduce anyway. Building interiors keep no checkpoint of their own, so a
  * snapshot API here would have had nothing to hang from and no caller.
  */
 export class LichPhaseMachine {
-  private currentPhase: LichBattlePhase = 'onslaught';
+  private currentPhase: LichBattlePhase;
   private currentTantrumMode: TantrumMode = 'float';
   private dodgeClockFrames = 0;
   private dazeClockFrames = 0;
   private landedDazeHits = 0;
+
+  constructor(opensBound = false) {
+    this.currentPhase = opensBound ? 'binding' : 'onslaught';
+  }
 
   get phase(): LichBattlePhase {
     return this.currentPhase;
@@ -96,11 +100,19 @@ export class LichPhaseMachine {
       case 'onslaught':
       case 'reckoning':
         return true;
+      case 'binding':
       case 'firewall':
         return false;
       case 'tantrum':
         return this.currentTantrumMode === 'daze';
     }
+  }
+
+  /** The circle's last bound pillar has shattered. Returns true on transition. */
+  registerBindingBroken(): boolean {
+    if (this.currentPhase !== 'binding') return false;
+    this.currentPhase = 'onslaught';
+    return true;
   }
 
   /**
@@ -170,6 +182,256 @@ export class LichPhaseMachine {
   }
 }
 
+// ── The binding ──────────────────────────────────────────────────────────────
+
+/**
+ * Frames a crawler works at a pillar to unbind its cat: four seconds standing
+ * still beside it, which is long enough that holding the Lich off for it is
+ * a job and short enough that a pillar is one job, not a siege.
+ */
+export const BINDING_CHANNEL_FRAMES = 240;
+/** The share of an unbinding a hit knocks back, so a blow costs the work it broke and not all of it. */
+export const BINDING_DAMAGE_SETBACK_SHARE = 0.4;
+/**
+ * Frames into the binding before the carrier comes in through the observatory.
+ *
+ * Fifteen seconds: long enough that the player has worked a pillar of their
+ * own and knows what the carrier is doing when it arrives, short enough that
+ * a circle of seven is still mostly standing.
+ */
+export const CARRIER_ARRIVAL_FRAMES = 900;
+/** Frames the carrier takes to fly from the observatory window down to its pillar, and as long again to fly out. */
+export const CARRIER_FLIGHT_FRAMES = 75;
+/** Frames the carrier hovers at its pillar working the cat loose. */
+export const CARRIER_LIFT_FRAMES = 60;
+/**
+ * Frames the ground at a channel spot must stay clear before a companion is
+ * sent back to it.
+ *
+ * The flee rule and the order to go back take turns: the hazard escape steps
+ * her out of a cone, the order walks her back in, and the cone lands on the
+ * frame she arrives. The wait is longer than the hands' eruption, so the
+ * ground she is sent back to is ground the last cast has finished with.
+ */
+export const CHANNEL_RETURN_CLEAR_FRAMES = 75;
+
+/** Where the carrier is: not yet come, on its way in, at its pillar, on its way out, or gone. */
+export type CarrierStage = 'waiting' | 'arriving' | 'lifting' | 'leaving' | 'gone';
+
+/** What one frame of the binding did, so the caller can play the right cue. */
+export type BindingTick<Id extends string> =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'carrier_arrives'; readonly pillar: Id }
+  | { readonly kind: 'carrier_frees'; readonly pillar: Id }
+  | { readonly kind: 'carrier_gone' };
+
+/**
+ * The circle's pillars, one per cat still bound to it, and the carrier who
+ * comes in through the observatory to carry one cat out.
+ *
+ * The circle shields the Lich for as long as any pillar stands lit; a cat let
+ * out of its cage before the ritual was never bound, so its pillar starts dark
+ * and the circle is that much smaller. The carrier comes once, and never for
+ * the pillar a crawler is working: two of the party's helpers on one pillar is
+ * one pillar's worth of help, and the player would see their own work taken
+ * out from under them.
+ */
+export class BindingCircle<Id extends string> {
+  private readonly boundPillars: Set<Id>;
+  private clock = 0;
+  private stage: CarrierStage = 'waiting';
+  private stageFrames = 0;
+  private carried: Id | null = null;
+
+  /** `carrierOrder` is every pillar, in the order the carrier prefers them. */
+  constructor(
+    bound: Iterable<Id>,
+    private readonly carrierOrder: ReadonlyArray<Id>,
+  ) {
+    this.boundPillars = new Set(bound);
+  }
+
+  get bound(): ReadonlySet<Id> {
+    return this.boundPillars;
+  }
+
+  /** Whether any pillar still stands lit, and so whether the Lich is shielded. */
+  get shieldsLich(): boolean {
+    return this.boundPillars.size > 0;
+  }
+
+  get carrierStage(): CarrierStage {
+    return this.stage;
+  }
+
+  /** 0..1 through the carrier's current stage, for drawing it. */
+  get carrierStageProgress(): number {
+    const length = carrierStageFrames(this.stage);
+    return length === 0 ? 0 : Math.min(1, this.stageFrames / length);
+  }
+
+  /** The pillar the carrier has set out for, from the frame it comes in until it is gone. */
+  get carrierPillar(): Id | null {
+    return this.carried;
+  }
+
+  /** Whether a crawler may work `pillar`: it is still bound, and the carrier is not already on it. */
+  workable(pillar: Id): boolean {
+    return this.boundPillars.has(pillar) && pillar !== this.carried;
+  }
+
+  /** A crawler has unbound `pillar`. Refuses one already dark or the carrier's. Returns true on the shatter. */
+  shatter(pillar: Id): boolean {
+    if (!this.workable(pillar)) return false;
+    this.boundPillars.delete(pillar);
+    return true;
+  }
+
+  /** One frame. `channelling` is the pillar a crawler is working this frame, or null. */
+  tick(channelling: Id | null): BindingTick<Id> {
+    this.clock++;
+    this.stageFrames++;
+    switch (this.stage) {
+      case 'waiting':
+        return this.tickWaiting(channelling);
+      case 'arriving':
+        if (this.stageFrames < CARRIER_FLIGHT_FRAMES) return NO_BINDING_TICK;
+        this.enterStage('lifting');
+        return NO_BINDING_TICK;
+      case 'lifting': {
+        const pillar = this.carried;
+        if (this.stageFrames < CARRIER_LIFT_FRAMES || pillar === null) return NO_BINDING_TICK;
+        this.boundPillars.delete(pillar);
+        this.enterStage('leaving');
+        return { kind: 'carrier_frees', pillar };
+      }
+      case 'leaving':
+        if (this.stageFrames < CARRIER_FLIGHT_FRAMES) return NO_BINDING_TICK;
+        this.enterStage('gone');
+        return { kind: 'carrier_gone' };
+      case 'gone':
+        return NO_BINDING_TICK;
+      default: {
+        const unhandled: never = this.stage;
+        throw new Error(`unhandled carrier stage ${String(unhandled)}`);
+      }
+    }
+  }
+
+  private tickWaiting(channelling: Id | null): BindingTick<Id> {
+    if (this.clock < CARRIER_ARRIVAL_FRAMES) return NO_BINDING_TICK;
+    const pillar = carrierTargetFor(this.boundPillars, channelling, this.carrierOrder);
+    if (pillar === null) return NO_BINDING_TICK;
+    this.carried = pillar;
+    this.enterStage('arriving');
+    return { kind: 'carrier_arrives', pillar };
+  }
+
+  private enterStage(stage: CarrierStage): void {
+    this.stage = stage;
+    this.stageFrames = 0;
+  }
+}
+
+const NO_BINDING_TICK = { kind: 'none' } as const;
+
+function carrierStageFrames(stage: CarrierStage): number {
+  switch (stage) {
+    case 'arriving':
+    case 'leaving':
+      return CARRIER_FLIGHT_FRAMES;
+    case 'lifting':
+      return CARRIER_LIFT_FRAMES;
+    case 'waiting':
+    case 'gone':
+      return 0;
+    default: {
+      const unhandled: never = stage;
+      throw new Error(`unhandled carrier stage ${String(unhandled)}`);
+    }
+  }
+}
+
+/**
+ * The pillar the carrier goes for: the first in its order that is still bound
+ * and is not the one a crawler is working, or null when there is none, in
+ * which case it waits rather than taking work out of a crawler's paws.
+ */
+function carrierTargetFor<Id extends string>(
+  bound: ReadonlySet<Id>,
+  channelling: Id | null,
+  order: ReadonlyArray<Id>,
+): Id | null {
+  return order.find((pillar) => bound.has(pillar) && pillar !== channelling) ?? null;
+}
+
+/**
+ * Whether the Lich passes over a crawler when it chooses whom to fight.
+ *
+ * During the binding the crawler working a pillar is left to it for as long
+ * as anybody else stands to be fought: the binding is the human holding the
+ * Lich off while the cat works, and a Lich that turned on whoever was
+ * kneeling at a pillar would make the job one the player cannot see a way to
+ * do. Once nobody else stands, there is nobody to hold it off.
+ */
+export function bindingSparesCrawler(
+  phase: LichBattlePhase,
+  isChannelling: boolean,
+  anotherStands: boolean,
+): boolean {
+  return phase === 'binding' && isChannelling && anotherStands;
+}
+
+/**
+ * The tiles a crawler can stand on to work a pillar: every walkable tile
+ * beside it, south, west, east and north. Any side will do, so a crawler
+ * coming from behind a pillar works it from there rather than walking round.
+ */
+export function pillarChannelSpots(room: OrbRainRoom, pillar: TilePos): TilePos[] {
+  const spots: TilePos[] = [];
+  for (const offset of CHANNEL_SPOT_OFFSETS) {
+    const col = pillar.col + offset.col;
+    const row = pillar.row + offset.row;
+    if (col < room.minCol || col > room.maxCol || row < room.minRow || row > room.maxRow) continue;
+    if (room.isWalkable(col, row)) spots.push({ col, row });
+  }
+  return spots;
+}
+
+const CHANNEL_SPOT_OFFSETS: ReadonlyArray<TilePos> = [
+  { col: 0, row: 1 },
+  { col: -1, row: 0 },
+  { col: 1, row: 0 },
+  { col: 0, row: -1 },
+];
+
+/**
+ * Whether a companion may be sent to her channel spot this frame.
+ *
+ * The spot is scored by the same danger field her hazard escape reads, so the
+ * order to go and the rule to flee agree on what is dangerous; and once the
+ * spot has been threatened it must stay clear for
+ * {@link CHANNEL_RETURN_CLEAR_FRAMES} before she goes back, so the two never
+ * trade her across the edge of a cone frame by frame.
+ */
+export class ChannelReturnGate {
+  private clearFrames: number;
+
+  constructor(private readonly clearFramesRequired: number = CHANNEL_RETURN_CLEAR_FRAMES) {
+    this.clearFrames = clearFramesRequired;
+  }
+
+  /** One frame: `threatened` is whether the spot is dangerous now. Returns whether she may go. */
+  tick(threatened: boolean): boolean {
+    if (threatened) {
+      this.clearFrames = 0;
+      return false;
+    }
+    this.clearFrames = Math.min(this.clearFramesRequired, this.clearFrames + 1);
+    return this.clearFrames >= this.clearFramesRequired;
+  }
+}
+
 // ── The firewall's gap planner ───────────────────────────────────────────────
 
 /** Tiles of safe gap in a wall of fire. Two, so it is a doorway and not a needle. */
@@ -210,7 +472,7 @@ export class FirewallGapPlanner {
    * Whether a gap starting at this column is somewhere the player can actually
    * stand for the whole of the wave's journey.
    *
-   * A room is not a rectangle. The magistrate's office has pillars in it, and a
+   * A room is not a rectangle. The top of the tower has pillars in it, and a
    * gap placed on one is not a gap — it is a wall the player is being told to
    * hide behind. The caller supplies the test because only it knows the storey.
    */
@@ -575,7 +837,7 @@ export class OrbRainPlanner {
 /**
  * How far the escape search looks for somewhere better to stand, in tiles.
  *
- * Wide enough to cross the magistrate's office, because during the firewall the
+ * Wide enough to cross the top of the tower, because during the firewall the
  * only safe ground is the gap and it can be at the far wall. A smaller radius
  * would find nothing better within reach on exactly the frames that matter and
  * report "nowhere to go" while a whole safe column stood eight tiles away.

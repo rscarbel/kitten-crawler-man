@@ -178,8 +178,6 @@ import {
   dynamiteMobDamage,
 } from '../src/systems/DynamiteSystem';
 import { EventBus } from '../src/core/EventBus';
-import { MissQuill } from '../src/creatures/MissQuill';
-import { Remex } from '../src/creatures/Remex';
 import { DarkKnight } from '../src/creatures/DarkKnight';
 
 /**
@@ -1980,7 +1978,7 @@ function runBomberThrow(type: BomberType, mobLevel: number): BomberThrowRun {
     human: target,
     cat: dodger,
     active: target,
-    inactive: dodger,
+    partner: dodger,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -2871,7 +2869,7 @@ function blastAgainstLevelledMob(
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: explosiveMap,
@@ -2970,7 +2968,7 @@ function crawlerThrow(
     human,
     cat,
     active: thrower,
-    inactive: other,
+    partner: other,
     activeIsMoving: false,
     roster,
     gameMap: explosiveMap,
@@ -3041,12 +3039,6 @@ function stickHpShare(
   return perStick / mob.maxHp;
 }
 
-/** Where a probed boss's summons go; none of them is ever ticked. */
-const probeSpawns: Mob[] = [];
-function collectProbeSpawn(mob: Mob): void {
-  probeSpawns.push(mob);
-}
-
 /** The Kraken with her room drained: under the flood she refuses every blow. */
 function surfacedKraken(): Mob {
   const boss = spawnMob(
@@ -3083,11 +3075,6 @@ const GAUNTLET_BOSSES = {
 const STORY_BOSSES: readonly (readonly [string, () => Mob])[] = [
   ['grotesque_spider', registeredMob('grotesque_spider')],
   ['the_lich', registeredMob('the_lich')],
-  [
-    'miss_quill',
-    () => new MissQuill(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE, collectProbeSpawn),
-  ],
-  ['remex', () => new Remex(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
 ];
 const BOSS_ROOM_BOSSES: readonly (readonly [string, () => Mob])[] = [
   ...Object.entries(GAUNTLET_BOSSES),

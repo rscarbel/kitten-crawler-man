@@ -4,7 +4,9 @@
  * inside and a draining ghost, a thin XP meter, and the status pills: hung
  * under the card on a roomy screen, right-aligned in the name row on a
  * compact one. Unspent skill points put a gold `+N` badge on the portrait,
- * beside the level disc, that opens the Spend section.
+ * beside the level disc, that opens the Spend section. While something only
+ * the crawler perceives is in their reach, the portrait breathes a cream sense
+ * ring with a sparkle on its shoulder.
  */
 
 import { centerIn, inset, type Rect } from '../core/geom';
@@ -29,6 +31,9 @@ const PORTRAIT_GLYPH_RATIO = 0.56;
 const PORTRAIT_FILL_ALPHA = 0.16;
 /** A resting crawler's card is dimmed a touch so the active one leads. */
 const COMPANION_ALPHA = 0.88;
+/** A crawler on another map is greyed well back: it cannot be steered, hurt or helped from here. */
+const AWAY_ALPHA = 0.55;
+const AWAY_TAG = 'AWAY';
 const PILL_FILL_ALPHA = 0.24;
 const PILL_SPENT_ALPHA = 0.45;
 /** The XP strip is a few units tall; its hover target reaches this far above and below it. */
@@ -42,6 +47,15 @@ const BADGE_GLOW_MIN = 0.35;
 const BADGE_NAG_GLOW_BLUR_SCALE = 2;
 /** Pills in the name row stop short of this much name, so the crawler stays identifiable. */
 const INLINE_NAME_MIN_W = 36;
+/** The sense ring stands this far outside the portrait. */
+const SENSE_RING_OFFSET = 2.5;
+const SENSE_RING_WIDTH = 2;
+const SENSE_PULSE_MS = 1100;
+const SENSE_RING_MIN_ALPHA = 0.4;
+/** The sparkle on the portrait's shoulder, as a fraction of the portrait. */
+const SENSE_SPARKLE_RATIO = 0.42;
+const SENSE_TOOLTIP_TITLE = 'Senses something nearby';
+const SENSE_TOOLTIP_TEXT = 'Something here only she can perceive. Switch to her to use it.';
 
 export interface UnitFrameOptions {
   readonly active: boolean;
@@ -60,14 +74,15 @@ export function unitFrame(
   const { ctx, theme } = ui;
   const { palette } = theme;
   const skin = skinsFor(theme).panel.hud;
+  const away = model.presence === 'away';
   ctx.save();
-  if (!opts.active) ctx.globalAlpha *= COMPANION_ALPHA;
+  if (!opts.active) ctx.globalAlpha *= away ? AWAY_ALPHA : COMPANION_ALPHA;
   ui.block(rects.card);
   drawGlass(ui, rects.card, skin);
   if (opts.active) {
     strokeRounded(ctx, rects.card, skin.radius, palette.accent.base, ACTIVE_BORDER_WIDTH);
   }
-  portrait(ui, rects.portrait, model, opts.color);
+  portrait(ui, rects.portrait, model, away ? palette.text.muted : opts.color);
   levelDisc(ui, rects.levelDisc, model.level);
   const inlinePills = rects.statusInline
     ? fitStatusPills(
@@ -127,8 +142,51 @@ export function unitFrame(
     const right = rects.status.x + rects.status.w;
     drawStatusPills(ui, rects.status, right - inlinePills.width, inlinePills);
   }
+  if (away) awayTag(ui, rects.portrait);
+  if (model.senseCue && !away) senseRing(ui, rects.portrait, model);
   if (model.skillPoints <= 0 || opts.skillPoints.hidden) return null;
   return skillBadge(ui, rects, model, opts);
+}
+
+/** The breathing ring and sparkle that say something only this crawler perceives is near. */
+function senseRing(ui: Ui, portrait: Rect, model: UnitFrameModel): void {
+  const { ctx, theme } = ui;
+  const color = theme.palette.sense.cue;
+  const beat = (Math.sin((ui.now / SENSE_PULSE_MS) * FULL_TURN) + 1) / 2;
+  const ring = inset(portrait, -SENSE_RING_OFFSET);
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = theme.space.sm * (SENSE_RING_MIN_ALPHA + beat);
+  ctx.globalAlpha *= SENSE_RING_MIN_ALPHA + (1 - SENSE_RING_MIN_ALPHA) * beat;
+  strokeRounded(ctx, ring, ring.w / 2, color, SENSE_RING_WIDTH);
+  ctx.restore();
+  const side = portrait.w * SENSE_SPARKLE_RATIO;
+  const sparkle: Rect = {
+    x: ring.x - side / 2 + SENSE_RING_OFFSET,
+    y: ring.y - side / 2 + SENSE_RING_OFFSET,
+    w: side,
+    h: side,
+  };
+  drawGlyph(ctx, 'sparkle', sparkle, { color });
+  const hover = ui.hit(`${model.id}/sense`, ring, { focusable: false });
+  tooltip(ui, ring, {
+    id: `${model.id}/sense/tip`,
+    title: SENSE_TOOLTIP_TITLE,
+    text: SENSE_TOOLTIP_TEXT,
+    show: hover.hovered,
+  });
+}
+
+/** The away tag, hung across the foot of the portrait. */
+function awayTag(ui: Ui, portrait: Rect): void {
+  const size = badgeSize(ui, { label: AWAY_TAG, kind: 'tag' });
+  const tag: Rect = {
+    x: portrait.x + (portrait.w - size.w) / 2,
+    y: portrait.y + portrait.h - size.h / 2,
+    w: size.w,
+    h: size.h,
+  };
+  badge(ui, tag, { label: AWAY_TAG, kind: 'tag', tone: 'neutral', variant: 'solid' });
 }
 
 function portrait(ui: Ui, r: Rect, model: UnitFrameModel, color: string): void {

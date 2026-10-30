@@ -32,16 +32,16 @@ it. Yard fences (`FENCE`) and the ruins' `RUINED_WALL` are split the same way.
 
 ### Districts
 
-| District          | Where          | Buildings                                                                                                                                             |
-| ----------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                                                        |
-| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the cult hideout)              |
-| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                                       |
-| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                                          |
-| **Market Row**    | south of plaza | Old Lori's Cottage, The Horned Flagon, The Rusty Anvil                                                                                                |
-| **Low Quarter**   | south band     | The Cloak & Dagger, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the service alley the murder mystery needs |
-| **South Green**   | inside SE wall | Miller's Farm                                                                                                                                         |
-| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                               |
+| District          | Where          | Buildings                                                                                                                                                    |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                                                               |
+| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the garrison's watch post)            |
+| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                                              |
+| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                                                 |
+| **Market Row**    | south of plaza | Old Lori's Cottage, The Horned Flagon, The Rusty Anvil                                                                                                       |
+| **Low Quarter**   | south band     | The Cloak & Dagger, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the two lamp-lit service alleys through the block |
+| **South Green**   | inside SE wall | Miller's Farm                                                                                                                                                |
+| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                                      |
 
 ### Building ids
 
@@ -70,29 +70,31 @@ entered through `buildingEntries`, but share the one id union and display-name t
 
 ## Who lives here
 
-The town is a Hawkfolk city with a human minority. That ratio carries the story: Quill's
-doomsday spell is built to kill every non-hawkfolk inhabitant, which only means something
-if there are visibly some.
+The town is a Hawkfolk city with a human minority.
 
 **Species is not a job.** `TownSpecies` (`src/systems/townSpecies.ts`: human, Hawkfolk,
-dwarf, otter, crocodilian) is its own axis, carried by `ResidentDef.species`,
+dwarf, otter, crocodilian, orc, elf) is its own axis, carried by `ResidentDef.species`,
 `OccupantSpec.species` and every `Townsperson`. It is what a person is, not what they are
 drawn as: only a `CrowdSpecies` (human, Hawkfolk) has an authored citizen cast, so only
 those are rolled into the crowd or wear a cast look; anyone else is drawn by a bespoke
 painter, and `TownspersonFigureOptions`, `OccupantIdentity` and `RESIDENT_LOOKS` refuse to
-compile one without it. Each species has its own danger barks (`DANGER_LINES` in
+compile one without it. Orcs have no crowd cast: Baggi is the town's only orc, and she is
+drawn on her own figure. Elves have none either: the cellar elf is the only one living
+inside the wall, drawn on the cult's elf figure (`drawElfSprite`). Each species has its own danger barks (`DANGER_LINES` in
 `src/dialog/scripts/townsfolk.ts`), and `AMBIENT_VOICE_OF` names the ambient pool its
 unnamed citizens talk from. `TownRole` is only ever a job: it picks barks and a citizen's look,
 and a species in the role union would bark as a job. A counter belongs to the person who
 keeps it (`OccupantSpec.service`), so neither species nor role touches it.
 
-**The named cast** is `RESIDENT_DEFS` in `src/systems/townResidents.ts`: twenty residents,
-nine Hawkfolk, six humans, a dwarf, an otter and three crocodilians. The humans are Wendell
+**The named cast** is `RESIDENT_DEFS` in `src/systems/townResidents.ts`: twenty-two residents,
+nine Hawkfolk, six humans, a dwarf, an otter, three crocodilians, an orc and an elf. The humans are Wendell
 (Plumbline Farm), Marta Miller, Apothecary Fen, Innkeep Marlow, Wick, the General Store's
 clerk, and Brandon at the Cloak & Dagger's front desk. Old Lori (a dwarf), Steve Cartwright
 (an otter), the pub janitors Puddles and Grout and Sydney at the Barracks Mercenaries' desk
-(crocodilians) and Brandon are drawn by bespoke painters. Every resident's figure is their
-entry in `RESIDENT_LOOKS` (`src/creatures/residentFigures.ts`): a look from their own
+(crocodilians), Baggi (an orc, Apothecary Fen's assistant at Herb & Remedy,
+`taloncrest_apothecary_assistant`), the cellar elf (`taloncrest_lodge_cellar_elf`, at
+Blackwood Lodge once its cellar has held) and Brandon are drawn by bespoke painters. Every
+resident's figure is their entry in `RESIDENT_LOOKS` (`src/creatures/residentFigures.ts`): a look from their own
 species' cast, which the compiler checks against their `ResidentDef`, or a bespoke painter. Each building a resident lives in
 names its keeper in `BUILDING_KEEPERS`, which the compiler holds to one entry per such
 building and to someone who lives there. Keeper Brenna
@@ -451,8 +453,8 @@ that, and each answers a different half of "I don't know what to do":
   `QUEST_TRAIL_MAX_TILES` of the route cut into straight runs and painted by `worldTrail`,
   and the `questRouteTrail` setting turns it off. A target flagged `drawsOwnRoute` (the
   Midge escort's waypoints) gets neither. Indoors the same guide routes to the exit, or to
-  a tower storey's stairs down, while the pin is somewhere else (`PINNED_EXIT`, behind the
-  soul crystal's climb); a pin on the building the party is in shows nothing.
+  a tower storey's stairs down, while the pin is somewhere else (`PINNED_EXIT`); a pin on
+  the building the party is in shows nothing.
 
 `npm run verify:town` is the gate for the door and gate geometry these rely on, and for
 the route guide's first aim from the plaza and from outside Briar Hollow.
@@ -471,9 +473,8 @@ returns layout entries. `generateInterior` holds no per-building logic.
 
 Only the Cloak & Dagger's rooms and stations are fixed. Every other
 room's shell and layout may change freely, as long as its function holds: quest beats,
-services, the safe room, the murder mystery's alley and cellar, the cult hideout, and the
-gates below. A room's layout follows from what the building is, and every room should
-look occupied. Four things about the shell are worth knowing before changing one.
+services, the safe room and the gates below. A room's layout follows from what the building
+is, and every room should look occupied. Four things about the shell are worth knowing before changing one.
 
 **The shell is per building, not per kind.** `INTERIOR_BY_BUILDING` in `GameMap.ts` states
 each building's width, height and floor material, and `INTERIOR_BY_KIND` is only the
@@ -487,7 +488,8 @@ so inserting one re-rolls the art of every material after it.
 **Every walkable tile must be reachable from `startTile`.** A partition wall that seals a
 wing produces no error, no log and no symptom except a room the player can see across and
 never enter. `verify:interiors` flood-fills every interior — all fifteen walk-ins, the Starlight
-Tent and all four tower storeys — and it excuses none.
+Tent, all six tower storeys in every state the questline leaves them in, and the sewer's
+sections — and it excuses none.
 
 **The safe room is the inn's taproom.** `hasSafeRoom` on the planned building is what
 puts Dave, the doctor's corner and the lantern light in a room, and the bounds it
@@ -529,18 +531,158 @@ hint that decides which piece of their anchor group they take; without one they 
 in raw scan order, which is row-major from the north-west and put every shopkeeper in town
 in the same corner.
 
-**The tower is laid out per storey.** `buildTownCenterTowerLayout`
-(`src/map/town/interiors/townCenterTower.ts`) takes the storey and the stairs' origins, and
-`generateInterior` applies it before laying the stairs, so each stair block records its
-storey's own floor material. Every storey keeps its stair landings and the lane between
-them clear. The top storey is the Lich's arena: the only blocking pieces its layout places are the side
-walls' filing and the hearth, and the open floor north of the room's middle is where the
-Lich anchors its firewalls — a prop there leaves a wave nobody can pass. That floor is
-also where `QuillConfrontationSystem` seats the magistrate's body at its own desk, drawn
-before the room's furniture, so no prop may stand over it; `verify:interiors` measures the
-body's ink against every prop's footprint and art. The confrontation makes his desk's
-tiles solid itself (`MAGISTRATE_DESK_OFFSETS`), and that shape is what the firewalls are
-tuned against: `npm run verify:lich` fights across exactly that floor.
+**The tower is laid out per storey.** Its six storeys, bottom up, are the `TowerStoreyId`
+union in `src/map/town/interiors/townCenterTower.ts`; a storey's index is its place in that
+list, and its label, plan, furnisher and reserved zones are tables keyed by it, so a storey
+cannot ship without any of them.
+
+| #   | Storey      | What stands there                                                                                                                                                                                                                                                                      |
+| --- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | cistern     | Sewer brick and water, entered up the sewer's cistern culvert (at `TOWER_CISTERN_ARRIVAL_TILE`) and left back down it from the culvert in its west wall. The ward conduit runs from its sluice in the north wall to the drain; the basin is deep; the overflow is ankle deep.          |
+| 1   | gatehouse   | The guard hall behind the front door (`TOWER_ENTRANCE_STOREY`), the only storey with a door. The cellar stair down, the stair up in the south-east, and the tower guards' watch.                                                                                                       |
+| 2   | kitchen     | Hearth, worktable, the walled larder in the south-east behind a locked door, the portcullis chain on the larder's east wall, the dumbwaiter's foot and bell on the west wall, and the stair up under a portcullis.                                                                     |
+| 3   | bell storey | The open shaft the two bells hang in across the middle, three cat beams over it, the ringers' walk down the east wall barred by a grate, and south of the shaft the counterweight between its two plates.                                                                              |
+| 4   | archive     | Two rooms either side of a filing wall joined by a doorway at each end, ward lines across both doorways and across the west room, a hole through the west room's boards, shelf tops (cat ledges) with things to knock off, and the dumbwaiter's upper hatch and bell on the east wall. |
+| 5   | cattery     | Cages down both side walls, the ritual circle under the observatory window, the binding pillars round it. The Warden's arena.                                                                                                                                                          |
+
+Each storey is a plan of rows (walls, floor, stairs, door, water) plus furniture placed by
+code; `GameMap.generateTowerStorey` builds it before laying the stairs, so each stair block
+records its storey's own floor. A storey's stairs can stand anywhere on its plan: the party
+always arrives on the landing below the stair it came by. Every storey keeps its stair blocks
+and the two landing rows below each clear, joins both stairs to every walkable tile, and keeps
+each of its `TOWER_MECHANIC_ZONES` open floor with nothing standing in it: that is where the
+cats' ledges, plates, bells, dumbwaiter and wards stand beside. Plans write a cat ledge
+(`CAT_LEDGE`) as `L` and a hole through the floor (`FLOOR_DROP`) as `_`: nobody stands on a
+drop, but a thing knocked off flies across one, and a board fallen over it is floor.
+
+**Storeys are built from the quest.** The tower interior builds every storey at the door, as
+`towerConditionsFor(progress)` says the questline leaves it: the conduit running or shut, the
+portcullis down or raised, the larder locked or open, the archive's wards solid, pulsing,
+sweeping or spent, its hole open or bridged and its key ring on the shelf or gone, which cages
+stand open, which cats are bound and whether the ritual is lit. A storey is never changed
+across phases on a built map; the next entry builds it again. Two things change while the
+party is in the room, as a valve does in the sewer: winding the sluice shut repaints it, runs
+the conduit down to wading depth and sets the quest's `conduitShut`. Each storey also names
+the dungeon theme it is drawn under (the cistern the sewer's, the rest the default), and the
+scene sets it as the storey comes on show, so no storey is drawn in the materials of the one
+before.
+
+**The gatehouse watch** (`src/systems/tower/`) reuses the prison's stealth whole: guard
+scripts in the prison's language compiled by `compileStealthFloor`, cones cast against a grid
+read from the storey's own layout (walls are walls, every blocking prop is cover), suspicion,
+touch, and `respondToNoise` for a guard struck unseen. The guards (`TowerGuard`, a reserved
+human cast look in the tower's livery) carry no light and look from just ahead of their
+faces. Their tuning is `GATEHOUSE_TUNING`, in the prison's shape. Being caught does no harm:
+the screen goes dark and the party is set down on the cellar stair's landing.
+`npm run verify:prison-stealth` proves the gatehouse can be crossed unseen at every
+difficulty and that the straight walk is caught from normal up. Only the crawlers are watched
+for; a hire is never what a guard is looking for.
+
+**The storeys' works** (`src/systems/tower/*Works.ts`, one object per storey, ticked and drawn
+only while its storey is on show by the tower's encounter). The tower's encounter keeps the
+room's own fittings (`keepsRoomFittings`), so every storey's furniture can still be read,
+searched, broken and knocked off; each storey has its own readables, prop interactions and
+breakables. Every lasting outcome is written to the questline's progress as it happens, and
+the next build of any storey reads it: plates, knock-offs and ward states that are not written
+there start again on the next visit, and are always there to be done again. Each step a
+chapter hangs on is raised as a `towerMoment` on the scene's bus (`towerMoments.ts`).
+
+- **Cattery** (before the Warden knows). Every shut cage opens by a timing interaction: the
+  cat jostles its latch, and a jostle counts only while the keeper, a krasue, has its back
+  turned. Its round reads three ways: where it floats (among the cages, or up by the window),
+  which way its look washes the floor, and the latch bar's colour. A jostle under its eye is
+  seen; it shrieks and stares on a while. Belle wakes in her cage and is held in it until her
+  own latch gives (`crawlerCatUncaged`). A freed town cat joins `catsFreed` and bolts for the
+  stair; the freed cellmate (`cellmateFreed`) comes out as the scene's `CatAllySystem` and joins
+  Belle's group. The cage is the placed prop; a caged cat is drawn sitting inside it.
+- **Archive.** Ward lines go into the storey's `SenseLayer`. Solid wards bar their tiles.
+  Pulsing (once the conduit is shut): the doorway ward bites on a rhythm the cat can read, the
+  west ward goes dark while the plate in front of it is held, the north door's stays solid.
+  Sweeping (once the Warden knows): each ward sweeps a band, fed by a ward stone; the cat
+  standing by a stone finds it (a paw badge marks it), and only the human can break a found
+  stone. A bite does a little damage and puts the crawler back on its last clear tile. The
+  shelf tops hold a jar over the ward plate (`pressPlate`), a jar that lands loudly
+  (`makeNoise`, which draws the warden to the edge of its round), a board over the hole
+  (`bridge`), and the archivist's key ring over the hatch (`deliver`, which sets
+  `keyRingSent`). Before the Warden knows, krasue wardens drift on rounds and do not fight; one
+  that sees a crawler long enough has the party caught and set down at the cattery stair's
+  landing. Once it knows, krasue rise to fight.
+- **Kitchen.** The key ring waits at the dumbwaiter's foot; the human opens the larder with it
+  (`larderOpened`) and it is gone. Carried off the storey, or missing on a visit while the
+  larder is locked, it goes back to the foot. The portcullis chain will not give until the
+  counterweight has fallen. Ringing the dumbwaiter's bell while the cellmate is unfed brings her
+  paw-printed note down; tuna sent up sets `tunaSent`. When the counterweight falls the
+  kitchen's portcullis rises at once, even on a storey built shut.
+- **Bell storey.** The bells swing together, a full swing every two bars of the tower's music
+  (96 BPM in 4/4: `TOWER_SPLIT_BEAT_S` and `TOWER_SPLIT_BAR_S`, beside the `tower_split` stem
+  set), on the playing stem's clock when one plays and the same tempo on the storey's own clock
+  when none does. Each bell rings live as it reaches a beam on a bar's downbeat. A bell crossing
+  a beam sweeps whoever stands on its span to the beam's nearer end; the strike is warned in red
+  for two beats first (`drawDangerRegion`). The counterweight is a latching plate set over two
+  plates; the cellmate holds whichever one Belle is not on, but only once she has been fed. Its
+  fall hauls the ringers' grate clear and sets `portcullisRaised`; a storey built after that is
+  built with the weight down (`PressurePlateSystem.settleOpen`).
+
+**The door.** Two tower guards stand either side of the tower's door for the whole floor
+(`TownPlan.towerGuardPosts`, kept off the door's approach, the storm-drain grate, the torches
+and every doorway). They cannot be fought and never leave. The front door never opens
+(`towerDoorRefusal`); a guard turns the party away in a line or two, and once the Warden is
+gone the answer is that the tower is closed by order, though nobody can say whose.
+
+**The top storey is the Lich's arena.** The Lich anchors at the north wall and sweeps the
+room south with walls of fire, each wave born on the first row from which every column runs
+clear to the south wall. So everything that blocks there is a cage against a side wall, the
+hearth against the north wall, or a binding pillar in the top three rows at the Lich's end:
+two beside the observatory window and the rest flanking the ritual circle's north edge, none
+touching another, so each has open floor to be worked from. The pillars level with the
+circle's top row start the waves one row below it, which leaves ten rows of travel to the
+south wall, deep enough for two walls to be in flight at once. Pillars any lower push the
+waves' first row south until only one wall is ever live. The floor from that row to the south
+wall is open, and a prop placed in it leaves a wave nobody can pass. The pillars stand there for every
+state of the quest, lit or dark, so the room the waves are planned across never changes. The
+Lich is the Warden, the tower's master, and keeps its grinning mask.
+
+**The Warden's ritual** (`TowerRitualSystem`, `src/systems/tower/`, one per tower visit,
+answering for the cattery through `TowerStoreysSystem`). The last flight from the archive asks
+whether the party is ready (`TowerStairSystem`'s finale panel) while the questline is at
+`ascent` or `ritual`. The first time the party comes up together the Warden waits masked in
+the lit circle, the questline moves to `ritual`, and the Warden says what the circle is for: it
+did not cause the Fraying, it means to pull the old city and everyone it lost back through the
+seam, and nine creatures that always come back hold the seam open. It lifts the mask, there is
+nothing under it, and the fight starts (`wardenReveal`, `src/dialog/scripts/scenes/towerRitual.ts`).
+A party turned out by the fight finds the Warden waiting again and fights without the reveal.
+The fight is `LichBattleSystem` with its rules in `lichBattleRules`:
+
+- **The binding.** Every town cat nobody let out of its cage is bound to its pillar
+  (`TowerConditions.boundCats`), so freeing cats in the cattery makes the circle smaller, and a
+  circle with none opens straight on the onslaught. While any pillar is lit the Lich cannot be
+  hurt. The cat unbinds a pillar by standing beside it and holding interact for four seconds
+  (`ChannelInteraction`; a hit knocks some of it back, walking off pauses it). The human holds
+  the Lich off: the Lich leaves the cat at a pillar alone while anybody else stands to be fought
+  (`bindingSparesCrawler`). With the human steered, the cat goes to the nearest lit pillar on her
+  own and works it; her channel spot is scored by the same danger field her hazard escape reads,
+  and once it has been threatened she is kept off it until it has stayed clear for
+  `CHANNEL_RETURN_CLEAR_FRAMES` (`ChannelReturnGate`), so the order and the flee rule never trade
+  her across the edge of a cone. Fifteen seconds in, the carrier the party's choice sent (Aviel
+  if his secret was kept, a High Roost hawk if he was exposed) comes in through the observatory
+  window and carries one cat out, never the one being worked (`BindingCircle`). A dark pillar
+  stays standing, so the firewall's room never changes.
+- **Then the four phases** the fight always had: the onslaught, the firewall, the tantrum and
+  the reckoning, with the Warden's barks between them (`src/dialog/scripts/scenes/lich.ts`).
+- **Music.** The `warden_ritual` stem set under owner `tower_finale` on the boss layer: the
+  stem without the cat theme (`warden_ritual_battle_bound`) while any cat is bound, the full mix
+  once the circle is broken. Its decoded stems (`wardenRitualMusic`) are held only from the
+  archive up while the ritual is ahead.
+- **The fall.** The mask cracks, every pillar goes dark, the questline moves to `aftermath`, and
+  the ritual's `onWardenFallen` hook runs; everything after it belongs to the aftermath.
+
+`npm run verify:lich` plays the whole fight on the built cattery from the questline at
+`ritual`, binding included, over several streams, beside the pure rules; each binding check
+has a `--fault=` that turns it red.
+
+`npm run render:tower-storeys` writes every storey in every state it has to
+`preview/missing-cats/tower/`, with its mechanic zones outlined and the gatehouse guards'
+looks drawn.
 
 `npm run verify:interiors` is the gate for all of it, including that every door opens onto
 clear floor two tiles deep.
@@ -617,6 +759,11 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
   or an unnamed occupant: a crowd `species` (default human) wearing a cast look, or any
   species with a `bespokeFigure` from `BESPOKE_RESIDENT_FIGURES`
   (`src/creatures/bespokeResidentFigures.ts`). Either is drawn through `Townsperson`.
+- **`presentWhen`.** Whether the story has put them in the room, read over the
+  `TownDialogContext` each time the room is built; absent, they are always there.
+  `InteriorOccupantSystem.forBuilding` takes the context and stands only
+  `presentOccupants(roster, town)`, so a character the story brings in later is one
+  roster entry, never a case in the system. The cellar elf is the one today.
 - **`routine`.** An optional behaviour on top of idle and wander (`occupantRoutines.ts`).
   It sets `Townsperson.routinePose`, which a bespoke figure maps onto rows of its own and
   a cast look draws as its `work` loop; the figure owns each pose's length and the beats
@@ -701,7 +848,7 @@ A prop def may carry an `interaction` (`{ kind: 'examine' | 'search' | 'use', id
 
 `TownMemory` (`src/core/state/TownMemory.ts`) is threaded by reference through `DungeonScene`
 and `BuildingInteriorScene`. It holds resident talk counts, Fen's poultice batch,
-`clearedRooms`, `clearedCamps` and `paidOutInteriorProps`.
+`clearedCamps`, `paidOutInteriorProps` and the places visited.
 
 - **A prop pays out once, ever.** `paidOutInteriorProps` is keyed by
   `interiorPropPayoutKey`: the room key plus the id the layout gives the prop. Every prop
@@ -773,6 +920,12 @@ ruins shifts.
 - It was never a poison, a gas or a sickness in the water, and no line describes it as one.
 - The temple calls it the Fraying. Old people call it the bad year.
 
+**A cat always comes back.** The town's cats walked through the Fraying and came back
+whole, where the people caught in it came back wrong. No Taloncrest cat can be shut in
+for long: a bolted stockroom finds her on the roof by morning. "A cat always comes back"
+is what the town says of anything that turns up again. Nobody explains why it is true.
+No line does, and Caroline never says.
+
 **The Hawkfolk and the Carrying.** During the Fraying the Hawkfolk flew the old city's
 people over the fray to the hill, along with whatever could be lifted. The smith's anvil
 came in on a sledge; the people came in on wings. Their faith grew from that: a wing is
@@ -782,14 +935,25 @@ owed.
   everyday word for it. A Hawkfolk who refuses a carry is "clipped": shunned.
 - The temple's tract is _On the Carrying_: carry what the ground cannot; set it down
   gently; never take a fee for the first carry; remember every name you could not lift.
+  The temple reads those names every seventh day.
 - The Hawkfolk council is the High Roost. It meets on the temple dome and answers to no
-  official of the town.
+  official of the town, the Warden included. It resents the tower.
 - Hawkfolk are not angels and nobody worships them. They are a proud, dutiful majority
   who carried the city once and have never quite let the groundfolk forget it.
 
+**The tower and the Warden.** The Town Center Tower was the seat of the old city's
+Warden. The Warden died in the bad year and did not stay dead. There is no magistracy and
+no council of the town: civic authority is the Warden, absent and feared, and the tower
+guards who keep the tower. The guards are living, ordinary and loyal; some have served
+decades and seen only a masked figure at the top of the stairs. Nobody else in town has
+seen the Warden at all. Proclamations still come down in the Warden's unchanging hand,
+and people fear the tower more than they obey it. The player-facing name is "the Warden";
+it has no personal name, and no line before the tower itself says what the Warden is.
+
 **The cult's elves.** Elves who would not be carried went down instead of up during the
-Fraying, into the cellars and cisterns under the old city. They came back certain the
-Fraying was Caroline's own hand.
+Fraying, into the cellars, the old cisterns and the storm drains under the hill. They
+came back knowing every pipe under the town, and certain the Fraying was Caroline's own
+hand.
 
 - Their creed: Caroline chooses whom she speaks to, and she can be made to choose.
   Offerings get her attention.
@@ -798,6 +962,10 @@ Fraying was Caroline's own hand.
 - Their mark is an open eye over a cupped hand, an offering held up to be seen, which
   nods to Caroline's floating eyes.
 - They call the Hawkfolk "carriers of dead weight".
+- Their own cats went missing with the town's. They left locks of their cats' fur at the
+  Blackwood Lodge cellar lid as offerings, asking Caroline to notice them and bring the
+  cats home. The town found the fur and blamed the elves for the thefts.
+- They know the drains under the tower and do not go in there.
 
 ---
 
@@ -844,13 +1012,264 @@ Wendell's `RESIDENT_LINES` entries and all of `src/dialog/scripts/scenes/anchor.
 
 ---
 
+## A Cat Always Comes Back
+
+Taloncrest's questline. Someone is stealing the town's cats, the town blames the elves,
+and the thief turns out to be the temple's own deacon, carrying the cats to the tower for
+the Warden. Its state is one `MissingCatsProgress` (`src/core/quests/missingCatsProgress.ts`),
+made by the overworld scene and threaded by reference through every scene that builds a
+room of it. Every phase is entry-idempotent: a scene built at any phase stands that phase
+up from the record, so a door, a death or a reload resumes a phase from its start. The
+record is saved with the run's checkpoint (`captureMissingCatsProgress`,
+`parseMissingCatsProgressCheckpoint`). What a crawler carries for it (the feather) lives
+in the bags and is never mirrored in the record. The systems are in
+`src/systems/missingCats/`, and the quest's own lines in
+`src/dialog/scripts/scenes/missingCats.ts`.
+
+The town's seven cats (`TOWN_CATS`, `src/systems/critters/TownCats.ts`) each have a home
+and an owner: Biscuit at the Sleeping Cat Inn (Innkeep Ossie), Thimble at Old Lori's
+Cottage, Sage at Herb & Remedy (Baggi), Barrel at the Horned Flagon (Innkeep Brend),
+Chaff at Miller's Farm (Marta Miller), Cinder at the Rusty Anvil (Smith Varga) and Penny
+at the General Store (Keeper Brenna Kestrel). Which are missing is derived from the phase
+alone (`missingTownCats`): every cat but Penny from the start, Penny too from the chase,
+and none once they walk home.
+
+**The steps** (`MissingCatsPhase`), in order:
+
+1. **`not_started`.** Innkeep Ossie wears `!`. She tells the party Biscuit is gone; Dave
+   adds that a cat always comes back, usually.
+2. **`posters_up`.** A missing-cat notice for each missing cat hangs on the Market Plaza
+   notice board. Reading the board starts the investigation.
+3. **`investigating`.** Four sites, in any order (`MISSING_CATS_CLUE_SITES`,
+   `CLUE_SITE_CLUES`). At each house the owner wears `!` until heard, and then a `?`
+   clue spot stands in the room:
+   - Old Lori's high window, set into the north wall between her hearth and drying beam
+     (`window_dressing` on the wall row, so the chimney step under it stays bare floor).
+     Its iron latch lies on the floor under it, sawn through from outside, and Lori has
+     found no ladder marks in the herb bed outside. The town reads it as an elf that climbed.
+   - Herb & Remedy's dish of tuna on the back-room floor under the window by the potting
+     bench, which nobody in the house bought; then the General Store's order book, whose
+     first entry is the tower's standing weekly tuna order, collected by a tower guard
+     after closing: two tins a week for years, twelve this month, against a tin a month
+     over the counter for the rest of town.
+   - Miller's Farm's millstones, where Chaff slept: a single large grey feather lies on the
+     floor beside them. Everyone dismisses it, because Hawkfolk feathers are everywhere. It
+     goes into the human's quest slot. Whenever nobody is carrying it before the
+     confession, it lies beside the millstones again.
+   - Outside the Sleeping Cat Inn, a scent trail only Belle can see. It leads across the
+     plaza and stops in open ground.
+
+   Reading the board plays the party's reading of it (`NOTICES_READ`): which three
+   notices say something odd, and that Belle can follow Biscuit's scent from the inn.
+   Every clue found moves the questline to `blame`, and the last one, wherever it was,
+   plays the party's summing-up (`INVESTIGATION_SOLVED`): the thief came from the sky,
+   so why do the soldiers blame elves? That is what sends the party to the Lodge.
+
+4. **`blame`.** At Blackwood Lodge, Sgt. Kessler shows the locks of cat fur found at the
+   cellar lid and puts the town's blame on the elves. The lid opens. The elves are not
+   there to fight: they come up because ruins ghouls and krasue are climbing the old
+   cistern behind them, and the party holds the lid beside them through
+   `LODGE_CELLAR_WAVE_COUNT` waves (three). The record keeps `cellarWavesHeld`, so a
+   rebuilt room resumes at the next wave. Afterwards the cellar elf explains the fur: the
+   elves' own cats are gone too, and the fur was their offering. The elf becomes an ally
+   and offers help if the party ever needs it; Belle and the human then work out that
+   Penny is the last cat left, so the thief comes for her next, and the questline moves
+   to `stakeout`.
+5. **`stakeout`.** Only Penny is left in town, sat on the General Store's step. Dusk falls
+   over Taloncrest (`DuskGrade`): a contrast grade under the shared lighting cap, with warm
+   pools round every street torch and a light on each crawler, never an obstruction. When
+   the party comes near the store the thief arrives and circles it on a fixed loop built
+   from the prison guards' patrol segments, looking in toward the step with a sight cone
+   cast against the buildings (`castCone`, `lightSeesBody`). Its gaze shows on the street
+   as a faint wash of light, not a warning, because it hurts nobody. A crawler stood in one
+   of the dashed hiding rings is never seen; one in the open inside the cone makes it
+   circle away and come back after a while. Left unseen for a little over a loop it swoops
+   and takes Penny, and the questline moves to `chase`. The stakeout claims the
+   `rooftop_chase` stem set at its reduced stem (`rooftop_chase_stakeout`, owner
+   `missing_cats`, layer `activity`), and the swoop moves the claim to the full mix.
+6. **`chase`.** The winged shape flies a fixed route over the roofs, perch to perch, to the
+   dome of the Temple of the Sky (`planRooftopRoute`). Whenever the steered crawler falls
+   more than `CHASE_LEASH_TILES` behind it settles on its next perch and waits, so the
+   party can lose sight of it but never lose it. It lands on the temple: `confession`,
+   and the party remarks that its grey wings match the mill's feather and that Deacon
+   Aviel, who keeps the temple, is Hawkfolk (`THIEF_LANDED_REMARK`). A
+   rebuild during the chase starts it again from the store's roof.
+7. **`confession` and `choice`.** The party presents the feather to Deacon Aviel, and a
+   second feather on the altar dais matches it. He confesses. In the bad year he could not
+   lift everyone, and the tract tells him to remember every name he could not lift; the
+   Warden promised to bring those names back, and he carried the cats up to the spire
+   without asking why. He knows the Warden wants one more: the chosen one's cat. The party
+   then chooses (`AvielChoice`): expose him to the High Roost, who clip him and ground
+   him at the temple until a High Roost hawk takes his place, or keep his secret, for
+   which he owes the party a carry. The answer is stored as `avielChoice` and read by
+   every later act.
+8. **`bait`.** In the safe room Dave refuses to help: he lost a cat to that tower. Belle
+   volunteers, and dusk comes down again. She waits on the plaza fountain at dusk, and the
+   carrier pretends to take her so that the party can follow the real hand-over.
+9. **`captured`.** Steering Belle onto the fountain plays the capture as a cutscene
+   (`captureCutscene.ts`), timed to the `capture_at_dusk` jingle's own clock
+   (`CAPTURE_KRASUE_LANDS_AT_S`, `CAPTURE_LIFT_OFF_AT_S`, `CAPTURE_CUE_FADED_BY_S` beside
+   `CAPTURE_CUE`). The carrier (Aviel if his secret was kept, a High Roost hawk if he was
+   exposed) settles on the rim and the pretence starts; at the drop's hit krasue fall out
+   of the dark onto Belle, the carrier is thrown aside and says they were expected; at the
+   lift-off Belle is carried toward the spire while Caroline tells her the Warden planned
+   for this before she did; the screen goes black as the cue fades. The krasue and the
+   carrier are painted bodies (`CaptureStaging`) lent to the script as actors, not
+   creatures of the street. The jingle's group (`missingCatsCapture`) is held from the
+   moment the bait is agreed. When the scene ends the party splits
+   (`beginCaptivity`, `missingCatsSplit.ts`): Belle alone in her own cage on the
+   cattery storey, the human (and their hire, if any) on the street where they stood.
+   Any scene, street or room, that finds the party whole while the questline stands
+   anywhere in the split (`missingCatsSplitUnderWay`) forms that phase's split
+   (`splitWholePartyIfOwed`): the chapter's side live, Belle where her chapter opens or
+   her last one left her, the human on the street or where their chapter opens.
+10. **`cattery`.** The split's first chapter is Belle's, in the cage (see the tower's
+    chapters below). When it ends the questline moves on to `seeking_entry` and play is
+    handed down to the human.
+11. **`seeking_entry`.** The tower door's two guards still refuse. The cellar elf at
+    Blackwood Lodge wears `!`; asked, it says the drains run under the tower and that it
+    will wait at the storm-drain grate on the Civic Terrace (`elfWaitsAtGrate`). From
+    then until the party is whole again inside the tower, Sydney's desk at the Barracks
+    lends one hire at no fee to a party without one (`towerLoanOffered`); a hire signed
+    while the party is split joins the live group (`SplitDirector.joinLiveGroup`). At the
+    grate the elf (`GrateMeeting`) turns a human with nobody beside them away, and opens
+    the grate for one with a partner: `sewer`, with a save at its mouth. Dave's tactics
+    (`missing_cats_tower_door`, `missing_cats_drain`) say the guards do not hit, they
+    throw you out, and to stay behind the elf; Caroline's intel says Belle is alive at the
+    top and that the Warden knows the party is coming.
+
+**The tower's chapters** (`MISSING_CATS_CHAPTERS` in `missingCatsSplit.ts`, played by
+`SplitDirector.runChapters`; the ends are noticed by `TowerChapters`, `towerChapters.ts`,
+which only the tower builds). The two sides take turns, and each chapter ends on what it
+leaves for the other: a chapter's end moves the questline on to the phase the next chapter
+plays in, which is what the table's `endsWhen` reads, and the director then saves and hands
+play over behind a "Meanwhile…" card. Each end is held a moment first, so what caused it is
+seen to happen.
+
+| Phase                                 | Side                                    | Where                                                   | Ends when                                                                                              | Leaves for the other side                     |
+| ------------------------------------- | --------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `cattery`                             | Belle (+ cellmate)                      | cattery, from her cage                                  | she comes down into the archive while its wards burn solid; she and the cellmate hide (one short talk) | —                                             |
+| `seeking_entry` → `sewer` → `cistern` | human (+ hire, + elf through the drain) | the street where they were left, the sewer, the cistern | the sluice is shut (`conduitShut`)                                                                     | the archive's wards pulse                     |
+| `archive`                             | Belle                                   | the archive landing she hid on                          | she comes down onto the bell storey with the key ring sent (`keyRingSent`)                             | the key ring at the kitchen's dumbwaiter foot |
+| `gatehouse`                           | human                                   | the gatehouse's cellar stair landing                    | the tuna has gone up (`tunaSent`)                                                                      | the cellmate is fed and will sit on a plate   |
+| `bell_storey`                         | Belle                                   | the bell storey landing she came down onto              | the counterweight falls (`portcullisRaised`)                                                           | the kitchen's portcullis is up                |
+
+`sewer` becomes `cistern` when the human first stands in the cistern. While split, a stair
+that leads off the playing side refuses with a toast (`TowerChapters.stairRefusal`, through
+`TowerStairSystem`'s refusals): the cistern's stair up until the sluice is shut, the
+archive's stair down until the key ring is sent, and the bell storey's stair down, which ends
+at the portcullis. Every hand-over rebuilds the tower from the questline's progress, so each
+storey is built as the other side left it.
+
+A save cannot resume indoors, so a save taken in a tower chapter resumes at the tower's
+doorstep, and the overworld moves the party straight back to where the save recorded the
+live group (`resumeLocationFor`, `src/systems/partySplit/splitResume.ts`): the chapter's
+opening place for the save a hand-over writes, so a death or a reload in a chapter starts
+that chapter again. Every save records the live group where it was written
+(`recordLiveGroupForSave`), and only a save written inside a building owes that move; a
+save the human writes on the street mid-split (out for the tuna) resumes on the street.
+
+**The reunion.** When the bell storey's chapter ends the party is put back together
+(`SplitDirector.regroup`) at the head of the kitchen stair, behind its own card. Whenever the
+party stands on the bell storey together at `bell_storey` with the portcullis up, the
+reunion plays: Belle steps back from the stair, `reunion_jingle` sounds, the human comes up
+it and walks over, and one conversation (`REUNION`) says what the climb is now. Its end moves
+the questline to `ascent`, saves, and rebuilds the tower, since the archive and the cattery
+are built differently for a party climbing together. The cellmate stays at Belle's side as
+the scene's cat ally until the aftermath.
+
+**Up together** (`ascent`, `ritual`). The archive's wards sweep and only Belle sees them; the
+stones that feed them are hers to find and the human's to break, and the krasue fight. The
+first arrival on the cattery at `ascent` opens the Warden's fight (`TowerRitualSystem`) and
+moves the questline to `ritual`. A save written in the tower after the reunion resumes
+where `missingCatsTowerResume` (`towerResume.ts`) stands the whole party: the reunion's
+landing at `bell_storey` and `ascent`, the foot of the cattery stair at `ritual`, the
+cattery at `aftermath`. From the street, every tower step of the Journal points at the storm
+drain, the only way in.
+
+**The tower's music.** Inside the tower from Belle's cage until the Warden is gone,
+`TowerChapters` claims the `tower_split` stems (owner `tower_split`, layer `activity`):
+`tower_split_descent` while Belle's side plays, `tower_split_ascent` while the human's does
+(and `stealth_music` on the gatehouse during its chapter), and `tower_split_full` once the
+party is together. Their decoded group, `towerSplitMusic`, is held only inside the tower in
+those phases, and `missingCatsReunion` while the questline is at `bell_storey`. The Warden's
+fight claims over it on the boss layer. Before Belle is taken and after the Warden, the
+tower plays its own `TOWER_MUSIC_TRACKS`; the sewer plays `storm_drain`
+(`SEWER_MUSIC_TRACKS`). A tower guard that half sees a crawler from off the screen is
+captioned; the keeper's shriek is captioned off screen by its own sound.
+
+**The aftermath** (`aftermath` → `complete`). When the Warden falls the mask cracks, the
+circle goes dark, and every town cat still bound to it gets up and runs for the stair
+down (`CatsWalkOut`) while the room watches; then a save. From `aftermath` on every cat
+is home (`townCatsHome`), derived from the phase and never stored: each wanders the street
+outside her own door, and inside her building's ground floor, the inn's Biscuit included.
+The tower's door guards, while the cats are walking home, say the bells have stopped and
+that nobody has told them to stand down; after `complete` the tower is closed by an order
+nobody can trace. In the Sleeping Cat Inn's taproom, the first time Dave and the party
+are there together, Pumpkin noses the door open and walks to him on `reunion_jingle`
+(group `missingCatsReunion`, held near the inn and inside it during the aftermath), and
+their conversation plays over `old_friends`, claimed for that talk alone. Its end
+completes the questline (`completeMissingCats`): XP to both crawlers, coins, and the
+grinning mask, shown on the quest-reward screen. Nothing opens and nothing ends; the party
+keeps playing the floor. From then on Pumpkin lives in the taproom by Dave's spot
+(`pumpkinLivesAtTheInn`, read off the phase), sits, grooms and ambles, and answers a talk
+in her own voice, whether Dave is in or teleported out. Aviel's lines after the aftermath
+follow the choice: clipped and walking, or still owing the carry. The town's playlist
+gains `taloncrest_cats_home`.
+
+**Dev routes.** `npm run playtest -- <id>` opens the questline at the start of a step:
+`missing_cats_hook`, `missing_cats_investigation`, `missing_cats_cellar`,
+`missing_cats_stakeout`, `missing_cats_chase`, `missing_cats_temple` (the feather in
+the human's quest slot) and `missing_cats_bait`; `sewer` opens it at `sewer`. A preset's
+`missingCatsPhase` builds the record with everything an earlier step leaves behind
+(`missingCatsProgressAt`).
+
+**Dave and Caroline.** Each step with a safe-room objective has an `AdviceObjectiveId`
+(`missing_cats_notices`, `missing_cats_owners`, `missing_cats_cellar`,
+`missing_cats_stakeout`, `missing_cats_temple`, `missing_cats_bait`): Caroline's intel
+says where and what, and Dave's tactics say how. Dave's tactics for `missing_cats_bait`
+are his refusal, and Belle's offer follows it.
+
+**Blackwood Lodge.** Kessler's post sits on the cellar lid (`cellar_trapdoor`), the mouth
+of the drainage under Garrison Row and of the old cistern below it. The lid defence is
+fought in the Lodge itself. Once the lid has held (`lodgeCellarHeld`), the cellar elf
+(`taloncrest_lodge_cellar_elf`, named "Cellar elf") lives in the Lodge for good, standing
+by the lid. Its roster entry is present only from then (`presentWhen`, see
+[Furniture is placed props](#furniture-is-placed-props)). It is the same elf that guides
+the party through the sewer later (`SewerGuide`), and it speaks in the same voice:
+plain, unhurried and without contractions. Kessler's own talk changes once the lid has
+held; he strikes the elves out of his log.
+
+**The temple.** Deacon Aviel keeps the Temple of the Sky and reads the names the parish
+could not lift every seventh day. Before the chase he has added the missing cats to them.
+After the choice, his talk follows `avielChoice`: clipped and walking where he used to fly,
+or quietly in the party's debt.
+
+**How the town reacts.** Through the same `TownDialogContext` every speaker reads
+(`missingCats`: phase, clues, cellar waves and Aviel's choice):
+
+- Every owner (`RESIDENT_LINES[*].reactive`, `src/dialog/scripts/residents.ts`) leads
+  with their own cat while she is gone, and with her return once every cat is home.
+  Some owners also react to the clue found in their house.
+- Street citizens (`buildCitizenConversation`, `src/systems/townDialog.ts`) lead every
+  other talk (`REACTIVE_LEAD_MODULUS`) with a `REPUTATION_GREETINGS` line for how far
+  the party has come (`ReputationTier`: asking after the cats, held the cellar, lost
+  their cat, brought the cats home), or with the street's `GOSSIP_LINES` on one of those
+  talks in `GOSSIP_OVER_GREETING_MODULUS`. Before the investigation there is no
+  reputation and the lead is gossip. The modulus is coprime to the three lines every
+  greeting pool holds (`ReputationGreetings`), so every greeting is still seen.
+- Madame Voss's and Old Lori's readings (`src/dialog/scripts/fortuneTeller.ts`) draw a
+  reactive reading about half the time one applies.
+
+---
+
 ## Invariants
 
 Load-bearing for quests, systems and save state. Anything that moves must be re-derived,
 not hard-coded twice.
 
 **Building ids.** Every `buildingEntries` id and `type` value. Quests, dialog, interiors,
-mercenaries, the club, the murder mystery, the cult hideout and saves key off the ids
+mercenaries, the club and saves key off the ids
 (see [Building ids](#building-ids)); a misspelled one fails to compile, and a renamed one
 discards saves that hold it. The tattoo parlour is `taloncrest_tattoo_parlor` (sign
 **The Quiet Needle**, sprite key `quiet_needle`), and the facade's
@@ -861,8 +1280,8 @@ A building with no entry in a partial table is invisible from both directions: t
 building reports no service and the service names no building, so nothing throws and
 nothing logs. `verify:interiors` walks both sides for exactly that reason.
 
-**A sign can be renamed freely.** `clearedRooms` and `paidOutInteriorProps` are keyed by
-building id (`RoomKey`, `InteriorPropPayoutKey` in `TownMemory.ts`), so changing a
+**A sign can be renamed freely.** `paidOutInteriorProps` is keyed by
+building id (`InteriorPropPayoutKey` in `TownMemory.ts`), so changing a
 building's display name keeps everything the town remembers there. Changing an id is a
 save break like any other: the save fails validation and is discarded. Wendell's home is
 **Plumbline Farm** (`taloncrest_builder_farm`, facade `plumbline_farm`).
@@ -874,16 +1293,14 @@ registered as a restaurant for as long as it held the safe room. Exactly one bui
 carries the flag, and `verify:interiors` asserts that.
 
 **`OverworldData` fields.** `startTile`, `buildingEntries`, `mainTowerAnchor`,
-`doomsdayEscapeTile`, `townSquareCentre`, `fountainCentre`, `circusCentre`,
+`townSquareCentre`, `fountainCentre`, `circusCentre`,
 `circusRadiusTiles`, `townSafeRadiusTiles`, `hallwaySpawnPoints`.
 
 **Story geometry.**
 
-- The tower base stays adjacent to the plaza (magistrate's office, tower stairs).
-- `doomsdayEscapeTile` stays just south of the tower door and out of `stairwellTiles`.
-  The stairwell drawn there stands from the countdown's start and stays for good once the
-  party has escaped down it: a player who keeps exploring can walk back down it, which
-  ends the run again, but only on a fresh step onto it (`npm run verify:doomsday`).
+- The tower base stays adjacent to the plaza (the tower stairs).
+- Floor 3 has no exit. `level3` is the last floor and has no stairwell, and nothing ends
+  the run there yet.
 - The circus stays 70–90 tiles from centre, outside the safe radius, with a ruins buffer.
   Its road routes to the nearest **gate**, not the town centre — a gate exit is a tile
   the gate's own highway paves, so the joint cannot miss.
@@ -1617,8 +2034,7 @@ writers.
 contract is issued; a contract already held waits out whatever blocks it.
 `contractSiteOwnedByStory` defers to `interiorRoomOwnedByStory`
 (`src/systems/interiorStoryOwnership.ts`), the same rule `BuildingInteriorScene` uses to
-decide who stands in a room: Blackwood Lodge while the cult hideout is pending or live, the
-Temple while the anchor quest's vermin are loose. Every Briar Hollow site is owned while
+decide who stands in a room: the Temple while the anchor quest's vermin are loose. Every Briar Hollow site is owned while
 `isVillageUnderSiege`. Old Lori's Cottage is eligible only once `lorisWreckMended`. No
 contact is ever written out of the world by a story flag, so a contact is absent only when
 their room is owned. While a held contract's site is owned its spots go inert, its contact
@@ -2482,13 +2898,79 @@ that it was actually applied, so a fault that silently misses cannot pass as gre
 
 ---
 
+## The sewer
+
+Under the town runs the sewer. The way down is the **storm-drain grate** on the
+Civic Terrace, south-east of the tower door (`TownPlan.stormDrainGrate`, a
+`STORM_DRAIN_GRATE` tile two wide laid into the terrace flagstone). It is a
+hand-built `BuildingEntry` (`taloncrest_storm_drain`, kind `'house'`) added by
+`placeStormDrainGrate` in `OverworldGenerator`, after every pass that writes
+town ground. `assertStormDrainGrateIsClear` throws if the grate stands off the
+terrace flagstone, on the tower base, on the tower door's approach, in or
+beside any doorway (`doorwayKeepClearTiles`), or within a tile of a torch. The
+art is `src/map/tiles/stormDrainGrateTile.ts`.
+
+**Entry.** `DungeonScene.sealedBuildingMessage` asks `stormDrainRefusal`
+(`src/systems/sewer/stormDrainGrate.ts`) with `DungeonScene.stormDrainOpen()`:
+the grate is bolted from below until something opens it, and stays open after.
+`DungeonScene.sewerIsGuided()` decides whether the cellar elf is down there to
+guide the visit; it reaches the interior as `BuildingInteriorWorldContext.sewerGuided`.
+
+**The space.** The interior is the `{ kind: 'sewer', plan }` `InteriorVariant`.
+The sewer is a set of named sections (`SewerSectionId`), each an authored
+layout in `src/map/sewer/sewerLayouts.ts`, parsed by `parseSewerSection` /
+`planSewer` (`sewerPlan.ts`) and built by `GameMap.generateSewer`. The scene
+builds one map per section and keeps them as it keeps a tower's storeys, so a
+culvert between sections is a storey change. Sections join by connections:
+`street_grate` (the ladder up, out through the storm drain's own door),
+`culvert` (into another section) and `tower_cistern` (straight into the tower
+at `TOWER_CISTERN_STOREY`). Only the tower drain is authored; a new section is
+a layout plus its connections. Glyphs: `#` brick, `.` walkway, `~` the main
+channel at full flow, `=` the spillway, `o` the nest basin, `n` the rat nest,
+`@` the ladder, `^` a street grate overhead, `C` the cistern culvert, `A`–`B`
+valves, `r`/`g` fight spawns, `1`–`9` the guide's stops.
+
+**Look.** The sewer is drawn through the dungeon pipeline as the `'sewer'`
+`DungeonFloorThemeId` (`src/map/dungeon/sewerMaterials.ts`; walls fade into
+black like floors 1 and 2). Its materials (`sewer_brick`, `sewer_walkway`,
+`sewer_channel`) are the last rows of the `ground_interior` sheet, so they are
+indoor-only art in level 3's `interiorSpriteGroups`. `GeneratedFloorThemeId`
+keeps any level from declaring itself a sewer. Lighting is
+`SewerLighting` (`src/systems/sewer/sewerLighting.ts`): a baked mask at the
+dark ambient, daylight pools under every street grate, and a light cut round
+each crawler, drawn through `InteriorEncounter.renderDarkness`.
+
+**Play.** `SewerSectionSystem` (`src/systems/sewer/`) runs each section as the
+`InteriorEncounter` on its storey. Water is the river model: channels are
+built dry and flooded from `TownMemory.settledSewerWorks` on every visit,
+because map water is never saved. A channel at full flow cannot be waded and
+its tiles are held shut. Valve wheels are `MashInteraction` presses; `lower`
+drains a channel to a walkable bed, `raise` floods one (the tower drain's sump,
+which carries the rat nest off). Fights spawn through the spawn funnel
+(`quest:storm-drain`) unless already won. The cellar elf is a `SewerGuide`
+(`src/creatures/SewerGuide.ts`): it cannot be killed, leads from stop to stop
+in a latched band, holds at a stop until its `holdsUntil` valve or fight is
+settled, and says its lines from `src/dialog/scripts/scenes/sewerGuide.ts`. The
+cistern culvert is a `tower_culvert` exit fixture whose destination is a
+`PartyTransferRequest`; the floor's `DungeonScene` hands the party from the
+sewer straight into the tower (`handOverBetweenInteriors`) behind the tower's
+own loading screen. Sounds are `SEWER_CUES`, preloaded as the `stormDrain`
+group.
+
+**Dev and gates.** `npm run playtest -- sewer` drops a party with a hire
+straight down the grate (`devEnterSewerAtStart`). `npm run render:sewer` writes
+`preview/missing-cats/sewer/`. `verify:interiors` checks every section's
+geometry, `verify:arrival-load -- --env=sewer` and `--env=cistern` the arrival
+into the sewer and the hand-over into the tower, and
+`verify:environment-sheet-budget` that the sewer's sheet is counted with floor 3.
+
 ## Dev routes
 
 Both are localhost-only, registered in `src/game.ts`.
 
 - **`?townmap`** — `TownMapScene`. The whole overworld on one canvas, two framings
   (town / world), scroll to zoom, drag to pan. Overlays building footprints and names,
-  door tiles, safe radius, circus radius, start tile and the Doomsday escape tile, plus
+  door tiles, safe radius, circus radius and start tile, plus
   a metrics panel. Footprints are re-derived from the grid rather than from
   `OverworldData`, so the overlay survives layout changes untouched.
 - **`?tiles`** — `TilePreviewScene`. Every ground material, plus live-composited

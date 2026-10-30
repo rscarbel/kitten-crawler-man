@@ -3,8 +3,8 @@
  * ledger, a letter, a tally board): its title, where it physically is, and
  * its text.
  *
- * It pages rather than scrolling to a cut-off. Every readable keeps its
- * payload in its last paragraph, so a body too tall for the screen is broken
+ * It pages rather than scrolling to a cut-off. A readable's payload can sit in
+ * any paragraph, the last included, so a body too tall for the screen is broken
  * across as many pages as it takes and advancing walks them. The page count
  * depends on the screen, so it is worked out each frame. Any tap, Space,
  * Enter or the attack key reads on and the last page puts it down; Escape puts it down from anywhere.

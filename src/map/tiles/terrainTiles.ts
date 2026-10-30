@@ -19,6 +19,7 @@ import {
   INTERIOR_WALL,
   LANE_STREET,
   PLAZA_STONE,
+  STORM_DRAIN_GRATE,
   VERGE_GRASS,
   YARD_GRAVEL,
   HIGHLAND_GRASS,
@@ -61,6 +62,7 @@ import {
   paintBackstageClutter,
 } from '../../sprites/art/starlightTent/starlightTentShellArt';
 import { drawCircusDecals } from './circusDecalTiles';
+import { drawStormDrainGrateTile } from './stormDrainGrateTile';
 
 /**
  * Whether a neighbour of an interior wall is floor. Any tile of a town interior
@@ -363,6 +365,13 @@ export function drawTerrainTile(
     case SCREE:
     case BARE_EARTH: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+    // The storm-drain grate, set into the terrace's own flagstone.
+    case STORM_DRAIN_GRATE: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      const westIsGrate = structure[ty]?.[tx - 1]?.type === STORM_DRAIN_GRATE;
+      drawStormDrainGrateTile(ctx, sx, sy, ts, westIsGrate ? 'east' : 'west');
       break;
     }
     case FloorTypeValue.road: {

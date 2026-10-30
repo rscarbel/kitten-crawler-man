@@ -1,4 +1,5 @@
 import { gearModifiers, runStruckHooks } from '../gear/gearHooks';
+import type { MobilityClass } from '../map/mobility';
 import { crawlerTurnsRangedBlow, inkSpoilsBlow } from '../gear/incomingBlows';
 import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
 import type { MobKind } from '../levels/mobKinds';
@@ -50,6 +51,9 @@ import {
   GUARD_KNOCKBACK_TILES,
   isGuardableBlow,
 } from './tactics/blockGuard';
+
+/** What a converted mob rallies on: where it stands, and whether it still stands. */
+export type AllyRallyAnchor = Readonly<Pick<Player, 'x' | 'y' | 'isAlive'>>;
 
 /**
  * The weapon a player-sourced blow was struck with, named so that everything
@@ -427,6 +431,11 @@ export abstract class Mob extends Player {
    */
   get cullMarginTiles(): number {
     return DEFAULT_CULL_MARGIN_TILES;
+  }
+
+  /** Most mobs keep to the floor; one that climbs overrides this. */
+  get mobility(): MobilityClass {
+    return 'walker';
   }
 
   /**
@@ -824,7 +833,7 @@ export abstract class Mob extends Player {
   /**
    * When true this mob hunts players sheltering inside the town safe zone.
    * Ambient mobs leave it false and deaggro at the town line; scripted spawns
-   * (Quill's summons, a bounty encounter lured home) set it so a player cannot
+   * (a bounty encounter lured home) set it so a player cannot
    * simply outrun the fight to the plaza.
    *
    * Only mobs whose `acquireTarget` passes a town-safe-zone predicate consult
@@ -1638,9 +1647,11 @@ export abstract class Mob extends Player {
 
   /**
    * Where a converted mob idles when nothing is left to fight: back within
-   * `radiusPx` of `anchor`, rather than wandering round its old spawn.
+   * `radiusPx` of `anchor`, rather than wandering round its old spawn. The
+   * anchor is a crawler it follows or a fixed spot it holds; a fallen anchor
+   * releases it.
    */
-  allyRally: { readonly anchor: Player; readonly radiusPx: number } | null = null;
+  allyRally: { readonly anchor: AllyRallyAnchor; readonly radiusPx: number } | null = null;
 
   /**
    * Where this creature's eyes sit, for the eye-shine the dungeon's dark
@@ -1912,7 +1923,6 @@ export abstract class Mob extends Player {
         return source.applier !== null && isPartySide(source.applier);
       case 'mob':
       case 'environmental':
-      case 'doomsday':
       case 'wheelPenalty':
       case 'scripted':
         return false;
@@ -2513,6 +2523,7 @@ export abstract class Mob extends Player {
           myTileY,
           goalTileX,
           goalTileY,
+          this.mobility,
           this.pathDistanceBudgetTiles,
           this.isHostile,
         );
@@ -2919,6 +2930,8 @@ export abstract class Mob extends Player {
     if (this.knockbackFramesRemaining > 0 && !this.knockbackStepInProgress) return;
     // A root holds the mob's own feet the same way; a shove still carries it.
     if (this.rootFrames > 0 && !this.knockbackStepInProgress) return;
+    // A climber mid-hop is carried by the hop, not by her own steps.
+    if (this.isCrossingFooting) return;
     const startX = this.x;
     const startY = this.y;
     const step = this.isFlying
@@ -2999,7 +3012,7 @@ export abstract class Mob extends Player {
     // every stairwell tile would refuse the tile it stands on, and freeze it.
     const alreadyInStairwell = this.standsInStairwell();
     const mayStepOnto = (tileX: number, tileY: number): boolean =>
-      map.isWalkableFor(tileX, tileY, this.isHostile) &&
+      map.isWalkableFor(tileX, tileY, this.isHostile, this.mobility) &&
       (alreadyInStairwell || !map.isStairwellTile(tileX, tileY));
     if (dx !== 0) {
       const nextX = this.x + dx;
@@ -3008,7 +3021,9 @@ export abstract class Mob extends Player {
           ? Math.floor((nextX + ts * MOB_COLLISION_FRONT_FRACTION) / ts)
           : Math.floor((nextX + ts * MOB_COLLISION_BACK_FRACTION) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
-      if (mayStepOnto(tileXnext, tileYcur)) this.x = nextX;
+      if (mayStepOnto(tileXnext, tileYcur) && !this.crossesFootingInto(tileXnext, tileYcur)) {
+        this.x = nextX;
+      }
     }
     if (dy !== 0) {
       const nextY = this.y + dy;
@@ -3017,8 +3032,29 @@ export abstract class Mob extends Player {
       // player follows. Without it a mob walks until its waist meets a south
       // wall and stands with its whole lower half on the masonry.
       const tileYnext = Math.floor((nextY + ts * verticalCollisionOffset(dy)) / ts);
-      if (mayStepOnto(tileXcur, tileYnext)) this.y = nextY;
+      if (mayStepOnto(tileXcur, tileYnext) && !this.crossesFootingInto(tileXcur, tileYnext)) {
+        this.y = nextY;
+      }
     }
+  }
+
+  /**
+   * Whether a step into a tile is a climber's hop or squeeze onto another
+   * footing, which then starts in place of the step. A shove never starts
+   * one: it is stopped at the footing's edge instead, the way a wall stops it.
+   */
+  private crossesFootingInto(tileX: number, tileY: number): boolean {
+    const climbing = this.climbing;
+    if (climbing === null || this.map === null) return false;
+    if (this.knockbackStepInProgress || this.separationStepInProgress) {
+      const ts = this.tileSize;
+      const here = this.map.footingAt(
+        Math.floor((this.x + ts * MOB_TILE_CENTER) / ts),
+        Math.floor((this.y + ts * MOB_TILE_CENTER) / ts),
+      );
+      return here !== this.map.footingAt(tileX, tileY);
+    }
+    return climbing.crossInto(this, tileX, tileY);
   }
 
   /** Whether the tile under this mob's centre is part of a stairwell footprint. */
@@ -3085,7 +3121,7 @@ export abstract class Mob extends Player {
    * Whether this mob currently refuses all damage.
    *
    * For a scripted boss hiding behind something the party has to destroy or
-   * do first — Miss Quill behind her capacitor, Big Rooster in his fury, the
+   * do first — Big Rooster in his fury, the
    * Kraken under water — and for bodies that may never be hurt. This is
    * *the* switch: every route into this mob's health asks it, the swung one and
    * the damage-over-time one alike. A shield that guarded only the swing let one
@@ -3099,7 +3135,7 @@ export abstract class Mob extends Player {
   /**
    * Shows the player that a blow was refused rather than missed. Overridden by
    * whichever boss is doing the refusing, because the tell belongs to its own
-   * art — a flare across the tendrils, a crack of the capacitor's field.
+   * character — the Big Rooster's IMMUNE label in his fury, a tower guard's bark.
    */
   protected onDamageBlocked(): void {
     // Nothing to show by default; only a shielded boss has a tell.
@@ -3541,7 +3577,9 @@ export abstract class Mob extends Player {
    * already covers.
    */
   advanceKnockback(): void {
-    if (this.knockbackFramesRemaining <= 0) return;
+    // Held, not spent, through a hop: the hop owns the feet, and the shove
+    // carries it once it lands.
+    if (this.knockbackFramesRemaining <= 0 || this.isCrossingFooting) return;
     const step = knockbackStepPx(this, this.tileSize);
     this.knockbackStepInProgress = true;
     try {
@@ -3594,9 +3632,9 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Damage that arrives outside a swing — a burn, a poison tick, an acid pool,
-   * the doomsday clock. `Player.takeDamage` writes hp and nothing else, so a mob
-   * finished by one of these would hit zero with `justDied` still false — no
+   * Damage that arrives outside a swing — a burn, a poison tick, an acid
+   * pool. `Player.takeDamage` writes hp and nothing else, so a mob finished
+   * by one of these would hit zero with `justDied` still false — no
    * death event, and therefore no gore, no loot, no XP, and a nought-HP body
    * left standing in `mobs` and in the mob grid — unless it goes through here.
    *

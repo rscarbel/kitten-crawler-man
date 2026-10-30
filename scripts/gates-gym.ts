@@ -190,7 +190,7 @@ for (const side of SIDES) {
   let samples = 0;
   for (let y = bounds.y + 1; y < bounds.y + bounds.h; y += RELOAD_SAMPLE_STRIDE_TILES) {
     for (let x = bounds.x + 1; x < bounds.x + bounds.w; x += RELOAD_SAMPLE_STRIDE_TILES) {
-      if (!env.gameMap.isWalkable(x, y)) continue;
+      if (!env.gameMap.isWalkable(x, y, 'walker')) continue;
       if (Math.hypot(x - post.x, y - post.y) < RELOAD_MIN_START_DISTANCE_TILES) continue;
       if (Math.hypot(x - catTileX, y - catTileY) < RELOAD_MIN_START_DISTANCE_TILES) continue;
       const bigRooster = new BigRooster(x, y, TILE_SIZE);
@@ -445,7 +445,11 @@ for (const side of SIDES) {
       if (before !== null && Math.sign(before.vx * after.vx + before.vy * after.vy) < 0)
         bounced = true;
       if (
-        !env.gameMap.isWalkable(Math.floor(after.x / TILE_SIZE), Math.floor(after.y / TILE_SIZE))
+        !env.gameMap.isWalkable(
+          Math.floor(after.x / TILE_SIZE),
+          Math.floor(after.y / TILE_SIZE),
+          'walker',
+        )
       ) {
         entered = true;
       }
@@ -634,12 +638,13 @@ function gymTileAtDistance(
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
       const distance = Math.hypot(x - from.x, y - from.y);
       if (distance < minTiles || distance > maxTiles) continue;
-      if (!env.gameMap.isWalkable(x, y)) continue;
+      if (!env.gameMap.isWalkable(x, y, 'walker')) continue;
       const clear = env.gameMap.hasWalkableLine(
         centre(from.x),
         centre(from.y),
         centre(x),
         centre(y),
+        'walker',
       );
       if (clear) return { x, y };
     }
@@ -768,7 +773,7 @@ function tileClearOfRacks(
   const { bounds } = env.room;
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-      if (!env.gameMap.isWalkable(x, y)) continue;
+      if (!env.gameMap.isWalkable(x, y, 'walker')) continue;
       const clear = rackFronts.every(
         (front) =>
           Math.hypot(front.x / TILE_SIZE - x, front.y / TILE_SIZE - y) >=

@@ -130,7 +130,7 @@ function routeProblems(map: GameMap, route: EscortRoute, start: TilePoint): stri
     if (spacing > ESCORT_WAYPOINT_MAX_SPACING_TILES) {
       problems.push(`waypoint ${index} is ${spacing.toFixed(1)} tiles from the one before`);
     }
-    if (!isStraightWalk(map, previous, waypoint.tile)) {
+    if (!isStraightWalk(map, previous, waypoint.tile, 'walker')) {
       problems.push(
         `no straight walk from (${previous.x},${previous.y}) to waypoint ${index} (${waypoint.tile.x},${waypoint.tile.y})`,
       );
@@ -636,7 +636,7 @@ function verifyRerouteFromUnexpectedGate(check: Check, unusedGateIndex: number):
   const tilesToGreen = (tile: TilePoint): number =>
     greenGate === null ? 0 : Math.hypot(tile.x - greenGate.x, tile.y - greenGate.y);
   check(
-    isStraightWalk(map, midgeTile, guidance.at) ||
+    isStraightWalk(map, midgeTile, guidance.at, 'walker') ||
       tilesToGreen(guidance.at) < tilesToGreen(midgeTile),
     'the waypoint in hand is ahead of her, not behind',
   );

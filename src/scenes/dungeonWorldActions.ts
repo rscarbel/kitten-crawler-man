@@ -1,5 +1,12 @@
 import type { TileRect } from '../map/town/townPlan';
 import type { FloodedPumpRoomIntroBeat } from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomState';
+import type { CaptureScriptActorId } from '../systems/missingCats/captureCutscene';
+
+/**
+ * Who a dungeon's scripts can name besides the active crawler: either crawler,
+ * by kind, and the bodies the capture at the fountain stages for its scene.
+ */
+export type DungeonActorId = CaptureScriptActorId;
 
 /**
  * The changes to the world a cutscene's `run` step can ask `DungeonScene` for,

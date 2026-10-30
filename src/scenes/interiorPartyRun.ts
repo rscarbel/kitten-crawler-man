@@ -2,6 +2,11 @@ import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import type { SaveWriteOutcome } from '../core/save/progressPersistence';
 import { createWheelLedger, type WheelLedger } from '../core/save/WheelLedger';
 import { createAttackCowState, type AttackCowState } from '../core/state/AttackCowState';
+import {
+  createPartySplitState,
+  type PartyLocation,
+  type PartySplitState,
+} from '../core/party/partySplit';
 import { PetNameBook } from '../core/party/petNames';
 import { DaveWhereabouts } from '../systems/DaveGuideSystem';
 import type { AdviceObjective } from '../systems/daveAdvice';
@@ -43,6 +48,8 @@ export interface InteriorStory {
 export interface InteriorPartyRun {
   readonly wheelLedger: WheelLedger;
   readonly attackCowState: AttackCowState;
+  /** The party's formation, read by the interior's party so an away crawler stays away indoors. */
+  readonly partySplit: PartySplitState;
   /** The run's pet names; a pet named indoors is saved by the floor outside. */
   readonly petNames: PetNameBook;
   /** Where Dave was last, so a building's safe room keeps him between visits. */
@@ -50,10 +57,12 @@ export interface InteriorPartyRun {
   readonly story: InteriorStory;
   /**
    * Writes a save now and makes it the one a death or a reload returns to.
-   * A reload resumes on the building's doorstep. Resolves once storage has
-   * answered.
+   * A reload resumes where the floor outside places `resumeAt`: the tile
+   * itself outdoors, a building's doorstep for anywhere indoors, from where
+   * a questline that can stand the building up again takes the party back
+   * inside. Resolves once storage has answered.
    */
-  readonly commitSave: (party: SaveParty) => Promise<SaveWriteOutcome>;
+  readonly commitSave: (party: SaveParty, resumeAt: PartyLocation) => Promise<SaveWriteOutcome>;
   /**
    * Whether the floor outside allows a save right now. A building is no
    * refuge from a fight still running out there — a boss, or an attack on
@@ -69,6 +78,7 @@ export function detachedPartyRun(): InteriorPartyRun {
   return {
     wheelLedger: createWheelLedger(),
     attackCowState: createAttackCowState(),
+    partySplit: createPartySplitState(),
     petNames: new PetNameBook(),
     daveWhereabouts: new DaveWhereabouts(),
     story: {

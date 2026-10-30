@@ -61,7 +61,7 @@ const BRIAR_HOLLOW_SLUGS = [
 
 /** The slugs of every building, per location. A building's id is `<location>_<slug>`. */
 const BUILDING_SLUGS = {
-  taloncrest: [...TALONCREST_PLOT_SLUGS, 'tower', 'circus_tent'],
+  taloncrest: [...TALONCREST_PLOT_SLUGS, 'tower', 'circus_tent', 'storm_drain'],
   briar_hollow: BRIAR_HOLLOW_SLUGS,
   level2: ['goblin_prison'],
 } as const satisfies Partial<Record<BuildingLocation, readonly string[]>>;
@@ -98,6 +98,9 @@ export type PlannedBuildingId = (typeof PLANNED_BUILDING_IDS)[number];
 
 export const TOWN_TOWER_ID = buildingId('taloncrest', 'tower');
 
+/** The storm-drain grate on the Civic Terrace, the way down into the sewer under the town. */
+export const STORM_DRAIN_ID = buildingId('taloncrest', 'storm_drain');
+
 /** Every enterable building inside Taloncrest's wall: the sprite buildings and the tower. */
 export type TownBuildingId = PlannedBuildingId | typeof TOWN_TOWER_ID;
 
@@ -131,6 +134,7 @@ const BUILDING_DISPLAY_NAMES = {
   taloncrest_mill_farm: "Miller's Farm",
   taloncrest_tower: 'Town Center Tower',
   taloncrest_circus_tent: 'The Starlight Tent',
+  taloncrest_storm_drain: 'The Storm Drain',
   briar_hollow_hall: "Mayor's Hall",
   briar_hollow_forge: 'Ironwhisker Forge',
   briar_hollow_cookhouse: "Pipkin's Cookhouse",

@@ -174,23 +174,6 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
       ],
     },
   },
-  disaster_averted: {
-    id: 'disaster_averted',
-    name: 'Disaster Averted',
-    description: 'Stop the catastrophe before it levels the city.',
-    playerType: 'both',
-    reward: {
-      rarity: 'Rare',
-      fixed: [{ kind: 'item', id: 'hourglass_charm', quantity: 1, to: 'cat' }],
-    },
-  },
-  out_before_the_fall: {
-    id: 'out_before_the_fall',
-    name: 'Out Before the Fall',
-    description: 'Escape the city before the countdown runs out.',
-    playerType: 'both',
-    reward: { rarity: 'Legendary' },
-  },
   on_retainer: {
     id: 'on_retainer',
     name: 'On Retainer',

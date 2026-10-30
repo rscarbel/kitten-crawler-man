@@ -131,7 +131,7 @@ export class SafeRoomSystem implements GameSystem {
       const canStand = (tileX: number, tileY: number): boolean => {
         if (tileX === home.x && tileY === home.y) return true;
         if (reserved.has(SafeRoomSystem.tileKey(tileX, tileY))) return false;
-        return gameMap.isWalkable(tileX, tileY);
+        return gameMap.isWalkable(tileX, tileY, 'walker');
       };
       const id = safeRoomIdIn(scope, safeRoomIndex);
       this.entries.push({

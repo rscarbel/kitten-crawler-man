@@ -58,6 +58,15 @@ import {
 } from '../sprites/brandonSprite';
 import { BRANDON_SALUTE_MS, BRANDON_WALK_FRAMES } from '../sprites/brandonTiming';
 import {
+  BAGGI_TILES_PER_WALK_CYCLE,
+  baggiWalkFrames,
+  drawBaggiSprite,
+  prewarmBaggiSprite,
+} from '../sprites/baggiSprite';
+import type { BaggiRole } from '../sprites/art/baggiFigure';
+import { ELF_TILES_PER_WALK_CYCLE, drawElfSprite, prewarmElf } from '../sprites/elfSprite';
+import { WALK_FRAMES } from '../sprites/art/human/timing';
+import {
   STEVE_AIM_FPS,
   STEVE_AIM_FRAMES,
   STEVE_RELOAD_DURATION_MS,
@@ -197,6 +206,38 @@ function loriRow(action: CitizenAction): LoriRow {
       return unhandledAction(action);
   }
 }
+
+/** Baggi has no work row of her own: at work she stands with her hands folded on the apron. */
+function baggiRole(action: CitizenAction): BaggiRole {
+  switch (action) {
+    case 'walk':
+      return 'walk';
+    case 'talk':
+      return 'talk';
+    case 'idle':
+    case 'work':
+      return 'idle';
+    default:
+      return unhandledAction(action);
+  }
+}
+
+/** The elf paints no talk or work row of its own: it stands at rest for both. */
+function elfWalks(action: CitizenAction): boolean {
+  switch (action) {
+    case 'walk':
+      return true;
+    case 'idle':
+    case 'talk':
+    case 'work':
+      return false;
+    default:
+      return unhandledAction(action);
+  }
+}
+
+/** The cellar elf never casts in town; its painter's cast progress stays at rest. */
+const ELF_AT_REST_CAST = 0;
 
 /** The row a figure stands in for a routine pose, falling back on its rest row. */
 function poseRow<Row extends string>(
@@ -340,6 +381,41 @@ export const BESPOKE_RESIDENT_FIGURES = {
     prewarm: prewarmBrandon,
     walkCyclePx: (tileSize) => BRANDON_WALK_TILES_PER_CYCLE * tileSize,
     walkFrames: BRANDON_WALK_FRAMES,
+    speechStyle: 'townsfolkMasculine',
+    routinePoses: NO_ROUTINE_ROWS,
+  },
+  baggi: {
+    draw: (ctx, sx, sy, tileSize, state) =>
+      drawBaggiSprite(ctx, sx, sy, tileSize, {
+        role: baggiRole(state.action),
+        facingX: state.facingX,
+        facingY: state.facingY,
+        walkPhase: state.walkPhase,
+        timeSeconds: clockSeconds(state),
+      }),
+    prewarm: prewarmBaggiSprite,
+    walkCyclePx: (tileSize) => BAGGI_TILES_PER_WALK_CYCLE * tileSize,
+    walkFrames: baggiWalkFrames(),
+    speechStyle: 'townsfolkFeminine',
+    routinePoses: NO_ROUTINE_ROWS,
+  },
+  cellar_elf: {
+    draw: (ctx, sx, sy, tileSize, state) =>
+      drawElfSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        state.walkPhase,
+        elfWalks(state.action),
+        ELF_AT_REST_CAST,
+        state.facingX,
+        state.facingY,
+        state.loopOffsetSeconds ?? 0,
+      ),
+    prewarm: prewarmElf,
+    walkCyclePx: (tileSize) => ELF_TILES_PER_WALK_CYCLE * tileSize,
+    walkFrames: WALK_FRAMES,
     speechStyle: 'townsfolkMasculine',
     routinePoses: NO_ROUTINE_ROWS,
   },

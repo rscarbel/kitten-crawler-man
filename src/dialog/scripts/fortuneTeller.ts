@@ -1,20 +1,20 @@
 /**
- * The town's two readings. Given a snapshot of quest progress, a reader draws
- * one fortune. Most draws are whimsical general fortunes; some are
- * quest-reactive omens that nod at what the player is (or should be) doing,
- * so the mystic feels like she actually sees the town's troubles.
- * `FortuneTable` owns the coin cost and the card flip — this module only
- * picks the words.
+ * The town's two readings. A reader draws one fortune: most are their general
+ * pool, and some are reactive readings that see what "A Cat Always Comes Back"
+ * has come to, so a reader seems to know the town's trouble. Each reading
+ * holds one fact. `FortuneTable` owns the coin cost and the card flip; this
+ * module only picks the words.
  *
  * Two people read in this town and they are not the same act. Madame Voss works
  * the plaza with cards and showmanship. Old Lori reads in her own kitchen for
- * less, has no cards, and tells you what she actually sees — which is mostly
+ * less, has no cards, and tells you what she actually sees, which is mostly
  * about the bad year and the ruins it left.
  */
 
 import { pickLine, speakerLines } from '../line';
 import type { BarkLine, NonEmpty } from '../line';
 import type { TownDialogContext } from '../../systems/townDialog';
+import { phaseReached } from '../../core/quests/missingCatsProgress';
 
 const voss = speakerLines('voss');
 const lori = speakerLines('lori');
@@ -22,6 +22,20 @@ const lori = speakerLines('lori');
 interface ReactiveFortune {
   readonly when: (ctx: TownDialogContext) => boolean;
   readonly lines: NonEmpty<BarkLine>;
+}
+
+/** Whether the town's cats are still being taken: from the first one gone until the party is split. */
+function catsBeingTaken(ctx: TownDialogContext): boolean {
+  return !phaseReached(ctx.missingCats, 'captured');
+}
+
+/** Whether Belle is in the tower and the cats are not yet home. */
+function belleInTheTower(ctx: TownDialogContext): boolean {
+  return phaseReached(ctx.missingCats, 'captured') && !phaseReached(ctx.missingCats, 'aftermath');
+}
+
+function catsHome(ctx: TownDialogContext): boolean {
+  return phaseReached(ctx.missingCats, 'aftermath');
 }
 
 export const VOSS_GENERAL_FORTUNES: NonEmpty<BarkLine> = [
@@ -51,54 +65,51 @@ export const VOSS_GENERAL_FORTUNES: NonEmpty<BarkLine> = [
   ),
 ];
 
-export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
+const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
   {
-    when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
+    when: catsBeingTaken,
     lines: [
       voss.bark(
-        'The tower burns in my vision, dear, and its heart beats far too fast. Still it, or we are all cinders together.',
-      ),
-      voss.bark(
-        'No cards tonight — only the smell of smoke and the ticking of some terrible clock. Run, child, if you have any sense left in you.',
+        'The Queen of Cups, with a feather lying across her. Something in this town is being carried off, dear, and it does not struggle.',
       ),
     ],
   },
   {
-    when: (ctx) => ctx.murder === 'night_attack' || ctx.murder === 'cult_hideout',
+    when: (ctx) => ctx.missingCats.phase === 'blame',
     lines: [
       voss.bark(
-        'A friendly face hides a hungry blade tonight, dear. Trust slowly, if you would keep your throat.',
-      ),
-      voss.bark(
-        'Blood on the cobbles, and more of it coming. The killer is nearer than this town believes.',
+        'Every card points down tonight, child. Cellars, drains, the dark under the street. Whether the guilty are down there, the cards decline to say.',
       ),
     ],
   },
   {
-    // The stage alone, not `quillNamed`. That flag latches when the letter
-    // naming the schoolteacher is read on the street, and only a checkpoint
-    // rewind clears it, so a fortune keyed to it would keep urging the player
-    // after a woman they have already killed — every stage past
-    // `confrontation` is a stage where she is dead.
-    when: (ctx) => ctx.murder === 'confrontation',
+    when: (ctx) => ctx.missingCats.phase === 'stakeout',
     lines: [
       voss.bark(
-        'The knife has a name at last, dear. Cut the thread before it wraps the whole town round its fist.',
+        'Dusk, a counter, and wings over a roof. Sit very still, my dear, and you will see it.',
       ),
     ],
   },
   {
-    when: (ctx) => ctx.doomsday === 'complete',
+    when: belleInTheTower,
     lines: [
       voss.bark(
-        'I see a hero where a stranger once stood. The cards have never once shown me anything so bright, child.',
+        'Your little cat is in the Tower card tonight, dear, curled at the foot of it, and the door is drawn shut.',
+      ),
+    ],
+  },
+  {
+    when: catsHome,
+    lines: [
+      voss.bark(
+        'Every cat in town sits on the Hearth card tonight, child. In thirty years I have never once drawn it full.',
       ),
     ],
   },
 ];
 
-// Roughly half of readings reach for a quest-reactive omen when one applies; the
-// rest are whimsical, so the mystic doesn't parrot the same warning every draw.
+// Roughly half of readings reach for a reactive one when one applies; the
+// rest come from the general pool, so a reader doesn't repeat the same omen every draw.
 const REACTIVE_DRAW_CHANCE = 0.5;
 
 function drawFrom(
@@ -106,11 +117,11 @@ function drawFrom(
   reactive: ReadonlyArray<ReactiveFortune>,
   ctx: TownDialogContext,
 ): string {
-  const applicable = reactive.filter((fortune) => fortune.when(ctx));
-  if (applicable.length > 0 && Math.random() < REACTIVE_DRAW_CHANCE) {
-    const [first, ...rest] = applicable;
-    const pool: NonEmpty<ReactiveFortune> = [first, ...rest];
-    const chosen = pickLine(pool, Math.random() * pool.length);
+  const matching = reactive.filter((fortune) => fortune.when(ctx));
+  if (matching.length > 0 && Math.random() < REACTIVE_DRAW_CHANCE) {
+    const [first, ...rest] = matching;
+    const applicable: NonEmpty<ReactiveFortune> = [first, ...rest];
+    const chosen = pickLine(applicable, Math.random() * applicable.length);
     return pickLine(chosen.lines, Math.random() * chosen.lines.length).paragraphs[0];
   }
   return pickLine(general, Math.random() * general.length).paragraphs[0];
@@ -156,55 +167,40 @@ export const LORI_GENERAL_READINGS: NonEmpty<BarkLine> = [
   ),
 ];
 
-export const LORI_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
+const LORI_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
   {
-    when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
+    when: catsBeingTaken,
     lines: [
       lori.bark(
-        'The humming has stopped, dearie. Forty years it hummed and now it has not. Whatever you are going to do, do it running.',
-      ),
-      lori.bark('No reading tonight. Get out of my kitchen and get up that tower.'),
-    ],
-  },
-  {
-    when: (ctx) => ctx.doomsday === 'complete',
-    lines: [
-      lori.bark(
-        'It hums again, quieter now. Whatever you put back in that box, dearie, it is sleeping.',
-      ),
-      lori.bark(
-        'First time in forty years I have nothing to warn you about, and I do not rightly know what to do with my hands.',
+        'I see a high window, dearie, and something with wings at it. The cards will not show me the rest.',
       ),
     ],
   },
   {
-    when: (ctx) => ctx.murder === 'confrontation',
+    when: (ctx) => ctx.missingCats.phase === 'blame',
+    lines: [
+      lori.bark('Look up, dearie. Everybody in this town is staring down a hole for those cats.'),
+    ],
+  },
+  {
+    when: belleInTheTower,
     lines: [
       lori.bark(
-        'She has a name now, dearie, and a name is a handle. Take hold of it before she sets it back down.',
-      ),
-      lori.bark(
-        'The one doing the killing is not the one who wants it done. Do not stop at the knife.',
+        'Your little one is up high and cross about it, dearie. She is not hurt. I would know.',
       ),
     ],
   },
   {
-    when: (ctx) =>
-      ctx.murder === 'night_attack' ||
-      ctx.murder === 'cult_hideout' ||
-      ctx.murder === 'investigation',
+    when: catsHome,
     lines: [
       lori.bark(
-        'No beast leaves heads without bodies, dearie. That takes a recipe, and somebody down there is following it proper.',
-      ),
-      lori.bark(
-        'Look to the low streets, not the plaza, dearie. The plaza never had anything worth taking.',
+        'Thimble is asleep on my reading cloth and I am not moving her for any fortune. You will be fine, dearie. Go on.',
       ),
     ],
   },
 ];
 
-/** Lori's reading — the same machinery, a darker and more specific voice. */
+/** Lori's reading: the same draw, a darker and more specific voice. */
 export function drawLoriReading(ctx: TownDialogContext): string {
   return drawFrom(LORI_GENERAL_READINGS, LORI_REACTIVE_READINGS, ctx);
 }

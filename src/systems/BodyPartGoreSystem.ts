@@ -618,7 +618,7 @@ export class BodyPartGoreSystem implements GameSystem {
           if (!onRing) continue;
           const tileX = originTileX + dx;
           const tileY = originTileY + dy;
-          if (!this.map.isWalkable(tileX, tileY)) continue;
+          if (!this.map.isWalkable(tileX, tileY, 'walker')) continue;
           const centerX = (tileX + TILE_CENTER_RATIO) * tileSize;
           const centerY = (tileY + TILE_CENTER_RATIO) * tileSize;
           const distSq = (centerX - x) ** 2 + (centerY - y) ** 2;
@@ -681,7 +681,7 @@ export class BodyPartGoreSystem implements GameSystem {
     const maxTileY = Math.floor((y + radius) / tileSize);
     for (let tileY = minTileY; tileY <= maxTileY; tileY++) {
       for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
-        if (!this.map.isWalkable(tileX, tileY)) return false;
+        if (!this.map.isWalkable(tileX, tileY, 'walker')) return false;
       }
     }
     return true;

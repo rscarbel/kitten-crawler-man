@@ -200,7 +200,8 @@ export interface RenderContext {
   gameMap: GameMap;
   pm: PlayerManager;
   active: HumanPlayer | CatPlayer;
-  inactive: HumanPlayer | CatPlayer;
+  /** The crawler not being steered, or null while it is away on another map. */
+  inactive: HumanPlayer | CatPlayer | null;
   mobs: Mob[];
   mobGrid: SpatialGrid<Mob>;
   /** Ambient overworld citizens; empty/absent off the town map. */
@@ -293,6 +294,8 @@ export interface RenderContext {
   lightShining?: (tileX: number, tileY: number) => boolean;
   /** Whether a crawler is out of sight (inside a bathroom stall) and must not be drawn this frame. */
   isCrawlerHidden?: (crawler: HumanPlayer | CatPlayer) => boolean;
+  /** Whether a script has taken a mob out of sight, so it must not be drawn this frame. */
+  isMobHidden?: (mob: Mob) => boolean;
   /** Fixtures a floor system owns that sort with the bodies, such as the bathroom sinks' running water. */
   sortedFixtures?: Iterable<TownPropRenderable>;
   /** Absent in scenes no script kills a crawler in. */
@@ -586,6 +589,7 @@ export class RenderPipeline {
     }
 
     for (const mob of visibleMobs) {
+      if (rc.isMobHidden?.(mob) === true) continue;
       const margin = TILE_SIZE * mob.cullMarginTiles;
       if (
         mob.x < camX - margin ||
@@ -596,7 +600,7 @@ export class RenderPipeline {
         continue;
       }
       const e = this._getEntry();
-      e.sortY = mob.y + ENTITY_SORT_Y_OFFSET;
+      e.sortY = mob.depthY + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_MOB;
       e.entity = mob;
       e.chestRef = null;
@@ -610,9 +614,9 @@ export class RenderPipeline {
     }
 
     for (const player of [inactive, active]) {
-      if (rc.isCrawlerHidden?.(player) === true) continue;
+      if (player === null || rc.isCrawlerHidden?.(player) === true) continue;
       const e = this._getEntry();
-      e.sortY = player.y + ENTITY_SORT_Y_OFFSET;
+      e.sortY = player.depthY + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_PLAYER;
       e.entity = player;
       e.chestRef = null;

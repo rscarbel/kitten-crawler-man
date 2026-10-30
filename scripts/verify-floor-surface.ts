@@ -121,7 +121,7 @@ function materialMismatches(map: GameMap): string[] {
   const problems: string[] = [];
   map.structure.forEach((row, y) => {
     row.forEach((tile, x) => {
-      if (!isWalkableTileType(tile)) return;
+      if (!isWalkableTileType(tile, 'walker')) return;
       const resolved = groundMaterialUnder(palette, map.structure, x, y);
       const regionMaterial = map.regionCharacters.floorMaterialAt(x, y);
       const wanted =
@@ -322,7 +322,7 @@ function checkFeatures(map: GameMap, totals: Totals): void {
       if (surface.isPuddleAt(x, y)) {
         totals.puddleTiles++;
         check(
-          isWalkableTileType(map.structure[y][x]),
+          isWalkableTileType(map.structure[y][x], 'walker'),
           `puddle on (${x},${y}), which is not walkable`,
         );
         const kind = surface.featureAt(x, y)?.kind;
@@ -403,7 +403,7 @@ function checkWearFollowsRoutes(map: GameMap, surface: FloorSurface, totals: Tot
       y >= top &&
       x < left + w &&
       y < top + h &&
-      isWalkableTileType(map.structure[y][x]);
+      isWalkableTileType(map.structure[y][x], 'walker');
     const ends = room.doorways.map((doorway) => doorway.tile).filter((t) => walkable(t.x, t.y));
     if (ends.length < 2) continue;
 

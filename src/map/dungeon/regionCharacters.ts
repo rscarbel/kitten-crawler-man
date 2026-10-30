@@ -11,7 +11,7 @@ import {
   type HallwayRegion,
   type Zone,
 } from '../regionMap';
-import type { DungeonFloorThemeId } from './floorTheme';
+import type { GeneratedFloorThemeId } from './floorTheme';
 import {
   HALLWAY_CHARACTERS_BY_FLOOR,
   ROOM_CHARACTERS_BY_FLOOR,
@@ -153,7 +153,7 @@ export function pickWeighted<T extends { readonly weight: number }>(
 
 /** Rolls the character of a populated room in `zone` on `floor`. */
 export function rollRoomCharacter(
-  floor: DungeonFloorThemeId,
+  floor: GeneratedFloorThemeId,
   zone: Zone,
   rng: Rng,
 ): RoomCharacterAssignment | null {
@@ -175,7 +175,7 @@ export function rollRoomCharacter(
  * hallway character.
  */
 export function rollHallwayCharacter(
-  floor: DungeonFloorThemeId,
+  floor: GeneratedFloorThemeId,
   hallway: HallwayRegion,
   rng: Rng,
 ): RegionAssignment | null {

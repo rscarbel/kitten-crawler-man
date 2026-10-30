@@ -129,7 +129,10 @@ export const BUNTING_SPANS: ReadonlyArray<PlannedBunting> = [
  * the nearest building is about three tiles from either end — so `drawLaundryLine`
  * stands its own poles instead of assuming there is something there to tie to.
  */
-export const LAUNDRY_ALLEY_NAMES: ReadonlyArray<string> = ['club service alley', 'murder alley'];
+export const LAUNDRY_ALLEY_NAMES: ReadonlyArray<string> = [
+  'club service alley',
+  'low quarter alley',
+];
 
 /**
  * How far down an alley from its north end each line hangs. Both alleys are ten

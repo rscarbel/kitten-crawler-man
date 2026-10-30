@@ -59,7 +59,7 @@ import {
   prewarmHumanSprite,
   residentViewSpans,
 } from '../src/sprites/humanSprite.js';
-import { activeCatFigure, prewarmCatSprite, RESIDENT_VIEW_ROWS } from '../src/sprites/catSprite.js';
+import { RESIDENT_VIEW_ROWS } from '../src/sprites/catSprite.js';
 import { mulberry32 } from '../src/sprites/person/rng.js';
 
 installCanvasGlobals();
@@ -222,11 +222,16 @@ const SCENARIOS: readonly Scenario[] = [
   },
 ];
 
-interface Crawler {
-  readonly name: string;
-  readonly build: () => Player;
+/** A crawler built for one measurement, with the figure their sprite draws through. */
+interface BuiltCrawler {
+  readonly player: Player;
   readonly figure: () => FigureDef;
   readonly prewarm: () => void;
+}
+
+interface Crawler {
+  readonly name: string;
+  readonly build: () => BuiltCrawler;
   /** The rows the sprite holds warm from every draw. */
   readonly residentRows: readonly string[];
   /** Plays the scenarios of picking things up and putting them down. */
@@ -251,28 +256,33 @@ function humanHolding(set: ArmedMotionSet): HumanPlayer {
   return human;
 }
 
+function humanBuilt(player: HumanPlayer): BuiltCrawler {
+  return { player, figure: activeHumanFigure, prewarm: prewarmHumanSprite };
+}
+
 const CRAWLERS: readonly Crawler[] = [
   {
     name: 'The human',
-    build: () => new HumanPlayer(0, 0, TILE_SIZE),
-    figure: activeHumanFigure,
-    prewarm: prewarmHumanSprite,
+    build: () => humanBuilt(new HumanPlayer(0, 0, TILE_SIZE)),
     residentRows: residentViewSpans('unarmed').map((span) => span.row),
     holds: false,
   },
   ...ARMED_MOTION_SETS.map((set) => ({
     name: `The human with a ${set} weapon out`,
-    build: () => humanHolding(set),
-    figure: activeHumanFigure,
-    prewarm: prewarmHumanSprite,
+    build: () => humanBuilt(humanHolding(set)),
     residentRows: residentViewSpans(set).map((span) => span.row),
     holds: false,
   })),
   {
     name: 'The cat',
-    build: () => new CatPlayer(0, 0, TILE_SIZE),
-    figure: activeCatFigure,
-    prewarm: prewarmCatSprite,
+    build: () => {
+      const cat = new CatPlayer(0, 0, TILE_SIZE);
+      return {
+        player: cat,
+        figure: () => cat.appearance.figure,
+        prewarm: () => cat.appearance.prewarm(),
+      };
+    },
     residentRows: RESIDENT_VIEW_ROWS,
     holds: true,
   },
@@ -316,8 +326,9 @@ function megabytes(def: FigureDef): number {
 function measure(crawler: Crawler, scenario: Scenario, framesPerUpdate: number): Measured {
   Math.random = mulberry32(RANDOM_SEED);
   flushFigureFrameCache();
-  const player = crawler.build();
-  crawler.prewarm();
+  const built = crawler.build();
+  const { player } = built;
+  built.prewarm();
   // Standing in view while the scene's warm-up drains, as he is in play: a
   // queue left to drain with nothing drawn sweeps its own first rows before
   // the last ones land.
@@ -355,11 +366,11 @@ function measure(crawler: Crawler, scenario: Scenario, framesPerUpdate: number):
       player.render(ctx, player.x, player.y, TILE_SIZE);
       const stats = getFigureCacheStats();
       const firstFrameAfterFlush = tick === scenario.flushAt && frame === 0;
-      if (firstFrameAfterFlush) unaskedAfterFlush = unaskedRows(crawler);
+      if (firstFrameAfterFlush) unaskedAfterFlush = unaskedRows(crawler, built);
       if (!counted) continue;
       if (stats.misses > 0) missFrames++;
       directDraws += stats.directDraws;
-      peakMegabytes = Math.max(peakMegabytes, megabytes(crawler.figure()));
+      peakMegabytes = Math.max(peakMegabytes, megabytes(built.figure()));
     }
   }
   return {
@@ -367,12 +378,12 @@ function measure(crawler: Crawler, scenario: Scenario, framesPerUpdate: number):
     unaskedAfterFlush,
     directDraws,
     peakMegabytes,
-    endMegabytes: megabytes(crawler.figure()),
+    endMegabytes: megabytes(built.figure()),
   };
 }
 
-function unaskedRows(crawler: Crawler): number {
-  const def = crawler.figure();
+function unaskedRows(crawler: Crawler, built: BuiltCrawler): number {
+  const def = built.figure();
   return crawler.residentRows.filter(
     (row) => !touchFigureState(def, row) && !isFigureStateQueued(def, row),
   ).length;

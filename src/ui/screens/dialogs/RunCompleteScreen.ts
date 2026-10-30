@@ -1,7 +1,7 @@
 /**
- * The end of the game: the party is down the escape stairwell and out of the
- * city. Light rays, fireworks and confetti behind a panel whose numbers count
- * up row by row, then a choice to keep walking the town or leave for the menu.
+ * The end of the game. Light rays, fireworks and confetti behind a panel whose
+ * numbers count up row by row, then a choice to keep walking the town or leave
+ * for the menu.
  *
  * The timeline advances one step per render frame, because the screen owns
  * the world beneath it, which is halted.
@@ -16,9 +16,8 @@
  *   nothing.
  */
 
-import { petWords, type PetNames, type PetWords } from '../../../core/party/petNames';
-import type { AchievementManager } from '../../../core/progression/AchievementManager';
-import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
+import type { PetWords } from '../../../core/party/petNames';
+import { formatPlayTime } from '../../../core/progression/GameStats';
 import { centerIn, splitH, splitV, type Rect } from '../../core/geom';
 import type { Surface, Ui } from '../../core/UiRoot';
 import { withAlpha } from '../../theme/color';
@@ -74,86 +73,14 @@ export interface RunSummary {
   readonly topKills: ReadonlyArray<readonly [string, number]>;
 }
 
-/** How many creatures the "most slain" block names. */
-export const RUN_SUMMARY_TOP_KILLS = 5;
-
-/**
- * Achievements the party holds between them, out of every achievement there is.
- * Counted across both crawlers because several are one crawler's alone, and a
- * party that earned all of them should read as having earned all of them.
- */
-export function countPartyAchievements(
-  human: AchievementManager,
-  cat: AchievementManager,
-): { unlocked: number; total: number } {
-  const all = human.getAllAchievements();
-  const unlocked = all.filter(({ def, unlocked }) => unlocked || cat.isUnlocked(def.id)).length;
-  return { unlocked, total: all.length };
-}
-
-export function buildRunSummary(input: {
-  stats: GameStats;
-  humanLevel: number;
-  catLevel: number;
-  deinonychusLevel: number | null;
-  petNames: PetNames;
-  achievements: { unlocked: number; total: number };
-}): RunSummary {
-  const { stats, achievements } = input;
-  return {
-    framesPlayed: stats.framesPlayed,
-    deaths: stats.deaths,
-    damageDealt: stats.damageDealt,
-    damageTaken: stats.damageTaken,
-    potionsUsed: stats.potionsUsed,
-    goldEarned: stats.goldEarned,
-    achievementsUnlocked: achievements.unlocked,
-    achievementsTotal: achievements.total,
-    humanLevel: input.humanLevel,
-    catLevel: input.catLevel,
-    deinonychusLevel: input.deinonychusLevel,
-    deinonychusWords: petWords(input.petNames, 'deinonychus'),
-    totalKills: stats.totalKills,
-    bossesDefeated: stats.bossesDefeated,
-    mercenariesHired: stats.mercenariesHired,
-    mercenariesLost: stats.mercenariesLost,
-    deinonychusPets: stats.deinonychusPets,
-    cowPets: stats.cowPets,
-    midgePets: stats.midgePets,
-    topKills: stats.topKills(RUN_SUMMARY_TOP_KILLS),
-  };
-}
-
 /** What the two buttons do; the scene owns both routes. */
 export interface RunCompleteHandlers {
   onKeepExploring: () => void;
   onMainMenu: () => void;
 }
 
-/**
- * Ends the run: whoever cannot come down the stairs is settled first, so the
- * save does not record them standing; then achievements, so the screen's count
- * includes the one for escaping; then the save, so a player who closes the tab
- * on the celebration still has the finished run on disk; then the screen.
- */
-export function finishRun(
-  screen: Pick<RunCompleteScreen, 'activate'>,
-  steps: {
-    settleParty: () => void;
-    unlockAchievements: () => void;
-    save: () => void;
-    summarize: () => RunSummary;
-    handlers: RunCompleteHandlers;
-  },
-): void {
-  steps.settleParty();
-  steps.unlockAchievements();
-  steps.save();
-  screen.activate(steps.summarize(), steps.handlers);
-}
-
 const HEADLINE = 'CONGRATULATIONS';
-const SUBTITLE = 'You escaped the city.';
+const SUBTITLE = 'You made it through.';
 const CAPTION = 'Run complete — progress saved.';
 const RUN_COLUMN_TITLE = 'THE RUN';
 const PARTY_COLUMN_TITLE = 'THE PARTY';

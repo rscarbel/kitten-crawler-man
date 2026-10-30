@@ -9,8 +9,8 @@
  * The Skeleton Lord's design is *open*: a robe framing a lit ribcage, and the
  * negative space between the ribs is the whole read. The Lich is the opposite —
  * a closed, near-black column of cloth with nothing showing but a jaw, two eye
- * points and a pair of hands. It has spent weeks impersonating a dead Hawkfolk
- * magistrate, signing his letters, and it still wears the office: a clerk's
+ * points and a pair of hands. It has governed the town from the tower for
+ * years, signing its proclamations, and it still wears the office: a clerk's
  * stole down the chest, a frayed sash, a wax seal on a cord, cuffs stained with
  * the ink it forges in.
  *
@@ -91,7 +91,7 @@ interface Ramp {
 }
 
 /**
- * Rotted magistrate's wool. Near-black with a cold blue-green cast, because a
+ * Rotted clerk's wool. Near-black with a cold blue-green cast, because a
  * true black has nowhere left to go when a fold has to be darker than the plane
  * beside it.
  */
@@ -129,7 +129,7 @@ const VOID = '#020304';
 /** Iron-gall ink, blue-black, on the cuffs and blotted down the stole. */
 const INK = '#131832';
 
-/** The magistrate's seal, still on its cord: dull oxblood wax. */
+/** The Warden's seal, still on its cord: dull oxblood wax. */
 const WAX_DARK = '#3f111a';
 const WAX_MID = '#71212d';
 const WAX_LIGHT = '#963a47';
@@ -849,7 +849,7 @@ function paintStole(paint: PaintContext): void {
   }
 }
 
-/** The frayed sash at the waist, and the magistrate's seal hanging off it. */
+/** The frayed sash at the waist, and the Warden's seal hanging off it. */
 function paintSashAndSeal(paint: PaintContext): void {
   const { ctx, rig, view, pose } = paint;
   const half = ROBE_CHEST_HALF * view.girth * 1.15;

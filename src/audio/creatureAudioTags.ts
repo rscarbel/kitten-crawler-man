@@ -34,7 +34,6 @@ export type CreatureAudioTag =
   | 'merc_archer'
   | 'merc_earth_elemental'
   | 'merc_medic'
-  | 'miss_quill'
   | 'deinonychus'
   | 'necromancer'
   | 'raised_ratkin'

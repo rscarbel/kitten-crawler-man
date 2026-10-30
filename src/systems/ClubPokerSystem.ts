@@ -12,6 +12,8 @@
  */
 
 import type { Player } from '../Player';
+import { CatAppearance } from '../sprites/catSprite';
+import type { SeatAvatar } from '../ui/casino/pokerSeat';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/party/partyCoins';
 import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
 import { copyPokerReads, type CasinoState, type PokerReads } from '../core/club/CasinoState';
@@ -968,7 +970,7 @@ export class ClubPokerSystem {
     if (seat === PLAYER_SEAT && occupantId !== null) {
       return {
         name: PLAYER_NAME,
-        avatar: { kind: 'crawler', crawler: crawlerOf(active) },
+        avatar: crawlerAvatarOf(active),
         tilted: false,
       };
     }
@@ -1041,8 +1043,11 @@ function actionCue(kind: PokerActionKind, amount: number, bigBlind: number): Pok
   }
 }
 
-function crawlerOf(player: Player): 'human' | 'cat' {
-  return 'crawlerKind' in player && player.crawlerKind === 'cat' ? 'cat' : 'human';
+function crawlerAvatarOf(player: Player): SeatAvatar {
+  if ('appearance' in player && CatAppearance.isAppearance(player.appearance)) {
+    return { kind: 'crawler', crawler: 'cat', appearance: player.appearance };
+  }
+  return { kind: 'crawler', crawler: 'human' };
 }
 
 function tierCardHeight(ui: Ui): number {

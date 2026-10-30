@@ -109,7 +109,7 @@ export function mercenaryDeskSurface(opts: MercenaryDeskScreenOptions): Surface 
 
 function entryTrailing(entry: MercenaryDeskEntry): string {
   if (entry.underContract) return HIRED_TAG;
-  return entry.template.price.toLocaleString('en-US');
+  return entry.fee.toLocaleString('en-US');
 }
 
 function portraitWidth(ui: Ui): number {
@@ -264,7 +264,7 @@ function renderPane(
   text(ui, kindRow, { text: `${template.species} · ${template.role}`, role: 'caption' });
 
   text(ui, priceRow, {
-    text: entry.underContract ? UNDER_CONTRACT : `${template.price.toLocaleString('en-US')} coins`,
+    text: entry.underContract ? UNDER_CONTRACT : `${entry.fee.toLocaleString('en-US')} coins`,
     role: entry.underContract ? 'success' : 'accent',
   });
   renderStats(ui, inset(stats, { t: space.xs }), opts.id, template);
@@ -282,7 +282,7 @@ function renderPane(
   }
   if (!entry.underContract) {
     if (entry.hireNote !== null) text(ui, noteRect, { text: entry.hireNote, role: 'muted' });
-    const label = `Hire: ${template.price.toLocaleString('en-US')}`;
+    const label = `Hire: ${entry.fee.toLocaleString('en-US')}`;
     refusableButton(
       ui,
       { ...actionRow, w: Math.min(actionRow.w, size.control * HIRE_BUTTON_CONTROLS) },
@@ -334,7 +334,7 @@ function paneActions(opts: MercenaryDeskScreenOptions, view: MercenaryDeskView):
       leave,
       {
         id: 'hire',
-        label: `Hire: ${template.price.toLocaleString('en-US')}`,
+        label: `Hire: ${entry.fee.toLocaleString('en-US')}`,
         variant: entry.hireRefusal === null ? 'primary' : 'secondary',
         sound: entry.hireRefusal === null ? undefined : null,
         onTap: () => opts.desk.pressHire(template.id, party.active, party.companion),

@@ -49,7 +49,7 @@ interface MetalRamp {
   readonly shadow: string;
 }
 
-/** Floor 1 hangs blackened iron; floor 2 painted steel. */
+/** Floor 1 hangs blackened iron; floor 2 painted steel; the sewer rusted iron. */
 const METAL: Readonly<Record<DungeonFloorThemeId, MetalRamp>> = {
   cellars: { dark: '#1f1b18', mid: '#3d3631', lit: '#6b6157', shadow: 'rgba(8,5,3,0.45)' },
   service_level: {
@@ -58,6 +58,7 @@ const METAL: Readonly<Record<DungeonFloorThemeId, MetalRamp>> = {
     lit: '#8a949e',
     shadow: 'rgba(3,5,8,0.45)',
   },
+  sewer: { dark: '#221a15', mid: '#4a3627', lit: '#7a5a3e', shadow: 'rgba(6,5,3,0.45)' },
 };
 
 const MS_PER_SECOND = 1000;

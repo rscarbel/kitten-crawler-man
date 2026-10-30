@@ -5,7 +5,7 @@ import type { StealthGateRequest } from '../map/spineLayout';
 import type { GauntletBossType } from '../map/bossRoomSizes';
 import type { FloodedApproachSpec } from '../map/floodedApproach';
 import type { MusicTrackId } from '../audio/sounds';
-import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
+import type { GeneratedFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
 import type { AssetGroup } from '../core/spriteAssets/assetGroups';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
@@ -485,7 +485,7 @@ export interface LevelDef {
    * `src/map/dungeon/floorTheme.ts`. Absent on an overworld level, which has its
    * own palette and never reaches the dungeon renderer.
    */
-  groundTheme?: DungeonFloorThemeId;
+  groundTheme?: GeneratedFloorThemeId;
   /**
    * Whether this level has a spider lab room with the Grotesque Spider quest.
    * The lab hangs off a spine route, so a floor with one needs one.

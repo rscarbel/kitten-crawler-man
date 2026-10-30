@@ -300,7 +300,8 @@ export class GraveBull extends Mob {
       const toY = target.y - this.y;
       const distance = Math.hypot(toX, toY);
       const clearRun =
-        this.map === null || this.map.hasHostileWalkableLine(this.x, this.y, target.x, target.y);
+        this.map === null ||
+        this.map.hasHostileWalkableLine(this.x, this.y, target.x, target.y, this.mobility);
       if (
         mayCharge &&
         distance <= this.tileSize * GRAVE_BULL_CHARGE_TRIGGER_TILES &&
@@ -442,7 +443,7 @@ export class GraveBull extends Mob {
 
     const aheadX = Math.floor((centreX + this.chargeDirX * (half + step)) / this.tileSize);
     const aheadY = Math.floor((centreY + this.chargeDirY * (half + step)) / this.tileSize);
-    if (this.map !== null && !this.map.isWalkableForHostile(aheadX, aheadY)) {
+    if (this.map !== null && !this.map.isWalkableForHostile(aheadX, aheadY, this.mobility)) {
       this.meetObstacle(aheadX, aheadY);
       return;
     }

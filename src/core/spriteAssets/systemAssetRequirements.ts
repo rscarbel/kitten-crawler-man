@@ -4,8 +4,7 @@ import type { SpriteKey } from './SpriteLoader';
 
 /**
  * A `LevelDef` does not list everything that can appear on its floor.
- * `BountySystem`, `StarlightTentMazeSystem`,
- * `QuillConfrontationSystem`, `MurderMysteryQuestSystem`, `SpiderQuestSystem`,
+ * `BountySystem`, `StarlightTentMazeSystem`, `LichBattleSystem`, `SpiderQuestSystem`,
  * `SkeletonSummonSystem`, `DeinonychusSystem` and `MercenarySystem` all construct
  * creatures no `LevelDef.roomMobs` / `hallwayMobs` / `extraSpawns` /
  * `campSpawns` entry ever names, because each is gated on a map feature
@@ -113,34 +112,24 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: [],
   },
 
-  // QuillConfrontationSystem (src/systems/QuillConfrontationSystem.ts) —
-  // level 3 only. Every creature here is procedural, so no sprite group is
-  // needed; the entry exists so the mob types are still checked against
-  // MOB_SPRITE_KEYS.
+  // The lodge cellar's defence (src/systems/missingCats/LodgeCellarDefence.ts):
+  // the elves who hold it with the party and what comes up the cistern at
+  // them. All painted, so no group is needed; the entry exists so the mob
+  // types are still checked against MOB_SPRITE_KEYS.
   {
-    id: 'quest:quill',
+    id: 'quest:missing_cats_cellar',
     levelIds: LEVEL3,
-    mobTypes: ['miss_quill', 'remex', 'elf'],
+    mobTypes: ['elf', 'ruins_ghoul', 'krasue'],
     requiredGroups: [],
   },
 
-  // The second half of the tower confrontation. The Lich, the skeletons it
-  // raises and the fight's own effects are all painted, so there is no group
-  // left to load; the entry stays so the mob types are still checked against
-  // MOB_SPRITE_KEYS.
+  // LichBattleSystem (src/systems/LichBattleSystem.ts) — the tower's Lich and
+  // the skeletons it raises are all painted, so there is no group to load; the
+  // entry exists so the mob types are still checked against MOB_SPRITE_KEYS.
   {
-    id: 'quest:murder_lich',
+    id: 'lich_battle',
     levelIds: LEVEL3,
     mobTypes: ['the_lich', 'skeleton_sword', 'skeleton_archer'],
-    requiredGroups: [],
-  },
-
-  // MurderMysteryQuestSystem (src/systems/MurderMysteryQuestSystem.ts) —
-  // level 3 only. Both creatures are procedural.
-  {
-    id: 'quest:murder_mystery',
-    levelIds: LEVEL3,
-    mobTypes: ['baggi', 'krasue'],
     requiredGroups: [],
   },
 

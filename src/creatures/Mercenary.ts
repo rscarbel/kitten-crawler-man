@@ -446,7 +446,7 @@ export class Mercenary extends Mob {
    * tiles. A clear line is not enough for a step: it sees over low props.
    */
   hasWalkableLine(fromX: number, fromY: number, toX: number, toY: number): boolean {
-    return this.map?.hasWalkableLine(fromX, fromY, toX, toY) ?? true;
+    return this.map?.hasWalkableLine(fromX, fromY, toX, toY, this.mobility) ?? true;
   }
 
   /**
@@ -459,7 +459,7 @@ export class Mercenary extends Mob {
     if (map === null) return true;
     const tileX = Math.floor(x / this.tileSize);
     const tileY = Math.floor(y / this.tileSize);
-    return map.isWalkable(tileX, tileY) && !map.isStairwellTile(tileX, tileY);
+    return map.isWalkable(tileX, tileY, 'walker') && !map.isStairwellTile(tileX, tileY);
   }
 
   /** Paths toward a point, stopping `stopPx` short of it. */

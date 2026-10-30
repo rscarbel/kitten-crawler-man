@@ -117,7 +117,7 @@ function measureUnfilteredPlacements(map: GameMap, seed: number, into: Violation
     for (let attempt = 0; attempt < UNFILTERED_PLACEMENT_ATTEMPTS; attempt++) {
       const tileX = Math.floor(rng() * size);
       const tileY = Math.floor(rng() * size);
-      if (!map.isWalkable(tileX, tileY)) continue;
+      if (!map.isWalkable(tileX, tileY, 'walker')) continue;
       measure(map, tileX * TILE_SIZE, tileY * TILE_SIZE, into);
       break;
     }
@@ -372,7 +372,11 @@ function findSafeZonePair(map: GameMap): SafeZonePair | null {
     });
     const crawler = at(radius - SAFE_ZONE_CRAWLER_DEPTH_TILES);
     const fairy = at(radius + SAFE_ZONE_FAIRY_OFFSET_TILES);
-    if (!map.isWalkable(crawler.x, crawler.y) || !map.isWalkable(fairy.x, fairy.y)) continue;
+    if (
+      !map.isWalkable(crawler.x, crawler.y, 'walker') ||
+      !map.isWalkable(fairy.x, fairy.y, 'walker')
+    )
+      continue;
     if (!map.isInTownSafeZone(crawler.x * TILE_SIZE, crawler.y * TILE_SIZE)) continue;
     if (map.isInTownSafeZone(fairy.x * TILE_SIZE, fairy.y * TILE_SIZE)) continue;
     const clear = map.hasLineOfSight(

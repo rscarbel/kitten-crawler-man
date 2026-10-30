@@ -21,7 +21,8 @@ import {
 import { PLAYER_HUMAN_SIZE_OVER_RIG } from '../../../sprites/art/human/figureScale';
 import { GROUND_Y as CAT_GROUND_BELOW_CENTRE } from '../../../sprites/art/catArt';
 import { GROUND_Y as DEINONYCHUS_GROUND_BELOW_CENTRE } from '../../../sprites/art/deinonychusArt';
-import { activeCatFigure, type CatState } from '../../../sprites/catSprite';
+import type { CatState } from '../../../sprites/catSprite';
+import { CAT_FIGURE } from '../../../sprites/art/catFigure';
 import { figureFrameCount } from '../../../sprites/figure/figureDef';
 import {
   drawDeinonychusSprite,
@@ -248,7 +249,7 @@ function catCellAt(
   timeMs: number,
   gate: GestureGate<CatBreakRow>,
 ): { state: CatState; frame: number } {
-  const figure = activeCatFigure();
+  const figure = CAT_FIGURE;
   const groom = gestureAt(
     timeMs,
     CAT_BREAK_SLOT_MS,
@@ -327,20 +328,20 @@ function pixelRatioOf(ctx: CanvasRenderingContext2D): number {
 export function heroesLayer(): TitleLayer {
   const heroShade = new TitleShadeBuffer();
   const heroCells = new TitleHeroCells((def) =>
-    def.id === activeCatFigure().id ? CAT_HERO_CROP : HUMAN_HERO_CROP,
+    def.id === CAT_FIGURE.id ? CAT_HERO_CROP : HUMAN_HERO_CROP,
   );
   /** Where the heroes were last drawn: the tile sizes and pixel ratio their cells are painted for. */
   let drawnAt: { catTile: number; humanTile: number; pixelRatio: number } | null = null;
   const densityOf = (def: FigureDef): number => {
     if (drawnAt === null) return 1;
-    const tile = def.id === activeCatFigure().id ? drawnAt.catTile : drawnAt.humanTile;
+    const tile = def.id === CAT_FIGURE.id ? drawnAt.catTile : drawnAt.humanTile;
     return TitleHeroCells.densityFor(def, tile, drawnAt.pixelRatio);
   };
   /** The human figure the hero is drawn as and whose rows the cells hold; another look chosen on the title lets them go. */
   let heldHumanFigure = titleHumanFigure();
   const holdIdleRows = (): void => {
     heroCells.holdResident(heldHumanFigure, HUMAN_IDLE_ROW);
-    heroCells.holdResident(activeCatFigure(), CAT_IDLE_ROW);
+    heroCells.holdResident(CAT_FIGURE, CAT_IDLE_ROW);
   };
   const adoptHumanLook = (): void => {
     const figure = titleHumanFigure();
@@ -362,7 +363,7 @@ export function heroesLayer(): TitleLayer {
     heroCells.isReady(heldHumanFigure, row, densityOf(heldHumanFigure)),
   );
   const catGate = new GestureGate<CatBreakRow>((row) => {
-    const figure = activeCatFigure();
+    const figure = CAT_FIGURE;
     return heroCells.isReady(figure, row, densityOf(figure));
   });
   const deinonychusShade = new TitleShadeBuffer();
@@ -393,7 +394,7 @@ export function heroesLayer(): TitleLayer {
     );
     if (cat !== null && cat.startMs !== lastWarmedCatStart) {
       lastWarmedCatStart = cat.startMs;
-      heroCells.request(activeCatFigure(), cat.row);
+      heroCells.request(CAT_FIGURE, cat.row);
     }
   };
 
@@ -517,7 +518,7 @@ export function heroesLayer(): TitleLayer {
           );
           const catLeft = catX - tile * HALF;
           const catTop = catY - tile * CAT_GROUND_IN_TILE;
-          const catFigure = activeCatFigure();
+          const catFigure = CAT_FIGURE;
           heroCells.draw(
             target,
             catFigure,

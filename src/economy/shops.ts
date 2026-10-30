@@ -141,6 +141,14 @@ export const SHOPS = {
         bundle: null,
         gate: null,
       },
+      {
+        item: 'quest_tuna_tin',
+        normalStock: 'unlimited',
+        desc: 'Tuna in oil. A cat will do a great deal for one',
+        label: 'Tinned Tuna',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
 

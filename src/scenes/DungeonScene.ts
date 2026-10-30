@@ -82,13 +82,6 @@ import { getLevelDef, levelLoadingKicker } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { LevelCompleteScreen } from '../ui/screens/dialogs/LevelCompleteScreen';
-import {
-  buildRunSummary,
-  countPartyAchievements,
-  finishRun,
-  RunCompleteScreen,
-} from '../ui/screens/dialogs/RunCompleteScreen';
-import { TitleScene } from './title/TitleScene';
 import { MENU_TAP_MAX_DISTANCE } from '../ui/core/pointer';
 import {
   PAUSE_SURFACE_ID,
@@ -133,6 +126,16 @@ import {
 } from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import { WorldTrail } from '../ui/world/worldTrail';
+import { SenseLayer } from '../systems/senses/SenseLayer';
+import { CatSenseCue } from '../systems/senses/CatSenseCue';
+import { MissingCatsQuestSystem } from '../systems/missingCats/MissingCatsQuestSystem';
+import { CAPTURE_ACTOR_IDS } from '../systems/missingCats/captureCutscene';
+import { missingCatsTowerResume } from '../systems/missingCats/towerResume';
+import {
+  recordLiveGroupForSave,
+  resumeLocationFor,
+  savedIndoorsInFor,
+} from '../systems/partySplit/splitResume';
 import { QuestRouteGuide } from '../systems/questRoute/QuestRouteGuide';
 import { crawlerGroundPoint, crawlerSpriteBox } from '../systems/questRoute/routeOrigin';
 import {
@@ -174,6 +177,22 @@ import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { crawlerDisplayName } from '../characters/characters';
 import { humanVocalSounds } from '../characters/humanVocalSounds';
 import { CRAWLER_KINDS } from '../core/skills/SkillManager';
+import {
+  capturePartySplit,
+  createPartySplitState,
+  restorePartySplit,
+  type InteriorPartyLocation,
+  type PartyLocation,
+  type PartySplitState,
+} from '../core/party/partySplit';
+import {
+  transferParty,
+  type ArrivalCard,
+  type InteriorArrival,
+  type PartyTransferRequest,
+  tileStoodOn,
+} from '../systems/partySplit/partyTransfer';
+import { SplitDirector } from '../systems/partySplit/SplitDirector';
 import { stampSafeRoomClinics } from '../map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
@@ -221,9 +240,14 @@ import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeR
 import { ALL_BREAKABLE_PROPS, NO_BREAKABLE_PROPS } from '../systems/DestructiblePropSystem';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit, type ChatCommand } from '../systems/kits/ChatKit';
-import { CutsceneKit, cutsceneSoundPlayer } from '../systems/kits/CutsceneKit';
+import { CutsceneKit, cutsceneCueClock, cutsceneSoundPlayer } from '../systems/kits/CutsceneKit';
+import { bodyActor } from '../systems/cutscene/cutsceneActors';
 import { ScriptedDeathSystem } from '../systems/scriptedDeath/ScriptedDeathSystem';
-import { runDungeonWorldAction, type DungeonWorldAction } from './dungeonWorldActions';
+import {
+  runDungeonWorldAction,
+  type DungeonActorId,
+  type DungeonWorldAction,
+} from './dungeonWorldActions';
 import {
   FLOODED_PUMP_ROOM_CUES,
   type FloodedPumpRoomLoop,
@@ -260,7 +284,7 @@ import {
   type TravelUnlockState,
 } from '../systems/travel/travelDestinations';
 import { BuildingSystem, downedPartnerEntryRefusal } from '../systems/BuildingSystem';
-import type { BuildingEntry } from '../map/buildingEntry';
+import { doorstepOf, type BuildingEntry } from '../map/buildingEntry';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import { CrowdResidentSet } from '../systems/CrowdResidentSet';
@@ -316,9 +340,11 @@ import { priceBreakdownsShown } from '../ui/screens/shop/priceBreakdowns';
 import { FortuneTable, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
 import {
   drawInteractionPromptOver,
-  interactionPromptsDrawnThisFrame,
+  pressFocusedPrompt,
+  raisePromptsFor,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
+import type { PromptOwner } from '../ui/interactionFocus';
 import type { GymRoomSystem } from '../systems/GymRoomSystem';
 import {
   BossRoomDressings,
@@ -327,7 +353,7 @@ import {
 } from '../systems/bossRooms/BossRoomDressings';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { type TreasureChest, TreasureChestSystem } from '../systems/TreasureChestSystem';
-import { HumanTalkDriver } from '../creatures/humanGestures';
+import { CrawlerTalkDriver } from '../creatures/crawlerTalk';
 import { type Pt } from '../sprites/art/bipedArt';
 import type { ChestLootSplit } from '../ui/ChestRewardDialog';
 import { ChestKit, forcedRecipientFor, type ChestReward } from '../systems/kits/ChestKit';
@@ -378,8 +404,6 @@ import {
   fromPersistedDefendQuestCheckpoint,
   toPersistedSpiderQuestCheckpoint,
   fromPersistedSpiderQuestCheckpoint,
-  toPersistedMurderMysteryQuestCheckpoint,
-  fromPersistedMurderMysteryQuestCheckpoint,
   toPersistedBountyCheckpoint,
   fromPersistedBountyCheckpoint,
 } from '../core/save/persistedWorldCapture';
@@ -437,17 +461,22 @@ import type { GatedSfxGroup } from '../audio/sfxGroups';
 import { CircusGroundsAmbience } from '../systems/circus/CircusGroundsAmbience';
 import { HighStrikerSystem } from '../systems/circus/HighStrikerSystem';
 import {
-  captureMurderQuestProgress,
-  createMurderQuestProgress,
-  restoreMurderQuestProgress,
-  type MurderQuestProgress,
-} from '../core/quests/MurderQuestProgress';
-import {
   captureAnchorQuestProgress,
   createAnchorQuestProgress,
   restoreAnchorQuestProgress,
   type AnchorQuestProgress,
 } from '../core/quests/AnchorQuestProgress';
+import {
+  captureMissingCatsProgress,
+  createMissingCatsProgress,
+  missingCatsProgressAt,
+  phaseReached,
+  restoreMissingCatsProgress,
+  stormDrainOpenFor,
+  townCatsHome,
+  type MissingCatsPhase,
+  type MissingCatsProgress,
+} from '../core/quests/missingCatsProgress';
 import {
   captureBountyProgress,
   createBountyProgress,
@@ -495,6 +524,10 @@ import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem
 import { CloggedBathroomSystem } from '../systems/cloggedBathroom/CloggedBathroomSystem';
 import { StealthKeySnatchSystem } from '../systems/stealthKeySnatch/StealthKeySnatchSystem';
 import { prisonDoorRefusal } from '../systems/stealthKeySnatch/prisonDoorGate';
+import { TowerDoorGuardSystem } from '../systems/tower/TowerDoorGuardSystem';
+import { towerDoorRefusal, towerDoorStandingFor } from '../systems/tower/towerDoor';
+import type { TowerDoorStanding } from '../dialog/scripts/scenes/towerDoor';
+import { stormDrainRefusal } from '../systems/sewer/stormDrainGrate';
 import { seatCompanionsWaitingOutsidePrison } from '../systems/stealthKeySnatch/prisonCompanions';
 import { planGoblinPrison } from '../map/goblinPrisonPlan';
 import type { PrisonLayout } from '../map/goblinPrisonLayouts';
@@ -517,17 +550,9 @@ import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/abov
 import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
 import { spiderQuestCueSound, spiderQuestLoop } from '../systems/spiderQuest/spiderQuestSoundCues';
 import type { SafeRoomService } from '../map/DungeonGenerator';
-import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
 import { stallBeaconTarget, doorwayBeaconTarget } from '../systems/objectiveBeaconTargets';
 import { TINKER_VENDOR_ID } from '../systems/market/vendorDefs';
-import {
-  capturePersistedDoomsday,
-  createDoomsdayProgress,
-  rearmExpiredDoomsday,
-  restoreDoomsdayProgress,
-  type DoomsdayProgress,
-} from '../core/quests/DoomsdayProgress';
 import {
   captureCasinoState,
   createCasinoState,
@@ -602,18 +627,13 @@ import { AttackCowSystem } from '../systems/AttackCowSystem';
 import { settleWheelLedger } from '../systems/casino/wheel/wheelPrizes';
 import { adoptWhenCommitted } from '../core/save/adoptWhenCommitted';
 import {
-  DOOMSDAY_TRACKER_ID,
-  DoomsdayEscapeSystem,
-  STAIRWELL_KNOCKED_OUT_TOAST,
-} from '../systems/DoomsdayEscapeSystem';
-import {
   clearSightOf,
   RenderPipeline,
   VISIBILITY_RADIUS_PX,
   type RenderContext,
 } from '../systems/RenderPipeline';
 import { cameraWorldView, setVisibleWorldView } from '../core/rendering/visibleWorldView';
-import type { SystemContext } from '../systems/GameSystem';
+import { presentCrawlers, type SystemContext } from '../systems/GameSystem';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
@@ -746,7 +766,12 @@ import { drawUnknownAbilityIcon } from '../ui/icons/rewardIcons';
 import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
 import type { HitRegion, Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
-import { buildingDisplayName, type BriarHollowBuildingId } from '../map/buildingIds';
+import {
+  STORM_DRAIN_ID,
+  buildingDisplayName,
+  type BriarHollowBuildingId,
+  type BuildingId,
+} from '../map/buildingIds';
 
 /** A save as a scene writes it: every run-level field present, the floor's `world` optional. */
 export type SaveProgressInput = GameProgressInput & RunSaveFields;
@@ -758,6 +783,19 @@ export type SaveProgressInput = GameProgressInput & RunSaveFields;
  * plus the floor's generation seeds and the safe room to stand back in.
  */
 export type SaveProgressFn = (data: SaveProgressInput) => Promise<SaveWriteOutcome>;
+
+/**
+ * The party going into a building: both crawlers, who walks in beside them,
+ * and the floor held aside for the visit (null on a floor that is rebuilt
+ * around its buildings instead). Read off the live floor at a door, or
+ * carried over unchanged from the room a hand-over leaves.
+ */
+interface InteriorHandOver {
+  readonly humanSnap: PlayerSnapshot;
+  readonly catSnap: PlayerSnapshot;
+  readonly companions: InteriorCompanionArrival;
+  readonly heldFloor: DungeonInteriorReturn | null;
+}
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -882,10 +920,12 @@ export interface DungeonSceneOptions {
   progressWipe?: ProgressWipe;
   /** The Starlight Tent's record, threaded by reference across building/scene transitions. */
   starlightTentProgress?: StarlightTentProgress;
-  /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
-  murderQuestProgress?: MurderQuestProgress;
   /** Wayfinder's Anchor questline state, threaded by reference across building/scene transitions. */
   anchorQuestProgress?: AnchorQuestProgress;
+  /** "A Cat Always Comes Back", threaded by reference across building/scene transitions. */
+  missingCatsProgress?: MissingCatsProgress;
+  /** Dev bootstrap only: the questline of the stolen cats standing at the start of this phase. */
+  devMissingCatsPhase?: MissingCatsPhase;
   /** Journal state that must survive a door: the pinned objective. */
   journalProgress?: JournalProgress;
   /** Tactics-trait System notices already shown this run, threaded like `journalProgress`. */
@@ -898,8 +938,6 @@ export interface DungeonSceneOptions {
    * reference like `bountyProgress`, and deliberately never saved.
    */
   midgeEscortCarry?: MidgeEscortCarry;
-  /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
-  doomsdayQuestProgress?: DoomsdayProgress;
   /** Cloak & Dagger casino state, threaded by reference across building/scene transitions. */
   casinoState?: CasinoState;
   /** The Wheel of Fortune's won prizes and pending spin, threaded by reference. */
@@ -908,6 +946,10 @@ export interface DungeonSceneOptions {
   attackCowState?: AttackCowState;
   /** Resident lore progress + the apothecary's batch, threaded by reference across building/scene transitions. */
   townMemory?: TownMemory;
+  /** The party's formation and what its groups left each other, threaded by reference like `townMemory`. */
+  partySplit?: PartySplitState;
+  /** The card this arrival shows in place of the floor's own: a split's "Meanwhile…". */
+  arrivalCard?: ArrivalCard;
   /**
    * Shared tool tiers and seen craft explainers. Party progress like
    * `abilityManager`, so it is threaded the same way rather than reset per
@@ -974,6 +1016,17 @@ export interface DungeonSceneOptions {
    */
   stealthGateOpenAtStart?: (gameMap: GameMap) => boolean;
   /**
+   * Dev bootstrap only: whether the floor's nursery starts already held, the
+   * goblin mother's child returned, for a start dropped past it. Asked of the
+   * freshly generated map, after the defend quest's system is built.
+   */
+  defendQuestCompleteAtStart?: (gameMap: GameMap) => boolean;
+  /**
+   * Dev bootstrap only: what Dave has already said after each boss, for a start
+   * dropped past a boss whose exit room the party would have walked through.
+   */
+  daveDebriefAtStart?: DaveDebriefCheckpoint;
+  /**
    * Dev bootstrap only: Pest Control starts already taken up, Dr. Moult at his
    * lab post waiting for the hack — as a save made in the lab's station has it.
    */
@@ -990,6 +1043,17 @@ export interface DungeonSceneOptions {
    * of the same floor: a building exit, a respawn and a floor restart.
    */
   devPrisonLayout?: PrisonLayout;
+  /**
+   * Dev bootstrap only: the storm-drain grate starts open, as if the cellar
+   * elf had already unbolted it from below.
+   */
+  stormDrainOpenAtStart?: boolean;
+  /**
+   * Dev bootstrap only: the party climbs straight down the storm drain on the
+   * first gameplay frame, the grate taken as open. Never carried to a rebuilt
+   * scene, or every climb back out would drop straight back in.
+   */
+  devEnterSewerAtStart?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
   skipIntro?: boolean;
   /**
@@ -1031,6 +1095,8 @@ export interface DungeonSceneOptions {
   rewriteCarriedSave?: boolean;
   /** Floor and run state from a resumed save; absent on a fresh game. */
   persistedWorldState?: PersistedWorldState;
+  /** The building a resumed save was written in; absent for one written outdoors. */
+  savedIndoorsIn?: BuildingId;
   /**
    * The floor this scene was built from, held aside while the party was inside
    * one of its buildings. The scene keeps that party and population rather
@@ -1411,6 +1477,9 @@ export class DungeonScene extends GameplayScene {
   /** The way to the pinned objective: the arrow's next gate and the ground trail. */
   private readonly questRoute = new QuestRouteGuide();
   private readonly questRouteTrail = new WorldTrail();
+  /** What only some crawlers perceive on this map: a system with a scent or a ward to show registers it here. */
+  readonly senses = new SenseLayer();
+  protected readonly catSenseCue: CatSenseCue;
   /** Systems that beam over their own objective places whether or not the Journal tracks them. */
   private readonly objectiveBeaconSources: ObjectiveBeaconSource[] = [];
   private readonly _systemContext: SystemContext;
@@ -1501,12 +1570,62 @@ export class DungeonScene extends GameplayScene {
   private signDialogHandle: ConversationHandle | null = null;
   /** Citizen currently frozen mid-conversation; unfrozen once the shared conversation closes. */
   private citizenDialogTarget: Townsperson | null = null;
+
+  /**
+   * Who each of the floor's interact prompts is raised for. The prompt surface
+   * shows only the best-ranked one, and `tryInteractWithWorld` offers the next
+   * press to that one before the rest of its chain, so the prompt on screen is
+   * the press.
+   */
+  private readonly promptOwners = {
+    defendQuest: {
+      kind: 'quest',
+      act: () => this.defendQuest.tryInteract(this.active(), { human: this.human, cat: this.cat }),
+    },
+    spiderQuest: { kind: 'quest', act: () => this.spiderQuest.tryInteract(this.active()) },
+    cloggedBathroom: {
+      kind: 'quest',
+      act: () =>
+        this.cloggedBathroom.tryInteract(this.active(), { human: this.human, cat: this.cat }),
+    },
+    stealthKeySnatch: {
+      kind: 'quest',
+      act: () =>
+        this.stealthKeySnatch.tryInteract(this.active(), { human: this.human, cat: this.cat }),
+    },
+    towerDoorGuards: { kind: 'person', act: () => this.towerDoorGuards.tryInteract(this.active()) },
+    bounty: {
+      kind: 'quest',
+      act: () => this.bounty?.tryInteract(this.active(), this.human, this.cat) === true,
+    },
+    questCitizen: { kind: 'quest', act: () => this.tryTalkToCitizen(this.active()) },
+    citizen: { kind: 'person', act: () => this.tryTalkToCitizen(this.active()) },
+    market: { kind: 'service', act: () => this.market?.tryInteract(this.active()) === true },
+    groundPickup: {
+      kind: 'pickup',
+      act: () => this.destruction.groundPickups.tryPickupNear(this.active()),
+    },
+    townProps: { kind: 'examine', act: () => this.townProps?.tryInteract(this.active()) === true },
+    highStriker: {
+      kind: 'fixture',
+      act: () => this.highStriker?.tryInteract(this.active()) === true,
+    },
+    crawlerSigns: {
+      kind: 'readable',
+      act: () => this.crawlerSigns?.tryInteract(this.active()) === true,
+    },
+    deinonychus: { kind: 'companion', act: () => this.tryPetDeinonychus(this.active()) },
+    mercenary: {
+      kind: 'companion',
+      act: () => this.mercenarySystem.tryTalk(this.active(), this.world.roster.mobs),
+    },
+  } satisfies Record<string, PromptOwner>;
   /** The talk row pinned for {@link citizenDialogTarget}, unpinned with it. */
   private citizenTalkRow: DrawnFigureRow | null = null;
   /** The handle the citizen's conversation opened with — see `signDialogHandle`. */
   private citizenDialogHandle: ConversationHandle | null = null;
-  /** Keeps the human crawler talking, turned to whoever he is in conversation with. */
-  private readonly humanTalk = new HumanTalkDriver();
+  /** Keeps the driven crawler talking, turned to whoever they are in conversation with. */
+  private readonly crawlerTalk = new CrawlerTalkDriver();
   private noticeBoard: NoticeBoard | null = null;
   private marketPanel: ShopSession | null = null;
   /** Stops this scene's bus hearing every shop counter's trades; set in `wireEventBus`. */
@@ -1526,9 +1645,12 @@ export class DungeonScene extends GameplayScene {
     this.isCrawlerHeldOutOfSight(crawler) || this.safeRoomRegroup.hides(crawler);
   /** A crawler a floor system has taken out of the world for a while: in a stall, or dying on a script. */
   private readonly isCrawlerHeldOutOfSight = (crawler: HumanPlayer | CatPlayer): boolean =>
-    this.cloggedBathroom.isCrawlerHidden(crawler) || this.scriptedDeaths.hides(crawler);
+    this.cloggedBathroom.isCrawlerHidden(crawler) ||
+    this.scriptedDeaths.hides(crawler) ||
+    this.cutscenes.director.hides(crawler);
   /** Floor 2's stealth gate, its guard and the prison key quest; inert on every other floor. */
   readonly stealthKeySnatch: StealthKeySnatchSystem;
+  private readonly towerDoorGuards: TowerDoorGuardSystem;
   /** Light and dark on floors 1 and 2; null on every other map. */
   private readonly dungeonLighting: DungeonLightingSystem | null;
   /** Beds, positional loops and distant one-shots on floors 1 and 2; null elsewhere. */
@@ -1545,9 +1667,9 @@ export class DungeonScene extends GameplayScene {
   private holdStartActivePos: { x: number; y: number } | null = null;
   private spiderQuest: SpiderQuestSystem;
   private readonly dungeonCuesPlayed = new Map<DungeonCue, number>();
-  private murderQuest: MurderMysteryQuestSystem;
   private anchorQuest: AnchorQuestSystem;
-  private doomsdayEscape: DoomsdayEscapeSystem;
+  /** "A Cat Always Comes Back" on the streets: notices, scent, stakeout, chase and bait. */
+  private readonly missingCats: MissingCatsQuestSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
   private ambientSound: AmbientSoundSystem | null = null;
   /**
@@ -1560,18 +1682,26 @@ export class DungeonScene extends GameplayScene {
   /** Briar Hollow's bed, held so `updateVillageAmbience` can switch it with the player's position. */
   private villageAmbientEmitter: AmbientEmitter | null = null;
   private readonly starlightTentProgress: StarlightTentProgress;
-  private readonly murderQuestProgress: MurderQuestProgress;
   private readonly anchorQuestProgress: AnchorQuestProgress;
+  private readonly missingCatsProgress: MissingCatsProgress;
   private readonly journalProgress: JournalProgress;
   private readonly bountyProgress: BountyProgress;
   private readonly midgeEscortCarry: MidgeEscortCarry;
-  private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly casinoState: CasinoState;
   /** Read and written by the wheel host; saved as top-level fields. */
   readonly wheelLedger: WheelLedger;
   /** Read and written by the attack cow's system; saved as top-level fields. */
   readonly attackCowState: AttackCowState;
   private readonly townMemory: TownMemory;
+  private readonly partySplit: PartySplitState;
+  /** Runs a split party from the overworld: hand-overs, regroups and quest chapter tables. */
+  readonly partySplitDirector: SplitDirector;
+  /**
+   * Set when a restore leaves the party owed somewhere this scene is not (the
+   * live group of a split, or a building a questline takes the party back
+   * into), so the first live frame moves the party there.
+   */
+  private resumeOwed: InteriorPartyLocation | null = null;
   private readonly partyCrafts: PartyCraftsState;
   /** Wraps `partyCrafts.tools` by reference; one instance for the scene's lifetime. */
   private readonly partyTools: PartyTools;
@@ -1634,6 +1764,9 @@ export class DungeonScene extends GameplayScene {
   /** See {@link DungeonSceneOptions.devPrisonLayout}. */
   private readonly devPrisonLayout: PrisonLayout | null;
   private devPrisonEntryPending: boolean;
+  /** See {@link DungeonSceneOptions.stormDrainOpenAtStart}. */
+  private readonly stormDrainOpenedForDev: boolean;
+  private devSewerEntryPending: boolean;
   private readonly prisonDifficulty = new ActivityDifficultyGate();
   /**
    * The lab terminal's difficulty question, owned here so it is mounted with
@@ -1655,7 +1788,6 @@ export class DungeonScene extends GameplayScene {
   private readonly crawlerBarks = new CrawlerBarkSystem();
 
   private levelCompleteScreen = new LevelCompleteScreen();
-  private readonly runCompleteScreen = new RunCompleteScreen();
 
   private achievementUI: AchievementUISystem;
   /** Pays every award this scene's crawlers earn; see {@link AchievementAwards}. */
@@ -1869,7 +2001,7 @@ export class DungeonScene extends GameplayScene {
    */
   private readonly conversation: Conversation;
   /** Scripted moments that own the party: the tutorial's talks with Dave. */
-  private readonly cutscenes: CutsceneKit<DungeonWorldAction>;
+  private readonly cutscenes: CutsceneKit<DungeonWorldAction, DungeonActorId>;
   /** Deaths a script shows rather than a blow deals, such as a shark taking the crawler. */
   readonly scriptedDeaths: ScriptedDeathSystem;
   private readonly tutorial: TutorialController | null = null;
@@ -1914,7 +2046,7 @@ export class DungeonScene extends GameplayScene {
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
     });
     this.conversation = new Conversation(this.audio);
-    this.cutscenes = new CutsceneKit<DungeonWorldAction>({
+    this.cutscenes = new CutsceneKit<DungeonWorldAction, DungeonActorId>({
       conversation: this.conversation,
       teleportDaveOut: () => this.dave.teleportOut(),
       playSound: cutsceneSoundPlayer(this.audio),
@@ -1924,6 +2056,7 @@ export class DungeonScene extends GameplayScene {
           floodedPumpRoom: ({ beat }) =>
             this.bossRoomDressings.parts.floodedPumpRoom?.runIntroBeat(beat),
         }),
+      cueClock: cutsceneCueClock(this.audio),
       pauseButton: () => {
         const rect = this.hud.frame?.dock.get('pause');
         return rect === undefined ? null : { rect, press: () => this.openPauseFromButton() };
@@ -2038,7 +2171,7 @@ export class DungeonScene extends GameplayScene {
       if (interiorReturn !== null) {
         // Built fresh, a crawler carries nothing a snapshot does not; a held one
         // must match, or the swing it was frozen in at the door resumes outside.
-        for (const crawler of this.pm.players()) {
+        for (const crawler of this.pm.wholeParty()) {
           crawler.clearTransientCombatState();
           crawler.resetCombatState();
         }
@@ -2331,7 +2464,7 @@ export class DungeonScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
       active: this.active(),
-      inactive: this.inactive(),
+      partner: this.presentPartner(),
       activeIsMoving: false,
       roster: this.world.roster,
       gameMap: this.gameMap,
@@ -2375,6 +2508,12 @@ export class DungeonScene extends GameplayScene {
       levelDef.defendQuestIntensity,
       this.audioScope,
     );
+    if (options?.defendQuestCompleteAtStart?.(this.gameMap) === true) {
+      this.defendQuest.startCompleted();
+    }
+    if (options?.daveDebriefAtStart !== undefined) {
+      this.daveDebrief = { ...options.daveDebriefAtStart };
+    }
     this.cloggedBathroom = new CloggedBathroomSystem({
       gameMap: this.gameMap,
       bus: this.bus,
@@ -2396,6 +2535,12 @@ export class DungeonScene extends GameplayScene {
       startOpened: options?.stealthGateOpenAtStart?.(this.gameMap) ?? false,
     });
     this.objectiveBeaconSources.push(this.stealthKeySnatch);
+    this.towerDoorGuards = new TowerDoorGuardSystem({
+      gameMap: this.gameMap,
+      roster: this.world.roster,
+      conversation: this.conversation,
+      standing: () => this.towerDoorStanding(),
+    });
     if (this.tutorial !== null) this.objectiveBeaconSources.push(this.tutorial);
     this.roomSaves = [this.cloggedBathroom, this.stealthKeySnatch].map((source) => ({
       source,
@@ -2429,14 +2574,17 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
     this.starlightTentProgress = options?.starlightTentProgress ?? createStarlightTentProgress();
-    this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.anchorQuestProgress = options?.anchorQuestProgress ?? createAnchorQuestProgress();
+    this.missingCatsProgress =
+      options?.missingCatsProgress ??
+      (options?.devMissingCatsPhase === undefined
+        ? createMissingCatsProgress()
+        : missingCatsProgressAt(options.devMissingCatsPhase));
     this.journalProgress = options?.journalProgress ?? createJournalProgress();
     this.tacticsNoticesSeen = options?.tacticsNoticesSeen ?? new Set<TacticsTrait>();
     this.tacticsNotices = new TacticsNoticeSystem(this.tacticsNoticesSeen);
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.midgeEscortCarry = options?.midgeEscortCarry ?? createMidgeEscortCarry();
-    this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.casinoState = options?.casinoState ?? createCasinoState();
     this.wheelLedger = options?.wheelLedger ?? createWheelLedger();
     this.attackCowState = options?.attackCowState ?? createAttackCowState();
@@ -2453,6 +2601,15 @@ export class DungeonScene extends GameplayScene {
       },
     });
     this.townMemory = options?.townMemory ?? createTownMemory();
+    this.partySplit = options?.partySplit ?? createPartySplitState();
+    this.pm.bindPartySplit(this.partySplit);
+    this.partySplitDirector = new SplitDirector({
+      state: this.partySplit,
+      locateLiveGroup: () => this.liveGroupLocation(),
+      save: (chapterStart) => this.captureChapterSave(chapterStart),
+      transfer: (request) => this.transferParty(request),
+      onFormationChanged: () => this.pm.steerLiveGroup(),
+    });
     this.partyCrafts = options?.partyCrafts ?? createPartyCraftsState();
     this.partyTools = new PartyTools(this.partyCrafts.tools);
     // Self-heals any drift between the two inventories (a stray other-tier
@@ -2473,6 +2630,7 @@ export class DungeonScene extends GameplayScene {
         toast: (message) => this.menus.toasts.post(message),
         sound: (id) => this.audio?.play(id),
       },
+      this.pm.presence,
     );
     this.attackCowSystem = new AttackCowSystem(
       this.attackCowState,
@@ -2522,7 +2680,7 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       ledger: fairyLedger,
       getMobs: () => this.world.roster.mobs,
-      getCrawlers: () => [this.human, this.cat],
+      getCrawlers: () => this.pm.presentCrawlers(),
       addMob: (mob) => this.world.roster.add(mob),
       skeletonSummons: this.skeletonSummons,
     });
@@ -2550,6 +2708,7 @@ export class DungeonScene extends GameplayScene {
       spawnTileY,
       this.companionStance,
     );
+    this.lendCutsceneActors();
     this.safeRoomRegroup = new SafeRoomRegroupSystem({
       safeRooms: this.safeRoom,
       companions: this.companion,
@@ -2603,6 +2762,7 @@ export class DungeonScene extends GameplayScene {
           companion.y + ts * TILE_CENTER_OFFSET,
           caster.x + ts * TILE_CENTER_OFFSET,
           caster.y + ts * TILE_CENTER_OFFSET,
+          companion.mobility,
         );
       if (!hasLOS) {
         const compTX = Math.floor((companion.x + ts * TILE_CENTER_OFFSET) / ts);
@@ -2614,6 +2774,7 @@ export class DungeonScene extends GameplayScene {
           compTY,
           casterTX,
           casterTY,
+          companion.mobility,
           RECALL_MAX_PATH_DISTANCE_TILES,
         );
         if (path.length === 0) {
@@ -2629,7 +2790,7 @@ export class DungeonScene extends GameplayScene {
           ];
           const teleportTile = adjacentOffsets
             .map(({ dx, dy }) => ({ x: casterTX + dx, y: casterTY + dy }))
-            .find(({ x, y }) => this.gameMap.isWalkable(x, y));
+            .find(({ x, y }) => this.gameMap.isWalkable(x, y, companion.mobility));
           if (teleportTile === undefined) {
             this.audio?.play('error');
             const companionName = companionIsCat ? 'cat' : 'human';
@@ -2645,12 +2806,13 @@ export class DungeonScene extends GameplayScene {
       }
       this.audio?.play('menu_change_follower');
       this.companion.setFollowMe(this.human.isActive);
-      this.inactive().autoTarget = null;
+      this.dropPresentPartnerTarget();
       this.tutorial?.onFollowMeSelected();
     };
     this.followerMenu.onDoNotMove = () => {
       this.audio?.play('menu_change_follower');
-      this.companion.setDoNotMove(this.inactive(), this.human.isActive);
+      const partner = this.presentPartner();
+      if (partner !== null) this.companion.setDoNotMove(partner, this.human.isActive);
     };
     this.followerMenu.onSetAggressive = () => {
       this.audio?.play('menu_change_follower');
@@ -2664,7 +2826,7 @@ export class DungeonScene extends GameplayScene {
     this.followerMenu.onSetPassive = () => {
       this.audio?.play('menu_change_follower');
       this.companion.setPassive(this.human.isActive);
-      this.inactive().autoTarget = null;
+      this.dropPresentPartnerTarget();
     };
     const partyLevel = (): number => partyLevelOf(this.human.level, this.cat.level);
     this.stairwell = new StairwellSystem(
@@ -2803,6 +2965,7 @@ export class DungeonScene extends GameplayScene {
         this.travelMenu.open(caster);
         this.audio?.play('menu_open');
       },
+      () => this.pm.travelRefusal(),
     );
     if (options?.existingMap !== undefined && options.existingRecallState !== undefined) {
       this.recall.restoreCheckpoint(options.existingRecallState);
@@ -2966,8 +3129,8 @@ export class DungeonScene extends GameplayScene {
               },
               taloncrestRoomOwnedByStory: (buildingId) =>
                 interiorRoomOwnedByStory(buildingId, {
-                  murderStage: this.murderQuestProgress.stage,
                   anchor: this.anchorQuestProgress,
+                  missingCats: this.missingCatsProgress,
                 }),
               openNoticeBoard: () => this.openVillageNoticeBoard(),
               fullDetail: () => renderQuality.fullDetail,
@@ -3049,6 +3212,9 @@ export class DungeonScene extends GameplayScene {
     this.companionsWaitingAtPrisonDoor = options?.companionsWaitAtPrisonDoor === true;
     this.devPrisonLayout = options?.devPrisonLayout ?? null;
     this.devPrisonEntryPending = options?.devEnterPrisonAtStart === true;
+    this.devSewerEntryPending = options?.devEnterSewerAtStart === true;
+    this.stormDrainOpenedForDev =
+      this.devSewerEntryPending || options?.stormDrainOpenAtStart === true;
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
     bindAbilityLevelUps({
@@ -3156,22 +3322,43 @@ export class DungeonScene extends GameplayScene {
     if (this.skipIntro || this.tutorial !== null) this.dungeonIntro.skip();
     this.overworldMusic =
       levelDef.isOverworld && this.audioScope !== null
-        ? new OverworldMusicSystem(this.gameMap, this.audioScope)
+        ? new OverworldMusicSystem(this.gameMap, this.audioScope, () =>
+            townCatsHome(this.missingCatsProgress),
+          )
         : null;
     this.ambientSound =
       levelDef.isOverworld && this.audioScope !== null
         ? new AmbientSoundSystem(this.audioScope, this.buildTownAmbientEmitters())
         : null;
+    this.catSenseCue = new CatSenseCue({
+      barks: this.crawlerBarks,
+      audio: this.audio,
+      conversation: this.conversation,
+      stats: this.gameStats,
+    });
+    this.missingCats = new MissingCatsQuestSystem({
+      map: this.gameMap,
+      bus: this.bus,
+      progress: this.missingCatsProgress,
+      conversation: this.conversation,
+      audio: this.audio,
+      music: this.audioScope,
+      loops: this.audioScope,
+      human: this.human,
+      cat: this.cat,
+      senses: this.senses,
+      steered: () => this.active(),
+      present: () => this.pm.presentCrawlers(),
+      announce: (message) => this.menus.announce(message),
+      noticeBoardTile: () => this.townProps?.noticeBoardTile ?? null,
+      noticeBoardOpen: () => this.noticeBoard?.isOpen ?? false,
+      save: () => this.captureSavePoint(this.activeTile),
+      playCutscene: (script, onComplete) => this.cutscenes.director.play(script, onComplete),
+      cutsceneHides: (body) => this.cutscenes.director.hides(body),
+      split: this.partySplitDirector,
+      hire: () => this.mercenaryRoster.active?.id ?? null,
+    });
     this.sfxGates = this.buildSfxGates(levelDef);
-    this.murderQuest = new MurderMysteryQuestSystem(
-      this.gameMap,
-      this.bus,
-      (mob) => this.world.roster.add(mob),
-      this.murderQuestProgress,
-      this.audioScope,
-      this.audio,
-      this.conversation,
-    );
     // Reads the plaza's fortune tile and the tinker's counter through accessors
     // rather than holding either system: both are null on floors with no town.
     this.anchorQuest = new AnchorQuestSystem(
@@ -3192,16 +3379,6 @@ export class DungeonScene extends GameplayScene {
       this.travelUnlocks,
       this.audio,
     );
-    this.doomsdayEscape = new DoomsdayEscapeSystem(
-      this.gameMap,
-      this.doomsdayQuestProgress,
-      (message) => this.menus.toasts.post(message),
-      () => (this.human.isKnockedOut || this.cat.isKnockedOut ? STAIRWELL_KNOCKED_OUT_TOAST : null),
-    );
-    // Y-sorted with the town's fixtures, so the tower above it can never paint over it.
-    if (this.townPropRenderables !== null) {
-      this.townPropRenderables = [...this.townPropRenderables, this.doomsdayEscape.stairwellProp];
-    }
     if (this.tutorial !== null) {
       this.tutorial.setCutscenes(this.cutscenes.director);
     }
@@ -3253,7 +3430,7 @@ export class DungeonScene extends GameplayScene {
     this.chestKit.bind(this.treasureChests);
 
     if (options?.persistedWorldState !== undefined) {
-      this.applyPersistedWorldState(options.persistedWorldState);
+      this.applyPersistedWorldState(options.persistedWorldState, options.savedIndoorsIn ?? null);
     }
     if (interiorReturn !== null) this.applyInteriorReturn(interiorReturn);
     this.updateSfxGates();
@@ -3286,9 +3463,11 @@ export class DungeonScene extends GameplayScene {
           spriteGroupsReady,
         }),
     };
+    const arrivalCard = options?.arrivalCard;
     this.arrivalLoading.begin({
       ...this.warpLoadRequest,
-      returning: options?.existingMap !== undefined,
+      ...arrivalCard,
+      returning: arrivalCard === undefined && options?.existingMap !== undefined,
     });
     for (const surface of this.surfaces()) this.ui.mount(surface);
     const startingPopulation = new Set(initialMobs);
@@ -3885,10 +4064,7 @@ export class DungeonScene extends GameplayScene {
       // The loading screen counts too: a pause menu opened under it would be
       // waiting, unseen, over a floor the player has not been shown yet.
       isGameOver: () =>
-        this.gameOver ||
-        this.levelCompleteScreen.isActive ||
-        this.runCompleteScreen.isActive ||
-        this.arrivalLoading.isOpen,
+        this.gameOver || this.levelCompleteScreen.isActive || this.arrivalLoading.isOpen,
       togglePause: () => this.togglePause(),
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
@@ -3975,6 +4151,27 @@ export class DungeonScene extends GameplayScene {
         places: [village.palisadeBounds],
       });
     }
+    const stakeoutPlace = this.missingCats.stakeoutPlace;
+    gates.push({
+      group: 'missingCatsStakeout',
+      activeAnywhere: activeAnywhere('missingCatsStakeout'),
+      places:
+        stakeoutPlace === null ? [] : [{ x: stakeoutPlace.x, y: stakeoutPlace.y, w: 1, h: 1 }],
+    });
+    gates.push({
+      group: 'missingCatsCapture',
+      activeAnywhere: activeAnywhere('missingCatsCapture'),
+      places: [],
+    });
+    const inn = this.gameMap.buildingEntries.find((entry) => entry.id === 'taloncrest_inn');
+    gates.push({
+      group: 'missingCatsReunion',
+      activeAnywhere: activeAnywhere('missingCatsReunion'),
+      places:
+        inn === undefined || this.missingCatsProgress.phase !== 'aftermath'
+          ? []
+          : [{ x: inn.doorTile.x, y: inn.doorTile.y, w: 1, h: 1 }],
+    });
     const circusCentre = this.gameMap.circusCentre;
     const circusRadius = this.gameMap.circusRadiusTiles ?? 0;
     gates.push({
@@ -4004,13 +4201,15 @@ export class DungeonScene extends GameplayScene {
       escortAmbushersStanding:
         this.briarHollowKit?.blueprints?.escort.ambush.hasLivingAmbushers === true,
       bountyOut: this.bountyProgress.phase !== 'available',
+      stakeoutUnderWay: this.missingCats.stakeoutUnderWay,
+      captureDue: this.missingCats.duskWanted && this.missingCatsProgress.phase === 'bait',
     };
   }
 
   private updateSfxGates(): void {
     const gates = this.sfxGates;
     if (gates === null) return;
-    const partyTiles = [this.human, this.cat].map((crawler) => ({
+    const partyTiles = this.pm.presentCrawlers().map((crawler) => ({
       x: Math.floor(crawler.x / TILE_SIZE + TILE_CENTER_OFFSET),
       y: Math.floor(crawler.y / TILE_SIZE + TILE_CENTER_OFFSET),
     }));
@@ -4020,6 +4219,7 @@ export class DungeonScene extends GameplayScene {
 
   onExit(): void {
     this.releaseDifficultyForTimeLimit();
+    this.missingCats.dispose();
     // A conversation cut off by the scene changing never closes on its own,
     // and its talk row would stay pinned.
     this.releaseCitizenDialogTarget();
@@ -4035,7 +4235,7 @@ export class DungeonScene extends GameplayScene {
     // dialog that never got its close callback can never surface as a
     // permanently-low coin counter on whatever replaces this scene.
     this.rewardFly.reset();
-    this.humanTalk.stop(this.human);
+    this.crawlerTalk.stop(this.human, this.cat);
     // Every loop and bed the floor started dies with the scene — unlike music,
     // which may deliberately survive a building round-trip.
     this.audioScope?.dispose();
@@ -4202,12 +4402,26 @@ export class DungeonScene extends GameplayScene {
     return emitters;
   }
 
+  private dropPresentPartnerTarget(): void {
+    const partner = this.presentPartner();
+    if (partner !== null) partner.autoTarget = null;
+  }
+
   private triggerSwitchCharacter(force = false): void {
     if (!force && this.tutorial !== null && !this.tutorial.canSwitchCharacter) {
       this.audio?.play('error');
       return;
     }
-    if (this.inactive().isKnockedOut || this.cloggedBathroom.isStallVisitActive) {
+    const awayRefusal = this.pm.switchRefusal();
+    if (awayRefusal !== null) {
+      this.audio?.play('error');
+      this.menus.toasts.post(awayRefusal, {
+        tone: 'danger',
+        durationTicks: COMPANION_ERROR_DISPLAY_FRAMES,
+      });
+      return;
+    }
+    if (this.presentPartner()?.isKnockedOut === true || this.cloggedBathroom.isStallVisitActive) {
       this.audio?.play('error');
       return;
     }
@@ -4951,9 +5165,9 @@ export class DungeonScene extends GameplayScene {
    */
   private residencyOutlook(): ResidencyOutlook {
     const active = this.active();
-    const inactive = this.inactive();
+    const partner = this.presentPartner();
     const focus: ResidencyFocus[] = [{ x: active.x, y: active.y }];
-    if (!inactive.isKnockedOut) focus.push({ x: inactive.x, y: inactive.y });
+    if (partner !== null && !partner.isKnockedOut) focus.push({ x: partner.x, y: partner.y });
     const landing = this.recall.channelLandingTile;
     if (landing !== null) focus.push({ ...tileFocus(landing), landing: true });
     const respawn = this.gameOver ? this.checkpointRespawnFocus() : null;
@@ -5058,6 +5272,35 @@ export class DungeonScene extends GameplayScene {
    * script's gather, so none of them can drift apart on where a party ends up.
    * `isAcceptable` keeps both crawlers inside a region the caller owns.
    */
+  /**
+   * A dungeon wall is a wall seen from in front, the same as an interior's,
+   * so a crawler walking south into one has to stop with their feet on the
+   * last floor tile rather than planting their whole lower half on the
+   * masonry — see `SOLE_COLLISION_OFFSET`. Only the outdoor town keeps the
+   * waist anchor: out there the "walls" are building facades and town
+   * walls whose art and clearances are a separate question from this one.
+   */
+  private get southAnchor(): SouthCollisionAnchor {
+    return this.levelDef.isOverworld === true ? 'waist' : 'sole';
+  }
+
+  /** Both crawlers, by the ids this floor's scripts name them with. */
+  private lendCutsceneActors(): void {
+    for (const crawler of [this.human, this.cat]) {
+      const actor = bodyActor(crawler, {
+        map: () => this.gameMap,
+        southAnchor: this.southAnchor,
+        hold: (held) => this.companion.holdForScript(crawler, held),
+      });
+      this.cutscenes.director.actors.register(crawler === this.human ? 'human' : 'cat', () =>
+        crawler.isAway ? null : actor,
+      );
+    }
+    for (const id of CAPTURE_ACTOR_IDS) {
+      this.cutscenes.director.actors.register(id, () => this.missingCats.captureActor(id));
+    }
+  }
+
   private placePartyAtTile(
     landing: { x: number; y: number },
     isAcceptable: TileFilter = ANY_TILE,
@@ -5142,7 +5385,7 @@ export class DungeonScene extends GameplayScene {
       y: target.y + Math.floor(target.h / 2),
     };
     this.mercenarySystem.reviveDownedQuietly();
-    for (const crawler of [this.human, this.cat]) {
+    for (const crawler of this.pm.presentCrawlers()) {
       if (crawler.isKnockedOut) finishRevival(crawler, crawler === this.human, null, this.bus);
       crawler.clearKnockback();
       crawler.isMoving = false;
@@ -5190,7 +5433,7 @@ export class DungeonScene extends GameplayScene {
    */
   private isPartyInUnresolvedBossRoom(ctx: SystemContext): boolean {
     const { mobs } = ctx.roster;
-    return [ctx.human, ctx.cat].some(
+    return presentCrawlers(ctx).some(
       (crawler) =>
         this.bossRoom.isEntityInUnresolvedBossRoom(crawler, mobs) ||
         this.spiderQuest.isEntityInUnresolvedLab(crawler, mobs),
@@ -5210,6 +5453,29 @@ export class DungeonScene extends GameplayScene {
       });
     }
     this.enterBuilding(entry);
+  }
+
+  /** Once, on the first gameplay frame of a dev boot that opens inside the sewer. */
+  private enterSewerForDev(): void {
+    if (!this.devSewerEntryPending) return;
+    this.devSewerEntryPending = false;
+    const entry = this.gameMap.buildingEntries.find((candidate) => candidate.id === STORM_DRAIN_ID);
+    if (entry === undefined) return;
+    this.enterBuilding(entry);
+  }
+
+  /**
+   * Whether the storm-drain grate lets the party down. Shut until the
+   * questline that needs the sewer has the cellar elf unbolt it, and open for
+   * good after: this is the one question the grate's refusal asks.
+   */
+  private stormDrainOpen(): boolean {
+    return this.stormDrainOpenedForDev || stormDrainOpenFor(this.missingCatsProgress);
+  }
+
+  /** Whether the cellar elf is down in the sewer to guide the party on this visit. */
+  private sewerIsGuided(): boolean {
+    return this.stormDrainOpenedForDev || this.missingCatsProgress.phase === 'sewer';
   }
 
   /**
@@ -5309,7 +5575,9 @@ export class DungeonScene extends GameplayScene {
    */
   private autoSummonDeinonychus(ctx: SystemContext): void {
     if (!settings.catAutoSummonsDeinonychus) return;
-    if (!this.human.isActive || this.deinonychusSystem.deinonychus !== null) return;
+    if (!this.human.isActive || this.cat.isAway || this.deinonychusSystem.deinonychus !== null) {
+      return;
+    }
     if (this.companion.getCombatStance(true) === 'passive') return;
     // A rest stop is not a staging ground: a hostile in sight through the door
     // would otherwise have him deployed from inside the sanctuary.
@@ -5318,9 +5586,18 @@ export class DungeonScene extends GameplayScene {
     if (!this.summonDeinonychus()) this.deinonychusSystem.onAutoSummonRefused();
   }
 
+  private presentPartnerSafeRoom(): SafeRoomId | null {
+    const partner = this.presentPartner();
+    return partner === null ? null : this.safeRoom.safeRoomAt(partner);
+  }
+
   /** The safe room either crawler stands in, or null. */
   private partySafeRoom(): SafeRoomId | null {
-    return this.safeRoom.safeRoomAt(this.human) ?? this.safeRoom.safeRoomAt(this.cat);
+    for (const crawler of this.pm.presentCrawlers()) {
+      const room = this.safeRoom.safeRoomAt(crawler);
+      if (room !== null) return room;
+    }
+    return null;
   }
 
   /**
@@ -5335,7 +5612,6 @@ export class DungeonScene extends GameplayScene {
     // the other two throw it away, and the durable record would have survived
     // any of them.
     this.bounty?.abandonBounty(this.world.roster.mobs, this.world.roster.grid);
-    rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
 
     const route = respawnRouteFor(this.lastSave, this.deathCause);
     switch (route.kind) {
@@ -5391,29 +5667,13 @@ export class DungeonScene extends GameplayScene {
   private enterBuilding(
     entry: BuildingEntry,
     prisonDifficulty: Difficulty = settings.difficulty,
+    arrival: InteriorArrival | null = null,
+    carried: InteriorHandOver | null = null,
   ): void {
     const levelDef = this.levelDef;
-    // Spawn one tile south of the door so the player exits outside and
-    // doesn't immediately re-trigger the "Enter building?" prompt.
-    const returnTile = {
-      x: entry.doorTile.x,
-      y: entry.doorTile.y + 1,
-    };
-    // Read before the dismiss that clears it. The dismiss still has to
-    // happen: this scene's roster is thrown away with it, and the dismiss
-    // is what writes his remaining health into the pet state the interior
-    // rebuilds him from.
-    const companionArrival: InteriorCompanionArrival = {
-      deinonychusUnlocked: this.deinonychusSystem.unlocked,
-      deinonychusWasOut: this.deinonychusSystem.followsThroughDoor,
-    };
-    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-    // A standing hire's health goes into the roster the interior stands it
-    // up from; a hire lying downed at the door is lost with this scene.
-    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
-    // Her health goes into the shared state the interior stands her up from;
-    // down at the door, she goes to rest instead.
-    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    const returnTile = doorstepOf(entry);
+    const party = carried ?? this.partyThroughTheDoor(returnTile);
+    const companionArrival = party.companions;
     // The prison admits neither companion: they wait in the gate room, and
     // Deinonychus walks back out with the party exactly as he stood at the door.
     const companionsWaitOutside = entry.type === 'prison';
@@ -5421,12 +5681,9 @@ export class DungeonScene extends GameplayScene {
       companionsWaitOutside
         ? { ...indoors, deinonychusWasOut: companionArrival.deinonychusWasOut }
         : indoors;
-    const heldFloor = this.floorRegeneratesAroundBuildings
-      ? null
-      : this.holdFloorForInterior(returnTile);
+    const heldFloor = party.heldFloor === null ? null : { ...party.heldFloor, returnTile };
     this.floorArtHeldByBuildingVisit = true;
-    const humanSnap = snapPlayer(this.human);
-    const catSnap = snapPlayer(this.cat);
+    const { humanSnap, catSnap } = party;
     const hudView: HudViewState = { miniMapExpanded: this.miniMap.isExpanded };
     this.sceneManager.replace(
       new BuildingInteriorScene(
@@ -5437,7 +5694,16 @@ export class DungeonScene extends GameplayScene {
         levelDef.arrivalLoadingScreen,
         this.input,
         this.sceneManager,
-        (hSnap, cSnap, defeated, companionDeparture) => {
+        (hSnap, cSnap, defeated, companionDeparture, onward) => {
+          if (!defeated && onward !== null && onward.to.kind === 'interior') {
+            this.handOverBetweenInteriors(onward, {
+              humanSnap: hSnap,
+              catSnap: cSnap,
+              companions: departureFor(companionDeparture),
+              heldFloor,
+            });
+            return;
+          }
           if (heldFloor !== null) {
             const outside = new DungeonScene(levelDef, this.input, this.sceneManager, {
               ...this.buildingExitOptions(hudView, hSnap, cSnap, departureFor(companionDeparture)),
@@ -5451,12 +5717,12 @@ export class DungeonScene extends GameplayScene {
             // as a death outside would be: rewound in place to the last save's
             // checkpoint, with the creatures killed before it still dead.
             if (defeated) outside.respawnAfterDeath();
+            else if (onward !== null) outside.transferParty(onward);
             return;
           }
           // A defeat indoors is a death like any other, so it lands on the
           // last save rather than on the doorstep the party died behind.
           const lastSave = this.lastSave;
-          if (defeated) rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
           if (defeated && lastSave !== null) {
             // The save rebuilds its floor from scratch, so nothing takes over
             // the map this visit was holding.
@@ -5474,21 +5740,21 @@ export class DungeonScene extends GameplayScene {
           // every leave-town path stays covered without special cases for
           // which ones happen to be "the same floor."
           this.residency.releaseAll();
-          this.sceneManager.replace(
-            new DungeonScene(levelDef, this.input, this.sceneManager, {
-              ...this.buildingExitOptions(hudView, hSnap, cSnap, companionDeparture),
-              spawnAt: exitTile,
-              // The save, not its checkpoint: the rebuilt scene regenerates the
-              // overworld's creatures, so mob flags captured against this
-              // scene would mean nothing there. An exit inside the town wall
-              // saves afresh on its first frame whenever a town save is
-              // allowed; until then — and for good after an exit outside the
-              // wall, such as the Starlight Tent's — a death respawns from this save.
-              lastSave: this.lastSave?.progress,
-              existingRecallState: this.recall.captureCheckpoint(),
-              existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
-            }),
-          );
+          const outside = new DungeonScene(levelDef, this.input, this.sceneManager, {
+            ...this.buildingExitOptions(hudView, hSnap, cSnap, companionDeparture),
+            spawnAt: exitTile,
+            // The save, not its checkpoint: the rebuilt scene regenerates the
+            // overworld's creatures, so mob flags captured against this
+            // scene would mean nothing there. An exit inside the town wall
+            // saves afresh on its first frame whenever a town save is
+            // allowed; until then — and for good after an exit outside the
+            // wall, such as the Starlight Tent's — a death respawns from this save.
+            lastSave: this.lastSave?.progress,
+            existingRecallState: this.recall.captureCheckpoint(),
+            existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
+          });
+          this.sceneManager.replace(outside);
+          if (!defeated && onward !== null) outside.transferParty(onward);
         },
         this.shopStock,
         this.humanAchievements,
@@ -5498,9 +5764,9 @@ export class DungeonScene extends GameplayScene {
         {
           starlightTent: this.starlightTentProgress,
           worldSeed: this.gameMap.worldSeed,
+          sewerGuided: this.sewerIsGuided(),
+          missingCats: this.missingCatsProgress,
         },
-        this.murderQuestProgress,
-        this.doomsdayQuestProgress,
         this.casinoState,
         this.townMemory,
         this.mercenaryRoster,
@@ -5517,18 +5783,181 @@ export class DungeonScene extends GameplayScene {
         this.partyCrafts,
         this.briarHollowState,
         // Asked live rather than snapshotted: progress threaded by
-        // reference (the anchor shards, the murders) moves indoors, and
+        // reference (the anchor shards) moves indoors, and
         // the Journal should say so while the party is still inside.
         this.hasQuestJournal
           ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
           : undefined,
         hudView,
-        heldFloor === null
-          ? { ...TOWN_INTERIOR_FLOOR, aiFloorKey: this.aiFloorKey() }
-          : this.interiorFloorContext(heldFloor, entry, prisonDifficulty),
+        {
+          ...(heldFloor === null
+            ? { ...TOWN_INTERIOR_FLOOR, aiFloorKey: this.aiFloorKey() }
+            : this.interiorFloorContext(heldFloor, entry, prisonDifficulty)),
+          ...(arrival === null ? {} : { arrival }),
+        },
         this.interiorPartyRun(returnTile),
       ),
     );
+  }
+
+  /**
+   * The party as it stands at a door, about to go through it: snapshots of
+   * both crawlers, who walks in with them, and — on a floor that is not
+   * rebuilt around its buildings — the floor held aside for the visit.
+   *
+   * Dismissing the companions is part of it: this scene's roster is thrown
+   * away with the scene, and the dismiss is what writes the pet's, the hire's
+   * and the cow's health into the shared state the interior stands them up
+   * from. A hire lying downed at the door is lost with this scene.
+   */
+  private partyThroughTheDoor(returnTile: TilePoint): InteriorHandOver {
+    const companions: InteriorCompanionArrival = {
+      deinonychusUnlocked: this.deinonychusSystem.unlocked,
+      deinonychusWasOut: this.deinonychusSystem.followsThroughDoor,
+    };
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    const heldFloor = this.floorRegeneratesAroundBuildings
+      ? null
+      : this.holdFloorForInterior(returnTile);
+    return {
+      humanSnap: snapPlayer(this.human),
+      catSnap: snapPlayer(this.cat),
+      companions,
+      heldFloor,
+    };
+  }
+
+  /**
+   * Hands the party from one interior straight into another on this floor,
+   * with no street between them: a sewer culvert opening into the tower's
+   * cistern. The party walks in exactly as it walked out of the last room —
+   * its snapshots, its companions and the floor held aside for the visit —
+   * so the only loading screen is the new room's own.
+   *
+   * This scene stays the one that owns the floor for the whole chain of
+   * rooms, as it does for a single visit: the last room's way out to the
+   * street rebuilds the floor from it.
+   */
+  private handOverBetweenInteriors(request: PartyTransferRequest, carried: InteriorHandOver): void {
+    const { to, card } = request;
+    if (to.kind !== 'interior') {
+      throw new Error('a hand-over between interiors needs an interior to go to');
+    }
+    const entry = this.gameMap.buildingEntries.find((candidate) => candidate.id === to.building);
+    if (entry === undefined) throw new Error(`no door to ${to.building} on this floor`);
+    this.enterBuilding(
+      entry,
+      settings.difficulty,
+      { storey: to.storey, tile: to.tile, card },
+      carried,
+    );
+  }
+
+  /**
+   * Moves the party to `request.to` behind its card, replacing this scene:
+   * the seam every split hand-over, regroup and rejoin goes through, and the
+   * one place a location kind is turned into a scene.
+   */
+  transferParty(request: PartyTransferRequest): void {
+    transferParty(
+      {
+        arriveOverworld: (tile, card) => this.arriveOverworldByTransfer(tile, card),
+        arriveInterior: (building, arrival) => {
+          const entry = this.gameMap.buildingEntries.find((candidate) => candidate.id === building);
+          if (entry === undefined) throw new Error(`no door to ${building} on this floor`);
+          this.enterBuilding(entry, settings.difficulty, arrival);
+        },
+      },
+      request,
+    );
+  }
+
+  /** Rebuilds this overworld with the party set down at `tile`, as a building exit does. */
+  private arriveOverworldByTransfer(tile: TilePoint, card: ArrivalCard | null): void {
+    if (!this.floorRegeneratesAroundBuildings) {
+      throw new Error(`${this.levelDef.id} is not an overworld a party can be moved to`);
+    }
+    const departure: InteriorCompanionDeparture = {
+      deinonychusWasOut: this.deinonychusSystem.followsThroughDoor,
+      deinonychusUnlocked: this.deinonychusSystem.unlocked,
+    };
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    const hudView: HudViewState = { miniMapExpanded: this.miniMap.isExpanded };
+    this.residency.releaseAll();
+    this.sceneManager.replace(
+      new DungeonScene(this.levelDef, this.input, this.sceneManager, {
+        ...this.buildingExitOptions(
+          hudView,
+          snapPlayer(this.human),
+          snapPlayer(this.cat),
+          departure,
+        ),
+        spawnAt: tile,
+        ...(card === null ? {} : { arrivalCard: card }),
+        lastSave: this.lastSave?.progress,
+        existingRecallState: this.recall.captureCheckpoint(),
+        existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
+      }),
+    );
+  }
+
+  /**
+   * Where a save taken for a chapter starting at `at` resumes on this floor:
+   * the chapter's own tile outdoors, the building's front step for one indoors,
+   * since a save cannot resume inside a building.
+   */
+  private resumeTileFor(at: PartyLocation): TilePoint {
+    switch (at.kind) {
+      case 'overworld':
+        return at.tile;
+      case 'interior': {
+        const entry = this.gameMap.buildingEntries.find(
+          (candidate) => candidate.id === at.building,
+        );
+        if (entry === undefined) throw new Error(`no door to ${at.building} on this floor`);
+        return doorstepOf(entry);
+      }
+      default: {
+        const unreachable: never = at;
+        return unreachable;
+      }
+    }
+  }
+
+  /** Where the steered crawler stands, as a split records it; null on a floor no location kind names. */
+  private liveGroupLocation(): PartyLocation | null {
+    if (!this.floorRegeneratesAroundBuildings) return null;
+    return { kind: 'overworld', tile: tileStoodOn(this.active()) };
+  }
+
+  /**
+   * A restored party owed inside the building its save was written in
+   * (`resumeLocationFor`) is moved there on the first live frame, since this
+   * scene only ever stands a party up outdoors; a save written outdoors
+   * resumes where it was written.
+   */
+  private oweIndoorsResume(savedIndoorsIn: BuildingId | null): void {
+    this.resumeOwed = resumeLocationFor(
+      this.partySplit.formation,
+      savedIndoorsIn,
+      missingCatsTowerResume(this.missingCatsProgress),
+    );
+  }
+
+  /**
+   * A save or a rewind lands here, on the floor that owns the save, a save
+   * never standing a party up indoors; when the party belongs somewhere else
+   * it is moved there.
+   */
+  private resumeIfOwed(): void {
+    const owed = this.resumeOwed;
+    if (owed === null) return;
+    this.resumeOwed = null;
+    this.transferParty({ to: owed, card: null });
   }
 
   /**
@@ -5664,14 +6093,14 @@ export class DungeonScene extends GameplayScene {
       onResetGame: this.onResetGameCallback ?? undefined,
       progressWipe: this.progressWipe ?? undefined,
       starlightTentProgress: this.starlightTentProgress,
-      murderQuestProgress: this.murderQuestProgress,
       anchorQuestProgress: this.anchorQuestProgress,
+      missingCatsProgress: this.missingCatsProgress,
       journalProgress: this.journalProgress,
       bountyProgress: this.bountyProgress,
       midgeEscortCarry: this.midgeEscortCarry,
-      doomsdayQuestProgress: this.doomsdayQuestProgress,
       casinoState: this.casinoState,
       townMemory: this.townMemory,
+      partySplit: this.partySplit,
       briarHollowState: this.briarHollowState,
       shopStock: this.shopStock,
       mercenaryRoster: this.mercenaryRoster,
@@ -5717,9 +6146,7 @@ export class DungeonScene extends GameplayScene {
    * from the save, or one whose last write had no room to stand the party in.
    *
    * Carries over only what the save does not hold and a reload would not want
-   * lost. The doomsday countdown is preserved for the same reason
-   * {@link restoreFromCheckpoint} preserves it: rewinding it would make dying a
-   * way to buy back time. The run's tallies rewind to the save's copy, but keep
+   * lost. The run's tallies rewind to the save's copy, but keep
    * the deaths and time played of the run in progress. Achievements are the
    * save's copy.
    *
@@ -5757,7 +6184,6 @@ export class DungeonScene extends GameplayScene {
         floorArrivalSave: sameFloor ? (this.floorArrivalSave ?? undefined) : undefined,
         rewriteCarriedSave: storage === 'rewriteSave',
         devPrisonLayout: sameFloor ? (this.devPrisonLayout ?? undefined) : undefined,
-        doomsdayQuestProgress: this.doomsdayQuestProgress,
         godModeState: this.godModeState,
         companionStance: this.companionStance,
         gameStats: this.gameStats,
@@ -5777,9 +6203,8 @@ export class DungeonScene extends GameplayScene {
    * the world the player left cannot be re-derived — it can only be kept and
    * rewound, which is what {@link restoreWorldCheckpoint} does.
    *
-   * The three deliberate exceptions, all preserved rather than rewound: the
-   * doomsday countdown (rewinding it would make dying a way to buy back time),
-   * the `difficultyStats` singleton (adaptive difficulty has to keep learning
+   * The two deliberate exceptions, both preserved rather than rewound: the
+   * `difficultyStats` singleton (adaptive difficulty has to keep learning
    * from real deaths), and fog of war (re-walking explored map is only tedium).
    */
   private restoreFromCheckpoint(cp: LevelCheckpoint): void {
@@ -5858,6 +6283,7 @@ export class DungeonScene extends GameplayScene {
     setWorldZoom(this.cameraZoom.zoom);
     this.scriptedDeaths.reset();
     this.cutscenes.resetForCheckpoint();
+    this.missingCats.resetForCheckpoint();
     this.globs.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
     this.hirelingShots.resetForCheckpoint();
@@ -5875,6 +6301,7 @@ export class DungeonScene extends GameplayScene {
     // same room locks and entry windows the snapshot describes, and they clear
     // them to "no fight in progress" rather than to what was actually captured.
     this.applyWorldCheckpoint(cp.world, cp.floorElapsedFrames, 'rewind');
+    this.oweIndoorsResume(cp.savedIndoorsIn);
     if (this.briarHollowKitCheckpoint !== null) {
       this.briarHollowKit?.restoreCheckpoint(this.briarHollowKitCheckpoint);
     }
@@ -5891,11 +6318,6 @@ export class DungeonScene extends GameplayScene {
     this.releaseKeyboardHeroMusic();
     const floodedRoom = this.bossRoomDressings.parts.floodedPumpRoom;
     if (floodedRoom !== null) this.krakenFightMusic?.restart(floodedRoom);
-
-    // A town save can predate a quest fight that was still being fought when
-    // the party fell. Rewound to before it, the quest no longer holds its
-    // track; one rewound into it has just claimed it again.
-    if (!this.murderQuest.isTownFightInProgress) this.audioScope?.releaseMusic('night_attack');
 
     // The party is standing on the save point right now — the latches have to
     // agree, or the respawn frame would read as a fresh entry and save the
@@ -5961,15 +6383,13 @@ export class DungeonScene extends GameplayScene {
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
       stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint(),
       spiderQuest: this.spiderQuest.captureCheckpoint(),
-      murderQuest: this.murderQuest.captureCheckpoint(),
-      doomsdayEscape: this.doomsdayEscape.captureCheckpoint(),
 
       trees: this.trees?.captureCheckpoint() ?? null,
       bounty: this.bounty?.captureCheckpoint() ?? null,
 
       starlightTentProgress: captureStarlightTentProgress(this.starlightTentProgress),
-      murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
       anchorQuestProgress: captureAnchorQuestProgress(this.anchorQuestProgress),
+      missingCatsProgress: captureMissingCatsProgress(this.missingCatsProgress),
       journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
       casinoState: captureCasinoState(this.casinoState),
@@ -5978,6 +6398,7 @@ export class DungeonScene extends GameplayScene {
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       deinonychusPetState: captureDeinonychusPetState(this.deinonychusPetState),
       attackCowState: captureAttackCowState(this.attackCowState),
+      partySplit: capturePartySplit(this.partySplit),
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
       krakenKilled: this.krakenKilled,
@@ -6023,12 +6444,6 @@ export class DungeonScene extends GameplayScene {
     // After the map's restore too: the gate follows the quest's phase.
     this.stealthKeySnatch.restoreCheckpoint(world.stealthKeySnatch);
     this.spiderQuest.restoreCheckpoint(world.spiderQuest);
-    this.murderQuest.restoreCheckpoint(
-      world.murderQuest,
-      this.world.roster.mobs,
-      this.world.roster.grid,
-    );
-    this.doomsdayEscape.restoreCheckpoint(world.doomsdayEscape);
 
     if (this.trees !== null && world.trees !== null) {
       this.trees.restoreCheckpoint(world.trees);
@@ -6059,8 +6474,8 @@ export class DungeonScene extends GameplayScene {
     this.deinonychusSystem.restoreCheckpoint(world.deinonychus);
 
     restoreStarlightTentProgress(this.starlightTentProgress, world.starlightTentProgress);
-    restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
     restoreAnchorQuestProgress(this.anchorQuestProgress, world.anchorQuestProgress);
+    restoreMissingCatsProgress(this.missingCatsProgress, world.missingCatsProgress);
     restoreJournalProgress(this.journalProgress, world.journal);
     // Paired with the bounty system above: the re-stage reads the mark's type,
     // name and site from this record, so an un-restored cursor would re-stage
@@ -6076,6 +6491,8 @@ export class DungeonScene extends GameplayScene {
     restoreDeinonychusPetState(this.deinonychusPetState, world.deinonychusPetState);
     // After `attackCowSystem.dismiss()` for the same reason as the pet's.
     restoreAttackCowState(this.attackCowState, world.attackCowState);
+    restorePartySplit(this.partySplit, world.partySplit);
+    this.pm.steerLiveGroup();
     restoreBriarHollowState(this.briarHollowState, world.briarHollow);
   }
 
@@ -6091,13 +6508,12 @@ export class DungeonScene extends GameplayScene {
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
       stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint(),
       spiderQuest: toPersistedSpiderQuestCheckpoint(this.spiderQuest.captureCheckpoint()),
-      murderQuest: toPersistedMurderMysteryQuestCheckpoint(this.murderQuest.captureCheckpoint()),
       bounty:
         this.bounty === null ? null : toPersistedBountyCheckpoint(this.bounty.captureCheckpoint()),
 
       starlightTentProgress: captureStarlightTentProgress(this.starlightTentProgress),
       anchorQuestProgress: captureAnchorQuestProgress(this.anchorQuestProgress),
-      murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
+      missingCatsProgress: captureMissingCatsProgress(this.missingCatsProgress),
       journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
       casinoState: captureCasinoState(this.casinoState),
@@ -6110,9 +6526,9 @@ export class DungeonScene extends GameplayScene {
       }),
       daveDebrief: { ...this.daveDebrief },
       tacticsNoticesSeen: [...this.tacticsNoticesSeen],
-      doomsday: capturePersistedDoomsday(this.doomsdayQuestProgress, Date.now()),
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
       briarHollow: captureBriarHollowState(this.briarHollowState),
+      partySplit: capturePartySplit(this.partySplit),
 
       krakenKilled: this.krakenKilled,
       bigRoosterKilled: this.bigRoosterKilled,
@@ -6134,7 +6550,10 @@ export class DungeonScene extends GameplayScene {
    * {@link restoreWorldCheckpoint} it is not a rewind, so there is no fight or
    * companion directive to clear first.
    */
-  private applyPersistedWorldState(state: PersistedWorldState): void {
+  private applyPersistedWorldState(
+    state: PersistedWorldState,
+    savedIndoorsIn: BuildingId | null,
+  ): void {
     // Every field is destructured so that the unused-variable lint catches one
     // that is read here but never applied, and the rest has to type as empty so
     // that a field added to the save but never read here fails the typecheck.
@@ -6145,11 +6564,10 @@ export class DungeonScene extends GameplayScene {
       cloggedBathroom,
       stealthKeySnatch,
       spiderQuest,
-      murderQuest,
       bounty,
       starlightTentProgress,
       anchorQuestProgress,
-      murderQuestProgress,
+      missingCatsProgress,
       journal,
       bountyProgress,
       casinoState,
@@ -6159,9 +6577,9 @@ export class DungeonScene extends GameplayScene {
       deinonychusPetState,
       daveDebrief,
       tacticsNoticesSeen,
-      doomsday,
       bossRoomDressing,
       briarHollow,
+      partySplit,
       krakenKilled,
       bigRoosterKilled,
       bigRoosterBossRoomIdx,
@@ -6192,18 +6610,12 @@ export class DungeonScene extends GameplayScene {
     // constructors spawned against this same progress object, and must see the
     // saved progress rather than the default those constructors read.
     restoreStarlightTentProgress(this.starlightTentProgress, starlightTentProgress);
-    restoreMurderQuestProgress(this.murderQuestProgress, murderQuestProgress);
-
-    this.murderQuest.restoreCheckpoint(
-      fromPersistedMurderMysteryQuestCheckpoint(murderQuest),
-      mobs,
-      grid,
-    );
     if (this.bounty !== null && bounty !== null) {
       this.bounty.restoreFromSave(fromPersistedBountyCheckpoint(bounty));
     }
 
     restoreAnchorQuestProgress(this.anchorQuestProgress, anchorQuestProgress);
+    restoreMissingCatsProgress(this.missingCatsProgress, missingCatsProgress);
     restoreJournalProgress(this.journalProgress, journal);
     restoreBountyProgress(this.bountyProgress, bountyProgress);
     restoreCasinoState(this.casinoState, casinoState);
@@ -6212,6 +6624,9 @@ export class DungeonScene extends GameplayScene {
     restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
     restoreDeinonychusPetState(this.deinonychusPetState, deinonychusPetState);
     restoreBriarHollowState(this.briarHollowState, briarHollow);
+    restorePartySplit(this.partySplit, partySplit);
+    this.pm.steerLiveGroup();
+    this.oweIndoorsResume(savedIndoorsIn);
 
     this.daveDebrief = { ...daveDebrief };
     // `TacticsNoticeSystem` holds this exact Set by reference, so it's refilled
@@ -6219,7 +6634,6 @@ export class DungeonScene extends GameplayScene {
     // system watching the stale, pre-load one.
     this.tacticsNoticesSeen.clear();
     for (const trait of tacticsNoticesSeen) this.tacticsNoticesSeen.add(trait);
-    restoreDoomsdayProgress(this.doomsdayQuestProgress, doomsday, Date.now());
 
     this.krakenKilled = krakenKilled;
     this.bigRoosterKilled = bigRoosterKilled;
@@ -6232,12 +6646,19 @@ export class DungeonScene extends GameplayScene {
    * replaces the last checkpoint: a death then rebuilds from this save rather
    * than rewinding to an older moment than the one just persisted.
    */
-  private saveProgress(checkpoint: LevelCheckpoint | null): void {
-    const progress = this.buildSaveProgress({
-      human: snapPlayer(this.human),
-      cat: snapPlayer(this.cat),
-      ...this.deinonychusPetSaveState(),
-    });
+  private saveProgress(
+    checkpoint: LevelCheckpoint | null,
+    savedIndoorsIn: BuildingId | null = null,
+  ): void {
+    const progress = this.buildSaveProgress(
+      {
+        human: snapPlayer(this.human),
+        cat: snapPlayer(this.cat),
+        ...this.deinonychusPetSaveState(),
+      },
+      this.lastSavePointTile,
+      savedIndoorsIn,
+    );
     this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
     if (this.arrivalSavePending && this.floorArrivalSave === null) this.floorArrivalSave = progress;
     void this.dispatchSaveProgress(progress);
@@ -6248,12 +6669,18 @@ export class DungeonScene extends GameplayScene {
    * stands indoors, and once storage has taken it, makes it the save a death
    * respawns from. The world
    * half is this scene's own, still the one the party walks back out into.
-   * A save cannot resume indoors, so a reload resumes on `doorstep`, the
-   * building's own front step. Resolves once storage has answered, for a
-   * caller that must not run ahead of the write.
+   * A save cannot resume indoors, so a reload resumes on the floor tile
+   * `resumeTileFor(resumeAt)` names, and the save records the building it was
+   * written in for {@link resumeLocationFor}. Resolves once storage has
+   * answered, for a caller that must not run ahead of the write.
    */
-  private commitSaveFromInterior(party: SaveParty, doorstep: TilePoint): Promise<SaveWriteOutcome> {
-    const progress = this.buildSaveProgress(party, doorstep);
+  private commitSaveFromInterior(
+    party: SaveParty,
+    resumeAt: PartyLocation,
+  ): Promise<SaveWriteOutcome> {
+    const resumeTile = this.resumeTileFor(resumeAt);
+    recordLiveGroupForSave(this.partySplit, resumeAt);
+    const progress = this.buildSaveProgress(party, resumeTile, savedIndoorsInFor(resumeAt));
     const previous = this.lastSave;
     const point = savePointAfterWrite<LevelCheckpoint>(progress, null, this.tutorial !== null);
     return adoptWhenCommitted(
@@ -6261,7 +6688,7 @@ export class DungeonScene extends GameplayScene {
       () => this.lastSave === previous,
       () => {
         this.lastSave = point;
-        this.lastSavePointTile = doorstep;
+        this.lastSavePointTile = resumeTile;
       },
     );
   }
@@ -6281,6 +6708,7 @@ export class DungeonScene extends GameplayScene {
     return {
       wheelLedger: this.wheelLedger,
       attackCowState: this.attackCowState,
+      partySplit: this.partySplit,
       petNames: this.petNames,
       daveWhereabouts: this.daveWhereabouts,
       story: {
@@ -6290,7 +6718,7 @@ export class DungeonScene extends GameplayScene {
         currentObjective: () => nextAdviceObjective(this.floorObjectives()),
         bearingOrigin: doorstep,
       },
-      commitSave: (party) => this.commitSaveFromInterior(party, doorstep),
+      commitSave: (party, resumeAt) => this.commitSaveFromInterior(party, resumeAt),
       maySave: () => this.canSaveInTown,
       progressWipe: this.progressWipe,
     };
@@ -6352,6 +6780,7 @@ export class DungeonScene extends GameplayScene {
   private buildSaveProgress(
     party: SaveParty,
     resumeTile: TilePoint | null = this.lastSavePointTile,
+    savedIndoorsIn: BuildingId | null = null,
   ): SaveProgressInput {
     const humanSnap = revivedSnapshot(party.human);
     const catSnap = revivedSnapshot(party.cat);
@@ -6368,6 +6797,7 @@ export class DungeonScene extends GameplayScene {
               worldSeed: this.gameMap.worldSeed,
               artSeed: this.gameMap.artSeed,
               resumeTile,
+              savedIndoorsIn,
               floorElapsedFrames: this.floorElapsedFrames,
               persisted: this.persistedWorldStateFor(party),
             }
@@ -6415,71 +6845,6 @@ export class DungeonScene extends GameplayScene {
     return this.onSaveProgress?.(progress) ?? Promise.resolve('disabled');
   }
 
-  /** The party is down the escape stairwell: the game is won. */
-  private completeRun(): void {
-    finishRun(this.runCompleteScreen, {
-      // A hire lying downed cannot follow the party down the stairs, so it dies
-      // here as it would at any door. A standing one keeps walking with them.
-      settleParty: () =>
-        this.mercenarySystem.forfeitDownedHire(this.world.roster.mobs, this.world.roster.grid),
-      unlockAchievements: () => {
-        this.awards.unlockParty('out_before_the_fall');
-      },
-      save: () => this.captureSavePoint(this.saveTileUnder(this.active())),
-      summarize: () =>
-        buildRunSummary({
-          stats: this.gameStats,
-          humanLevel: this.human.level,
-          catLevel: this.cat.level,
-          deinonychusLevel: this.deinonychusSystem.unlocked
-            ? this.abilityManager.getRealLevel('deinonychus')
-            : null,
-          petNames: this.petNames,
-          achievements: countPartyAchievements(this.humanAchievements, this.catAchievements),
-        }),
-      handlers: {
-        // Nothing to undo: the stairwell stays where it is, and stepping back
-        // onto it after walking away ends the run again.
-        onKeepExploring: () => undefined,
-        onMainMenu: () => this.returnToMainMenu(),
-      },
-    });
-    this.audio?.play('level_complete');
-  }
-
-  /**
-   * The start menu, with the finished run offered as the save to continue.
-   *
-   * Not the pause menu's Reset Game: that wipes the save, and a run the player
-   * just finished is exactly the one they may want to walk around in again.
-   */
-  private returnToMainMenu(): void {
-    // Leaves the floor for the title screen, not just this scene — whatever
-    // this floor holds has no claim on the memory once the player is back at
-    // the menu, continuing or not.
-    this.residency.releaseAll();
-    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-    const baseOptions: DungeonSceneOptions = {
-      audio: this.audio ?? undefined,
-      saveProgress: this.onSaveProgress,
-      onResetGame: this.onResetGameCallback ?? undefined,
-      progressWipe: this.progressWipe ?? undefined,
-    };
-    const save = this.lastSave?.progress ?? null;
-    const onContinue =
-      save === null
-        ? undefined
-        : () => {
-            const { levelDef, options } = sceneSetupFromSave(baseOptions, save);
-            this.sceneManager.replace(
-              new DungeonScene(levelDef, this.input, this.sceneManager, options),
-            );
-          };
-    this.sceneManager.replace(
-      new TitleScene(this.input, this.sceneManager, baseOptions, onContinue),
-    );
-  }
-
   /**
    * Takes a save point at `respawnTile`: the persisted game, which resumes on
    * that tile, and — outside the tutorial — the in-run checkpoint that rewinds
@@ -6490,11 +6855,35 @@ export class DungeonScene extends GameplayScene {
    * rewound in place, and a death there restarts it rather than returning here.
    */
   private captureSavePoint(respawnTile: TilePoint): void {
-    this.lastSavePointTile = respawnTile;
-    this.saveProgress(this.tutorial === null ? this.captureLevelCheckpoint(respawnTile) : null);
+    // A restore owed somewhere else moves the party on this same frame; a save
+    // here would record the live group on a street it is about to leave.
+    if (this.resumeOwed !== null) return;
+    if (this.floorRegeneratesAroundBuildings) {
+      recordLiveGroupForSave(this.partySplit, { kind: 'overworld', tile: respawnTile });
+    }
+    this.writeSavePoint(respawnTile, null);
   }
 
-  private captureLevelCheckpoint(respawnTile: TilePoint): LevelCheckpoint {
+  /**
+   * The split's save as a chapter opens at `chapterStart`, where the live group
+   * already stands: inside a building it resumes there, through
+   * {@link oweIndoorsResume}.
+   */
+  private captureChapterSave(chapterStart: PartyLocation): void {
+    this.writeSavePoint(this.resumeTileFor(chapterStart), savedIndoorsInFor(chapterStart));
+  }
+
+  private writeSavePoint(respawnTile: TilePoint, savedIndoorsIn: BuildingId | null): void {
+    this.lastSavePointTile = respawnTile;
+    const checkpoint =
+      this.tutorial === null ? this.captureLevelCheckpoint(respawnTile, savedIndoorsIn) : null;
+    this.saveProgress(checkpoint, savedIndoorsIn);
+  }
+
+  private captureLevelCheckpoint(
+    respawnTile: TilePoint,
+    savedIndoorsIn: BuildingId | null = null,
+  ): LevelCheckpoint {
     markMobsAtCheckpoint(this.world.roster);
     this.briarHollowKitCheckpoint = this.briarHollowKit?.captureCheckpoint() ?? null;
     this.gatheringCheckpoint = this.gathering?.captureCheckpoint() ?? null;
@@ -6508,6 +6897,7 @@ export class DungeonScene extends GameplayScene {
       catAchievements: this.catAchievements.clone(),
       respawnX: respawnTile.x * TILE_SIZE,
       respawnY: respawnTile.y * TILE_SIZE,
+      savedIndoorsIn,
       floorElapsedFrames: this.floorElapsedFrames,
     };
   }
@@ -6825,14 +7215,12 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * A fight in the streets: the krasue night attack, or any hostile creature
-   * inside the wall that has actually traded blows with the party — a bounty
+   * A fight in the streets: any hostile creature inside the wall that has actually traded blows with the party — a bounty
    * target or a summon that chased them through a gate. A mob that has only
    * noticed the party is not a fight, and allies are filtered by `isHostile`
    * because they share the mob roster.
    */
   private get isTownUnderAttack(): boolean {
-    if (this.murderQuest.isTownFightInProgress) return true;
     return this.world.roster.mobs.some(
       (mob) => mob.isHostile && isEngagedInFight(mob) && this.isInsideTownWall(mob),
     );
@@ -6930,17 +7318,14 @@ export class DungeonScene extends GameplayScene {
         onResetGame: this.onResetGameCallback ?? undefined,
         progressWipe: this.progressWipe ?? undefined,
         // Preserved rather than reset — a death restart shouldn't force-replay an
-        // already-completed boss fight (Quill), and for the doomsday
-        // timer specifically, resetting it here would let a player cancel a
-        // lethal countdown for free by simply dying to anything else.
+        // already-completed questline.
         starlightTentProgress: this.starlightTentProgress,
-        murderQuestProgress: this.murderQuestProgress,
         anchorQuestProgress: this.anchorQuestProgress,
+        missingCatsProgress: this.missingCatsProgress,
         // Carried through a death restart with the questlines it belongs to, so
         // the objective the player pinned is still pinned when they get up.
         journalProgress: this.journalProgress,
         bountyProgress: this.bountyProgress,
-        doomsdayQuestProgress: this.doomsdayQuestProgress,
         casinoState: this.casinoState,
         townMemory: this.townMemory,
         partyCrafts: this.partyCrafts,
@@ -6983,9 +7368,9 @@ export class DungeonScene extends GameplayScene {
       this.treasureChests.wouldInteract(active) ||
       this.defendQuest.wouldInteract(active) ||
       this.spiderQuest.wouldInteract(active) ||
-      this.murderQuest.wouldInteract(active) ||
       this.cloggedBathroom.wouldInteract(active) ||
-      this.stealthKeySnatch.wouldInteract(active)
+      this.stealthKeySnatch.wouldInteract(active) ||
+      this.towerDoorGuards.wouldInteract(active)
     );
   }
 
@@ -7012,10 +7397,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Floats "Pick up" over the nearest ground pickup, only when a press would
-   * actually reach it. Returns whether it drew, because every link after it in
-   * the Space chain (market, props, signs, the village, citizens, the hireling)
-   * is then out of reach and must not float a prompt of its own.
+   * Floats "Pick up" over the nearest ground pickup, only when no chest,
+   * quest link or gym piece ahead of it in the Space chain would take the
+   * press. Returns whether it drew.
    */
   private renderGroundPickupPrompt(
     ctx: CanvasRenderingContext2D,
@@ -7033,24 +7417,14 @@ export class DungeonScene extends GameplayScene {
   }
 
   private townDialogContext(): TownDialogContext {
-    return {
-      murder: this.murderQuestProgress.stage,
-      doomsday: this.doomsdayQuestProgress.stage,
-      quillNamed: this.murderQuestProgress.quillNamed,
-    };
+    return { missingCats: this.missingCatsProgress };
   }
 
   private townNoticeContext(): TownNoticeContext {
-    const murder = this.murderQuestProgress;
-    const cluesFound = [murder.wellClueFound, murder.homeClueFound, murder.roostClueFound].filter(
-      Boolean,
-    ).length;
     return {
-      murder: murder.stage,
-      murderCluesFound: cluesFound,
-      doomsday: this.doomsdayQuestProgress.stage,
       bounty: this.bounty?.noticeState ?? null,
       workOrder: workOrderStateFor(this.briarHollowState),
+      missingCats: this.missingCats.notices.map((notice) => notice.cat),
     };
   }
 
@@ -7061,6 +7435,7 @@ export class DungeonScene extends GameplayScene {
       action: this.workOrderAction(),
     });
     this.playNoticeBoardOpened();
+    this.missingCats.onNoticeBoardRead();
   }
 
   /** Opens Briar Hollow's notice board: the siege call while it lasts, and Wendell's work order. */
@@ -7094,9 +7469,9 @@ export class DungeonScene extends GameplayScene {
     // The posting has already explained the arrangement, so Wendell skips his pitch.
     contracts.introSeen = true;
     const world = buildContractWorld({
-      murderQuest: this.murderQuestProgress,
       anchorQuest: this.anchorQuestProgress,
       briarHollow: this.briarHollowState,
+      missingCats: this.missingCatsProgress,
     });
     const issued = issueNextContract(contracts, world, this.gameMap.worldSeed);
     if (issued === null) {
@@ -7173,13 +7548,18 @@ export class DungeonScene extends GameplayScene {
     }
     const active = this.active();
     if (!this.shouldShowInteractionPrompts(active)) return;
-    // Same order as the Space chain in `tryInteract`, so the prompt always names
-    // the thing that press would actually reach.
-    if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
-    if (this.bounty?.renderPrompt(ctx, camX, camY, active) === true) return;
-    this.townProps?.renderPrompt(ctx, camX, camY, active);
-    if (this.highStriker?.renderPrompt(ctx, camX, camY, active) === true) return;
-    if (this.signDialogTarget === null) this.crawlerSigns?.renderPrompt(ctx, camX, camY, active);
+    const owners = this.promptOwners;
+    raisePromptsFor(owners.market, () => this.market?.renderPrompt(ctx, camX, camY, active));
+    raisePromptsFor(owners.bounty, () => this.bounty?.renderPrompt(ctx, camX, camY, active));
+    raisePromptsFor(owners.townProps, () => this.townProps?.renderPrompt(ctx, camX, camY, active));
+    raisePromptsFor(owners.highStriker, () =>
+      this.highStriker?.renderPrompt(ctx, camX, camY, active),
+    );
+    if (this.signDialogTarget === null) {
+      raisePromptsFor(owners.crawlerSigns, () =>
+        this.crawlerSigns?.renderPrompt(ctx, camX, camY, active),
+      );
+    }
   }
 
   /** Floats a "Talk" prompt over the nearest citizen when one is in range and idle. */
@@ -7190,16 +7570,16 @@ export class DungeonScene extends GameplayScene {
     if (!this.shouldShowInteractionPrompts(active)) return;
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return;
-    drawInteractionPromptOver(ctx, target, camX, camY, 'Talk');
+    const owner =
+      target.markerType === 'none' ? this.promptOwners.citizen : this.promptOwners.questCitizen;
+    raisePromptsFor(owner, () => drawInteractionPromptOver(ctx, target, camX, camY, 'Talk'));
   }
 
   /**
    * Floats a "Pet" prompt over Deinonychus when a press would reach him.
    *
-   * Sits just ahead of the hireling in the Space chain, so it draws just ahead
-   * of it too: it yields to a chest, a quest giver, a citizen or a harvest
-   * already claiming the press, the same way `renderMercenaryPrompt` yields to
-   * this one.
+   * Yields to a harvest or the village, which sit ahead of him in the Space
+   * chain; anything else in reach outranks a pet on the prompt surface.
    */
   private renderDeinonychusPetPrompt(
     ctx: CanvasRenderingContext2D,
@@ -7208,33 +7588,32 @@ export class DungeonScene extends GameplayScene {
   ): void {
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) return;
-    if (interactionPromptsDrawnThisFrame() > 0) return;
     if (this.gathering?.wouldStartHarvest(active) === true) return;
     if (this.briarHollowKit?.wouldInteract(active) === true) return;
-    this.deinonychusSystem.renderPetPrompt(
-      ctx,
-      camX,
-      camY,
-      active,
-      this.gameMap,
-      this.world.roster.mobs,
-      this.world.roster.grid,
-      this.levelDef.isOverworld === true,
+    raisePromptsFor(this.promptOwners.deinonychus, () =>
+      this.deinonychusSystem.renderPetPrompt(
+        ctx,
+        camX,
+        camY,
+        active,
+        this.gameMap,
+        this.world.roster.mobs,
+        this.world.roster.grid,
+        this.levelDef.isOverworld === true,
+      ),
     );
   }
 
   /**
    * Floats a "Talk" prompt over the hireling when a press would reach it.
    *
-   * Talking is the last link of the Space chain, so this draws last of all the
-   * world prompts and yields to any of them already on screen: a chest, a quest
-   * giver or a citizen in reach takes the press first, and its prompt says so.
-   * `talkTarget` holds back while a fight is on, as the chain does.
+   * The hireling ranks last on the prompt surface, so a chest, a quest giver
+   * or a citizen in reach is the prompt shown instead. `talkTarget` holds back
+   * while a fight is on, as the chain does.
    */
   private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) return;
-    if (interactionPromptsDrawnThisFrame() > 0) return;
     // Gathering sits ahead of the hireling in the Space chain but draws no
     // prompt of its own, so it has to be asked whether it would take the press.
     if (this.gathering?.wouldStartHarvest(active) === true) return;
@@ -7244,7 +7623,9 @@ export class DungeonScene extends GameplayScene {
     if (this.briarHollowKit?.wouldInteract(active) === true) return;
     const merc = this.mercenarySystem.talkTarget(active, this.world.roster.mobs);
     if (merc === null) return;
-    drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk');
+    raisePromptsFor(this.promptOwners.mercenary, () =>
+      drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk'),
+    );
   }
 
   /** Opens a conversation with the nearest street citizen, if one is in range. */
@@ -7328,7 +7709,8 @@ export class DungeonScene extends GameplayScene {
   private surfaces(): Surface[] {
     const party = (): { readonly active: Player; readonly companion: Player } => ({
       active: this.active(),
-      companion: this.inactive(),
+      // The purse a shop or a fee draws on is the whole party's, wherever its crawlers are.
+      companion: this.partnerAnywhere(),
     });
     const camera = (): { readonly x: number; readonly y: number } => this.camera();
     const tutorial = this.tutorial;
@@ -7367,7 +7749,6 @@ export class DungeonScene extends GameplayScene {
         onRespawn: () => this.respawnAfterDeath(),
       }),
       this.levelCompleteScreen.surface(),
-      this.runCompleteScreen.surface(),
       this.chat.surface(),
       ...(this.noticeBoard === null ? [] : [this.noticeBoard.surface('notice-board')]),
       ...(this.marketPanel === null
@@ -7433,8 +7814,7 @@ export class DungeonScene extends GameplayScene {
    * Who answers Escape on the conversation now up, or null when Escape is the
    * pause key's instead (the pause key then closes the conversation for the
    * menu). Only the speakers listed here take it, in this order: the defend
-   * offer, the lab's scientist, the bounty man, the murder and the
-   * Anchor questlines, Dave, the doctor, and, while nothing else has halted
+   * offer, the lab's scientist, the bounty man, the Anchor questline, Dave, the doctor, and, while nothing else has halted
    * the floor, a citizen, a villager or the recruiter, and a sign. A request
    * that must be read to its end still spends the press on its speaker.
    */
@@ -7448,10 +7828,11 @@ export class DungeonScene extends GameplayScene {
     }
     if (
       this.bounty?.isDialogOpen === true ||
-      this.murderQuest.isDialogOpen ||
       this.anchorQuest.isDialogOpen ||
+      this.missingCats.isDialogOpen ||
       this.cloggedBathroom.isDialogOpen ||
       this.stealthKeySnatch.isDialogOpen ||
+      this.towerDoorGuards.isDialogOpen ||
       this.dave.dialogOpen
     ) {
       return dismiss;
@@ -7819,7 +8200,7 @@ export class DungeonScene extends GameplayScene {
       this.dave.isPresent &&
       !this.story.isTellingDaveMoment &&
       !this.cutscenes.isActive &&
-      !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+      !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
     const owedRoom = this.daveArrivalOwed;
     if (owedRoom !== null && daveFree && this.activeCrawlerIsWithDaveIn(owedRoom)) {
       this.daveArrivalOwed = null;
@@ -7891,7 +8272,7 @@ export class DungeonScene extends GameplayScene {
     for (let distance = DAVE_WAITING_MIN_TILES; distance <= DAVE_WAITING_MAX_TILES; distance++) {
       for (const direction of DAVE_WAITING_DIRECTIONS) {
         const tile = { x: origin.x + direction.x * distance, y: origin.y + direction.y * distance };
-        if (this.gameMap.isWalkable(tile.x, tile.y)) return tile;
+        if (this.gameMap.isWalkable(tile.x, tile.y, 'walker')) return tile;
       }
     }
     return null;
@@ -7987,7 +8368,7 @@ export class DungeonScene extends GameplayScene {
     const lessonHoldsHer =
       tutorial !== null && (!tutorial.showAchievementUI || tutorial.pauseRestriction() !== null);
     if (lessonHoldsHer) return false;
-    return !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+    return !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
   }
 
   /**
@@ -8086,10 +8467,10 @@ export class DungeonScene extends GameplayScene {
       case OVERWORLD_FLOOR_THREE:
         // The Anchor's offer leads the list: accepting it is what makes every
         // later trip on this floor shorter, so he raises it before the other
-        // three errands rather than after them.
+        // errands rather than after them.
         return [
           this.anchorOfferObjective(),
-          this.murderQuestObjective(),
+          this.missingCatsObjective(),
           this.bountyObjective(),
           this.anchorStoneObjective(),
           this.speedFizzObjective(),
@@ -8097,14 +8478,6 @@ export class DungeonScene extends GameplayScene {
       default:
         return [];
     }
-  }
-
-  private murderQuestObjective(): AdviceObjective {
-    const complete = this.murderQuest.questManager.getStatus(MURDER_QUEST_ID) === 'completed';
-    // The quest's own first anchor, so his bearing points where its Journal row
-    // does rather than at the town centre.
-    const target = this.murderQuest.trackerEntries()[0]?.target ?? null;
-    return adviceObjective('krasue_murders', complete, target);
   }
 
   /**
@@ -8175,6 +8548,56 @@ export class DungeonScene extends GameplayScene {
       return adviceObjective('spider_lab', false, lab?.hallwayPostTile ?? null);
     }
     return adviceObjective('spider_lab_started', this.spiderQuest.isComplete, lab?.centre ?? null);
+  }
+
+  /**
+   * The stolen cats' next step, or null while the questline is inside the
+   * tower or past it, where neither Dave nor Caroline has anything to add.
+   */
+  private missingCatsObjective(): AdviceObjective | null {
+    const progress = this.missingCatsProgress;
+    const door = (id: BuildingId): TilePoint | null =>
+      this.gameMap.buildingEntries.find((entry) => entry.id === id)?.doorTile ?? null;
+    switch (progress.phase) {
+      case 'not_started':
+      case 'posters_up':
+        return adviceObjective('missing_cats_notices', false, door('taloncrest_inn'));
+      case 'investigating':
+        return adviceObjective('missing_cats_owners', false, this.gameMap.townSquareCentre ?? null);
+      case 'blame':
+        return adviceObjective('missing_cats_cellar', false, door('taloncrest_garrison_lodge'));
+      case 'stakeout':
+      case 'chase':
+        return adviceObjective('missing_cats_stakeout', false, door('taloncrest_general_store'));
+      case 'confession':
+      case 'choice':
+        return adviceObjective('missing_cats_temple', false, door('taloncrest_temple'));
+      case 'bait':
+        return adviceObjective(
+          'missing_cats_bait',
+          progress.daveRefusedBait,
+          this.gameMap.fountainCentre ?? null,
+        );
+      case 'seeking_entry':
+        return adviceObjective(
+          'missing_cats_tower_door',
+          false,
+          door(progress.elfWaitsAtGrate ? STORM_DRAIN_ID : 'taloncrest_garrison_lodge'),
+        );
+      case 'sewer':
+        return adviceObjective('missing_cats_drain', false, door(STORM_DRAIN_ID));
+      case 'captured':
+      case 'cattery':
+      case 'cistern':
+      case 'archive':
+      case 'gatehouse':
+      case 'bell_storey':
+      case 'ascent':
+      case 'ritual':
+      case 'aftermath':
+      case 'complete':
+        return null;
+    }
   }
 
   /** Points at Madame Voss; complete once the party has taken up the errand. */
@@ -8308,7 +8731,9 @@ export class DungeonScene extends GameplayScene {
   private tryInteractWithWorld(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
     return (
-      this.tryWalkedUpToInteraction(active, fromTap) || this.tryInteractWithSurroundings(active)
+      pressFocusedPrompt(this.promptOwners) ||
+      this.tryWalkedUpToInteraction(active, fromTap) ||
+      this.tryInteractWithSurroundings(active)
     );
   }
 
@@ -8327,13 +8752,13 @@ export class DungeonScene extends GameplayScene {
     if (this.spiderQuest.tryInteract(active)) {
       return true;
     }
-    if (this.murderQuest.tryInteract(active)) {
-      return true;
-    }
     if (this.cloggedBathroom.tryInteract(active, { human: this.human, cat: this.cat })) {
       return true;
     }
     if (this.stealthKeySnatch.tryInteract(active, { human: this.human, cat: this.cat })) {
+      return true;
+    }
+    if (this.towerDoorGuards.tryInteract(active)) {
       return true;
     }
     // Ahead of the boss room: standing on a placed piece singles it out, where
@@ -8382,22 +8807,7 @@ export class DungeonScene extends GameplayScene {
     if (this.gathering?.tryStartHarvest(active) === true) {
       return true;
     }
-    if (
-      this.deinonychusSystem.tryPet(
-        active,
-        this.gameMap,
-        this.world.roster.mobs,
-        this.world.roster.grid,
-        this.levelDef.isOverworld === true,
-      )
-    ) {
-      this.audio?.play('happy_hearts');
-      const isGrownUp =
-        (this.deinonychusSystem.deinonychus?.growthLevel ?? 0) >=
-        DEINONYCHUS_ADULT_SQUAWK_MIN_LEVEL;
-      this.audio?.playRandom(
-        isGrownUp ? DEINONYCHUS_ADULT_HAPPY_SQUAWKS : DEINONYCHUS_JUVENILE_HAPPY_SQUAWKS,
-      );
+    if (this.tryPetDeinonychus(active)) {
       return true;
     }
     // Last in the chain: the hireling stands at the party's shoulder all
@@ -8406,6 +8816,24 @@ export class DungeonScene extends GameplayScene {
       return true;
     }
     return false;
+  }
+
+  private tryPetDeinonychus(active: HumanPlayer | CatPlayer): boolean {
+    const petted = this.deinonychusSystem.tryPet(
+      active,
+      this.gameMap,
+      this.world.roster.mobs,
+      this.world.roster.grid,
+      this.levelDef.isOverworld === true,
+    );
+    if (!petted) return false;
+    this.audio?.play('happy_hearts');
+    const isGrownUp =
+      (this.deinonychusSystem.deinonychus?.growthLevel ?? 0) >= DEINONYCHUS_ADULT_SQUAWK_MIN_LEVEL;
+    this.audio?.playRandom(
+      isGrownUp ? DEINONYCHUS_ADULT_HAPPY_SQUAWKS : DEINONYCHUS_JUVENILE_HAPPY_SQUAWKS,
+    );
+    return true;
   }
 
   /** The dynamite in his hand waiting to be thrown, which the hotbars mark in use. */
@@ -8513,7 +8941,6 @@ export class DungeonScene extends GameplayScene {
   }
 
   private hudMinimap(): MinimapModel {
-    this.miniMap.escapeMarkerTile = this.doomsdayEscape.escapeMarkerTile;
     return {
       expanded: this.miniMap.isExpanded,
       hint: platform.miniMapHint(this.miniMap.isExpanded),
@@ -8522,7 +8949,7 @@ export class DungeonScene extends GameplayScene {
           ctx,
           rect,
           this.active(),
-          this.inactive(),
+          this.presentPartner(),
           this.world.roster.grid,
           this.dave.minimapTile,
           this.collectQuestMarkers(),
@@ -8617,6 +9044,7 @@ export class DungeonScene extends GameplayScene {
         icon: other === 'cat' ? 'cat' : 'user',
         label: `Switch to ${crawlerDisplayName(other)}`,
         key: keybindings.labelFor('switchCharacter'),
+        pulse: other === 'cat' && this.catSenseCue.showing,
         onTap: () => this.triggerSwitchCharacter(),
       });
     }
@@ -8634,13 +9062,11 @@ export class DungeonScene extends GameplayScene {
       this.achievementUI.rewardsBanner(this.human.isProtected || this.cat.isProtected),
       this.bossRoom.topBandEntry(this.world.roster.mobs, this.human, this.cat),
       this.defendQuest.topBandEntry(),
-      this.murderQuest.topBandEntry(),
-      this.doomsdayEscape.topBandEntry(),
       this.spiderQuest.topBandEntry(),
       ...(this.briarHollowKit?.topBandEntries() ?? []),
       ...(this.gathering?.topBandEntries(this.active()) ?? []),
       ...this.aiInteractions.topBandEntries(),
-      knockedOutBandEntry(this.inactive()),
+      knockedOutBandEntry(this.presentPartner()),
     ];
     return entries.filter((entry): entry is TopBandEntry => entry !== null);
   }
@@ -8814,7 +9240,7 @@ export class DungeonScene extends GameplayScene {
   private collectWorldPickupAt(x: number, y: number): boolean {
     const active = this.active();
     const { x: camX, y: camY } = this.camera();
-    if (this.destruction.loot.tryCollectLootAt(x, y, camX, camY, active, this.inactive())) {
+    if (this.destruction.loot.tryCollectLootAt(x, y, camX, camY, active, this.partnerAnywhere())) {
       return true;
     }
     if (this.treasureChests.tryInteractAt(x, y, camX, camY, active)) return true;
@@ -8890,8 +9316,7 @@ export class DungeonScene extends GameplayScene {
     }
     // Gameplay stops ticking the soundscape under all three end screens, so its
     // loops would hold their last volume behind the screen until it closed.
-    const endScreenShowing =
-      this.gameOver || this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive;
+    const endScreenShowing = this.gameOver || this.levelCompleteScreen.isActive;
     if (endScreenShowing) {
       this.dungeonAmbience?.silence();
       this.labHallway?.silence();
@@ -8908,7 +9333,6 @@ export class DungeonScene extends GameplayScene {
       this.gameOver ||
       this.menus.pauseScreen.isOpen ||
       this.levelCompleteScreen.isActive ||
-      this.runCompleteScreen.isActive ||
       !this.dungeonIntro.arrivalSettled;
     if (!townFrozen) {
       this.townLife?.update(this.buildSystemContext());
@@ -8926,14 +9350,12 @@ export class DungeonScene extends GameplayScene {
     // wanted while his own dialog is open, which is exactly when gameplay is
     // halted and `updateGameplay` never runs.
     this.bounty?.syncShady();
-    // Same reason, for the two givers whose beacon and glyph are drawn by
-    // different owners. Their marker state is suppressed while their own dialog
-    // is open, and an open dialog is a halted frame — so setting it in `update`
-    // alone would leave a column of light standing over somebody mid-sentence.
-    this.murderQuest.syncMarkers();
     // The board's generation runs behind the explainer and the board, both of
     // which halt the world, so it is stepped ahead of the halt.
     this.cloggedBathroom.tickGeneration();
+    // Marker state is suppressed while a giver's own dialog is open, and an open
+    // dialog is a halted frame — so setting it in `update` alone would leave a
+    // beacon standing over somebody mid-sentence.
     this.cloggedBathroom.syncMarkers();
     this.stealthKeySnatch.syncMarkers();
     // Ahead of the halt: the pipe board halts the world, and it is the only
@@ -8944,7 +9366,16 @@ export class DungeonScene extends GameplayScene {
       this.gameMap,
       crawlerGroundPoint(this.active()),
       this.routedPinnedTarget(),
+      this.active().mobility,
     );
+    this.senses.update(this.active(), performance.now());
+    this.catSenseCue.update({
+      senses: this.senses,
+      cat: this.cat,
+      steered: this.active(),
+      calm: !this.gameplayHalted && !this.conversation.isOpen && !this.cutscenes.isActive,
+      nowMs: performance.now(),
+    });
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -8953,7 +9384,7 @@ export class DungeonScene extends GameplayScene {
 
     // Ahead of the halt for the same reason: most conversations halt the
     // world, and he is to be seen talking through them.
-    this.humanTalk.update(this.human, this.humanTalkSpeaker(), this.gameplayHalted);
+    this.crawlerTalk.update(this.human, this.cat, this.crawlerTalkSpeaker(), this.gameplayHalted);
 
     // The world stops under the death screen, but the fall he died in plays
     // out beneath it as it fades in.
@@ -9229,6 +9660,7 @@ export class DungeonScene extends GameplayScene {
     ctx.save();
     ctx.scale(zoom, zoom);
     this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks, this.isCrawlerHidden);
+    this.anchorPromptFocus(ctx, camX, camY);
     const frontBeams = this.frontObjectiveBeams();
 
     const rc: RenderContext = {
@@ -9237,7 +9669,7 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       pm: this.pm,
       active: this.active(),
-      inactive: this.inactive(),
+      inactive: this.presentPartner(),
       mobs: this.world.roster.mobs,
       mobGrid: this.world.roster.grid,
       townsfolk: this.townLife?.renderablePeople(camX, camY),
@@ -9297,6 +9729,7 @@ export class DungeonScene extends GameplayScene {
       goreUnderDarkness: this.dungeonLighting !== null,
       lightShining: this.lightShining,
       isCrawlerHidden: this.isCrawlerHidden,
+      isMobHidden: (mob) => this.cutscenes.director.hides(mob),
       scriptedDeaths: this.scriptedDeaths,
       sortedFixtures: [
         ...this.cloggedBathroom.sortedFixtures(),
@@ -9312,24 +9745,39 @@ export class DungeonScene extends GameplayScene {
     // clue scene or a grate stands in front of the light marking it.
     this.renderObjectiveBeacons(ctx, camX, camY);
     this.renderQuestRouteTrail(ctx, camX, camY);
+    this.missingCats.renderGround(ctx, camX, camY);
+    this.missingCats.renderCats(ctx, camX, camY);
+    if (!this.senses.isEmpty) {
+      const senseView = {
+        camX,
+        camY,
+        width: worldViewWidth(),
+        height: worldViewHeight(),
+        nowMs: performance.now(),
+      };
+      this.senses.paint(ctx, senseView);
+      this.catSenseCue.paint(ctx, this.cat, senseView);
+    }
     this.briarHollowKit?.renderGround(ctx, camX, camY);
     this.gathering?.renderGround(ctx, camX, camY);
     const activeCrawler = this.active();
-    this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler);
-    this.cloggedBathroom.renderGround(
-      ctx,
-      camX,
-      camY,
-      rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined,
+    const owners = this.promptOwners;
+    const promptFor = rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined;
+    raisePromptsFor(owners.defendQuest, () =>
+      this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler),
     );
-    this.stealthKeySnatch.renderPrompt(
-      ctx,
-      camX,
-      camY,
-      rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined,
+    raisePromptsFor(owners.cloggedBathroom, () =>
+      this.cloggedBathroom.renderGround(ctx, camX, camY, promptFor),
     );
-    this.spiderQuest.render(ctx, camX, camY, this.active());
-    this.murderQuest.render(ctx, camX, camY, this.active());
+    raisePromptsFor(owners.stealthKeySnatch, () =>
+      this.stealthKeySnatch.renderPrompt(ctx, camX, camY, promptFor),
+    );
+    raisePromptsFor(owners.towerDoorGuards, () =>
+      this.towerDoorGuards.renderPrompt(ctx, camX, camY, promptFor),
+    );
+    raisePromptsFor(owners.spiderQuest, () =>
+      this.spiderQuest.render(ctx, camX, camY, this.active()),
+    );
     // Puddles and telegraphs are floor paint, so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
@@ -9339,14 +9787,15 @@ export class DungeonScene extends GameplayScene {
     if (this.dungeonLighting !== null) beginAboveDarkness(this.dungeonLighting.darknessAtWorld);
     this.renderPipeline.renderEntities(ctx, rc);
     for (const spider of this.grotesqueSpiders) {
-      spider.renderAboveEntities(ctx, camX, camY, [this.human, this.cat]);
+      spider.renderAboveEntities(ctx, camX, camY, this.pm.presentCrawlers());
     }
-    this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.dungeonLife?.renderAir(ctx, camX, camY, worldViewWidth(), worldViewHeight());
     this.labHallway?.render(ctx, camX, camY, worldViewWidth(), worldViewHeight());
     // Over every body and under every warning, health bar and label.
     this.renderDungeonDarkness(ctx, rc);
+    this.missingCats.renderDusk(ctx, camX, camY, worldViewWidth(), worldViewHeight());
+    this.missingCats.renderAir(ctx, camX, camY);
     // Over every body in the lab and under every warning: the dark her roars
     // bring down, with her telegraphs, puddles and eggs drawn back over it.
     this.spiderQuest.renderLabDarkness(ctx, camX, camY, this.active());
@@ -9426,7 +9875,7 @@ export class DungeonScene extends GameplayScene {
       // Only one of these may be on screen at once — a downed companion always
       // wins the slot, and every other kind has a fixed place behind it.
       drawTopArrowCandidate([
-        downedCompanionArrowCandidate(ctx, this.active(), this.inactive(), camX, camY),
+        downedCompanionArrowCandidate(ctx, this.active(), this.presentPartner(), camX, camY),
         this.briarHollowKit?.siegeBellArrowCandidate(ctx, this.active(), camX, camY, framesRect) ??
           null,
         this.mercenarySystem.downedArrowCandidate(
@@ -9499,11 +9948,12 @@ export class DungeonScene extends GameplayScene {
         !this.overlayOpen &&
         (this.highStriker?.renderLockPrompt(ctx, camX, camY, this.active()) === true ||
           this.highStriker?.holdsCrawler(this.active()) === true);
-      const laterPromptsOutOfReach =
-        strikerOwnsPress || this.renderGroundPickupPrompt(ctx, camX, camY);
-      if (!laterPromptsOutOfReach) this.renderCitizenPrompt(ctx, camX, camY);
+      if (!strikerOwnsPress) {
+        raisePromptsFor(owners.groundPickup, () => this.renderGroundPickupPrompt(ctx, camX, camY));
+        this.renderCitizenPrompt(ctx, camX, camY);
+      }
       this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
-      if (!laterPromptsOutOfReach) {
+      if (!strikerOwnsPress) {
         this.renderPropPrompt(ctx, camX, camY);
         if (!this.earlierSpaceLinkClaims(this.active())) {
           this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
@@ -9528,7 +9978,7 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.renderUI(ctx, camX, camY);
 
     if (this.bossIntro.isActive) {
-      this.bossIntro.render(ctx);
+      this.bossIntro.render(ctx, this.cat.appearance);
     }
 
     const mouse = sceneMouse(this.ui);
@@ -9657,17 +10107,29 @@ export class DungeonScene extends GameplayScene {
    * The refusal a doorway answers with, or null when it opens normally.
    *
    * Every door refuses while the partner is down. Beyond that, floor 2's
-   * prison is held shut by its quest until the gate guard has explained it. `BuildingSystem` asks rather than decides, so
+   * prison is held shut by its quest until the gate guard has explained it, and
+   * floor 3's tower never opens its front door. `BuildingSystem` asks rather than decides, so
    * each reason for being closed stays with the questline that closes it.
    */
   private sealedBuildingMessage(entry: BuildingEntry): string | null {
-    const partner = this.inactive();
-    const partnerName =
-      partner === this.human ? crawlerDisplayName('human') : crawlerDisplayName('cat');
-    const partnerDown = downedPartnerEntryRefusal(partner, partnerName);
+    const partner = this.presentPartner();
+    const partnerDown =
+      partner === null
+        ? null
+        : downedPartnerEntryRefusal(
+            partner,
+            partner === this.human ? crawlerDisplayName('human') : crawlerDisplayName('cat'),
+          );
     if (partnerDown !== null) return partnerDown;
     const prisonRefusal = prisonDoorRefusal(entry, this.stealthKeySnatch.isGuardBriefed);
-    return prisonRefusal;
+    if (prisonRefusal !== null) return prisonRefusal;
+    const towerRefusal = towerDoorRefusal(entry, this.towerDoorStanding());
+    if (towerRefusal !== null) return towerRefusal;
+    return stormDrainRefusal(entry, this.stormDrainOpen());
+  }
+
+  private towerDoorStanding(): TowerDoorStanding {
+    return towerDoorStandingFor(this.missingCatsProgress);
   }
 
   /**
@@ -9696,8 +10158,8 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.cloggedBathroom.questMarkers);
     markers.push(...this.stealthKeySnatch.questMarkers);
     markers.push(...this.spiderQuest.questMarkers);
-    markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
+    if (this.levelDef.isOverworld) markers.push(...this.missingCats.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
     if (this.briarHollowKit !== null) markers.push(...this.briarHollowKit.questMarkers);
     const daveMarker = this.dave.minimapMarker;
@@ -9728,10 +10190,9 @@ export class DungeonScene extends GameplayScene {
         this.cloggedBathroom,
         this.stealthKeySnatch,
         this.spiderQuest,
-        this.murderQuest,
         this.anchorQuest,
+        this.levelDef.isOverworld ? this.missingCats : null,
         this.bounty,
-        this.doomsdayEscape,
         this.briarHollowKit,
         this.aiChallenges,
       ]),
@@ -9765,7 +10226,7 @@ export class DungeonScene extends GameplayScene {
     ctx.human = this.human;
     ctx.cat = this.cat;
     ctx.active = active;
-    ctx.inactive = this.inactive();
+    ctx.partner = this.presentPartner();
     ctx.activeIsMoving = active.isMoving;
     ctx.roster = this.world.roster;
     ctx.gameMap = this.gameMap;
@@ -9776,14 +10237,7 @@ export class DungeonScene extends GameplayScene {
 
   private updateGameplay(): void {
     const player = this.active();
-
-    // A dungeon wall is a wall seen from in front, the same as an interior's,
-    // so a crawler walking south into one has to stop with their feet on the
-    // last floor tile rather than planting their whole lower half on the
-    // masonry — see `SOLE_COLLISION_OFFSET`. Only the outdoor town keeps the
-    // waist anchor: out there the "walls" are building facades and town
-    // walls whose art and clearances are a separate question from this one.
-    const southAnchor: SouthCollisionAnchor = this.levelDef.isOverworld === true ? 'waist' : 'sole';
+    const southAnchor = this.southAnchor;
     const scriptMovedParty = this.cutscenes.tickWorld(player, this.gameMap, southAnchor);
     const move = readMovement(
       this.input,
@@ -9849,7 +10303,7 @@ export class DungeonScene extends GameplayScene {
     const enteredRoom =
       this.wasInSafeRoom || !nowInSafeRoom
         ? null
-        : (this.safeRoom.safeRoomAt(this.active()) ?? this.safeRoom.safeRoomAt(this.inactive()));
+        : (this.safeRoom.safeRoomAt(this.active()) ?? this.presentPartnerSafeRoom());
     if (enteredRoom !== null) {
       this.bus.emit('safeRoomEntered', { room: enteredRoom });
       this.dave.onSafeRoomEntered(enteredRoom);
@@ -9942,6 +10396,7 @@ export class DungeonScene extends GameplayScene {
     this.aiChallenges.update(ctx);
     this.cloggedBathroom.update(ctx);
     this.stealthKeySnatch.update(ctx);
+    this.towerDoorGuards.update(ctx);
     this.briarHollowKit?.updateSiege(ctx);
     this.grateSpikes.update();
     if (this.defendQuest.hammerSoundPending) {
@@ -9975,29 +10430,17 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.barrierBrokenSoundPending = false;
       this.audio?.playRandom(BARRIER_BREAK_SOUNDS);
     }
-    this.murderQuest.update(ctx);
     this.anchorQuest.update();
+    if (this.levelDef.isOverworld) this.missingCats.update();
     // She is a plaza prop, not a `Player`, so unlike every other quest giver
     // she has no `markerType` field of her own for the beacon to read.
     this.townProps?.setFortuneTellerMarker(this.anchorQuest.markerState);
-    this.townProps?.setNoticeBoardMarker(noticeBoardMarkerFor(this.briarHollowState));
+    this.townProps?.setNoticeBoardMarker(
+      this.missingCats.noticeBoardWantsReading
+        ? 'exclamation'
+        : noticeBoardMarkerFor(this.briarHollowState),
+    );
     this.updateSpeedFizzDiscovery();
-    this.doomsdayEscape.update(ctx);
-    if (this.doomsdayEscape.pinRequested) {
-      this.doomsdayEscape.pinRequested = false;
-      this.journalProgress.pinnedTrackerId = DOOMSDAY_TRACKER_ID;
-      // Not an auto-pin: the escape is the floor's own emergency, and must not
-      // be quietly handed back to whatever quest is active when the next one
-      // starts.
-      this.journalProgress.pinSource = 'player';
-    }
-    if (this.doomsdayEscape.floorEscapedPending) {
-      this.doomsdayEscape.floorEscapedPending = false;
-      this.completeRun();
-      // The run is saved and over: nothing else may act this frame, or a blow
-      // landing after the save would raise a death screen under the celebration.
-      return;
-    }
     this.overworldMusic?.update(ctx);
     this.updateVillageAmbience(ctx.active);
     this.ambientSound?.update(ctx);
@@ -10022,8 +10465,9 @@ export class DungeonScene extends GameplayScene {
         this.tutorial.needsSwitchToCat = false;
         this.triggerSwitchCharacter(true);
       }
-      if (this.tutorial.shouldAnchorCurrentCompanion) {
-        this.companion.setDoNotMove(this.inactive(), this.human.isActive);
+      const anchoredPartner = this.presentPartner();
+      if (this.tutorial.shouldAnchorCurrentCompanion && anchoredPartner !== null) {
+        this.companion.setDoNotMove(anchoredPartner, this.human.isActive);
       }
 
       if (this.tutorial.needsCameraPanStart) {
@@ -10143,17 +10587,20 @@ export class DungeonScene extends GameplayScene {
     this.carryDeinonychusIn();
     this.deinonychusSystem.update(ctx);
     this.autoSummonDeinonychus(ctx);
+    if (phaseReached(this.missingCatsProgress, 'aftermath')) this.mercenarySystem.endTowerLoan();
     this.mercenarySystem.update(ctx);
     this.attackCowSystem.update(ctx);
     this.seatCompanionsAtPrisonDoor();
     this.enterPrisonForDev();
+    this.enterSewerForDev();
+    this.resumeIfOwed();
     this.drainWardExplainerBarks();
     this.crawlerBarks.update();
     if (this.building?.menuOpen === true || this.recall.isChannelling) {
       this.mercenarySystem.warnIfLeavingDowned();
     }
     this.pm.tickTimers();
-    drainBloodVomitRetches([this.human, this.cat], this.bus);
+    drainBloodVomitRetches(this.pm.presentCrawlers(), this.bus);
     drainHpThresholdCrossings({ human: this.human, cat: this.cat }, this.bus);
 
     if (this.human.effectDamageSoundPending) {
@@ -10164,7 +10611,7 @@ export class DungeonScene extends GameplayScene {
       this.cat.effectDamageSoundPending = false;
       this.audio?.playRandom(['cat_effect_damage_1', 'cat_effect_damage_2', 'cat_effect_damage_3']);
     }
-    playCrawlerSeizureJolts([this.human, this.cat], this.audio);
+    playCrawlerSeizureJolts(this.pm.presentCrawlers(), this.audio);
 
     if (this.tutorial?.suppressCatRegen === true) {
       this.combat.playerTick.tickRegenHumanOnly(this.human);
@@ -10209,7 +10656,7 @@ export class DungeonScene extends GameplayScene {
     this.updateDungeonLife(ctx.active);
     playFairySystemCues(this.fairies.takeCues(), this.audio);
     playFairyFireballCues(this.fairyFireballs.takeCues(), this.audio);
-    playFrostCues([this.human, this.cat], this.audio);
+    playFrostCues(this.pm.presentCrawlers(), this.audio);
 
     // A glob's own impact cue. It is drained here rather than from
     // `playMobAudioCues` because the glob outlives its thrower, and a shot that
@@ -10302,17 +10749,18 @@ export class DungeonScene extends GameplayScene {
     }
     this.building?.detect(this.active());
 
-    if (!this.timeLimitIsTakingParty) {
+    const partner = this.presentPartner();
+    if (!this.timeLimitIsTakingParty && partner !== null) {
       updateKnockoutState({
         active: this.active(),
-        inactive: this.inactive(),
-        inactiveIsHuman: this.inactive() === this.human,
+        inactive: partner,
+        inactiveIsHuman: partner === this.human,
         audio: this.audio,
         bus: this.bus,
       });
     }
 
-    if (!this.gameOver && checkDeath(this.human, this.cat)) {
+    if (!this.gameOver && checkDeath(this.pm.presentCrawlers())) {
       this.gameOver = true;
       // Nothing at the striker may land under the death screen or carry into the respawn.
       this.highStriker?.abandonAll();
@@ -10454,7 +10902,7 @@ export class DungeonScene extends GameplayScene {
     const scope = this.audioScope;
     const footsteps = SCIENTIST_FOOTSTEPS_LOOP;
     if (scope === null || footsteps === null) return;
-    const endScreenShowing = this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive;
+    const endScreenShowing = this.levelCompleteScreen.isActive;
     if (!this.spiderQuest.isScientistRunning || endScreenShowing) {
       scope.stopLoop(footsteps);
       return;
@@ -10707,8 +11155,8 @@ export class DungeonScene extends GameplayScene {
       this.stairwell.menuOpen ||
       (this.building?.menuOpen ?? false) ||
       this.defendQuest.isDialogOpen ||
-      this.murderQuest.isDialogOpen ||
       this.anchorQuest.isDialogOpen ||
+      this.missingCats.isDialogOpen ||
       this.citizenDialogTarget !== null ||
       this.signDialogTarget !== null ||
       this.chat.isOpen ||
@@ -10947,7 +11395,7 @@ export class DungeonScene extends GameplayScene {
    * speaker this scene can place — a townsperson, Dave, the defend-quest
    * giver.
    */
-  private humanTalkSpeaker(): Pt | null {
+  private crawlerTalkSpeaker(): Pt | null {
     const citizen = this.citizenDialogTarget;
     if (citizen !== null) return citizen;
     const dave = this.dave.speakingPosition;
@@ -10960,7 +11408,7 @@ export class DungeonScene extends GameplayScene {
 
   /** Whether the party already has `id`, carried or still on the ground: gear is one of a kind per party. */
   private readonly partyOwnsGear = (id: GearId): boolean =>
-    partyOwnsGear([this.human, this.cat], id) ||
+    partyOwnsGear(this.pm.wholeParty(), id) ||
     this.destruction.loot.holds(id) ||
     this.treasureChests.holds(id);
 

@@ -91,6 +91,13 @@ const RESIDENT_DEFS = {
     species: 'human',
     home: 'taloncrest_apothecary',
   },
+  taloncrest_apothecary_assistant: {
+    id: 'taloncrest_apothecary_assistant',
+    name: 'Baggi',
+    role: 'laborer',
+    species: 'orc',
+    home: 'taloncrest_apothecary',
+  },
   deacon_aviel: {
     id: 'deacon_aviel',
     name: 'Deacon Aviel',
@@ -131,6 +138,13 @@ const RESIDENT_DEFS = {
     name: 'Sgt. Kessler',
     role: 'guard',
     species: 'hawkfolk',
+    home: 'taloncrest_garrison_lodge',
+  },
+  taloncrest_lodge_cellar_elf: {
+    id: 'taloncrest_lodge_cellar_elf',
+    name: 'Cellar elf',
+    role: 'commoner',
+    species: 'elf',
     home: 'taloncrest_garrison_lodge',
   },
   sydney: {

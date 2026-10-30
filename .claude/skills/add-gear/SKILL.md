@@ -434,10 +434,10 @@ link so two worn together hang side by side.
 split hands it to; `lootRecipient` overrides the split for a signature drop
 either crawler could wear.
 
-Outfits are baked, not drawn per frame: `setOutfit(wearer, garments)`
-(`src/sprites/outfits.ts`) dresses the player character's look with
-`outfitOf`, swaps the outfit figure and releases the old one; the players call
-it from `onEquipmentChanged`. Figure ids name the look, then the sorted visible
+Outfits are baked, not drawn per frame: the human's `setHumanOutfit(outfitOf(look,
+garments))` (`src/sprites/humanSprite.ts`) and each cat's own
+`CatAppearance.dress(garments)` (`src/sprites/catSprite.ts`) swap the outfit figure
+and release the old one; the players call them from `onEquipmentChanged`. Figure ids name the look, then the sorted visible
 garment ids: `human:<lookId>[:outfit][:holding-…]` and `cat:<lookId>[:outfit]`,
 the outfit left off for a bare cat.
 

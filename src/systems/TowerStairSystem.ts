@@ -3,15 +3,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
-
-const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
-
-/** Floors are counted from zero; players count from one. */
-const FLOOR_NUMBER_BASE = 1;
-
-function floorLabel(floor: number): string {
-  return FLOOR_LABELS[floor] ?? `Floor ${floor + FLOOR_NUMBER_BASE}`;
-}
+import { towerStoreyLabel } from '../map/town/interiors/townCenterTower';
 
 const TILE_CENTER_OFFSET = 0.5;
 
@@ -40,6 +32,17 @@ export type TowerStairPrompt =
   | { readonly kind: 'ascend' | 'descend'; readonly targetFloorLabel: string }
   | { readonly kind: 'finale' };
 
+/** Which way a stair leads. */
+export type StairDirection = 'up' | 'down';
+
+/** A stair that will not be taken: why, as a toast says it, or null when it will. */
+export interface StairRefusals {
+  readonly reasonFor: (going: StairDirection) => string | null;
+  readonly onRefused: (reason: string) => void;
+}
+
+const NO_STAIR_REFUSALS: StairRefusals = { reasonFor: () => null, onRefused: () => undefined };
+
 export class TowerStairSystem implements GameSystem {
   private onUpStair = false;
   private onDownStair = false;
@@ -61,7 +64,20 @@ export class TowerStairSystem implements GameSystem {
      * no business knowing which questline decides it.
      */
     private readonly isFinalAscent: () => boolean = () => false,
+    /**
+     * Stairs a questline holds shut for now. Stepping onto one says why
+     * instead of opening its prompt, once until the crawler steps off.
+     */
+    private readonly refusals: StairRefusals = NO_STAIR_REFUSALS,
   ) {}
+
+  /** Whether `going` is refused, saying why when it is. */
+  private refused(going: StairDirection): boolean {
+    const reason = this.refusals.reasonFor(going);
+    if (reason === null) return false;
+    this.refusals.onRefused(reason);
+    return true;
+  }
 
   get menuOpen(): boolean {
     return this._upMenuOpen || this._downMenuOpen;
@@ -88,7 +104,7 @@ export class TowerStairSystem implements GameSystem {
     const targetFloor = isUp ? this.currentFloor + 1 : this.currentFloor - 1;
     return {
       kind: isUp ? 'ascend' : 'descend',
-      targetFloorLabel: floorLabel(targetFloor),
+      targetFloorLabel: towerStoreyLabel(targetFloor),
     };
   }
 
@@ -121,7 +137,8 @@ export class TowerStairSystem implements GameSystem {
       this.upDismissed = false;
       this._upMenuOpen = false;
     } else if (!wasOnUp && !this.upDismissed) {
-      this._upMenuOpen = true;
+      if (this.refused('up')) this.upDismissed = true;
+      else this._upMenuOpen = true;
     }
 
     const wasOnDown = this.onDownStair;
@@ -130,7 +147,8 @@ export class TowerStairSystem implements GameSystem {
       this.downDismissed = false;
       this._downMenuOpen = false;
     } else if (!wasOnDown && !this.downDismissed) {
-      this._downMenuOpen = true;
+      if (this.refused('down')) this.downDismissed = true;
+      else this._downMenuOpen = true;
     }
   }
 

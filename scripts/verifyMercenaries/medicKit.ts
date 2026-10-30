@@ -189,6 +189,7 @@ function build(
   roster.active = {
     id: 'brother_anselm',
     name: getMercenaryTemplate('brother_anselm').name,
+    terms: 'paid',
     contractLevelId: FLOOR,
     introduced: true,
   };
@@ -197,7 +198,7 @@ function build(
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster: mobs,
     gameMap: map,

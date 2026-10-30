@@ -27,8 +27,33 @@ import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/input/InputManager';
 import { keybindings } from '../core/input/Keybindings';
 import { TILE_SIZE } from '../core/constants';
-import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W, type InteriorVariant } from '../map/GameMap';
+import {
+  GameMap,
+  TOWER_CISTERN_STOREY,
+  TOWER_ENTRANCE_STOREY,
+  TOWER_FLOOR_COUNT,
+  TOWER_TOP_FLOOR,
+  TOWER_INTERIOR_W,
+  type InteriorVariant,
+} from '../map/GameMap';
 import { planGoblinPrison, type PrisonPlan } from '../map/goblinPrisonPlan';
+import {
+  planSewer,
+  sewerSectionIndex,
+  towerCisternCulvertLanding,
+  type SewerPlan,
+} from '../map/sewer/sewerPlan';
+import { SewerSectionSystem } from '../systems/sewer/SewerSectionSystem';
+import { TowerStoreysSystem } from '../systems/tower/TowerStoreysSystem';
+import { TowerRitualSystem } from '../systems/tower/TowerRitualSystem';
+import { TowerChapters } from '../systems/missingCats/towerChapters';
+import { splitWholePartyIfOwed } from '../systems/missingCats/missingCatsSplit';
+import {
+  TOWER_CISTERN_ARRIVAL_TILE,
+  towerConditionsFor,
+} from '../map/town/interiors/townCenterTower';
+import { setDungeonFloorTheme } from '../map/dungeon/floorTheme';
+import { warmDungeonWater } from '../map/tiles/dungeonWaterShore';
 import { PrisonKeySystem } from '../systems/stealthKeySnatch/PrisonKeySystem';
 import {
   CAPTURE_WITH_KEY_TOAST,
@@ -48,8 +73,13 @@ import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environment
 import { holdIdleClock, releaseIdleClock } from '../core/rendering/renderFrameClock';
 import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
-import type { BuildingEntry } from '../map/buildingEntry';
-import { type BuildingId, buildingDisplayName } from '../map/buildingIds';
+import { doorstepOf, type BuildingEntry } from '../map/buildingEntry';
+import {
+  STORM_DRAIN_ID,
+  TOWN_TOWER_ID,
+  type BuildingId,
+  buildingDisplayName,
+} from '../map/buildingIds';
 import { snapPlayer, restorePlayer } from '../core/save/PlayerSnapshot';
 import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
@@ -58,13 +88,32 @@ import { DaveGuideSystem } from '../systems/DaveGuideSystem';
 import { prewarmDaveSprite } from '../sprites/daveSprite';
 import { adviceIntel, adviceTactics } from '../systems/daveAdvice';
 import { type AdviceObjectiveId } from '../story/adviceObjectiveIds';
+import { DAVE_ADVICE } from '../dialog/scripts/dave';
 import type { CarolineMessage } from '../dialog/caroline';
 import { StoryDelivery, partyIsEngaged } from '../systems/StoryDelivery';
 import { walkUpTo } from '../systems/cutscene/walkUp';
-import { noWorldActions, type WalkToStep } from '../systems/cutscene/cutsceneSteps';
+import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
+import { bodyActor, townspersonActor } from '../systems/cutscene/cutsceneActors';
+import {
+  residentActorId,
+  runInteriorWorldAction,
+  type InteriorActorId,
+  type InteriorWorldAction,
+} from './interiorCutscene';
+import { RESIDENT_IDS } from '../core/state/residentIds';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import { pixelToTile } from '../utils';
-import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
+import { safeRoomIdIn, sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
+import {
+  PARTY_GROUP_IDS,
+  presenceOf,
+  withCompanionJoining,
+  type PartyLocation,
+  type PartySplitState,
+} from '../core/party/partySplit';
+import { CatAllySystem } from '../systems/CatAllySystem';
+import { tileStoodOn, type PartyTransferRequest } from '../systems/partySplit/partyTransfer';
+import { SplitDirector } from '../systems/partySplit/SplitDirector';
 import { DoctorSystem } from '../systems/DoctorSystem';
 import { stampSafeRoomClinics } from '../map/safeRoomClinicLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
@@ -92,7 +141,7 @@ import { promptSurface } from '../ui/hud/prompt';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
 import { paintInteriorMiniMap } from '../systems/interiorMiniMap';
-import { TowerStairSystem } from '../systems/TowerStairSystem';
+import { TowerStairSystem, type StairDirection } from '../systems/TowerStairSystem';
 import {
   readMovement,
   applyMovement,
@@ -134,7 +183,8 @@ import { GameStats, bindRunStats } from '../core/progression/GameStats';
 import type { PauseScreen } from '../ui/screens/pause/PauseScreen';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
-import { HumanTalkDriver } from '../creatures/humanGestures';
+import { CrawlerTalkDriver } from '../creatures/crawlerTalk';
+import { CastCatTalkDriver, type CatInConversation } from '../creatures/castCatTalk';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { AbilityManager } from '../core/skills/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
@@ -147,6 +197,7 @@ import {
   TAVERN_MUSIC_TRACKS,
   TEMPLE_MUSIC_TRACKS,
   TOWER_MUSIC_TRACKS,
+  SEWER_MUSIC_TRACKS,
   type MusicTrackId,
   type SoundId,
 } from '../audio/sounds';
@@ -184,7 +235,6 @@ import { causeFromDamageSource } from '../systems/DeathCauseSystem';
 import { pickDeathMessage, plainDeathMessage, type DeathMessage } from '../ui/DeathExplanations';
 import type { LootDrop, Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
-import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
 import { unpinCitizenTalk } from '../creatures/citizenFigure';
 import { prewarmAndPinTownspersonTalk } from '../creatures/townspersonBody';
@@ -193,8 +243,6 @@ import {
   createStarlightTentProgress,
   type StarlightTentProgress,
 } from '../core/state/StarlightTentProgress';
-import type { MurderQuestProgress, MurderQuestStage } from '../core/quests/MurderQuestProgress';
-import { createDoomsdayProgress, type DoomsdayProgress } from '../core/quests/DoomsdayProgress';
 import { createCasinoState, type CasinoState } from '../core/club/CasinoState';
 import { tickShopStock, type ShopStock } from '../economy/shopStock';
 import type { ShopId } from '../economy/shops';
@@ -230,6 +278,10 @@ import {
   InteriorPropInteractionSystem,
   TownMemoryInteriorPayoutRecord,
 } from '../systems/InteriorPropInteractionSystem';
+import { RoomMechanisms } from '../systems/roomMechanisms/RoomMechanisms';
+import { SenseLayer } from '../systems/senses/SenseLayer';
+import { CatSenseCue } from '../systems/senses/CatSenseCue';
+import { CONVEYOR_PLACEMENTS, plateSetsFor } from '../map/town/interiors/roomMechanisms';
 import { TownInteriorPropDestructionSystem } from '../systems/TownInteriorPropDestructionSystem';
 import { ContractInteriorSite } from '../systems/constructionContracts/ContractInteriorSite';
 import { InteriorBreakReactions } from '../systems/InteriorBreakReactions';
@@ -314,9 +366,11 @@ import { towerStairsPromptSurface } from '../ui/screens/dialogs/towerStairsPromp
 import {
   drawInteractionPrompt,
   drawInteractionPromptOver,
-  interactionPromptsDrawnThisFrame,
+  pressFocusedPrompt,
+  raisePromptsFor,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
+import type { PromptOwner } from '../ui/interactionFocus';
 import { MercenarySystem } from '../systems/MercenarySystem';
 import { MercenaryGuildSystem } from '../systems/MercenaryGuildSystem';
 import { mercenaryDeskSurface } from '../ui/screens/shop/MercenaryDeskScreen';
@@ -336,19 +390,30 @@ import { findPartyArrivalTiles } from '../map/findWalkableTile';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
-import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
 import { TAVERN_BUILDING_IDS } from '../map/town/townPlan';
 import { isSlotCabinet, type ClubProp } from '../core/club/clubProps';
 import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
-import { cultHideoutHoldsRoom, type InteriorStoryState } from '../systems/interiorStoryOwnership';
+import type { InteriorStoryState } from '../systems/interiorStoryOwnership';
 import {
   createAnchorQuestProgress,
   type AnchorQuestProgress,
 } from '../core/quests/AnchorQuestProgress';
+import {
+  createMissingCatsProgress,
+  phaseReached,
+  towerLoanOffered,
+  type MissingCatsProgress,
+} from '../core/quests/missingCatsProgress';
+import {
+  MissingCatsInteriorSystem,
+  PUMPKIN_ACTOR_ID,
+} from '../systems/missingCats/MissingCatsInteriorSystem';
+import { CATS_WALK_OUT } from '../dialog/scripts/scenes/missingCats';
+import { LodgeCellarDefence } from '../systems/missingCats/LodgeCellarDefence';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit } from '../systems/kits/ChatKit';
-import { CutsceneKit, cutsceneSoundPlayer } from '../systems/kits/CutsceneKit';
+import { CutsceneKit, cutsceneCueClock, cutsceneSoundPlayer } from '../systems/kits/CutsceneKit';
 import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
@@ -362,7 +427,8 @@ import { DestructionKit } from '../systems/kits/DestructionKit';
 import { RewardFlySystem } from '../systems/RewardFlySystem';
 import { TreasureChestSystem } from '../systems/TreasureChestSystem';
 import { ChestKit, chestPlacer, type ChestPlacer } from '../systems/kits/ChestKit';
-import { InteriorExitFixtureSystem } from '../systems/interiorExitFixtures';
+import { exitFixtureOnTile, InteriorExitFixtureSystem } from '../systems/interiorExitFixtures';
+import { OUT_THROUGH_THE_DOOR, type InteriorExitDestination } from '../systems/interiorTransfer';
 import { screenFadeSurface } from '../ui/ScreenFade';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
@@ -371,9 +437,6 @@ import { StarlightTentFinale } from '../systems/starlightTent/StarlightTentFinal
 import { restartStarlightTent } from '../systems/starlightTent/starlightTentRestart';
 import type { GroundHazardSource } from '../systems/GroundHazardSource';
 import { DIFFICULTY_LABELS, type Difficulty } from '../core/difficulty/difficultyProfiles';
-import { CultHideoutSystem } from '../systems/CultHideoutSystem';
-import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
-import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { FairySystem } from '../systems/FairySystem';
@@ -408,6 +471,7 @@ import {
 import {
   cameraWorldView,
   setVisibleWorldView,
+  isPointInWorldView,
   visibleWorldView,
 } from '../core/rendering/visibleWorldView';
 import { captionToward } from '../ui/hud/captions';
@@ -447,6 +511,12 @@ import {
 } from '../loot/gearPools';
 import { gearRecipient } from '../loot/questGear';
 
+/** Dave's refusal to bait the thief, told as a beat of its own rather than ranked as advice. */
+const DAVE_BAIT_REFUSAL_OBJECTIVE = 'missing_cats_bait' as const satisfies AdviceObjectiveId;
+/** A building holds one safe room at most, and it is the first. */
+const FIRST_SAFE_ROOM_INDEX = 0;
+/** How long the room watches the freed cats run for the stair before anyone speaks. */
+const CATS_WALK_OUT_WATCH_FRAMES = 150;
 /** The shared conversation's surface id: the one overlay a world tap may hand its press past. */
 const CONVERSATION_SURFACE_ID = 'conversation';
 /** The line over a building's name on its loading screen. */
@@ -536,7 +606,6 @@ function slotBankEmitters(props: ReadonlyArray<ClubProp>): AmbientEmitter[] {
     }));
 }
 
-const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
 /** The companion cat's missile is a constant patter in a fight; held under the swings it covers. */
 const CAT_MISSILE_VOLUME = 0.5;
@@ -555,24 +624,6 @@ const AI_FRAMES_PER_SECOND = 60;
 const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 /** Single-room buildings, and the storey a tower is entered on. */
 const GROUND_FLOOR_INDEX = 0;
-/** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
-const TOWER_CONFRONTATION_FLOOR = 3;
-/** Offset from a stair tile's corner to its centre, as a fraction of a tile. */
-const STAIR_TILE_CENTRE = 0.5;
-/**
- * Quest stages that put the magistrate's office on screen.
- *
- * Wider than the stage that starts the Quill fight: the room owns Featherfall's
- * body as much as it owns the fights, and it has to be standing there before
- * the first of them, between the two, and after the last — including on a
- * revisit once the questline is closed.
- */
-const TOWER_CONFRONTATION_STAGES: ReadonlyArray<MurderQuestStage> = [
-  'confrontation',
-  'quill_slain',
-  'lich_slain',
-  'complete',
-];
 /** Fade-in for an interior's own music when the building is entered. */
 const INTERIOR_MUSIC_FADE_IN_MS = 800;
 
@@ -587,9 +638,18 @@ interface InteriorEncounterFixtures {
   readonly exits: InteriorExitFixtureSystem;
 }
 
-/** A quest encounter that runs inside a building (the Starlight Tent maze, cult hideout, tower fight). */
+/** A scripted place that runs inside a building: the Starlight Tent maze, the prison, a sewer section. */
 interface InteriorEncounter {
   update(ctx: SystemContext): void;
+  /** An interact press the encounter's own fittings take, ahead of the room's; true when one did. */
+  tryInteract?(ctx: SystemContext): boolean;
+  /** The prompts and progress bars over the encounter's fittings, drawn over the room's darkness. */
+  renderInteractionPrompts?(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: HumanPlayer | CatPlayer,
+  ): void;
   /** What the encounter draws over the room that is not a bar in the top band. */
   renderUI?(ctx: CanvasRenderingContext2D): void;
   /** The encounter's bars, stacked in the HUD's top band. */
@@ -625,7 +685,37 @@ interface InteriorEncounter {
   dispose?(): void;
   /** Death-screen message when the players fall during this encounter. */
   readonly defeatMessage: string;
+  /** Whether the encounter is holding the party's input, as a capture does. */
+  readonly playerLocked?: boolean;
+  /** Overlays the encounter raises, mounted once on the scene's `UiRoot` with the rest. */
+  surfaces?(): Surface[];
+  /** Bodies fighting on the party's side that the encounter's hostiles may fight too. */
+  allyTargets?(): readonly Player[];
+  /** Party-side creatures the encounter stands up, moved with the crawlers as the scene's own are. */
+  carriedCompanions?(): CarriedCompanion[];
+  /** Why a stair will not take whoever is playing, or null when it will. */
+  stairRefusal?(going: StairDirection): string | null;
+  /**
+   * The encounter is a place worked through rather than a fight, so the room's
+   * ordinary fittings stay: its readables, its searchable and breakable props,
+   * its occupants. Unset, the encounter holds the room and they are left out.
+   */
+  readonly keepsRoomFittings?: true;
+  /** Things the encounter draws in the room's depth-sorted pass, among the bodies and the furniture. */
+  roomFigures?(): InteriorFigure[];
+  /** Placed props the encounter draws itself this frame, or that no longer stand where they were placed. */
+  hiddenProps?(): ReadonlySet<string>;
 }
+
+/** A storey's own furniture verbs: what on it can be read, examined or searched, and broken. */
+interface FloorFittings {
+  readonly readables: InteriorReadableSystem | null;
+  readonly props: InteriorPropInteractionSystem | null;
+  readonly breakables: TownInteriorPropDestructionSystem | null;
+}
+
+/** Which storey an encounter runs on: one, or whichever the party stands on. */
+type EncounterStoreys = number | 'every_storey';
 
 /**
  * One storey of an interior, with everything that is a property of *that map*.
@@ -660,6 +750,10 @@ interface InteriorFloor {
   readonly chests: TreasureChestSystem;
   /** The storey's ways out that are things in the room rather than its door mat. */
   readonly exits: InteriorExitFixtureSystem;
+  /** The storey's plates, knockable props and conveyor ends. */
+  readonly mechanisms: RoomMechanisms;
+  /** What only some crawlers perceive on this storey: scents, wards. */
+  readonly senses: SenseLayer;
 }
 
 /**
@@ -689,6 +783,14 @@ export interface BuildingInteriorWorldContext {
    * apart from it, and the tent's hall of mirrors deals one board per world.
    */
   readonly worldSeed: number;
+  /** Whether the cellar elf guides the party through the sewer on this visit; absent, nobody does. */
+  readonly sewerGuided?: boolean;
+  /**
+   * "A Cat Always Comes Back", by reference: its owners, clues, cellar and
+   * confession are rooms. Absent only in a harness with no town behind it,
+   * which then gets a record of its own.
+   */
+  readonly missingCats?: MissingCatsProgress;
 }
 
 /**
@@ -697,6 +799,29 @@ export interface BuildingInteriorWorldContext {
  */
 const DETACHED_ROOM_WORLD_SEED = 0;
 
+/** Where the sewer's cistern culvert hands the party: the tower's cistern, behind the tower's own card. */
+const SEWER_TO_TOWER_CISTERN: PartyTransferRequest = {
+  to: {
+    kind: 'interior',
+    building: TOWN_TOWER_ID,
+    storey: TOWER_CISTERN_STOREY,
+    tile: TOWER_CISTERN_ARRIVAL_TILE,
+  },
+  card: null,
+};
+
+/** Back down the cistern's culvert: the sewer's walkway at the culvert's mouth, behind the sewer's own card. */
+function towerCisternToSewer(): PartyTransferRequest {
+  const landing = towerCisternCulvertLanding(planSewer());
+  return {
+    to: { kind: 'interior', building: STORM_DRAIN_ID, storey: landing.section, tile: landing.tile },
+    card: null,
+  };
+}
+
+/** The cistern's floor tile in front of the culvert in its west wall, which the culvert is gone back through from. */
+const TOWER_CISTERN_CULVERT_TILE = { x: 1, y: TOWER_CISTERN_ARRIVAL_TILE.y } as const;
+
 const GROUNDFOLK_TUT_SOUNDS: ReadonlyArray<SoundId> = ['townsfolk_tut_1', 'townsfolk_tut_2'];
 /** The sound an occupant makes reacting to a break; Hawkfolk react in caption only. */
 const BREAK_REACTION_SOUNDS: Readonly<Record<TownSpecies, ReadonlyArray<SoundId> | null>> = {
@@ -704,6 +829,8 @@ const BREAK_REACTION_SOUNDS: Readonly<Record<TownSpecies, ReadonlyArray<SoundId>
   dwarf: GROUNDFOLK_TUT_SOUNDS,
   otter: GROUNDFOLK_TUT_SOUNDS,
   crocodilian: GROUNDFOLK_TUT_SOUNDS,
+  orc: GROUNDFOLK_TUT_SOUNDS,
+  elf: GROUNDFOLK_TUT_SOUNDS,
   hawkfolk: null,
 };
 /** A townsperson's x/y is their tile's corner; a caption points at the middle of it. */
@@ -716,7 +843,8 @@ const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
  *
  * The Goblin High Security Prison is always one of its authored layouts,
  * picked by the world seed so every visit is the same prison. The Starlight Tent is
- * always its maze, dealt from the world seed.
+ * always its maze, dealt from the world seed. The storm drain opens onto the
+ * sewer, which is the same in every world.
  */
 function interiorVariantFor(
   entry: BuildingEntry,
@@ -726,6 +854,7 @@ function interiorVariantFor(
   if (entry.type === 'prison') {
     return { kind: 'goblin_prison', plan: planGoblinPrison(worldSeed, settings.difficulty) };
   }
+  if (entry.id === STORM_DRAIN_ID) return { kind: 'sewer', plan: planSewer() };
   if (entry.id !== 'taloncrest_circus_tent') return 'default';
   // Dealt before the room exists: the hall's tiles, its floor marks and its
   // stage lights are all built from the board, once.
@@ -759,6 +888,8 @@ export class BuildingInteriorScene extends GameplayScene {
    * climb out for an exit fixture, which asks the same question first.
    */
   private exitMenuLeave: () => void = () => this.doExit();
+  /** The interior the open exit menu's Exit leads straight into, or null for the street. */
+  private exitMenuGoingInto: BuildingId | null = null;
   private exitDismissed = false;
 
   /** Null in every interior but the one the town plan flags with `hasSafeRoom`. */
@@ -847,6 +978,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** Coins/items flying to this scene's own HUD. One instance for the whole building — floors change, this doesn't. */
   protected readonly rewardFly = new RewardFlySystem();
+  protected readonly catSenseCue: CatSenseCue;
   /** Opening any storey's chest: the grant, the lid, the reward card and the fly to the HUD. */
   private readonly chestKit: ChestKit;
 
@@ -889,6 +1021,8 @@ export class BuildingInteriorScene extends GameplayScene {
   // Tower multi-floor state
   private towerFloors: GameMap[] = [];
   private currentFloor = 0;
+  /** Runs a split party from in here: hand-overs, regroups and quest chapter tables. */
+  readonly partySplitDirector: SplitDirector;
   private towerStairs: TowerStairSystem | null = null;
 
   protected readonly audio: AudioManager | null;
@@ -903,21 +1037,11 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly floors: InteriorFloor[] = [];
   /** The quest fight running in this building, if any, and the floor it holds. */
   private encounter: InteriorEncounter | null = null;
-  private encounterFloor = 0;
-  /**
-   * The tower fight, held by its own type as well as by `encounter`.
-   *
-   * It is the one encounter with a conversation in it — the body at the desk
-   * and the reveal that follows — so the conversation's Escape hook and the
-   * Space chain both have to be able to ask it questions no other encounter
-   * answers.
-   */
-  private towerConfrontation: QuillConfrontationSystem | null = null;
+  private encounterFloor: EncounterStoreys = 0;
   /**
    * The Starlight Tent's trap maze, held by its own type as well as by `encounter`.
    *
-   * Like the tower's confrontation it has a conversation in it, and more besides
-   * — a camera the script takes over, a follow command it refuses, and a door it
+   * It has a conversation in it, and more besides — a camera the script takes over, a follow command it refuses, and a door it
    * sends the party out through — so the conversation's hooks, the Space chain
    * and the render pass all ask it questions no other encounter answers.
    */
@@ -946,8 +1070,6 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly starlightTentHazards: GroundHazardSource = {
     getHazardEscapeVector: (x, y) => this.starlightTentMaze?.getHazardEscapeVector(x, y) ?? null,
   };
-  /** Storeys still holding hostiles that were not put there by a quest encounter. */
-  private readonly hostileRoomFloors = new Set<number>();
   // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
   private readonly occupants: InteriorOccupantSystem | null;
   private readonly ambientSound: AmbientSoundSystem | null;
@@ -964,13 +1086,9 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly readingPanel: FortuneTable | null;
   /** The mercenaries' hire desk; null in every room whose roster keeps no such desk. */
   private readonly mercenaryDesk: MercenaryGuildSystem | null;
-  /** Ledgers, letters and tally boards sitting on this room's furniture. */
-  private readonly readables: InteriorReadableSystem | null;
+  /** Each storey's own furniture verbs, by storey index. */
+  private readonly fittings: FloorFittings[] = [];
   private readonly readablePanel = new ReadableOverlay();
-  /** Examine/search/use on this room's placed props; null where nothing here offers any of the three. */
-  private readonly propInteractions: InteriorPropInteractionSystem | null;
-  /** This room's breakable placed props (barrels, crates, jars…); null where nothing here is breakable. */
-  private readonly interiorPropDestruction: TownInteriorPropDestructionSystem | null;
   /** The active construction contract's spots, when this room hosts them; null everywhere else. */
   private readonly contractSite: ContractInteriorSite | null;
   /** This room's contract contact, when the building can host a contract; also in `residentQuestHooks`. */
@@ -993,8 +1111,12 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   public readonly briarHollowState: BriarHollowState;
   private readonly anchorQuestProgress: AnchorQuestProgress;
+  private readonly missingCatsProgress: MissingCatsProgress;
   /** The anchor questline's business in this room; null in every other room. */
   private readonly anchorInterior: AnchorInteriorSystem | null;
+  /** "A Cat Always Comes Back"'s business with this room: owners, clues, the cellar, the confession. */
+  private readonly missingCatsInterior: MissingCatsInteriorSystem | null;
+  /** The town cats running out of the cattery once the Warden has fallen; null before and after. */
   /**
    * Every questline with business with this room's residents, in priority
    * order: a construction contract's client first, then the Anchor's, then
@@ -1011,7 +1133,7 @@ export class BuildingInteriorScene extends GameplayScene {
   /** The one conversation panel every speaking system in this room shares. */
   private readonly conversation: Conversation;
   /** Scripted moments that own the party, run the same way as in the dungeon. */
-  private readonly cutscenes: CutsceneKit;
+  private readonly cutscenes: CutsceneKit<InteriorWorldAction, InteriorActorId>;
   /** The run's story, told in this building's safe room as on the floor outside. */
   private readonly story: StoryDelivery;
   /**
@@ -1022,10 +1144,46 @@ export class BuildingInteriorScene extends GameplayScene {
   private daveArrivalOwed: SafeRoomId | null = null;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
   private citizenDialogTarget: Townsperson | null = null;
+
+  /**
+   * Who each of the room's interact prompts is raised for. The prompt surface
+   * shows only the best-ranked one, and `update` offers the next press to that
+   * one before the rest of its chain, so the prompt on screen is the press.
+   */
+  private readonly promptOwners = {
+    encounter: {
+      kind: 'quest',
+      act: () => this.activeEncounter?.tryInteract?.(this.buildSystemContext()) === true,
+    },
+    missingCats: {
+      kind: 'quest',
+      act: () => this.missingCatsInterior?.tryInteract(this.active()) === true,
+    },
+    contractSite: { kind: 'quest', act: () => this.tryContractPress(this.active()) },
+    questResident: { kind: 'quest', act: () => this.tryTalkToOccupant(this.active()) },
+    serviceKeeper: { kind: 'service', act: () => this.tryTalkToOccupant(this.active()) },
+    occupant: { kind: 'person', act: () => this.tryTalkToOccupant(this.active()) },
+    shop: { kind: 'service', act: () => this.tryOpenShop(this.active()) },
+    club: { kind: 'service', act: () => this.club?.handleInteract(this.active()) === true },
+    doctor: { kind: 'person', act: () => this.trySafeRoomPress(this.active()) },
+    dave: { kind: 'person', act: () => this.trySafeRoomPress(this.active()) },
+    mechanism: { kind: 'fixture', act: () => this.mechanisms.tryInteract(this.active()) },
+    exitFixture: { kind: 'fixture', act: () => this.exitFixtures.tryInteract(this.active()) },
+    groundPickup: { kind: 'pickup', act: () => this.tryGroundPickup(this.active()) },
+    readable: { kind: 'readable', act: () => this.tryReadNearby(this.active()) },
+    prop: { kind: 'examine', act: () => this.tryInteractWithPropNearby(this.active()) },
+    mercenary: {
+      kind: 'companion',
+      act: () => this.mercenarySystem.tryTalk(this.active(), this.world.roster.mobs),
+    },
+  } satisfies Record<string, PromptOwner>;
   /** The talk row pinned for {@link citizenDialogTarget}, unpinned with it. */
   private citizenTalkRow: DrawnFigureRow | null = null;
-  /** Keeps the human crawler talking, turned to whoever he is in conversation with. */
-  private readonly humanTalk = new HumanTalkDriver();
+  /** Keeps the driven crawler talking, turned to whoever they are in conversation with. */
+  private readonly crawlerTalk = new CrawlerTalkDriver();
+  private readonly castCatTalk = new CastCatTalkDriver();
+  /** The tower's cattery stray, while the party is in the tower. */
+  private towerCellmate: CatAllySystem | null = null;
   /**
    * Whether the interact key has been released since an overlay last spent it:
    * the edge trigger that guards the whole interaction chain.
@@ -1057,14 +1215,6 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Drives ability XP and levelling for everything the party does indoors. */
   private readonly abilityManager: AbilityManager;
 
-  private readonly doomsdayProgress: DoomsdayProgress;
-  /**
-   * Ticked every frame regardless of floor/building — the containment
-   * deadline must keep being checked even if the player leaves the crystal's
-   * floor, or the tower, before containing it. See SoulCrystalSystem's doc.
-   */
-  private readonly soulCrystal: SoulCrystalSystem;
-
   constructor(
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
@@ -1082,6 +1232,8 @@ export class BuildingInteriorScene extends GameplayScene {
       defeated: boolean,
       /** Who walks out of the door with the party. */
       companions: InteriorCompanionDeparture,
+      /** Where the party goes on from the floor outside, when the exit is a transfer. */
+      onward: PartyTransferRequest | null,
     ) => void,
     /**
      * Every shop's stock, threaded by reference like `casinoState` so a
@@ -1095,8 +1247,6 @@ export class BuildingInteriorScene extends GameplayScene {
     audio?: AudioManager,
     abilityManager?: AbilityManager,
     private readonly overworld?: BuildingInteriorWorldContext,
-    private readonly murderQuestProgress?: MurderQuestProgress,
-    doomsdayQuestProgress?: DoomsdayProgress,
     casinoState?: CasinoState,
     townMemory?: TownMemory,
     mercenaryRoster?: MercenaryRoster,
@@ -1155,11 +1305,15 @@ export class BuildingInteriorScene extends GameplayScene {
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
     });
     this.conversation = new Conversation(this.audio);
-    this.cutscenes = new CutsceneKit({
+    this.cutscenes = new CutsceneKit<InteriorWorldAction, InteriorActorId>({
       conversation: this.conversation,
       teleportDaveOut: () => this.dave?.teleportOut(),
       playSound: cutsceneSoundPlayer(this.audio),
-      runWorldAction: noWorldActions,
+      runWorldAction: (action) =>
+        runInteriorWorldAction(action, {
+          setPartyDown: ({ tile }) => this.setPartyDown(tile),
+        }),
+      cueClock: cutsceneCueClock(this.audio),
       pauseButton: () => {
         const rect = this.hud.frame?.dock.get('pause');
         return rect === undefined ? null : { rect, press: () => this.pauseScreen.toggle() };
@@ -1181,11 +1335,16 @@ export class BuildingInteriorScene extends GameplayScene {
     this.partyCrafts = partyCrafts ?? createPartyCraftsState();
     this.briarHollowState = briarHollowState ?? createBriarHollowState();
     this.anchorQuestProgress = anchorQuestProgress ?? createAnchorQuestProgress();
+    this.missingCatsProgress = overworld?.missingCats ?? createMissingCatsProgress();
     this.gameStats = gameStats ?? new GameStats();
+    this.catSenseCue = new CatSenseCue({
+      barks: this.crawlerBarks,
+      audio: this.audio,
+      conversation: this.conversation,
+      stats: this.gameStats,
+    });
     this.humanAchievements = humanAchievements ?? new AchievementManager();
     this.catAchievements = catAchievements ?? new AchievementManager();
-    this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
-    this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);
     this.casinoState = casinoState ?? createCasinoState();
     this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
     this.godModeState = godModeState ?? createGodModeState();
@@ -1217,6 +1376,7 @@ export class BuildingInteriorScene extends GameplayScene {
         toast: (message) => this.menus.toasts.post(message),
         sound: (id) => this.audio?.play(id),
       },
+      presenceOf(() => this.pm.formation),
     );
 
     const isTower = entry.type === 'tower';
@@ -1231,6 +1391,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const prisonPlan =
       variant !== 'default' && variant.kind === 'goblin_prison' ? variant.plan : null;
+    const sewerPlan = variant !== 'default' && variant.kind === 'sewer' ? variant.plan : null;
     this.companionsWaitOutside = prisonPlan !== null;
     this.attackCowSystem = new AttackCowSystem(
       partyRun.attackCowState,
@@ -1246,7 +1407,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // prebuiltStructure skips dungeon generation entirely (mapSize 0 would
     // crash the generator); generateInterior() builds the real room next.
     if (isTower) {
-      // Generate 4 tower floors
+      // Every storey is built at the door, each as the questline leaves it.
+      const towerVariant: InteriorVariant = {
+        kind: 'tower',
+        conditions: towerConditionsFor(this.missingCatsProgress),
+      };
       for (let f = 0; f < TOWER_FLOOR_COUNT; f++) {
         const floorMap = new GameMap({
           tileHeight: TILE_SIZE,
@@ -1255,10 +1420,32 @@ export class BuildingInteriorScene extends GameplayScene {
         });
         // Every storey of a tower passes `false`: a tower is not a safe-room
         // building, and the flag belongs to the building rather than the floor.
-        floorMap.generateInterior('tower', f, entry.id, false);
+        floorMap.generateInterior('tower', f, entry.id, false, towerVariant);
         this.towerFloors.push(floorMap);
       }
-      this.map = this.towerFloors[0];
+      const topStorey = this.towerFloors.length - 1;
+      this.currentFloor = Math.min(this.floor.arrival?.storey ?? TOWER_ENTRANCE_STOREY, topStorey);
+      this.map = this.towerFloors[this.currentFloor];
+      this.showTowerStoreyTheme();
+    } else if (sewerPlan !== null) {
+      // One map per section, kept the way a tower keeps its storeys, so a
+      // culvert between sections is a storey change.
+      sewerPlan.sections.forEach((_section, index) => {
+        const sectionMap = new GameMap({
+          tileHeight: TILE_SIZE,
+          prebuiltStructure: [],
+          artSeed: townArtSeed,
+        });
+        sectionMap.generateSewer(sewerPlan, index);
+        this.towerFloors.push(sectionMap);
+      });
+      const lastSection = this.towerFloors.length - 1;
+      const requestedSection = this.floor.arrival?.storey;
+      this.currentFloor =
+        requestedSection === undefined
+          ? sewerSectionIndex(sewerPlan, sewerPlan.entrySection)
+          : Math.min(Math.max(requestedSection, 0), lastSection);
+      this.map = this.towerFloors[this.currentFloor];
     } else {
       // Build single interior map
       this.map = new GameMap({
@@ -1281,7 +1468,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // groups stay resident (the idle clock stands still indoors), so asking
     // again costs nothing.
     const repaintTileArt = (): void => {
-      for (const floor of isTower ? this.towerFloors : [this.map]) {
+      for (const floor of this.towerFloors.length > 0 ? this.towerFloors : [this.map]) {
         floor.markTileArtStale({ includeFacades: true });
       }
     };
@@ -1299,7 +1486,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // `GameMap.markTileArtStale`'s doc comment) — every tower floor was
     // built above from the same `floor.spriteGroups`, so one resolution covers all
     // of them; `changeFloor` never re-triggers this load.
-    const interiorMaps = isTower ? this.towerFloors : [this.map];
+    const interiorMaps = this.towerFloors.length > 0 ? this.towerFloors : [this.map];
     const spriteGroupsReady = prewarmGroups(floor.spriteGroups).then(() => {
       for (const m of interiorMaps) m.markTileArtStale({ includeFacades: true });
     });
@@ -1311,6 +1498,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
     restorePlayer(this.human, humanSnap);
     restorePlayer(this.cat, catSnap);
+    this.pm.bindPartySplit(partyRun.partySplit);
+    this.partySplitDirector = new SplitDirector({
+      state: partyRun.partySplit,
+      locateLiveGroup: () => this.liveGroupLocation(),
+      save: (chapterStart) => void this.saveNow(chapterStart),
+      transfer: (request) => this.transferParty(request),
+      onFormationChanged: () => this.pm.steerLiveGroup(),
+    });
     // Spell levels live on the run's ability manager, not the crawler: without
     // this a missile cast indoors flies at level 1 whatever the cat has earned.
     this.cat.setAbilityManager(this.abilityManager);
@@ -1338,6 +1533,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // fights this one for every step.
     this.companion = new CompanionSystem(this.map, sx, sy, this.companionStance);
     this.wireFollowerMenu();
+    this.lendCutsceneActors();
 
     this.safeRoom =
       entry.hasSafeRoom === true
@@ -1397,8 +1593,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // After the safe room's fittings are stamped: the arrival has to keep clear
     // of them just as it keeps clear of the room's own furniture. The maze's
     // two flaps are fixed marks on two sealed halves and are left as set.
-    if (variant === 'default' || variant.kind === 'goblin_prison') {
-      this.setPartyDown(this.map.startTile);
+    if (variant === 'default' || variant.kind !== 'starlight_tent_maze') {
+      this.setPartyDown(this.floor.arrival?.tile ?? this.map.startTile);
       this.companion.setMap(this.map, this.human, this.cat);
     }
     if (prisonPlan !== null) {
@@ -1476,10 +1672,17 @@ export class BuildingInteriorScene extends GameplayScene {
     if (isTower) {
       this.towerStairs = new TowerStairSystem(
         this.map,
-        0,
+        this.currentFloor,
         () => this.changeFloor(this.currentFloor + 1),
         () => this.changeFloor(this.currentFloor - 1),
         () => this.ascentEntersTowerFinale(),
+        {
+          reasonFor: (going) => this.activeEncounter?.stairRefusal?.(going) ?? null,
+          onRefused: (reason) => {
+            this.audio?.play('error');
+            this.menus.toasts.post(reason, { key: reason });
+          },
+        },
       );
     }
 
@@ -1501,8 +1704,21 @@ export class BuildingInteriorScene extends GameplayScene {
         roster: new MobRoster(floorMap, spells),
       };
       const skeletonSummons = new SkeletonSummonSystem(floorMap, (mob) => world.roster.add(mob));
+      const storey = interiorMaps.indexOf(floorMap);
       this.floors.push({
         world,
+        mechanisms: new RoomMechanisms({
+          map: floorMap,
+          place: { building: entry.id, storey },
+          plateSets: plateSetsFor(entry.id, storey),
+          conveyors: CONVEYOR_PLACEMENTS,
+          split: partyRun.partySplit,
+          bus: this.bus,
+          shatter: (placed, at) =>
+            this.fittingsOf(storey)?.breakables?.shatterAt(placed, at) === true,
+          playSound: (cue) => this.audio?.play(cue),
+        }),
+        senses: new SenseLayer(),
         destruction: new DestructionKit(world, getLevelDef(floor.levelId).floorNumber),
         skeletonShots: new SkeletonProjectileSystem(floorMap),
         rockThrows: new RockThrowSystem(floorMap),
@@ -1513,8 +1729,8 @@ export class BuildingInteriorScene extends GameplayScene {
         skeletonSummons,
         chests: new TreasureChestSystem(),
         exits: new InteriorExitFixtureSystem({
-          confirm: (leave) => this.openExitMenu(leave),
-          exit: () => this.doExit(),
+          confirm: (destination, leave) => this.openExitMenu(leave, destination),
+          exit: (destination) => this.leaveFor(destination),
           playSound: (id) => this.audio?.play(id),
         }),
         fairies: new FairySystem({
@@ -1522,7 +1738,7 @@ export class BuildingInteriorScene extends GameplayScene {
           gameMap: floorMap,
           ledger: null,
           getMobs: () => world.roster.mobs,
-          getCrawlers: () => [this.human, this.cat],
+          getCrawlers: () => this.pm.presentCrawlers(),
           addMob: (mob) => world.roster.add(mob),
           skeletonSummons,
         }),
@@ -1651,7 +1867,8 @@ export class BuildingInteriorScene extends GameplayScene {
       variant !== 'default' && variant.kind === 'starlight_tent_maze' ? variant.plan : null,
     );
     if (prisonPlan !== null) this.raiseGoblinPrison(prisonPlan);
-    this.populateHostileRooms();
+    if (sewerPlan !== null) this.raiseSewerSection(sewerPlan, this.currentFloor);
+    if (isTower) this.raiseTowerStoreys(partyRun.partySplit);
 
     // Before the occupants are placed, because breaking Lori's shelf takes it
     // out of the furniture an occupant may anchor to — a citizen standing at a
@@ -1662,7 +1879,7 @@ export class BuildingInteriorScene extends GameplayScene {
       GROUND_FLOOR_INDEX,
       this.anchorQuestProgress,
       ground.gameMap,
-      () => [this.human, this.cat],
+      () => this.pm.presentCrawlers(),
       (mob) => ground.roster.add(mob),
       (message) => this.menus.toasts.post(message),
       this.conversation,
@@ -1693,9 +1910,9 @@ export class BuildingInteriorScene extends GameplayScene {
       worldSeed: this.overworld?.worldSeed ?? DETACHED_ROOM_WORLD_SEED,
       world: () =>
         buildContractWorld({
-          murderQuest: this.murderQuestProgress,
           anchorQuest: this.anchorQuestProgress,
           briarHollow: this.briarHollowState,
+          missingCats: this.missingCatsProgress,
         }),
       openHayloft: () => this.openWendellHayloft(),
       chatLine: () => this.wendellChatLine(),
@@ -1703,10 +1920,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.contractContact = ContractContactHook.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
       state: this.briarHollowState,
       party: { human: this.human, cat: this.cat },
-      story: () => ({
-        murderStage: this.murderQuestProgress?.stage,
-        anchor: this.anchorQuestProgress,
-      }),
+      story: () => ({ anchor: this.anchorQuestProgress, missingCats: this.missingCatsProgress }),
       bus: this.bus,
       audio: this.audio,
       conversation: this.conversation,
@@ -1718,36 +1932,63 @@ export class BuildingInteriorScene extends GameplayScene {
         this.occupants?.people.find((person) => person.residentId === residentId)?.speechStyle ??
         null,
     });
+    this.missingCatsInterior = MissingCatsInteriorSystem.forBuilding(GROUND_FLOOR_INDEX, {
+      buildingId: entry.id,
+      map: ground.gameMap,
+      progress: this.missingCatsProgress,
+      bus: this.bus,
+      conversation: this.conversation,
+      human: this.human,
+      cat: this.cat,
+      audio: this.audio,
+      speechStyleOf: (residentId) =>
+        this.occupants?.people.find((person) => person.residentId === residentId)?.speechStyle ??
+        null,
+      startCellarDefence: () => this.raiseLodgeCellarDefence(),
+      daveTalking: () => this.dave?.dialogOpen === true,
+      readingOpen: () => this.readablePanel.isOpen,
+      onItemGranted: flyGrantedItem,
+      playCutscene: (script, onComplete) => this.cutscenes.director.play(script, onComplete),
+      reunionReady: () => this.daveAndPartyFreeInSafeRoom(),
+      daveHome: () => this.daveHomeTile(),
+      pinnedTrackerId: () => this.overworldJournal?.progress.pinnedTrackerId ?? null,
+      readableNamed: (readableId) => this.readables?.placedById(readableId) ?? null,
+      music: this.audioScope,
+      save: () => void this.saveNow(),
+    });
     // The contract's contact first: it speaks only while a payment is owed,
     // and the Anchor's terms for Aviel or Lori would otherwise take every
-    // talk and keep the payment from ever being made.
+    // talk and keep the payment from ever being made. The stolen cats next:
+    // the town's own questline speaks before a side errand for the same
+    // resident, and only while it has a beat for them.
     this.residentQuestHooks = [
       this.contractContact,
+      this.missingCatsInterior,
       this.anchorInterior,
       wendellHook,
       wendellContractsHook,
     ].flatMap((hook) => (hook === null ? [] : [hook]));
     this.pinQuestsStartedIndoors();
 
-    // Ambient occupants only where no live encounter owns the room; the tower's
-    // confrontation can start after entry, so towers are excluded outright.
-    this.occupants =
-      this.encounter === null
-        ? InteriorOccupantSystem.forBuilding(
-            this.map,
-            entry.type,
-            entry.id,
-            () => this.active(),
-            () =>
-              partyRoutineBodies({
-                crawlers: [this.human, this.cat],
-                pet: this.deinonychusSystem,
-                hire: this.mercenarySystem,
-                cow: this.attackCowSystem,
-              }),
-            (cue, x, y) => this.audio?.playRandomAt(OCCUPANT_ROUTINE_CUES[cue].takes, x, y),
-          )
-        : null;
+    // Ambient occupants only where no live encounter owns the room; towers are
+    // excluded outright.
+    this.occupants = !this.encounterHoldsRoom
+      ? InteriorOccupantSystem.forBuilding(
+          this.map,
+          entry.type,
+          entry.id,
+          this.townDialogContext(),
+          () => this.active(),
+          () =>
+            partyRoutineBodies({
+              crawlers: this.pm.presentCrawlers(),
+              pet: this.deinonychusSystem,
+              hire: this.mercenarySystem,
+              cow: this.attackCowSystem,
+            }),
+          (cue, x, y) => this.audio?.playRandomAt(OCCUPANT_ROUTINE_CUES[cue].takes, x, y),
+        )
+      : null;
     // Kestrel is a counter-anchored occupant, not a figure `ShopSystem` owns
     // itself; it only needs her position for the "Shop" prompt and interact
     // range, so it is handed a pointer to her own `Townsperson` here, once
@@ -1757,74 +1998,68 @@ export class BuildingInteriorScene extends GameplayScene {
       null;
     this.shop?.setKeeper(storeKeeper);
     if (this.shop !== null && storeKeeper !== null) storeKeeper.shopSign = 'trades';
-    // Suppressed for the same reason occupants are: a room hosting a live quest
-    // encounter is a fight, not a library.
-    this.readables =
-      this.encounter === null
-        ? InteriorReadableSystem.forBuilding(
-            this.map,
-            entry.id,
-            this.occupants?.occupiedFurniture ?? new Set(),
-          )
-        : null;
-    // One record shared by both search and break, since both pay out from
-    // the same "first time only" rule against the same `TownMemory` — a
-    // player who searches a chest and breaks a crate in the same visit must
+    // One record per storey shared by both search and break, since both pay
+    // out from the same "first time only" rule against the same `TownMemory` —
+    // a player who searches a chest and breaks a crate in the same visit must
     // not get two separate first-timer's grace periods on one room.
-    const interiorPayoutRecord = new TownMemoryInteriorPayoutRecord(
-      this.townMemory,
-      entry.id,
-      GROUND_FLOOR_INDEX,
-    );
-    // Same suppression as the two above: a live encounter room is a fight,
-    // not a general store to shop and break crockery in.
-    this.propInteractions =
-      this.encounter === null
-        ? InteriorPropInteractionSystem.forBuilding(this.map, interiorPayoutRecord)
+    const roomFittingsLive = !this.encounterHoldsRoom;
+    this.floors.forEach((floorKit, storey) => {
+      const floorMap = floorKit.world.gameMap;
+      const payoutRecord = new TownMemoryInteriorPayoutRecord(this.townMemory, entry.id, storey);
+      const occupiedFurniture =
+        storey === this.currentFloor
+          ? (this.occupants?.occupiedFurniture ?? new Set<string>())
+          : new Set<string>();
+      const props = roomFittingsLive
+        ? InteriorPropInteractionSystem.forBuilding(floorMap, payoutRecord)
         : null;
-    if (this.propInteractions !== null && entry.id === 'taloncrest_builder_farm') {
-      this.propInteractions.examineOverride = (id) =>
-        plumblineFarmExamineLine(id, this.briarHollowState.blueprints.phase);
-    }
-    this.interiorPropDestruction =
-      this.encounter === null && TownInteriorPropDestructionSystem.hasAnyDestructible(this.map)
-        ? new TownInteriorPropDestructionSystem(
-            this.map,
-            this.destruction.loot,
-            interiorPayoutRecord,
-          )
-        : null;
-    // Same ground-floor kit whose loot system the prop-destruction system was
-    // just built from — a stick of dynamite thrown indoors should flatten a
-    // placed barrel exactly as it flattens a dungeon crate.
-    this.floors[GROUND_FLOOR_INDEX].destruction.dynamite.interiorProps =
-      this.interiorPropDestruction;
-    // A room a live encounter holds is a fight, not a job site, the same as
-    // for the occupants and the prop interactions above.
-    const murderStage = (): MurderQuestStage | undefined => this.murderQuestProgress?.stage;
+      if (props !== null && entry.id === 'taloncrest_builder_farm') {
+        props.examineOverride = (id) =>
+          plumblineFarmExamineLine(id, this.briarHollowState.blueprints.phase);
+      }
+      const breakables =
+        roomFittingsLive && TownInteriorPropDestructionSystem.hasAnyDestructible(floorMap)
+          ? new TownInteriorPropDestructionSystem(floorMap, floorKit.destruction.loot, payoutRecord)
+          : null;
+      // A stick of dynamite thrown indoors should flatten a placed barrel
+      // exactly as it flattens a dungeon crate.
+      floorKit.destruction.dynamite.interiorProps = breakables;
+      this.fittings.push({
+        readables: roomFittingsLive
+          ? InteriorReadableSystem.forBuilding(floorMap, entry.id, occupiedFurniture)
+          : null,
+        props,
+        breakables,
+      });
+    });
+    // A room a live encounter holds is a fight: not a library, a general store
+    // to break crockery in, or a job site.
     const contractStory: InteriorStoryState = {
-      get murderStage() {
-        return murderStage();
-      },
       anchor: this.anchorQuestProgress,
+      missingCats: this.missingCatsProgress,
     };
-    const contractSite =
-      this.encounter === null
-        ? ContractInteriorSite.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
-            state: this.briarHollowState,
-            story: () => contractStory,
-            gameMap: ground.gameMap,
-            human: this.human,
-            cat: this.cat,
-            audio: this.audio,
-            audioScope: this.audioScope,
-            toast: (message) => this.menus.toasts.post(message),
-            worldHalted: () => this.ui.worldHalted(),
-          })
-        : null;
+    const contractSite = !this.encounterHoldsRoom
+      ? ContractInteriorSite.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
+          state: this.briarHollowState,
+          story: () => contractStory,
+          gameMap: ground.gameMap,
+          human: this.human,
+          cat: this.cat,
+          audio: this.audio,
+          audioScope: this.audioScope,
+          toast: (message) => this.menus.toasts.post(message),
+          worldHalted: () => this.ui.worldHalted(),
+        })
+      : null;
     this.contractSite = contractSite;
-    if (contractSite !== null && this.interiorPropDestruction !== null) {
-      this.interiorPropDestruction.protectedIds = () => contractSite.protectedProps();
+    const groundBreakables = this.fittings[GROUND_FLOOR_INDEX].breakables;
+    if (contractSite !== null && groundBreakables !== null) {
+      groundBreakables.protectedIds = () => contractSite.protectedProps();
+    }
+    // After the room's people and furniture: the lodge's defence, resumed on
+    // entry, keeps the room as it was the visit Kessler opened the lid.
+    if (this.missingCatsInterior?.cellarDefenceOwedOnEntry === true) {
+      this.raiseLodgeCellarDefence();
     }
 
     this.ambientSound =
@@ -1843,7 +2078,9 @@ export class BuildingInteriorScene extends GameplayScene {
       ? new FortuneTable()
       : null;
     this.mercenaryDesk = interiorKeepsDesk(entry.id, 'mercenary_guild')
-      ? new MercenaryGuildSystem(this.mercenaryRoster, this.audio)
+      ? new MercenaryGuildSystem(this.mercenaryRoster, this.audio, () =>
+          towerLoanOffered(this.missingCatsProgress),
+        )
       : null;
 
     // Last, once the party stands where it came in and the entry storey's roster
@@ -1855,7 +2092,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const safeRoom = this.safeRoom;
     const arrivesInSafeRoom =
       safeRoom !== null &&
-      (safeRoom.safeRoomAt(this.active()) ?? safeRoom.safeRoomAt(this.inactive())) !== null;
+      (safeRoom.safeRoomAt(this.active()) ?? this.presentPartnerSafeRoom(safeRoom)) !== null;
     if (this.dave !== null && arrivesInSafeRoom) prewarmDaveSprite();
     const arrivalCamera = this.computeCamera(this.map);
     this.doctor?.prewarmInView(arrivalCamera.x, arrivalCamera.y);
@@ -1865,6 +2102,7 @@ export class BuildingInteriorScene extends GameplayScene {
       kicker: prisonPlan === null ? INTERIOR_LOADING_KICKER : PRISON_LOADING_KICKER,
       title: buildingDisplayName(entry.id),
       screen: loadingScreen,
+      ...this.floor.arrival?.card,
       returning: false,
       tasks: () =>
         floorArrivalLoadTasks({
@@ -1975,6 +2213,41 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.floors[this.currentFloor].fairies;
   }
 
+  /** Whether a live encounter holds the room as a fight, leaving out its ordinary fittings. */
+  private get encounterHoldsRoom(): boolean {
+    return this.encounter !== null && this.encounter.keepsRoomFittings !== true;
+  }
+
+  /** A storey's furniture verbs, or null for a storey not yet furnished. */
+  private fittingsOf(storey: number): FloorFittings | null {
+    return storey < this.fittings.length ? this.fittings[storey] : null;
+  }
+
+  /** Ledgers, letters and tally boards sitting on the current storey's furniture. */
+  private get readables(): InteriorReadableSystem | null {
+    return this.fittingsOf(this.currentFloor)?.readables ?? null;
+  }
+
+  /** Examine/search/use on the current storey's placed props; null where nothing there offers any of the three. */
+  private get propInteractions(): InteriorPropInteractionSystem | null {
+    return this.fittingsOf(this.currentFloor)?.props ?? null;
+  }
+
+  /** The current storey's breakable placed props (barrels, crates, jars…); null where nothing there is breakable. */
+  private get interiorPropDestruction(): TownInteriorPropDestructionSystem | null {
+    return this.fittingsOf(this.currentFloor)?.breakables ?? null;
+  }
+
+  /** The current storey's plates, knockable props and conveyor ends. */
+  private get mechanisms(): RoomMechanisms {
+    return this.floors[this.currentFloor].mechanisms;
+  }
+
+  /** The current storey's sense layer: a system with a scent or a ward to show registers it here. */
+  get senses(): SenseLayer {
+    return this.floors[this.currentFloor].senses;
+  }
+
   /**
    * An interior's boss fights are its quest encounters, and each fills the
    * storey it runs on, so the storey is the room: the fight is unfinished while
@@ -1987,7 +2260,9 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** The quest fight, but only while the player is on the floor holding it. */
   private get activeEncounter(): InteriorEncounter | null {
-    return this.currentFloor === this.encounterFloor ? this.encounter : null;
+    const onItsStorey =
+      this.encounterFloor === 'every_storey' || this.currentFloor === this.encounterFloor;
+    return onItsStorey ? this.encounter : null;
   }
 
   private wirePauseScreen(): void {
@@ -2110,7 +2385,7 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Whether the party already has `id`, carried or still on the floor: gear is one of a kind. */
   private partyOwnsGear(id: GearId): boolean {
     return (
-      partyOwnsGear([this.human, this.cat], id) ||
+      partyOwnsGear(this.pm.wholeParty(), id) ||
       this.destruction.loot.holds(id) ||
       this.floors.some((floor) => floor.chests.holds(id))
     );
@@ -2138,7 +2413,7 @@ export class BuildingInteriorScene extends GameplayScene {
     owner: HumanPlayer | CatPlayer,
   ): void {
     const earner = owner === this.human ? 'human' : 'cat';
-    for (const crawler of [this.human, this.cat]) {
+    for (const crawler of this.pm.wholeParty()) {
       const kind = crawler === this.human ? 'human' : 'cat';
       const pieces = gear.items.filter((id) => gearRecipient(id, earner) === kind);
       const coins = crawler === owner ? gear.coins : 0;
@@ -2147,33 +2422,9 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
-  /**
-   * Whatever hostile is standing in each of this building's rooms.
-   *
-   * Content, not wiring: the guards join through the roster each storey already
-   * has, are fought with the kit it already has, and drop through the loot
-   * system it already has. Adding a fight to a room that never had one is a
-   * table entry in `interiorHostiles`, and nothing else.
-   */
   /** What every scripted interior enemy is levelled against. */
   private get partyLevel(): number {
     return partyLevelOf(this.human.level, this.cat.level);
-  }
-
-  private populateHostileRooms(): void {
-    this.floors.forEach((floor, floorIndex) => {
-      const hostiles = interiorHostilesFor({
-        buildingId: this.entry.id,
-        buildingType: this.entry.type,
-        floor: floorIndex,
-        map: floor.world.gameMap,
-        memory: this.townMemory,
-        murderQuest: this.murderQuestProgress,
-        partyLevel: this.partyLevel,
-      });
-      for (const hostile of hostiles) floor.world.roster.add(hostile);
-      if (hostiles.length > 0) this.hostileRoomFloors.add(floorIndex);
-    });
   }
 
   /**
@@ -2197,22 +2448,8 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Marks a room quiet once the last of its guards is down, so walking back
-   * through the door does not restock the fight.
-   */
-  private noteHostileRoomsCleared(): void {
-    for (const floorIndex of [...this.hostileRoomFloors]) {
-      const roster = this.floors[floorIndex].world.roster;
-      if (roster.mobs.some((mob) => mob.isAlive && mob.isHostile)) continue;
-      this.hostileRoomFloors.delete(floorIndex);
-      noteRoomCleared(this.townMemory, this.entry.id, floorIndex);
-    }
-  }
-
-  /**
    * Encounters that are live from the moment the building is entered: the
-   * Starlight Tent's trap maze and the Blackwood Lodge cult hideout. The tower's Quill
-   * confrontation is created later, on reaching the top floor.
+   * Starlight Tent's trap maze.
    */
   private initEntryEncounter(
     /** The tent as dealt at the door, when this room is the maze. */
@@ -2231,16 +2468,6 @@ export class BuildingInteriorScene extends GameplayScene {
       // update the way the tower's Lich fight does.
       this.companion.registerHazardSource(this.starlightTentHazards);
       this.combat.mobLoop.registerHazardSource(this.starlightTentHazards);
-      return;
-    }
-
-    const murderProgress = this.murderQuestProgress;
-    if (murderProgress !== undefined && cultHideoutHoldsRoom(this.entry.id, murderProgress.stage)) {
-      this.startEncounter(
-        GROUND_FLOOR_INDEX,
-        (bus, addMob) =>
-          new CultHideoutSystem(this.map, bus, addMob, murderProgress, this.partyLevel),
-      );
     }
   }
 
@@ -2283,6 +2510,58 @@ export class BuildingInteriorScene extends GameplayScene {
       });
     }
     prison.lighting.prewarm();
+  }
+
+  /**
+   * Stands one section of the sewer up on its storey's map: its water as its
+   * valves leave it, its fights, its guide and its ways out, one of which
+   * hands the party straight into the tower's cistern.
+   */
+  private raiseSewerSection(plan: SewerPlan, sectionIndex: number): void {
+    const section = plan.sections[sectionIndex];
+    const { gameMap } = this.floors[sectionIndex].world;
+    const sewer = this.startEncounter(
+      sectionIndex,
+      (_bus, addMob, fixtures) =>
+        new SewerSectionSystem({
+          map: gameMap,
+          section,
+          memory: this.townMemory,
+          addMob,
+          exits: fixtures.exits,
+          audio: this.audio,
+          partyLevel: this.partyLevel,
+          guided: this.overworld?.sewerGuided === true,
+          cistern: SEWER_TO_TOWER_CISTERN,
+          presentCrawlers: () => this.pm.presentCrawlers(),
+        }),
+    );
+    // Baked while the ladder is still loading, not on the first frame below.
+    sewer.lighting.prewarm();
+  }
+
+  /**
+   * Blackwood Lodge's cellar lid, held with the elves against what comes up
+   * the cistern. Raised the moment Kessler opens the lid, or on entry while
+   * the lid stands open and the cellar has not yet held.
+   */
+  private raiseLodgeCellarDefence(): void {
+    const lid = this.map.placedInteriorProps.find((placed) => placed.propId === 'cellar_trapdoor');
+    if (lid === undefined || this.encounter !== null) return;
+    this.startEncounter(
+      GROUND_FLOOR_INDEX,
+      (_bus, addMob) =>
+        new LodgeCellarDefence({
+          map: this.map,
+          progress: this.missingCatsProgress,
+          addMob,
+          partyLevel: this.partyLevel,
+          owner: this.human,
+          lid: lid.tile,
+          audio: this.audio,
+          onHeld: () => this.missingCatsInterior?.cellarHeld(),
+        }),
+    );
   }
 
   /**
@@ -2367,20 +2646,187 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * The Warden has fallen and the town cats are running for the stair down:
+   * the room watches them go, and the run is saved with the questline at its
+   * aftermath.
+   */
+  private watchCatsLeaveTheCattery(): void {
+    this.cutscenes.director.play(
+      [
+        { kind: 'wait', frames: CATS_WALK_OUT_WATCH_FRAMES },
+        {
+          kind: 'conversation',
+          request: { lines: CATS_WALK_OUT, reward: null, questRelated: true },
+        },
+      ],
+      () => void this.saveNow(),
+    );
+  }
+
+  /** Whether Dave and the steered crawler are both in this room's safe room, with nothing else under way. */
+  private daveAndPartyFreeInSafeRoom(): boolean {
+    const daveState = this.dave?.state ?? null;
+    if (daveState?.kind !== 'inRoom' || daveState.phase.kind !== 'present') return false;
+    const crawlerRoom = this.safeRoom?.safeRoomAt(this.active()) ?? null;
+    if (crawlerRoom === null || !sameSafeRoom(daveState.room, crawlerRoom)) return false;
+    return (
+      !this.cutscenes.isActive &&
+      !this.conversation.isOpen &&
+      !this.story.isTellingDaveMoment &&
+      !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers())
+    );
+  }
+
+  /** Where Dave stands in this room's safe room, whether or not he is in it now. */
+  private daveHomeTile(): TilePoint | null {
+    if (this.safeRoom === null) return null;
+    const room = safeRoomIdIn({ kind: 'interior', building: this.entry.id }, FIRST_SAFE_ROOM_INDEX);
+    return this.safeRoom.guidePlacement(room)?.home ?? null;
+  }
+
+  /** The reunion's jingle stays decoded in the Sleeping Cat Inn while the cats are walking home. */
+  private holdReunionJingle(): void {
+    if (this.entry.id !== 'taloncrest_inn') return;
+    this.audio?.holdSfxGroup('missingCatsReunion', this.missingCatsProgress.phase === 'aftermath');
+  }
+
+  /** The cistern's sluice and the gatehouse watch, live on whichever storey the party stands on. */
+  private raiseTowerStoreys(split: PartySplitState): void {
+    const chapters = new TowerChapters({
+      director: this.partySplitDirector,
+      progress: this.missingCatsProgress,
+      bus: this.bus,
+      formation: () => this.pm.formation,
+      currentStorey: () => this.currentFloor,
+      playCutscene: (script, onComplete) => this.cutscenes.director.play(script, onComplete),
+      sceneBusy: () => this.cutscenes.isActive || this.conversation.isOpen,
+      roomShown: () => !this.arrivalLoading.isOpen,
+      saveNow: () => void this.saveNow(),
+      here: () => this.liveGroupLocation(),
+      transferParty: (request) => this.transferParty(request),
+      audio: this.audio,
+      music: this.audioScope,
+    });
+    const cattery = this.floors[TOWER_TOP_FLOOR];
+    this.floors[TOWER_CISTERN_STOREY].exits.place(
+      exitFixtureOnTile('tower_culvert', TOWER_CISTERN_CULVERT_TILE, {
+        kind: 'onward',
+        request: towerCisternToSewer(),
+      }),
+    );
+    const cellmate = new CatAllySystem('tower_cattery_cellmate', this.pm.presence);
+    this.towerCellmate = cellmate;
+    cellmate.followCrawler('cat');
+    const progress = this.missingCatsProgress;
+    if (progress.cellmateFreed && !phaseReached(progress, 'aftermath') && !this.cat.isAway) {
+      cellmate.bringOut(this.cat, this.map, this.world.roster);
+    }
+    const conditions = towerConditionsFor(this.missingCatsProgress);
+    const ritual = new TowerRitualSystem({
+      map: cattery.world.gameMap,
+      bus: this.bus,
+      addMob: (mob) => cattery.world.roster.add(mob),
+      progress: this.missingCatsProgress,
+      conditions,
+      audio: this.audio,
+      music: this.audioScope,
+      companion: this.companion,
+      conversation: this.conversation,
+      partyLevel: () => this.partyLevel,
+      saveBeforeFight: () => {
+        if (this.isRevivePending || !this.partyRun.maySave()) return;
+        void this.saveNow();
+      },
+      onWardenFallen: () => this.watchCatsLeaveTheCattery(),
+    });
+    this.startEncounter(
+      'every_storey',
+      () =>
+        new TowerStoreysSystem({
+          storeys: this.towerFloors,
+          progress: this.missingCatsProgress,
+          conditions,
+          difficulty: settings.difficulty,
+          currentStorey: () => this.currentFloor,
+          addMob: (storey, mob) => this.floors[storey].world.roster.add(mob),
+          bus: this.bus,
+          split,
+          sensesOf: (storey) => this.floors[storey].senses,
+          mechanismsOf: (storey) => this.floors[storey].mechanisms,
+          cellmate: {
+            body: () => cellmate.body,
+            bringOut: (tile) => {
+              const storey = this.floors[TOWER_TOP_FLOOR].world;
+              const body = cellmate.bringOut(this.cat, storey.gameMap, storey.roster);
+              if (body === null) return null;
+              const spawnX = body.x;
+              const spawnY = body.y;
+              body.placeAt(tile.x * TILE_SIZE, tile.y * TILE_SIZE);
+              storey.roster.grid.move(body, spawnX, spawnY);
+              body.caged = true;
+              return body;
+            },
+            joinCat: () => {
+              const body = cellmate.body;
+              if (body !== null) body.caged = false;
+              cellmate.followCrawler('cat');
+              const formation = split.formation;
+              if (formation.kind !== 'split') return;
+              const catGroup = PARTY_GROUP_IDS.find((id) =>
+                formation.groups[id].crawlers.includes('cat'),
+              );
+              if (catGroup === undefined) return;
+              split.formation = withCompanionJoining(formation, catGroup, cellmate.companionRef);
+            },
+            order: (directive) => {
+              if (directive === null) cellmate.clearDirective();
+              else cellmate.setDirective(directive);
+            },
+          },
+          cellmateAlly: cellmate,
+          chapters,
+          audio: this.audio,
+          presentCrawlers: () => this.pm.presentCrawlers(),
+          setPartyDown: (tile) => this.setPartyDown(tile),
+          toast: (text) => this.menus.toasts.post(text, { tone: 'danger' }),
+          heardOffScreen: (text, at) => {
+            const view = visibleWorldView();
+            if (isPointInWorldView(view, at.x, at.y, 0)) return;
+            this.menus.captions.post(captionToward(text, at, view));
+          },
+          ritual,
+        }),
+    );
+  }
+
+  /**
+   * Draws the storey on show in its own dungeon theme and paints its standing
+   * water, both before any of its chunks bake. The water is painted here rather
+   * than when the storey is built: the water cache holds one map at a time, and
+   * every storey is built at the door.
+   */
+  private showTowerStoreyTheme(): void {
+    const theme = this.map.towerStoreyTheme;
+    if (theme !== null) setDungeonFloorTheme(theme);
+    warmDungeonWater(this.map.structure);
+  }
+
+  /**
    * Brings a quest fight to life on one floor. The encounter spawns its mobs
    * through that floor's roster, so it is fought with the kit that floor already
    * had rather than one built around it.
    */
   private startEncounter<E extends InteriorEncounter>(
-    floor: number,
+    storeys: EncounterStoreys,
     makeEncounter: (
       bus: EventBus,
       addMob: (mob: Mob) => void,
       fixtures: InteriorEncounterFixtures,
     ) => E,
   ): E {
+    const floor = storeys === 'every_storey' ? this.currentFloor : storeys;
     const { world, chests, exits } = this.floors[floor];
-    this.encounterFloor = floor;
+    this.encounterFloor = storeys;
     const encounter = makeEncounter(this.bus, (mob) => world.roster.add(mob), {
       chests: chestPlacer(chests, world.gameMap),
       exits,
@@ -2391,52 +2837,21 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Whether climbing from the storey the party is standing on walks straight
-   * into the murder quest's final battle.
-   *
-   * Only the two stages that still owe a fight qualify: `lich_slain` and
-   * `complete` are also tower-confrontation stages, but the office is empty by
-   * then and asking a returning player whether they are ready would be the game
+   * into the Warden's fight: the last flight, while the questline has the
+   * party climbing together or already into the ritual. Before the reunion
+   * the cattery is a storey of cages, and after the Warden it is an empty
+   * room, and asking either party whether they are ready would be the game
    * threatening them with nothing.
    */
   private ascentEntersTowerFinale(): boolean {
     if (this.entry.type !== 'tower') return false;
-    if (this.currentFloor + 1 !== TOWER_CONFRONTATION_FLOOR) return false;
-    const stage = this.murderQuestProgress?.stage;
-    return stage === 'confrontation' || stage === 'quill_slain';
-  }
-
-  /**
-   * The Quill confrontation spawns the first time the players reach the
-   * tower's top floor while the murder quest is at its confrontation stage.
-   */
-  private maybeStartTowerConfrontation(): void {
-    if (this.encounter !== null) return;
-    if (this.entry.type !== 'tower' || this.currentFloor !== TOWER_CONFRONTATION_FLOOR) return;
-    const murderProgress = this.murderQuestProgress;
-    if (murderProgress === undefined) return;
-    if (!TOWER_CONFRONTATION_STAGES.includes(murderProgress.stage)) return;
-
-    const floorMap = this.map;
-    this.startEncounter(TOWER_CONFRONTATION_FLOOR, (bus, addMob) => {
-      const confrontation = new QuillConfrontationSystem(
-        floorMap,
-        bus,
-        addMob,
-        murderProgress,
-        this.audio,
-        this.doomsdayProgress,
-        this.partyLevel,
-        this.companion,
-        this.conversation,
-        this.audioScope,
-      );
-      this.towerConfrontation = confrontation;
-      return confrontation;
-    });
+    if (this.currentFloor + 1 !== TOWER_TOP_FLOOR) return false;
+    const { phase } = this.missingCatsProgress;
+    return phase === 'ascent' || phase === 'ritual';
   }
 
   private changeFloor(newFloor: number): void {
-    if (newFloor < 0 || newFloor > MAX_TOWER_FLOOR_INDEX) return;
+    if (newFloor < 0 || newFloor > TOWER_TOP_FLOOR) return;
     const goingUp = newFloor > this.currentFloor;
     // Anything the storey has in the air has to be dropped on the way out. A
     // stick thrown as the player left would otherwise hang there unticked and go
@@ -2462,6 +2877,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mapW = this.map.structure[0]?.length ?? TOWER_INTERIOR_W;
     this.cat.setMap(this.map);
     this.towerStairs?.setMap(this.map, newFloor);
+    this.showTowerStoreyTheme();
 
     // An ascending party arrives at the new storey's stair down, a descending
     // one at its stair up.
@@ -2493,14 +2909,12 @@ export class BuildingInteriorScene extends GameplayScene {
     // Emitters were scanned from the previous floor's grid — every hearth on it
     // would otherwise keep crackling from coordinates that mean nothing here.
     this.ambientSound?.setEmitters(this.buildAmbientEmitters());
-
-    this.maybeStartTowerConfrontation();
   }
 
   /**
    * The soundtrack this interior owns: a rotating playlist in the club and the
    * taverns, the circus playlist in the Starlight Tent, the tower's own theme,
-   * the temple's own theme, and a shared default in every other room. Null
+   * the sewer's, the temple's own theme, and a shared default in every other room. Null
    * in a building with no soundtrack of its own. An encounter's music is
    * claimed over it, and falls back to it when the encounter lets go.
    */
@@ -2509,6 +2923,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
     if (this.entry.id === 'taloncrest_circus_tent') return CIRCUS_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
+    if (this.entry.id === STORM_DRAIN_ID) return SEWER_MUSIC_TRACKS;
     if (this.entry.id === 'taloncrest_temple') return TEMPLE_MUSIC_TRACKS;
     if (TAVERN_BUILDING_IDS.has(this.entry.id)) return TAVERN_MUSIC_TRACKS;
     return DEFAULT_BUILDING_MUSIC_TRACKS;
@@ -2651,7 +3066,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** Whether the HUD offers the Build button: under the same rule as outdoors. */
   private get buildButtonOffered(): boolean {
-    return constructionUnlocked([this.human, this.cat], this.briarHollowState.unlocks);
+    return constructionUnlocked(this.pm.wholeParty(), this.briarHollowState.unlocks);
   }
 
   /**
@@ -2733,7 +3148,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.club?.closeAll(this.active());
     this.mercenaryDesk?.close();
     this.drainMercenaryHire();
-    this.humanTalk.stop(this.human);
+    this.missingCatsInterior?.dispose();
+    this.crawlerTalk.stop(this.human, this.cat);
     // The next scene binds its own; a level-up must never reach this one's menus.
     this.abilityManager.onLevelUp = null;
     aiAdapter.unbindScene(this.bus);
@@ -2792,9 +3208,10 @@ export class BuildingInteriorScene extends GameplayScene {
    * opened in.
    */
   private mountSurfaces(): void {
+    // The purse a shop or a fee draws on is the whole party's, wherever its crawlers are.
     const party = (): { active: Player; companion: Player } => ({
       active: this.active(),
-      companion: this.inactive(),
+      companion: this.partnerAnywhere(),
     });
     const surfaces: Surface[] = [
       ...this.arrivalLoading.surfaces(),
@@ -2851,6 +3268,7 @@ export class BuildingInteriorScene extends GameplayScene {
       exitBuildingPromptSurface(EXIT_MENU_SURFACE_ID, {
         isOpen: () => this.exitMenuOpen,
         buildingId: () => this.entry.id,
+        goingInto: () => this.exitMenuGoingInto,
         exit: () => this.leaveByExitMenu(),
         stay: () => this.closeExitMenu(),
       }),
@@ -2864,6 +3282,7 @@ export class BuildingInteriorScene extends GameplayScene {
     ];
     if (this.prisonKey !== null) surfaces.push(...this.prisonKey.surfaces());
     if (this.prison !== null) surfaces.push(this.prison.fadeSurface());
+    surfaces.push(...(this.encounter?.surfaces?.() ?? []));
     if (this.servicePanel !== null) {
       surfaces.push(
         shopScreenSurface({
@@ -2899,7 +3318,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const club = this.club;
     if (club !== null) {
-      const casinoSeat = { active: () => this.active(), companion: () => this.inactive() };
+      const casinoSeat = { active: () => this.active(), companion: () => this.partnerAnywhere() };
       surfaces.push(
         ...club.stationSurfaces(party),
         ...club.casinoSurfaces(casinoSeat),
@@ -2911,17 +3330,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * What Escape does to the conversation on screen, or null to let it pass
-   * beneath: only the speakers below may be backed out of. A scripted beat that
-   * holds the party (the tower's load-bearing pages) and a
-   * line from anyone not listed leave Escape to the pause menu.
+   * beneath: only the speakers below may be backed out of. A line from anyone
+   * not listed leaves Escape to the pause menu.
    */
   private conversationEscape(): (() => void) | null {
     const doctor = this.doctor;
     if (doctor?.isDialogOpen === true) return () => void doctor.dismissDialog();
     const maze = this.starlightTentMaze;
     if (maze?.isDialogOpen === true) return () => void maze.dismissDialog();
-    const tower = this.towerConfrontation;
-    if (tower?.dialogDismissible === true) return () => void tower.dismissDialog();
     const questHook = this.openResidentQuestHook();
     if (questHook !== null) return () => void questHook.dismissDialog();
     const contractContact = this.contractContact;
@@ -2984,7 +3400,8 @@ export class BuildingInteriorScene extends GameplayScene {
     };
     this.followerMenu.onDoNotMove = () => {
       this.audio?.play('menu_click');
-      this.companion.setDoNotMove(this.inactive(), this.human.isActive);
+      const partner = this.presentPartner();
+      if (partner !== null) this.companion.setDoNotMove(partner, this.human.isActive);
     };
     this.followerMenu.onSetAggressive = () => {
       this.audio?.play('menu_click');
@@ -3003,7 +3420,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * companion can only have gone down in here.
    */
   private get companionDownIndoors(): boolean {
-    return this.inactive().isKnockedOut;
+    return this.presentPartner()?.isKnockedOut === true;
   }
 
   /**
@@ -3015,6 +3432,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.deinonychusSystem.asCarriedCompanion(this.cat),
       this.mercenarySystem.asCarriedCompanion(),
       this.attackCowSystem.asCarriedCompanion(),
+      ...(this.activeEncounter?.carriedCompanions?.() ?? []),
     ];
   }
 
@@ -3032,6 +3450,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (merc !== null) targets.push(merc);
     const cow = this.attackCowSystem.standingCow;
     if (cow !== null) targets.push(cow);
+    for (const ally of this.activeEncounter?.allyTargets?.() ?? []) targets.push(ally);
     return targets;
   }
 
@@ -3048,6 +3467,28 @@ export class BuildingInteriorScene extends GameplayScene {
    * a tile they can walk off. Everything that lands beside a crawler — Deinonychus,
    * the hire — reads these positions, so this comes before any of them.
    */
+  /** Both crawlers and every resident who may stand in the room, by the ids this interior's scripts name them with. */
+  private lendCutsceneActors(): void {
+    const actors = this.cutscenes.director.actors;
+    for (const crawler of [this.human, this.cat]) {
+      const actor = bodyActor(crawler, {
+        map: () => this.map,
+        southAnchor: 'sole',
+        hold: (held) => this.companion.holdForScript(crawler, held),
+      });
+      actors.register(crawler === this.human ? 'human' : 'cat', () =>
+        crawler.isAway ? null : actor,
+      );
+    }
+    actors.register(PUMPKIN_ACTOR_ID, () => this.missingCatsInterior?.pumpkinActor() ?? null);
+    for (const resident of RESIDENT_IDS) {
+      actors.register(residentActorId(resident), () => {
+        const person = this.occupants?.people.find((p) => p.residentId === resident);
+        return person === undefined ? null : townspersonActor(person);
+      });
+    }
+  }
+
   private setPartyDown(landing: { readonly x: number; readonly y: number }): void {
     this.pm.setPartyDown(findPartyArrivalTiles(this.map, landing));
   }
@@ -3106,18 +3547,29 @@ export class BuildingInteriorScene extends GameplayScene {
   private get scriptOwnsParty(): boolean {
     return (
       this.cutscenes.isActive ||
-      this.towerConfrontation?.playerLocked === true ||
-      this.prison?.playerLocked === true
+      this.prison?.playerLocked === true ||
+      this.activeEncounter?.playerLocked === true
     );
   }
 
-  /** Hands control to the companion, unless they're lying knocked out. */
+  private presentPartnerSafeRoom(safeRoom: SafeRoomSystem): SafeRoomId | null {
+    const partner = this.presentPartner();
+    return partner === null ? null : safeRoom.safeRoomAt(partner);
+  }
+
+  /** Hands control to the companion, unless they're lying knocked out or away. */
   private trySwitchActive(): void {
     // Guarded here rather than only at the keyboard poll, because the mobile HUD
     // reaches this by a different road: a script that is driving both bodies
     // must not have one swapped out from under it by either of them.
     if (this.scriptOwnsParty) return;
-    if (this.inactive().isKnockedOut) {
+    const awayRefusal = this.pm.switchRefusal();
+    if (awayRefusal !== null) {
+      this.audio?.play('error');
+      this.menus.toasts.post(awayRefusal, { tone: 'danger' });
+      return;
+    }
+    if (this.presentPartner()?.isKnockedOut === true) {
       this.audio?.play('error');
       return;
     }
@@ -3161,7 +3613,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const justEntered = nowInSafeRoom && !this.wasInSafeRoom;
     this.wasInSafeRoom = nowInSafeRoom;
     if (!justEntered) return;
-    const room = safeRoom.safeRoomAt(this.active()) ?? safeRoom.safeRoomAt(this.inactive());
+    const room = safeRoom.safeRoomAt(this.active()) ?? this.presentPartnerSafeRoom(safeRoom);
     if (room !== null) this.onSafeRoomEntered(room);
   }
 
@@ -3196,7 +3648,8 @@ export class BuildingInteriorScene extends GameplayScene {
    * the front door, which would teleport the player outside mid-visit.
    */
   private updateCompanionKnockout(): void {
-    const inactive = this.inactive();
+    const inactive = this.presentPartner();
+    if (inactive === null) return;
     updateKnockoutState({
       active: this.active(),
       inactive,
@@ -3212,10 +3665,20 @@ export class BuildingInteriorScene extends GameplayScene {
    * Where the one the human crawler is in conversation with stands, while a street-style
    * conversation is open — a resident, or Dave; null otherwise.
    */
-  private humanTalkSpeaker(): { x: number; y: number } | null {
+  private crawlerTalkSpeaker(): { x: number; y: number } | null {
     const citizen = this.citizenDialogTarget;
     if (citizen !== null) return citizen;
     return this.dave?.speakingPosition ?? null;
+  }
+
+  /** The cast's cats in this room who may speak a line, each with whoever she would answer. */
+  private castCatsInConversation(): CatInConversation[] {
+    const cats: CatInConversation[] = [];
+    const cellmate = this.towerCellmate?.body ?? null;
+    if (cellmate !== null) cats.push({ cat: cellmate, listener: this.active() });
+    const pumpkin = this.missingCatsInterior?.pumpkinInConversation() ?? null;
+    if (pumpkin !== null) cats.push(pumpkin);
+    return cats;
   }
 
   update(): void {
@@ -3242,24 +3705,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
 
-    // Ticked on every floor of every building, and the one exception is the
-    // return above: a party that is already dead has nothing left to contain.
-    const isOnCrystalFloor =
-      this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
-    this.soulCrystal.update(this.human, this.cat, this.active(), isOnCrystalFloor);
     this.updateExitRoute();
-    if (this.soulCrystal.crystalContainedPending) {
-      this.soulCrystal.crystalContainedPending = false;
-      this.awards.unlockParty('disaster_averted');
-      const active = this.active();
-      const cam = this.computeCamera(this.map);
-      this.rewardFly.enqueueItem(
-        'doomsday_scenario',
-        ITEM_DEF.doomsday_scenario.name,
-        active.x - cam.x,
-        active.y - cam.y,
-      );
-    }
 
     // Before `drainFor`, so a notice queued this frame drains on this same
     // frame's toast pass rather than sitting a frame behind.
@@ -3273,9 +3719,8 @@ export class BuildingInteriorScene extends GameplayScene {
     );
     this.chat.update();
 
-    // Caught here as well as at the end of `updateCombat`, because a death can
-    // arrive from something the frame stops before reaching it — the doomsday
-    // countdown ticks above every modal's early return.
+    // Caught here as well as at the end of `updateCombat`, because the modal
+    // returns below would otherwise hold a dead crawler on screen.
     if (!this.active().isAlive) {
       this.raiseDeathScreen();
       return;
@@ -3317,7 +3762,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.doctor?.isDialogOpen === true) {
       // The doctor keeps ticking through the conversation, so a treatment's
       // animation and its popups play out while the player reads the line.
-      this.doctor.tick(this.human, this.cat, this.active(), this.inactive());
+      this.doctor.tick(this.human, this.cat, this.active(), this.presentPartner());
       return;
     }
     const shop = this.shop;
@@ -3330,21 +3775,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // The blackjack table deals, flips and settles on its own clock, so it has
       // to keep ticking through its own panel — the same reason the doctor
       // ticks through their dialog above.
-      this.club.tickOpenModals(this.active(), this.inactive());
-      return;
-    }
-    // The tower's own conversation: the office scene, the reveal, the Lich's
-    // phase barks and the victory page. Its conversation halts the world, and
-    // this return is what makes that true — without it
-    // the room kept fighting behind the box, which meant a boss phase advancing
-    // and orbs landing on a party that was reading. A bare return is safe here
-    // where it is not for the maze: nothing inside the confrontation is waiting
-    // on a timer while its dialog is up. Every one of those pages is closed by
-    // the player, and closing it is what starts the next beat.
-    if (
-      this.currentFloor === TOWER_CONFRONTATION_FLOOR &&
-      this.towerConfrontation?.isDialogOpen === true
-    ) {
+      this.club.tickOpenModals(this.active(), this.partnerAnywhere());
       return;
     }
     if (this.starlightTentMaze?.isDialogOpen === true) {
@@ -3378,7 +3809,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // conversation is the shared one, already ticked above; this only measures
     // whether the player has walked out of his room.
     this.dave?.tickWalkAway(this.active());
-    this.humanTalk.update(this.human, this.humanTalkSpeaker(), false);
+    this.crawlerTalk.update(this.human, this.cat, this.crawlerTalkSpeaker(), false);
+    this.castCatTalk.update(this.castCatsInConversation(), this.conversation);
 
     const player = this.active();
     // Interiors are small enough that the south wall is always on screen, so a
@@ -3427,6 +3859,10 @@ export class BuildingInteriorScene extends GameplayScene {
     const interactPressed = (): boolean =>
       this.interactArmed && !overlayOwnsInteract && keybindings.isHeld(this.input, 'attack');
 
+    if (interactPressed() && pressFocusedPrompt(this.promptOwners)) {
+      keybindings.release(this.input, 'attack');
+    }
+
     // Safe room: whichever of the doctor and Dave is nearer. Only consume
     // Space when actually acting, so an unrelated press can still fall through
     // to talking to an ambient occupant sharing the room.
@@ -3444,22 +3880,13 @@ export class BuildingInteriorScene extends GameplayScene {
       keybindings.release(this.input, 'attack');
     }
 
-    if (
-      interactPressed() &&
-      this.currentFloor === TOWER_CONFRONTATION_FLOOR &&
-      this.towerConfrontation?.tryExamine(player) === true
-    ) {
-      keybindings.release(this.input, 'attack');
-    }
-
     if (safeRoomSpeaker === 'dave' && interactPressed()) {
       keybindings.release(this.input, 'attack');
       this.talkToDave(player);
     }
 
-    if (this.shop !== null && interactPressed() && this.shop.isNearShopkeeper(player)) {
+    if (interactPressed() && this.tryOpenShop(player)) {
       keybindings.release(this.input, 'attack');
-      this.shop.open();
     }
 
     // Club: talk to a station (bar, casino, market, …) with Space.
@@ -3475,7 +3902,22 @@ export class BuildingInteriorScene extends GameplayScene {
       keybindings.release(this.input, 'attack');
     }
 
+    if (
+      interactPressed() &&
+      this.activeEncounter?.tryInteract?.(this.buildSystemContext()) === true
+    ) {
+      keybindings.release(this.input, 'attack');
+    }
+
+    if (interactPressed() && this.mechanisms.tryInteract(player)) {
+      keybindings.release(this.input, 'attack');
+    }
+
     if (interactPressed() && this.tryUseRoomFixture(player)) {
+      keybindings.release(this.input, 'attack');
+    }
+
+    if (interactPressed() && this.missingCatsInterior?.tryInteract(player) === true) {
       keybindings.release(this.input, 'attack');
     }
 
@@ -3486,12 +3928,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // A contract spot in reach, ahead of examining the prop it marks, unless
     // the person the same press would talk to stands nearer than the spot.
     // With a hostile in reach the press is a swing, as it is outdoors.
-    if (
-      interactPressed() &&
-      this.citizenDialogTarget === null &&
-      !hostileWithinAttackRange(player, this.world.roster.grid) &&
-      this.contractSite?.tryInteract(player, this.occupantTalkTiles(player)) === true
-    ) {
+    if (interactPressed() && this.tryContractPress(player)) {
       keybindings.release(this.input, 'attack');
     }
 
@@ -3525,25 +3962,26 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     // Update walk animation
-    this.human.tickTimers();
-    this.cat.tickTimers();
-    drainBloodVomitRetches([this.human, this.cat], this.bus);
-    playCrawlerSeizureJolts([this.human, this.cat], this.audio);
+    this.pm.tickTimers();
+    drainBloodVomitRetches(this.pm.presentCrawlers(), this.bus);
+    playCrawlerSeizureJolts(this.pm.presentCrawlers(), this.audio);
     drainHpThresholdCrossings({ human: this.human, cat: this.cat }, this.bus);
     this.updateSafeRoomProtection();
     this.safeRoom?.tickBeds();
     this.dave?.update(player);
     this.startOwedDaveTalk();
     this.story.update();
-    this.doctor?.tick(this.human, this.cat, player, this.inactive());
+    this.doctor?.tick(this.human, this.cat, player, this.presentPartner());
     this.shop?.update();
-    this.club?.update(this.active(), this.inactive(), this.occupants?.people ?? []);
+    this.club?.update(this.active(), this.presentPartner(), this.occupants?.people ?? []);
     this.occupants?.update();
     this.hawkfolkFoley.update(this.audio, this.occupants?.people ?? [], player.x, player.y);
     this.syncPlumblineFarmRoom();
     this.applyResidentQuestMarkers();
     this.applyServiceShopSigns();
     for (const hook of this.residentQuestHooks) hook.update();
+    this.holdReunionJingle();
+    this.splitPartyIfOwed();
     this.contractSite?.update();
     this.prisonKey?.update(player);
     this.refreshAmbientEmittersIfPropsHid();
@@ -3628,7 +4066,7 @@ export class BuildingInteriorScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
       active,
-      inactive: this.inactive(),
+      partner: this.presentPartner(),
       activeIsMoving: active.isMoving,
       roster: this.world.roster,
       gameMap: this.map,
@@ -3665,6 +4103,15 @@ export class BuildingInteriorScene extends GameplayScene {
     // A quest fight's own shots and hazards run on the hostile world's clock,
     // which a crawler's last stand slows.
     if (combat.worldStepTaken) this.activeEncounter?.update(ctx);
+    if (combat.worldStepTaken) this.mechanisms.update(ctx);
+    this.senses.update(active, performance.now());
+    this.catSenseCue.update({
+      senses: this.senses,
+      cat: this.cat,
+      steered: active,
+      calm: !this.ui.worldHalted() && !this.conversation.isOpen && !this.scriptOwnsParty,
+      nowMs: performance.now(),
+    });
     // Beside the update that sets it, and ahead of next frame's companion pass:
     // a burnout moves both crawlers itself, but the anchors are the scene's to
     // fix, and an anchored companion still pointing at a corridor walks straight
@@ -3709,6 +4156,14 @@ export class BuildingInteriorScene extends GameplayScene {
     // and never behind any of the world-halting returns in `update`.
     this.deinonychusSystem.update(ctx);
     this.autoSummonDeinonychus(ctx);
+    // The lent hire stays with the party to the end of the scene, so the
+    // contract it held is not taken as changed.
+    if (
+      phaseReached(this.missingCatsProgress, 'aftermath') &&
+      this.mercenarySystem.endTowerLoan()
+    ) {
+      this.hireContract = null;
+    }
     if (this.mercenaryRoster.active !== this.hireContract) {
       this.hireContract = this.mercenaryRoster.active;
       this.mercenarySystem.onContractChanged(ctx.roster.mobs, ctx.roster.grid);
@@ -3718,7 +4173,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.drainWardExplainerBarks();
     this.crawlerBarks.update();
     this.breakReactions.update();
-    this.noteHostileRoomsCleared();
     combat.playerTick.tickRegen(this.human, this.cat);
     // Auto-potion only while something in the room is actually trying to kill
     // them. It exists to keep a companion standing through a fight; in a shop it
@@ -3748,12 +4202,15 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!active.isAlive) this.raiseDeathScreen();
   }
 
-  /** Placed props not standing in the room this frame: smashed, or taken down by a contract. */
+  /** Placed props not standing in the room this frame: smashed, knocked off, or taken down by a contract. */
   private hiddenInteriorProps(): ReadonlySet<string> | undefined {
-    return (
+    const smashed =
       this.contractSite?.hiddenProps(this.interiorPropDestruction?.broken) ??
-      this.interiorPropDestruction?.broken
-    );
+      this.interiorPropDestruction?.broken;
+    const knockedOff = this.mechanisms.hiddenProps();
+    const encounterHidden = this.activeEncounter?.hiddenProps?.();
+    if (knockedOff.size === 0 && (encounterHidden?.size ?? 0) === 0) return smashed;
+    return new Set([...(smashed ?? []), ...knockedOff, ...(encounterHidden ?? [])]);
   }
 
   private refreshAmbientEmittersIfPropsHid(): void {
@@ -3822,8 +4279,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * The tiles the way out toward the pinned objective ends on: a tower
    * storey's stairs down above the ground floor, the exit otherwise. Null when
    * there is nothing to lead out to: no Journal, no live pin, a pin on this
-   * very building (whoever the party came to see is already in the room), or
-   * the tower's crystal still loose, whose climb outranks the way out.
+   * very building (whoever the party came to see is already in the room).
    */
   private pinnedExitGoals(): readonly TilePoint[] | null {
     const journal = this.overworldJournal;
@@ -3835,8 +4291,7 @@ export class BuildingInteriorScene extends GameplayScene {
     );
     const target = pinned?.target;
     if (target === undefined || target.building === this.entry.id) return null;
-    const isTower = this.towerFloors.length > 0;
-    if (isTower && this.soulCrystal.isGuidingToCrystal) return null;
+    const isTower = this.entry.type === 'tower';
     const goals =
       isTower && this.currentFloor > 0
         ? this.map._interiorStairDownTiles
@@ -3846,12 +4301,13 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private updateExitRoute(): void {
     this.exitRouteGoals = this.pinnedExitGoals();
-    const ground = crawlerGroundPoint(this.active());
+    const active = this.active();
+    const ground = crawlerGroundPoint(active);
     if (this.exitRouteGoals === null) {
-      this.exitRoute.update(this.map, ground, null);
+      this.exitRoute.update(this.map, ground, null, active.mobility);
       return;
     }
-    this.exitRoute.updateToTiles(this.map, ground, this.exitRouteGoals);
+    this.exitRoute.updateToTiles(this.map, ground, this.exitRouteGoals, active.mobility);
   }
 
   /**
@@ -3907,35 +4363,6 @@ export class BuildingInteriorScene extends GameplayScene {
       view: { width: viewportWidth(), height: viewportHeight() },
       body: crawlerSpriteBox(active),
     });
-  }
-
-  /**
-   * A candidate for the shared arrow arbiter: the arrow to the loose soul
-   * crystal, or to the stairs that climb toward it.
-   */
-  private soulCrystalArrowCandidate(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): ArrowCandidate | null {
-    if (this.gameOver || this.pauseScreen.isOpen || this.entry.type !== 'tower') return null;
-    const upTiles = this.map._interiorStairUpTiles;
-    const middleUpTile = upTiles[Math.floor(upTiles.length / 2)];
-    const upStairs =
-      upTiles.length === 0
-        ? null
-        : {
-            x: (middleUpTile.x + STAIR_TILE_CENTRE) * TILE_SIZE,
-            y: (middleUpTile.y + STAIR_TILE_CENTRE) * TILE_SIZE,
-          };
-    return this.soulCrystal.guidanceArrowCandidate(
-      ctx,
-      camX,
-      camY,
-      this.active(),
-      this.currentFloor === TOWER_CONFRONTATION_FLOOR,
-      upStairs,
-    );
   }
 
   /**
@@ -4106,7 +4533,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * fight resets on re-entry.
    */
   private reviveAndExit(): void {
-    for (const player of [this.human, this.cat]) {
+    for (const player of this.pm.wholeParty()) {
       player.hp = Math.max(player.hp, Math.ceil(player.maxHp * INTERIOR_REVIVE_HP_FRACTION));
     }
     this.gameOver = false;
@@ -4118,8 +4545,15 @@ export class BuildingInteriorScene extends GameplayScene {
    * the menu's frame is also where a downed hire about to be left behind is
    * warned about.
    */
-  private openExitMenu(leave: () => void): void {
+  private openExitMenu(
+    leave: () => void,
+    destination: InteriorExitDestination = OUT_THROUGH_THE_DOOR,
+  ): void {
     this.exitMenuLeave = leave;
+    this.exitMenuGoingInto =
+      destination.kind === 'onward' && destination.request.to.kind === 'interior'
+        ? destination.request.to.building
+        : null;
     this.exitMenuOpen = true;
   }
 
@@ -4136,7 +4570,31 @@ export class BuildingInteriorScene extends GameplayScene {
     this.exitDismissed = true;
   }
 
-  private doExit(defeated = false): void {
+  /**
+   * Leaves through the floor outside to `request.to`: the interior's way into
+   * the one transfer the floor owns, for a split's hand-over or regroup.
+   */
+  transferParty(request: PartyTransferRequest): void {
+    this.doExit(false, request);
+  }
+
+  /** Leaves by a way out that is a thing in the room: through the door, or onward. */
+  private leaveFor(destination: InteriorExitDestination): void {
+    switch (destination.kind) {
+      case 'door':
+        this.doExit();
+        return;
+      case 'onward':
+        this.transferParty(destination.request);
+        return;
+      default: {
+        const unhandled: never = destination;
+        throw new Error(`unhandled exit destination ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+
+  private doExit(defeated = false, onward: PartyTransferRequest | null = null): void {
     // Before the snapshot, not after: `onExit` runs only once the replacement
     // scene has already been built from these snapshots, so a refund credited
     // there lands on a Player object that is about to be discarded. The
@@ -4148,7 +4606,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // the door. The interior map is regenerated on the next entry, so anything
     // still lying on it ceases to exist the moment this scene is replaced.
     for (const floor of this.floors) {
-      floor.destruction.loot.sweepUncollected(this.pm.players());
+      floor.destruction.loot.sweepUncollected(this.pm.presentCrawlers());
     }
     // God mode rides on top of base stats rather than being folded into them, so
     // snapshots are already clean and the overworld can re-apply its own overlay.
@@ -4164,7 +4622,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const catSnap = snapPlayer(this.cat);
     if (this.hudView !== null) this.hudView.miniMapExpanded = this.miniMapExpanded;
     if (this.prisonKey !== null) playPrisonCue(this.audio, 'prisonDoorOpen');
-    this.onExitCallback(humanSnap, catSnap, defeated, companions);
+    this.onExitCallback(humanSnap, catSnap, defeated, companions, onward);
   }
 
   /**
@@ -4193,16 +4651,46 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Writes the save now, with the party as it stands in this room, and makes
-   * it the one a death or a reload returns to. Resolves once storage has
-   * answered, so a caller can hold an irreversible moment until it is on disk.
+   * it the one a death or a reload returns to. A reload resumes by
+   * `resumeAt`, this building by default. Resolves once storage has answered,
+   * so a caller can hold an irreversible moment until it is on disk.
    */
-  saveNow(): Promise<SaveWriteOutcome> {
-    return this.partyRun.commitSave({
-      human: snapPlayer(this.human),
-      cat: snapPlayer(this.cat),
-      deinonychusPetHp: this.deinonychusSystem.hp,
-      deinonychusPetResting: this.deinonychusSystem.restingUntilFull,
+  saveNow(resumeAt: PartyLocation = this.liveGroupLocation()): Promise<SaveWriteOutcome> {
+    return this.partyRun.commitSave(
+      {
+        human: snapPlayer(this.human),
+        cat: snapPlayer(this.cat),
+        deinonychusPetHp: this.deinonychusSystem.hp,
+        deinonychusPetResting: this.deinonychusSystem.restingUntilFull,
+      },
+      resumeAt,
+    );
+  }
+
+  /**
+   * The party found whole while the questline stands in the middle of the
+   * tower's split is split as that phase plays it, the human's side waiting
+   * on this building's doorstep when it waits outdoors.
+   */
+  private splitPartyIfOwed(): void {
+    const formed = splitWholePartyIfOwed(this.partySplitDirector, this.missingCatsProgress, {
+      here: this.liveGroupLocation(),
+      street: doorstepOf(this.entry),
+      hire: this.mercenaryRoster.active?.id ?? null,
     });
+    if (formed !== null && !formed.ok) {
+      throw new Error(`the questline could not split the party: ${formed.reason}`);
+    }
+  }
+
+  /** Where the steered crawler stands, as a split and a save record it. */
+  private liveGroupLocation(): PartyLocation {
+    return {
+      kind: 'interior',
+      building: this.entry.id,
+      storey: this.currentFloor,
+      tile: tileStoodOn(this.active()),
+    };
   }
 
   /**
@@ -4231,7 +4719,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private applyServiceShopSigns(): void {
     if (this.occupants === null) return;
-    const party = [this.human, this.cat];
+    const party = this.pm.wholeParty();
     for (const person of this.occupants.people) {
       const service = this.occupants.serviceOf(person);
       if (service?.surface !== 'menu') continue;
@@ -4254,7 +4742,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private syncPlumblineFarmRoom(): void {
-    this.plumblineFarmRoom?.sync(this.briarHollowState.blueprints.phase, [this.human, this.cat]);
+    this.plumblineFarmRoom?.sync(this.briarHollowState.blueprints.phase, this.pm.wholeParty());
   }
 
   /** The resident quest hook whose conversation is on screen, or null when none is. */
@@ -4379,15 +4867,16 @@ export class BuildingInteriorScene extends GameplayScene {
    * dismissal from one.
    */
   private tryTalkToOccupant(player: ReturnType<BuildingInteriorScene['active']>): boolean {
-    if (this.occupants === null) return false;
-    const target = this.occupants.findTalkTarget(player.x, player.y);
+    const occupants = this.occupants;
+    if (occupants === null) return false;
+    const target = occupants.findTalkTarget(player.x, player.y);
     if (target === null || target === this.citizenDialogTarget) return false;
     target.faceToward(player.x, player.y);
 
     const ctx = this.townDialogContext();
     const inDanger = isTownInDanger(ctx);
     const resident = target.residentId === null ? null : residentById(target.residentId);
-    const service = this.occupants.serviceOf(target);
+    const service = occupants.serviceOf(target);
     const turn = this.turnFor(target);
 
     // A resident questline outranks even a resident's own untold lore — Lori,
@@ -4448,7 +4937,7 @@ export class BuildingInteriorScene extends GameplayScene {
       haltsWorld: false,
       anchor: {
         position: () => ({ x: target.x, y: target.y }),
-        talkRangeTiles: CITIZEN_TALK_RADIUS_TILES,
+        talkRangeTiles: occupants.talkRangeTilesOf(target),
       },
       locksKeyboard: true,
     });
@@ -4584,6 +5073,9 @@ export class BuildingInteriorScene extends GameplayScene {
     if (desk?.hirePending !== true) return;
     desk.hirePending = false;
     this.awards.unlockParty('on_retainer');
+    const hired = this.mercenaryRoster.active;
+    if (hired !== null)
+      this.partySplitDirector.joinLiveGroup({ kind: 'mercenary', hire: hired.id });
   }
 
   /**
@@ -4624,7 +5116,7 @@ export class BuildingInteriorScene extends GameplayScene {
     host: ResidentHost | null,
     counter: ServiceCounter,
   ): void {
-    const party = [this.human, this.cat];
+    const party = this.pm.wholeParty();
     // Every service confirms with the same purchase chime; a counter that has a
     // sound of its own layers that underneath, so a round sounds like a round
     // and a rented room sounds like the door closing behind you.
@@ -4777,6 +5269,13 @@ export class BuildingInteriorScene extends GameplayScene {
    * outside ranks them.
    */
   private talkToDave(active: { x: number; y: number }): void {
+    const missingCats = this.missingCatsInterior;
+    if (missingCats?.daveRefusalOwed === true) {
+      this.partyRun.daveWhereabouts.tacticsGiven.add(DAVE_BAIT_REFUSAL_OBJECTIVE);
+      this.dave?.openLine(active, DAVE_ADVICE[DAVE_BAIT_REFUSAL_OBJECTIVE]);
+      missingCats.daveRefused();
+      return;
+    }
     const objective = this.partyRun.story.currentObjective();
     if (objective !== null) {
       this.bus.emit('daveAdviceGiven', { objectiveId: objective.id });
@@ -4789,6 +5288,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** His `!`: tactics for what is next that he has not yet given. */
   private daveMarker(): QuestMarkerState {
+    if (this.missingCatsInterior?.daveRefusalOwed === true) return 'exclamation';
     const objective = this.partyRun.story.currentObjective();
     const owed =
       objective !== null && !this.partyRun.daveWhereabouts.tacticsGiven.has(objective.id);
@@ -4815,7 +5315,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const free =
       !this.cutscenes.isActive &&
       !this.story.isTellingDaveMoment &&
-      !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+      !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
     if (!together || !free) return;
     this.daveArrivalOwed = null;
     const story = this.partyRun.story;
@@ -4858,16 +5358,11 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Caroline speaks only while nothing hostile is fighting the party, nothing halts the world and no box is open. */
   private carolineMaySpeak(): boolean {
     if (this.gameOver || this.ui.worldHalted() || this.conversation.isOpen) return false;
-    return !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+    return !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
   }
 
   private townDialogContext(): TownDialogContext {
-    const murder = this.murderQuestProgress;
-    return {
-      murder: murder?.stage ?? 'not_started',
-      doomsday: this.doomsdayProgress.stage,
-      quillNamed: murder?.quillNamed ?? false,
-    };
+    return { missingCats: this.missingCatsProgress };
   }
 
   /**
@@ -4879,44 +5374,34 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.destruction.groundPickups.tryPickupNear(active);
   }
 
-  /**
-   * Floats a "Talk" prompt over the hireling when a press would reach it.
-   *
-   * Talking is the last link of the Space chain, so this is drawn after every
-   * surface that raises a prompt of its own — the counters, the desk, the bed,
-   * Dave, the doctor, the readables, the quest fights — and yields to any
-   * of them already on screen: that one takes the press first.
-   */
+  /** Floats a "Talk" prompt over the hireling when a press would reach it. */
   private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (interactionPromptsDrawnThisFrame() > 0) return;
     const merc = this.mercenarySystem.talkTarget(this.active(), this.world.roster.mobs);
     if (merc === null) return;
-    drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk');
+    raisePromptsFor(this.promptOwners.mercenary, () =>
+      drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk'),
+    );
   }
 
   /**
-   * Floats one interact prompt over whatever the next press would reach: the
-   * nearest occupant, or — when nobody is in range — whatever there is to read.
-   * One prompt at a time, because two hovering key-caps in a small room read as
-   * a bug rather than as two options.
+   * Raises a prompt over each thing in the room's own chain a press would
+   * reach: the contract spot, the occupant, the page to read and the prop.
+   * The prompt surface shows only the best-ranked of everything raised.
    */
   private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.citizenDialogTarget !== null) return;
     if (this.ui.worldHalted()) return;
     const active = this.active();
-    // Same order as the Space chain: a pickup already prompted takes the
-    // press first, and a contract spot beats everyone but a nearer occupant.
-    if (
-      interactionPromptsDrawnThisFrame() === 0 &&
-      this.contractSite?.renderPrompt(ctx, camX, camY, active, this.occupantTalkTiles(active)) ===
-        true
-    ) {
-      return;
-    }
+    const owners = this.promptOwners;
+    raisePromptsFor(owners.contractSite, () =>
+      this.contractSite?.renderPrompt(ctx, camX, camY, active, this.occupantTalkTiles(active)),
+    );
     const target = this.occupants?.findTalkTarget(active.x, active.y) ?? null;
-    if (target !== null) {
-      drawInteractionPromptOver(ctx, target, camX, camY, this.promptFor(target));
-      return;
+    const talkOwner = target === null ? null : this.occupantPromptOwner(target, active);
+    if (target !== null && talkOwner !== null) {
+      raisePromptsFor(talkOwner, () =>
+        drawInteractionPromptOver(ctx, target, camX, camY, this.promptFor(target)),
+      );
     }
     const page = this.readables?.findReadTarget(active.x, active.y) ?? null;
     if (page !== null) {
@@ -4924,21 +5409,46 @@ export class BuildingInteriorScene extends GameplayScene {
       const pageTileY = page.y / TILE_SIZE;
       const pageTop = this.furnitureArtTop(pageTileX, pageTileY) - camY;
       const pageBottom = this.furnitureFootprintBottom(pageTileX, pageTileY) - camY;
-      drawInteractionPrompt(ctx, page.x - camX, pageTop, TILE_SIZE, pageBottom, READ_PROMPT_LABEL);
-      return;
+      raisePromptsFor(owners.readable, () =>
+        drawInteractionPrompt(
+          ctx,
+          page.x - camX,
+          pageTop,
+          TILE_SIZE,
+          pageBottom,
+          READ_PROMPT_LABEL,
+        ),
+      );
     }
-    const propTarget = this.propInteractions?.findTarget(active.x, active.y) ?? null;
+    const propTarget = this.propInteractions?.findTarget(active) ?? null;
     if (propTarget === null) return;
     const { placed } = propTarget;
     const riseTiles = townInteriorPropArtRiseTiles(placed.propId, placed.variant);
-    drawInteractionPrompt(
-      ctx,
-      propTarget.x - camX,
-      (placed.tile.y - riseTiles) * TILE_SIZE - camY,
-      TILE_SIZE,
-      townInteriorPropFootprintBottom(placed) * TILE_SIZE - camY,
-      this.propInteractions?.promptFor(propTarget) ?? '',
+    raisePromptsFor(owners.prop, () =>
+      drawInteractionPrompt(
+        ctx,
+        propTarget.x - camX,
+        (placed.tile.y - riseTiles) * TILE_SIZE - camY,
+        TILE_SIZE,
+        townInteriorPropFootprintBottom(placed) * TILE_SIZE - camY,
+        this.propInteractions?.promptFor(propTarget) ?? '',
+      ),
     );
+  }
+
+  /**
+   * What talking to `target` is: quest business, a counter's service, or a
+   * chat. Null for the store's keeper with no quest business, whom the shop's
+   * own "Shop" prompt names, since a press beside her opens the shop.
+   */
+  private occupantPromptOwner(
+    target: Townsperson,
+    active: HumanPlayer | CatPlayer,
+  ): PromptOwner | null {
+    if (this.questResidentInReach(active)) return this.promptOwners.questResident;
+    if (this.shop?.isKeeper(target) === true) return null;
+    if (this.occupants?.serviceOf(target) !== undefined) return this.promptOwners.serviceKeeper;
+    return this.promptOwners.occupant;
   }
 
   /**
@@ -4986,6 +5496,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const page = this.readables.findReadTarget(player.x, player.y);
     if (page === null) return false;
     this.readablePanel.openWith(page.readable);
+    this.missingCatsInterior?.onReadableOpened(page.readable.id);
     playInteriorCue(this.audio, readableCue(page.readable.medium));
     return true;
   }
@@ -4997,7 +5508,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private tryInteractWithPropNearby(player: ReturnType<BuildingInteriorScene['active']>): boolean {
     if (this.propInteractions === null || this.conversation.isOpen) return false;
     if (this.citizenDialogTarget !== null) return false;
-    const target = this.propInteractions.findTarget(player.x, player.y);
+    const target = this.propInteractions.findTarget(player);
     if (target === null) return false;
     let closingCue: InteriorCue | null = null;
     const outcome = this.propInteractions.perform(
@@ -5054,7 +5565,7 @@ export class BuildingInteriorScene extends GameplayScene {
     entities: ReadonlyArray<InteriorFigure>,
   ): void {
     const drawables: Array<{ sortY: number; draw: () => void }> = entities.map((entity) => ({
-      sortY: entity.y + TILE_SIZE,
+      sortY: (entity.depthY ?? entity.y) + TILE_SIZE,
       draw: () => entity.render(ctx, camX, camY, TILE_SIZE),
     }));
     for (const deco of this.map.getVisibleDecorationTiles(
@@ -5154,6 +5665,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // must not go on hovering over the person now talking.
     setInteractionPromptsSuppressed(surfacesOverHud(this.ui).length > 0);
     this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks);
+    this.anchorPromptFocus(ctx, camX, camY);
 
     ctx.fillStyle = worldPalette.shade;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
@@ -5196,32 +5708,50 @@ export class BuildingInteriorScene extends GameplayScene {
     // Under the figures: the highlight rings sit on the floor around the broken
     // furniture, and a crawler standing at one must not be drawn beneath it.
     this.anchorInterior?.renderObjects(ctx, camX, camY, this.active());
+    raisePromptsFor(this.promptOwners.missingCats, () =>
+      this.missingCatsInterior?.renderObjects(ctx, camX, camY, this.active()),
+    );
     this.activeEncounter?.renderWorld?.(ctx, camX, camY, this.active());
-    // Independent of `combat` — the crystal must still be visible/containable
-    // if the player returns to this floor after the encounter was torn down.
-    const isOnCrystalFloor =
-      this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
-    this.soulCrystal.renderGround(ctx, camX, camY, isOnCrystalFloor);
     this.renderExitRouteTrail(ctx, camX, camY);
+    this.mechanisms.renderGround(ctx, camX, camY);
+    if (!this.senses.isEmpty) {
+      const senseView = {
+        camX,
+        camY,
+        width: viewportWidth(),
+        height: viewportHeight(),
+        nowMs: performance.now(),
+      };
+      this.senses.paint(ctx, senseView);
+      this.catSenseCue.paint(ctx, this.cat, senseView);
+    }
     this.renderSortedEntities(ctx, camX, camY, [
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
-      ...this.world.roster.mobs.filter((mob) => mob.belongsInMobGrid),
-      ...[this.inactive(), this.active()].filter(
-        (crawler) => this.safeRoomRegroup?.hides(crawler) !== true,
+      ...this.world.roster.mobs.filter(
+        (mob) => mob.belongsInMobGrid && !this.cutscenes.director.hides(mob),
+      ),
+      ...[this.partnerAnywhere(), this.active()].filter(
+        (crawler) =>
+          !crawler.isAway &&
+          this.safeRoomRegroup?.hides(crawler) !== true &&
+          !this.cutscenes.director.hides(crawler),
       ),
       ...(this.safeRoomRegroup?.sortedFigures() ?? []),
-      ...(this.occupants?.people ?? []),
+      ...(this.occupants?.people ?? []).filter((person) => !this.cutscenes.director.hides(person)),
       ...(this.occupants?.sortedFigures() ?? []),
+      ...(this.missingCatsInterior?.sortedFigures() ?? []),
       ...safeRoomFigures,
       ...(this.doctor?.sortedFigures(camX, camY) ?? []),
       ...(this.club?.sortedRenderables() ?? []),
       ...townInteriorPropFigures(this.map, hiddenProps),
+      ...this.mechanisms.sortedFigures(),
       // After the props: a tie in the sort keeps a prop under its own damage.
       ...(this.contractSite?.sortedFigures() ?? []),
       ...destruction.groundPickups.renderEntities(),
       ...this.chests.sortedFigures(this.active()),
       ...(this.starlightTentMaze?.sortedFigures() ?? []),
+      ...(this.activeEncounter?.roomFigures?.() ?? []),
       ...(this.prisonKey === null ? [] : [this.prisonKey.sortedFigure()]),
       ...(this.prison?.sortedFigures(camX, camY) ?? []),
     ]);
@@ -5243,16 +5773,30 @@ export class BuildingInteriorScene extends GameplayScene {
     // burning over the room below at the floor above's coordinates.
     this.activeEncounter?.renderEffects?.(ctx, camX, camY);
     this.starlightTentMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
+    const owners = this.promptOwners;
+    raisePromptsFor(owners.encounter, () =>
+      this.activeEncounter?.renderInteractionPrompts?.(ctx, camX, camY, this.active()),
+    );
+    this.mechanisms.renderMarkers(ctx, camX, camY, performance.now());
     if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
-      this.exitFixtures.renderPrompt(ctx, camX, camY, this.active());
+      raisePromptsFor(owners.mechanism, () =>
+        this.mechanisms.renderPrompt(ctx, camX, camY, this.active()),
+      );
+      raisePromptsFor(owners.exitFixture, () =>
+        this.exitFixtures.renderPrompt(ctx, camX, camY, this.active()),
+      );
     }
     this.prisonKey?.renderOverDarkness(ctx, camX, camY, this.active());
     destruction.renderLoot(ctx, camX, camY, this.active());
     if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
-      destruction.groundPickups.renderPrompt(ctx, camX, camY, this.active());
+      raisePromptsFor(owners.groundPickup, () =>
+        destruction.groundPickups.renderPrompt(ctx, camX, camY, this.active()),
+      );
     }
     // A room hosting a live fight is not offering conversation.
-    if (this.activeEncounter === null) this.renderCitizenPrompt(ctx, camX, camY);
+    if (this.activeEncounter === null || this.activeEncounter.keepsRoomFittings === true) {
+      this.renderCitizenPrompt(ctx, camX, camY);
+    }
 
     combat.floatingText.render(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY, this.pm);
@@ -5263,15 +5807,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.attackCowSystem.renderOverlay(ctx, camX, camY);
     this.crawlerBarks.render(ctx, camX, camY, this.human, this.cat);
 
-    this.soulCrystal.render(ctx, camX, camY, this.active(), isOnCrystalFloor);
-
-    if (this.shop) {
-      this.shop.renderObjects(ctx, camX, camY, this.active());
-    }
-
-    if (this.club) {
-      this.club.renderObjects(ctx, camX, camY, this.active());
-    }
+    raisePromptsFor(owners.shop, () => this.shop?.renderObjects(ctx, camX, camY, this.active()));
+    raisePromptsFor(owners.club, () => this.club?.renderObjects(ctx, camX, camY, this.active()));
 
     // Exit hint above door
     this.renderExitHint(ctx, camX, camY);
@@ -5296,7 +5833,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // wins the slot, and every other kind has a fixed place behind it.
       drawTopArrowCandidate([
         this.companionDownIndoors
-          ? downedCompanionArrowCandidate(ctx, this.active(), this.inactive(), camX, camY)
+          ? downedCompanionArrowCandidate(ctx, this.active(), this.presentPartner(), camX, camY)
           : null,
         this.mercenarySystem.downedArrowCandidate(
           ctx,
@@ -5312,7 +5849,6 @@ export class BuildingInteriorScene extends GameplayScene {
           this.active(),
           this.floor.sightRadiusPx,
         ),
-        this.soulCrystalArrowCandidate(ctx, camX, camY),
         this.prisonKey?.arrowCandidate(ctx, camX, camY, this.active()) ?? null,
         this.pinnedExitArrowCandidate(ctx, camX, camY),
       ]);
@@ -5344,12 +5880,12 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.safeRoom) {
       this.safeRoom.renderUI(ctx, this.active());
     }
-    this.dave?.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'doctor');
-
-    if (this.doctor !== null) {
-      this.doctor.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
-    }
-    // Last of the world prompts; see the method for why.
+    raisePromptsFor(owners.dave, () =>
+      this.dave?.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'doctor'),
+    );
+    raisePromptsFor(owners.doctor, () =>
+      this.doctor?.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave'),
+    );
     this.renderMercenaryPrompt(ctx, camX, camY);
 
     // A death takes the read-only Construction menu down: left under the death
@@ -5489,7 +6025,7 @@ export class BuildingInteriorScene extends GameplayScene {
           rect,
           this.map,
           this.active(),
-          this.inactive(),
+          this.presentPartner(),
           this.prisonKey?.minimapKeyTile ?? null,
         ),
       toggle: () => this.toggleMiniMap(),
@@ -5579,6 +6115,7 @@ export class BuildingInteriorScene extends GameplayScene {
       icon: other === 'cat' ? 'cat' : 'user',
       label: `Switch to ${crawlerDisplayName(other)}`,
       key: keybindings.labelFor('switchCharacter'),
+      pulse: other === 'cat' && this.catSenseCue.showing,
       onTap: () => this.trySwitchActive(),
     });
     return dock;
@@ -5598,14 +6135,13 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private topBandEntries(): TopBandEntry[] {
-    const towerFloor = this.towerFloors.length > 0 ? this.currentFloor : null;
+    const towerFloor = this.entry.type === 'tower' ? this.currentFloor : null;
     const entries: (TopBandEntry | null)[] = [
       ...(this.activeEncounter?.topBandEntries() ?? []),
       this.achievementUI.rewardsBanner(this.partyInSafeRoom()),
-      this.soulCrystal.topBandEntry(),
       this.prisonKey?.topBandEntry() ?? null,
       contractCounterEntry(this.briarHollowState.contracts.active),
-      this.companionDownIndoors ? knockedOutBandEntry(this.inactive()) : null,
+      this.companionDownIndoors ? knockedOutBandEntry(this.presentPartner()) : null,
       roomNameEntry(interiorRoomTitle(this.entry.id, towerFloor)),
     ];
     return entries.filter((entry): entry is TopBandEntry => entry !== null);
@@ -5703,7 +6239,7 @@ export class BuildingInteriorScene extends GameplayScene {
       camX,
       camY,
       this.active(),
-      this.inactive(),
+      this.partnerAnywhere(),
     );
     if (!collected) this.chests.tryInteractAt(screenX, screenY, camX, camY, this.active());
   }
@@ -5711,6 +6247,20 @@ export class BuildingInteriorScene extends GameplayScene {
   /** A chest or an exit fixture in reach of `player` takes the press. */
   private tryUseRoomFixture(player: HumanPlayer | CatPlayer): boolean {
     return this.chests.tryInteract(player) || this.exitFixtures.tryInteract(player);
+  }
+
+  private tryOpenShop(player: HumanPlayer | CatPlayer): boolean {
+    const shop = this.shop;
+    if (shop?.isNearShopkeeper(player) !== true) return false;
+    shop.open();
+    return true;
+  }
+
+  /** Starts work at the contract spot in reach, unless a hostile in reach makes the press a swing. */
+  private tryContractPress(player: HumanPlayer | CatPlayer): boolean {
+    if (this.citizenDialogTarget !== null) return false;
+    if (hostileWithinAttackRange(player, this.world.roster.grid)) return false;
+    return this.contractSite?.tryInteract(player, this.occupantTalkTiles(player)) === true;
   }
 
   /**
@@ -5744,6 +6294,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // swings at whatever the script has walked them up to.
     if (this.scriptOwnsParty) return;
     const dialogUpBeforeTap = this.citizenDialogTarget !== null || this.tapTargetOpen();
+    if (!dialogUpBeforeTap && pressFocusedPrompt(this.promptOwners)) return;
     if (
       !dialogUpBeforeTap &&
       this.questResidentInReach(this.active()) &&
@@ -5761,9 +6312,6 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.shop?.isNearShopkeeper(this.active()) === true) {
       this.shop.open();
     }
-    if (this.currentFloor === TOWER_CONFRONTATION_FLOOR) {
-      this.towerConfrontation?.tryExamine(this.active());
-    }
     this.club?.handleInteract(this.active());
     // Talk to a nearby occupant only when nothing else claimed the tap: no
     // shop/club panel is up (the store has both a shop and shelf-browsers), and
@@ -5778,6 +6326,7 @@ export class BuildingInteriorScene extends GameplayScene {
       if (
         !repaired &&
         !this.tryUseRoomFixture(active) &&
+        this.missingCatsInterior?.tryInteract(active) !== true &&
         !this.tryGroundPickup(active) &&
         !this.tryContractTap(active, tapScreenX, tapScreenY) &&
         !this.tryTalkToOccupant(active) &&

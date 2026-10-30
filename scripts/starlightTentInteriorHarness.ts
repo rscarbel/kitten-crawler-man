@@ -114,7 +114,7 @@ export function buildTent(artSeed: number, options: TentOptions = {}): TentHarne
     human,
     cat,
     active: human,
-    inactive: cat,
+    partner: cat,
     activeIsMoving: false,
     roster,
     gameMap: map,
@@ -613,7 +613,8 @@ export function safeTilesNear(
   const mapWidth = map.structure[0]?.length ?? 0;
   for (const tile of queue) {
     if (found.length >= count) break;
-    if (map.isWalkable(tile.x, tile.y) && !avoided.has(`${tile.x},${tile.y}`)) found.push(tile);
+    if (map.isWalkable(tile.x, tile.y, 'walker') && !avoided.has(`${tile.x},${tile.y}`))
+      found.push(tile);
     for (const [dx, dy] of NEIGHBOUR_STEPS) {
       const next = { x: tile.x + dx, y: tile.y + dy };
       const key = `${next.x},${next.y}`;

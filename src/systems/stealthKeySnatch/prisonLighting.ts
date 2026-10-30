@@ -35,7 +35,7 @@ import {
 import { perfMonitor } from '../../core/perf/PerfMonitor';
 import { rectContainsTile, type ParsedPrisonLayout } from '../../map/goblinPrisonPlan';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
-import { worldPalette } from '../../ui/theme/worldInk';
+import { rgbInkMix, worldPalette } from '../../ui/theme/worldInk';
 import { LIGHTING_TUNING } from '../lighting/lightingTuning';
 import type { LightShape, PrisonBounds, PrisonPoint } from './detection';
 import type { PrisonWallLamp } from './prisonGround';
@@ -124,14 +124,6 @@ export interface PrisonLightSource {
   readonly strength: number;
 }
 
-function rgbMix(from: string, to: string, share: number): string {
-  const a = from.split(',').map(Number);
-  const b = to.split(',').map(Number);
-  return a
-    .map((value, index) => Math.round(value + ((b[index] ?? value) - value) * share))
-    .join(',');
-}
-
 /** Every colour one light is drawn in at one step of its suspicion, built once. */
 interface LightTint {
   readonly step: number;
@@ -148,8 +140,8 @@ interface LightTint {
 function buildTint(step: number): LightTint {
   const ink = worldPalette.prison;
   const share = step / TINT_STEPS;
-  const wash = rgbMix(ink.lightWarmRgb, ink.lightCatchingRgb, share);
-  const rim = rgbMix(ink.spotRimRgb, ink.lightCatchingRgb, share);
+  const wash = rgbInkMix(ink.lightWarmRgb, ink.lightCatchingRgb, share);
+  const rim = rgbInkMix(ink.spotRimRgb, ink.lightCatchingRgb, share);
   const coneAlpha = CONE_WASH_ALPHA + CATCHING_WASH_BOOST * share;
   const discAlpha = DISC_WASH_ALPHA + CATCHING_WASH_BOOST * share;
   return {

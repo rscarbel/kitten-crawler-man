@@ -7,7 +7,7 @@
 import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { TILE_SIZE } from '../core/constants';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, drawnFigureRow, figureFrameCount } from './figure/figureDef';
 import {
   ELF_FIGURE,
   ELF_HEIGHT_SCALE,
@@ -85,6 +85,7 @@ function frameFor(
  * @param facingX +1 faces right, −1 left.
  * @param facingY +1 faces toward the camera, −1 away, 0 neither.
  * @param idleOffsetSeconds offset into the breathing loop, so a crowd does not breathe in unison.
+ * @returns the row drawn, so a caller can hang a label or icon over the art's measured top.
  */
 export function drawElfSprite(
   ctx: CanvasRenderingContext2D,
@@ -97,13 +98,15 @@ export function drawElfSprite(
   facingX = 1,
   facingY = 0,
   idleOffsetSeconds = 0,
-): void {
+): DrawnFigureRow {
   const view = viewFor(facingX, facingY);
   const role = roleOf(isMoving, castAnim);
   const key = elfStateName(role, view);
+  const drawn = drawnFigureRow(ELF_FIGURE, key);
   const frames = figureFrameCount(ELF_FIGURE, key);
-  if (frames === 0) return;
+  if (frames === 0) return drawn;
   const frame = frameFor(role, walkFrame, castAnim, frames, idleOffsetSeconds);
   const flipX = view === 'side' && facingX < 0;
   drawFigureCached(ctx, ELF_FIGURE, key, frame, sx, sy, s, { flipX });
+  return drawn;
 }

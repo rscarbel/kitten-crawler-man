@@ -34,6 +34,7 @@
 import type { GroundPalette } from '../ground/GroundPalette';
 import { FLOOR1_GROUND, FLOOR1_WALL_MATERIAL } from './floor1Materials';
 import { FLOOR2_GROUND, FLOOR2_WALL_MATERIAL } from './floor2Materials';
+import { SEWER_GROUND, SEWER_WALL_MATERIAL } from './sewerMaterials';
 
 export interface DungeonFloorTheme {
   /** Which floor this is; the wall painter keys its faces, slivers and dressing on it. */
@@ -50,7 +51,31 @@ export interface DungeonFloorTheme {
   readonly wallMaterial: string;
 }
 
-export type DungeonFloorThemeId = 'cellars' | 'service_level';
+/** Every theme, for the review tools that draw each one side by side. */
+export const DUNGEON_FLOOR_THEME_IDS = ['cellars', 'service_level', 'sewer'] as const;
+
+export type DungeonFloorThemeId = (typeof DUNGEON_FLOOR_THEME_IDS)[number];
+
+/**
+ * Whether `DungeonGenerator` lays floors in each theme. The sewer is a
+ * hand-built map under the town, drawn in this pipeline's walls and water but
+ * never generated, so it carries none of the generator's furniture — no room
+ * and hallway characters, and no crawler signs pointing to stairs.
+ */
+const GENERATED_THEMES = {
+  cellars: true,
+  service_level: true,
+  sewer: false,
+} as const satisfies Record<DungeonFloorThemeId, boolean>;
+
+/** The themes `DungeonGenerator` lays floors in, and so the only ones a `LevelDef` may declare. */
+export type GeneratedFloorThemeId = {
+  [Id in DungeonFloorThemeId]: (typeof GENERATED_THEMES)[Id] extends true ? Id : never;
+}[DungeonFloorThemeId];
+
+export function isGeneratedFloorTheme(id: DungeonFloorThemeId): id is GeneratedFloorThemeId {
+  return GENERATED_THEMES[id];
+}
 
 const THEMES: Readonly<Record<DungeonFloorThemeId, DungeonFloorTheme>> = {
   cellars: { id: 'cellars', ground: FLOOR1_GROUND, wallMaterial: FLOOR1_WALL_MATERIAL },
@@ -59,6 +84,7 @@ const THEMES: Readonly<Record<DungeonFloorThemeId, DungeonFloorTheme>> = {
     ground: FLOOR2_GROUND,
     wallMaterial: FLOOR2_WALL_MATERIAL,
   },
+  sewer: { id: 'sewer', ground: SEWER_GROUND, wallMaterial: SEWER_WALL_MATERIAL },
 };
 
 /**
@@ -76,13 +102,34 @@ const THEMES: Readonly<Record<DungeonFloorThemeId, DungeonFloorTheme>> = {
  * cheap insurance: the failure it prevents is silent and only shows up as art
  * from the wrong floor.
  */
-export const DEFAULT_DUNGEON_FLOOR_THEME: DungeonFloorThemeId = 'cellars';
+export const DEFAULT_DUNGEON_FLOOR_THEME = 'cellars' as const satisfies GeneratedFloorThemeId;
 
 let activeTheme: DungeonFloorTheme = THEMES[DEFAULT_DUNGEON_FLOOR_THEME];
+let activeClaim: symbol | null = null;
 
 /** Sets the materials every dungeon floor and wall is drawn in from now on. */
 export function setDungeonFloorTheme(id: DungeonFloorThemeId): void {
   activeTheme = THEMES[id];
+  activeClaim = null;
+}
+
+/**
+ * Sets the theme for something that lives inside another map's visit (the
+ * sewer under the town), and returns the release that puts the previous theme
+ * back. The release does nothing once anything has set a theme since: the
+ * next scene is built before the old one is torn down, so a release that ran
+ * unconditionally would paint the new map in the theme from before the claim.
+ */
+export function claimDungeonFloorTheme(id: DungeonFloorThemeId): () => void {
+  const previous = activeTheme;
+  const claim = Symbol('dungeonFloorThemeClaim');
+  activeTheme = THEMES[id];
+  activeClaim = claim;
+  return () => {
+    if (activeClaim !== claim) return;
+    activeTheme = previous;
+    activeClaim = null;
+  };
 }
 
 /** The materials dungeon floors and walls are currently drawn in. */

@@ -468,6 +468,25 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
+  /**
+   * The nursery as a party that already held it leaves it: the child back at
+   * his mother's side, the quest completed and the way on smashed open. For a
+   * start dropped past the room, whose rewards the caller has already paid.
+   */
+  startCompleted(): void {
+    if (this.npc === null || this.roomData === null) return;
+    this.questManager.startQuest(DEFEND_QUEST_ID);
+    this.questManager.completeQuest(DEFEND_QUEST_ID);
+    this.phase = 'complete';
+    this.npc.markerType = 'none';
+    this.childVisible = true;
+    this.childX = this.npc.x + TILE_SIZE;
+    this.childY = this.npc.y;
+    this.childTargetX = this.childX;
+    this.childTargetY = this.childY;
+    this.syncQuestExitDoor();
+  }
+
   get isActive(): boolean {
     return this.phase !== 'inactive' && this.phase !== 'complete' && this.phase !== 'failed';
   }
@@ -1321,7 +1340,7 @@ export class DefendQuestSystem implements GameSystem {
   private openDoorwayTiles(): Array<{ x: number; y: number }> {
     if (!this.roomData) return [];
     const doorways = [this.roomData.entranceTile, ...this.roomData.exitDoorTiles];
-    return doorways.filter((tile) => this.gameMap.isWalkable(tile.x, tile.y));
+    return doorways.filter((tile) => this.gameMap.isWalkable(tile.x, tile.y, 'walker'));
   }
 
   private spawnWave(): void {
@@ -1603,7 +1622,7 @@ export class DefendQuestSystem implements GameSystem {
     const tiles: Array<{ x: number; y: number }> = [];
     for (const fraction of TORCH_WALL_FRACTIONS) {
       const x = room.bounds.x + Math.round((room.bounds.w - 1) * fraction);
-      if (this.gameMap.isWalkable(x, wallY)) continue;
+      if (this.gameMap.isWalkable(x, wallY, 'walker')) continue;
       tiles.push({ x, y: wallY });
     }
     this.torchTiles = tiles;

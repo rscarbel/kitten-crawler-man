@@ -97,7 +97,7 @@ function openDesk(
   const roster = createMercenaryRoster();
   roster.floorLevelId = FLOOR_ID;
   setup?.(roster);
-  const guild = new MercenaryGuildSystem(roster, null);
+  const guild = new MercenaryGuildSystem(roster, null, () => false);
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   human.coins = coins;
   const cat = new CatPlayer(1, 0, TILE_SIZE);
@@ -233,7 +233,13 @@ function save(desk: Desk, state: string): void {
 }
 
 function hireCrush(roster: MercenaryRoster): void {
-  roster.active = { id: 'crush', name: 'Crush', contractLevelId: FLOOR_ID, introduced: true };
+  roster.active = {
+    id: 'crush',
+    name: 'Crush',
+    terms: 'paid',
+    contractLevelId: FLOOR_ID,
+    introduced: true,
+  };
 }
 
 function hiredId(desk: Desk): string {

@@ -16,30 +16,33 @@ import {
   parseStealthKeySnatchCheckpoint,
   type StealthKeySnatchCheckpoint,
 } from '../../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
-import type { MurderMysteryQuestCheckpoint } from '../../systems/MurderMysteryQuestSystem';
 import type { SpiderQuestCheckpoint } from '../../systems/SpiderQuestSystem';
 import type { BountyCheckpoint } from '../../systems/BountySystem';
 import type { CasinoStateCheckpoint, PokerReads } from '../club/CasinoState';
 import type { PlayerRead } from '../../systems/casino/poker/npc/playerRead';
 import { isRegularId } from '../../systems/casino/poker/npc/regularIds';
 import { normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
-import type { HiredMercenary, MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
+import {
+  MERCENARY_CONTRACT_TERMS,
+  type HiredMercenary,
+  type MercenaryRosterCheckpoint,
+} from '../party/MercenaryRoster';
 import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState';
 import {
   VISITED_PLACE_IDS,
   isInteriorPropPayoutKey,
-  isRoomKey,
   type TownMemoryCheckpoint,
 } from '../state/TownMemory';
 import type { JournalProgressCheckpoint } from '../quests/JournalProgress';
+import { SEWER_WORK_IDS } from '../../map/sewer/sewerLayouts';
 import { TACTICS_TRAITS, type TacticsTrait } from '../../creatures/tactics/tacticsTraits';
 import { parseShopStockSnapshot, type ShopStockSnapshot } from '../../economy/shopStock';
 import type { StarlightTentProgressCheckpoint } from '../state/StarlightTentProgress';
 import type { AnchorQuestProgressCheckpoint } from '../quests/AnchorQuestProgress';
 import {
-  MURDER_QUEST_STAGE_ORDER,
-  type MurderQuestProgressCheckpoint,
-} from '../quests/MurderQuestProgress';
+  parseMissingCatsProgressCheckpoint,
+  type MissingCatsProgressCheckpoint,
+} from '../quests/missingCatsProgress';
 import type { BountyProgressCheckpoint } from '../quests/BountyProgress';
 import type { LootDrop } from '../../creatures/Mob';
 import { isItemId, type ItemId } from '../items/defs/ItemDefs';
@@ -51,13 +54,13 @@ import type { LifeMachine } from '../../systems/SpiderQuestSystem';
 import { RESIDENT_IDS } from '../state/residentIds';
 import { MERCENARY_TEMPLATE_IDS } from '../party/mercenaryTemplates';
 import { isRecord } from '../util/guards';
-import { parsePersistedDoomsday, type PersistedDoomsdayProgress } from '../quests/DoomsdayProgress';
 import { type DebriefMemory, type DaveDebriefCheckpoint } from '../../systems/daveDebrief';
 import { debriefBossType } from '../mobs/debriefBossTypes';
 import {
   parseBriarHollowStateSnapshot,
   type BriarHollowStateSnapshot,
 } from '../quests/briarHollowState';
+import { parsePartySplitSnapshot, type PartySplitSnapshot } from '../party/partySplit';
 
 /**
  * The subset of `WorldCheckpoint` that survives a page reload.
@@ -73,13 +76,12 @@ export interface PersistedWorldState {
   treasureChests: PersistedTreasureChestCheckpoint;
   defendQuest: PersistedDefendQuestCheckpoint;
   spiderQuest: PersistedSpiderQuestCheckpoint;
-  murderQuest: PersistedMurderMysteryQuestCheckpoint;
 
   bounty: PersistedBountyCheckpoint | null;
 
   starlightTentProgress: StarlightTentProgressCheckpoint;
   anchorQuestProgress: AnchorQuestProgressCheckpoint;
-  murderQuestProgress: MurderQuestProgressCheckpoint;
+  missingCatsProgress: MissingCatsProgressCheckpoint;
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
   casinoState: CasinoStateCheckpoint;
@@ -90,8 +92,6 @@ export interface PersistedWorldState {
   daveDebrief: DaveDebriefCheckpoint;
   /** Tactics traits the party has already been told enemies have learned, for the whole run. */
   tacticsNoticesSeen: readonly TacticsTrait[];
-  /** The doomsday finale's stage and the time left on its countdown. */
-  doomsday: PersistedDoomsdayProgress;
   /** What each boss room's props and ground looked like. */
   bossRoomDressing: BossRoomDressingCheckpoint;
   /**
@@ -103,6 +103,8 @@ export interface PersistedWorldState {
   cloggedBathroom: CloggedBathroomCheckpoint;
   /** The stealth gate's key quest and whether the prison's explainer was seen. */
   stealthKeySnatch: StealthKeySnatchCheckpoint;
+  /** A split party survives a reload: its groups, where each stands, and what they left each other. */
+  partySplit: PartySplitSnapshot;
 
   krakenKilled: boolean;
   bigRoosterKilled: boolean;
@@ -120,11 +122,6 @@ export interface PersistedTreasureChestCheckpoint {
 }
 
 export type PersistedDefendQuestCheckpoint = Omit<DefendQuestCheckpoint, 'questMobs'>;
-
-export type PersistedMurderMysteryQuestCheckpoint = Omit<
-  MurderMysteryQuestCheckpoint,
-  'swarm' | 'baggi' | 'swarmSpawnGrace'
->;
 
 export type PersistedSpiderQuestCheckpoint = Omit<
   SpiderQuestCheckpoint,
@@ -490,66 +487,6 @@ function parsePersistedDefendQuestCheckpoint(
   };
 }
 
-function parseMurderQuestPhase(
-  value: unknown,
-): PersistedMurderMysteryQuestCheckpoint['phase'] | undefined {
-  return stringUnion(value, [
-    'baggi_waiting',
-    'body_waiting',
-    'investigation',
-    'night_attack',
-    'cult_hideout',
-    'confrontation',
-    'lich_confrontation',
-    'awaiting_rewards',
-    'complete',
-  ] as const);
-}
-
-function parseSwarmOffset(
-  value: unknown,
-): PersistedMurderMysteryQuestCheckpoint['swarmSpawnQueue'][number] | undefined {
-  if (!isRecord(value)) return undefined;
-  const { dx, dy } = value;
-  if (!isNumber(dx) || !isNumber(dy)) return undefined;
-  return { dx, dy };
-}
-
-function parsePersistedMurderMysteryQuestCheckpoint(
-  value: unknown,
-): PersistedMurderMysteryQuestCheckpoint | undefined {
-  if (!isRecord(value)) return undefined;
-  const {
-    questStatuses,
-    phase,
-    swarmCleared,
-    swarmStarted,
-    swarmDefeatedBaseline,
-    swarmSpawnQueue,
-  } = value;
-  const parsedQuestStatuses = parseQuestStatuses(questStatuses);
-  const parsedPhase = parseMurderQuestPhase(phase);
-  const parsedSpawnQueue = parseArray(swarmSpawnQueue, parseSwarmOffset);
-  if (
-    parsedQuestStatuses === undefined ||
-    parsedPhase === undefined ||
-    !isBoolean(swarmCleared) ||
-    !isBoolean(swarmStarted) ||
-    !isNumber(swarmDefeatedBaseline) ||
-    parsedSpawnQueue === undefined
-  ) {
-    return undefined;
-  }
-  return {
-    questStatuses: parsedQuestStatuses,
-    phase: parsedPhase,
-    swarmCleared,
-    swarmStarted,
-    swarmDefeatedBaseline,
-    swarmSpawnQueue: parsedSpawnQueue,
-  };
-}
-
 /**
  * Every spider-lab phase, in the order the quest reaches them. A save only
  * ever holds the steady ones: the explanation is saved as waiting and the run
@@ -731,7 +668,8 @@ function parsePersistedBountyCheckpoint(value: unknown): PersistedBountyCheckpoi
 
 export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { residentTalks, clearedRooms, clearedCamps, paidOutInteriorProps, visitedPlaces } = value;
+  const { residentTalks, clearedCamps, paidOutInteriorProps, visitedPlaces, settledSewerWorks } =
+    value;
   const parsedTalks = parseArray(residentTalks, (entry) => {
     const talk = parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined));
     if (talk === undefined) return undefined;
@@ -741,27 +679,27 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
   const parsedVisitedPlaces = parseArray(visitedPlaces, (entry) =>
     stringUnion(entry, VISITED_PLACE_IDS),
   );
-  const parsedClearedRooms = parseArray(clearedRooms, (entry) =>
-    isRoomKey(entry) ? entry : undefined,
-  );
   const parsedPaidOutProps = parseArray(paidOutInteriorProps, (entry) =>
     isInteriorPropPayoutKey(entry) ? entry : undefined,
   );
+  const parsedSewerWorks = parseArray(settledSewerWorks, (entry) =>
+    stringUnion(entry, SEWER_WORK_IDS),
+  );
   if (
     parsedTalks === undefined ||
-    parsedClearedRooms === undefined ||
     !isStringArray(clearedCamps) ||
     parsedPaidOutProps === undefined ||
-    parsedVisitedPlaces === undefined
+    parsedVisitedPlaces === undefined ||
+    parsedSewerWorks === undefined
   ) {
     return undefined;
   }
   return {
     residentTalks: parsedTalks,
-    clearedRooms: parsedClearedRooms,
     clearedCamps,
     paidOutInteriorProps: parsedPaidOutProps,
     visitedPlaces: parsedVisitedPlaces,
+    settledSewerWorks: parsedSewerWorks,
   };
 }
 
@@ -886,11 +824,19 @@ export function parseCasinoStateCheckpoint(value: unknown): CasinoStateCheckpoin
 
 function parseHiredMercenary(value: unknown): HiredMercenary | undefined {
   if (!isRecord(value)) return undefined;
-  const { id, name, contractLevelId, introduced, hp } = value;
+  const { id, name, terms, contractLevelId, introduced, hp } = value;
   const parsedId = stringUnion(id, MERCENARY_TEMPLATE_IDS);
-  if (parsedId === undefined || !isString(name) || !isString(contractLevelId)) return undefined;
+  const parsedTerms = stringUnion(terms, MERCENARY_CONTRACT_TERMS);
+  if (parsedId === undefined || parsedTerms === undefined) return undefined;
+  if (!isString(name) || !isString(contractLevelId)) return undefined;
   if (!isBoolean(introduced)) return undefined;
-  const hire: HiredMercenary = { id: parsedId, name, contractLevelId, introduced };
+  const hire: HiredMercenary = {
+    id: parsedId,
+    name,
+    terms: parsedTerms,
+    contractLevelId,
+    introduced,
+  };
   if (hp === undefined) return hire;
   // A live hire is the only one whose health is written, so it always has some left.
   if (!isNumber(hp) || hp <= 0) return undefined;
@@ -902,11 +848,12 @@ export function parseMercenaryRosterCheckpoint(
   value: unknown,
 ): MercenaryRosterCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { active, lastDeceased } = value;
+  const { active, lastDeceased, towerLoanSigned } = value;
   const parsedActive = active === null ? null : parseHiredMercenary(active);
   if (parsedActive === undefined) return undefined;
   if (lastDeceased !== null && !isString(lastDeceased)) return undefined;
-  return { active: parsedActive, lastDeceased };
+  if (!isBoolean(towerLoanSigned)) return undefined;
+  return { active: parsedActive, lastDeceased, towerLoanSigned };
 }
 
 function parseDeinonychusPetStateCheckpoint(
@@ -964,48 +911,6 @@ function parseAnchorQuestProgressCheckpoint(
     temple: parsedTemple,
     loriRepairedTypes,
     templeVerminRemaining,
-  };
-}
-
-function parseMurderQuestProgressCheckpoint(
-  value: unknown,
-): MurderQuestProgressCheckpoint | undefined {
-  if (!isRecord(value)) return undefined;
-  const {
-    stage,
-    wellClueFound,
-    homeClueFound,
-    roostClueFound,
-    quillNamed,
-    officeSceneSeen,
-    evidenceOwed,
-    swarmKrasueDefeated,
-  } = value;
-  const parsedStage = stringUnion(stage, MURDER_QUEST_STAGE_ORDER);
-  const parsedEvidence = parseArray(evidenceOwed, (item) =>
-    isItemIdValue(item) ? item : undefined,
-  );
-  if (
-    parsedStage === undefined ||
-    !isBoolean(wellClueFound) ||
-    !isBoolean(homeClueFound) ||
-    !isBoolean(roostClueFound) ||
-    !isBoolean(quillNamed) ||
-    !isBoolean(officeSceneSeen) ||
-    parsedEvidence === undefined ||
-    !isNumber(swarmKrasueDefeated)
-  ) {
-    return undefined;
-  }
-  return {
-    stage: parsedStage,
-    wellClueFound,
-    homeClueFound,
-    roostClueFound,
-    quillNamed,
-    officeSceneSeen,
-    evidenceOwed: parsedEvidence,
-    swarmKrasueDefeated,
   };
 }
 
@@ -1095,11 +1000,10 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const treasureChests = parsePersistedTreasureChestCheckpoint(value.treasureChests);
   const defendQuest = parsePersistedDefendQuestCheckpoint(value.defendQuest);
   const spiderQuest = parsePersistedSpiderQuestCheckpoint(value.spiderQuest);
-  const murderQuest = parsePersistedMurderMysteryQuestCheckpoint(value.murderQuest);
   const bounty = value.bounty === null ? null : parsePersistedBountyCheckpoint(value.bounty);
   const starlightTentProgress = parseStarlightTentProgressCheckpoint(value.starlightTentProgress);
   const anchorQuestProgress = parseAnchorQuestProgressCheckpoint(value.anchorQuestProgress);
-  const murderQuestProgress = parseMurderQuestProgressCheckpoint(value.murderQuestProgress);
+  const missingCatsProgress = parseMissingCatsProgressCheckpoint(value.missingCatsProgress);
   const journal = parseJournalProgressCheckpoint(value.journal);
   const bountyProgress = parseBountyProgressCheckpoint(value.bountyProgress);
   const casinoState = parseCasinoStateCheckpoint(value.casinoState);
@@ -1109,11 +1013,11 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const deinonychusPetState = parseDeinonychusPetStateCheckpoint(value.deinonychusPetState);
   const daveDebrief = parseDaveDebriefCheckpoint(value.daveDebrief);
   const tacticsNoticesSeen = parseTacticsNoticesSeen(value.tacticsNoticesSeen);
-  const doomsday = parsePersistedDoomsday(value.doomsday);
   const bossRoomDressing = parseBossRoomDressingCheckpoint(value.bossRoomDressing);
   const briarHollow = parseBriarHollowStateSnapshot(value.briarHollow);
   const cloggedBathroom = parseCloggedBathroomCheckpoint(value.cloggedBathroom);
   const stealthKeySnatch = parseStealthKeySnatchCheckpoint(value.stealthKeySnatch);
+  const partySplit = parsePartySplitSnapshot(value.partySplit);
   const { krakenKilled, bigRoosterKilled, bigRoosterBossRoomIdx } = value;
 
   if (
@@ -1121,11 +1025,10 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     treasureChests === undefined ||
     defendQuest === undefined ||
     spiderQuest === undefined ||
-    murderQuest === undefined ||
     bounty === undefined ||
     starlightTentProgress === undefined ||
     anchorQuestProgress === undefined ||
-    murderQuestProgress === undefined ||
+    missingCatsProgress === undefined ||
     journal === undefined ||
     bountyProgress === undefined ||
     casinoState === undefined ||
@@ -1135,11 +1038,11 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     deinonychusPetState === undefined ||
     daveDebrief === undefined ||
     tacticsNoticesSeen === undefined ||
-    doomsday === undefined ||
     bossRoomDressing === undefined ||
     briarHollow === undefined ||
     cloggedBathroom === undefined ||
     stealthKeySnatch === undefined ||
+    partySplit === undefined ||
     !isBoolean(krakenKilled) ||
     !isBoolean(bigRoosterKilled) ||
     !isNumber(bigRoosterBossRoomIdx)
@@ -1152,11 +1055,10 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     treasureChests,
     defendQuest,
     spiderQuest,
-    murderQuest,
     bounty,
     starlightTentProgress,
     anchorQuestProgress,
-    murderQuestProgress,
+    missingCatsProgress,
     journal,
     bountyProgress,
     casinoState,
@@ -1166,11 +1068,11 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     deinonychusPetState,
     daveDebrief,
     tacticsNoticesSeen,
-    doomsday,
     bossRoomDressing,
     briarHollow,
     cloggedBathroom,
     stealthKeySnatch,
+    partySplit,
     krakenKilled,
     bigRoosterKilled,
     bigRoosterBossRoomIdx,

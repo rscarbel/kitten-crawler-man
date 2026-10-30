@@ -9,8 +9,7 @@
  * directly into the grid, for walls, doorway gaps, floor-material overrides
  * (a stone dais, raked drill sand) and the bespoke fixtures the shared prop
  * library has no painted equivalent for (a weapon rack, a muster board, a
- * grinding slab). `smashable: true` on a 'tile' entry routes it through
- * `placeProp`, recording the floor underneath so a later break can restore it.
+ * grinding slab).
  *
  * A 'prop' entry's `(x, y)` names the footprint's **north-west** tile: the
  * top-left corner, with the footprint running south across the prop's
@@ -21,9 +20,11 @@
  */
 
 import type {
+  KnockableTownInteriorPropId,
   StatefulTownInteriorPropId,
   StatelessTownInteriorPropId,
 } from '../../../sprites/art/townInterior/townInteriorProps';
+import type { KnockOffPlacement } from '../../interiorMechanisms';
 import { contractPropId } from '../../contractAreas';
 import type { PlannedBuildingId } from '../../buildingIds';
 
@@ -46,8 +47,15 @@ interface TownInteriorPropEntryBase {
  * is what the save keys it by, so moving the prop keeps its state.
  */
 interface StatefulTownInteriorPropEntry extends TownInteriorPropEntryBase {
-  readonly propId: StatefulTownInteriorPropId;
+  readonly propId: Exclude<StatefulTownInteriorPropId, KnockableTownInteriorPropId>;
   readonly id: string;
+}
+
+/** A prop a cat can knock off a ledge, placed with where it falls and what its landing does. */
+interface KnockableTownInteriorPropEntry extends TownInteriorPropEntryBase {
+  readonly propId: KnockableTownInteriorPropId;
+  readonly id: string;
+  readonly knockOff: KnockOffPlacement;
 }
 
 /**
@@ -59,7 +67,8 @@ interface StatelessTownInteriorPropEntry extends TownInteriorPropEntryBase {
   readonly id?: string;
 }
 
-export type TownInteriorPropEntry = StatefulTownInteriorPropEntry | StatelessTownInteriorPropEntry;
+export type TownInteriorPropEntry =
+  StatefulTownInteriorPropEntry | KnockableTownInteriorPropEntry | StatelessTownInteriorPropEntry;
 
 /**
  * The id a placed prop goes by within its room. A prop without one in its
@@ -75,20 +84,12 @@ export interface TownInteriorTileEntry {
   readonly x: number;
   readonly y: number;
   readonly tileType: number;
-  readonly smashable?: boolean;
 }
 
 export type TownInteriorLayoutEntry = TownInteriorPropEntry | TownInteriorTileEntry;
 
-/** A building's whole authored layout: every entry `generateInterior` applies after carving the room's floor. */
-export type TownInteriorLayout = ReadonlyArray<TownInteriorLayoutEntry>;
-
 export function tile(x: number, y: number, tileType: number): TownInteriorTileEntry {
   return { kind: 'tile', x, y, tileType };
-}
-
-export function smashableTile(x: number, y: number, tileType: number): TownInteriorTileEntry {
-  return { kind: 'tile', x, y, tileType, smashable: true };
 }
 
 export function prop(
@@ -101,11 +102,23 @@ export function prop(
   return { kind: 'prop', x, y, propId, variant, id: options.id, dropsLoot: options.dropsLoot };
 }
 
+/** A prop a cat can knock off, under `id`, falling and landing as `knockOff` says. */
+export function knockableProp(
+  x: number,
+  y: number,
+  propId: KnockableTownInteriorPropId,
+  id: string,
+  knockOff: KnockOffPlacement,
+  variant = 0,
+): TownInteriorPropEntry {
+  return { kind: 'prop', x, y, propId, id, variant, knockOff };
+}
+
 /** A prop the room's save remembers, under `id`: see `StatefulTownInteriorPropId`. */
 export function statefulProp(
   x: number,
   y: number,
-  propId: StatefulTownInteriorPropId,
+  propId: Exclude<StatefulTownInteriorPropId, KnockableTownInteriorPropId>,
   id: string,
   variant = 0,
   options: { readonly dropsLoot?: boolean } = {},

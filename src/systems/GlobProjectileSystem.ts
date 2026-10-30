@@ -29,7 +29,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawFireballBolt, drawFireballBurst, drawFireballFlame } from '../sprites/fireballSprite';
 import { drawAcidBolt, drawAcidBurst, drawAcidPuddle } from '../sprites/acidGlobSprite';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 import type { DynamicLightKind } from './lighting/lightKinds';
 import type { GroundHazardSource } from './GroundHazardSource';
@@ -320,7 +320,7 @@ export class GlobProjectileSystem implements GameSystem, GroundHazardSource {
       const nextY = bolt.y + bolt.vy;
       const tileX = Math.floor(nextX / TILE_SIZE);
       const tileY = Math.floor(nextY / TILE_SIZE);
-      if (!this.gameMap.isWalkable(tileX, tileY)) {
+      if (!this.gameMap.isWalkable(tileX, tileY, 'walker')) {
         // Landed at the last clear position rather than inside the wall, so the
         // burst and its puddle sit on floor the player can actually stand on.
         this.land(bolt, targets);
@@ -409,7 +409,7 @@ export class GlobProjectileSystem implements GameSystem, GroundHazardSource {
    * because it keeps its cooldown and never lands a hit.
    */
   private targetsFor(ctx: SystemContext, bolt: Bolt): readonly Player[] {
-    const targets: Player[] = [ctx.human, ctx.cat];
+    const targets: Player[] = presentCrawlers(ctx);
     /**
      * Defend-quest NPCs are escorted, not hunted. `MobUpdateLoop` strips them
      * out of the shared AI target list for exactly this reason, and

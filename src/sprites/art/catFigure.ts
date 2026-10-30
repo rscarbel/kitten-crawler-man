@@ -75,6 +75,18 @@ import {
 import { PLAYER_CAT } from '../../characters/characterLooks';
 import type { CatGait, CatLook, CatOutline } from '../looks/catLook';
 import { lateralWalkBack, lateralWalkFront, lateralWalkSide } from './catLateralWalk';
+import {
+  channel,
+  HOP_DOWN,
+  HOP_UP,
+  latchPaw,
+  pawBat,
+  sniff,
+  SQUEEZE,
+  talkOver,
+  VIEW_TAIL_BASE,
+  type ViewedMove,
+} from './catWorldMoves';
 import { CARDINAL_VIEWS, type CardinalView } from '../facingView';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { BARE_CAT_OUTFIT, bareCatOutfit, dressCat } from '../garments/cat/catDressing';
@@ -117,6 +129,8 @@ export const BREAK_FRAMES = 12;
 export const ACTION_FRAMES = 8;
 export const KO_FRAMES = 8;
 export const DANCE_FRAMES = 12;
+export const TRAVERSAL_FRAMES = 10;
+export const TALK_FRAMES = 8;
 // ── Pose helpers ─────────────────────────────────────────────────────────────
 
 const NO_PAW: PawPose = { dx: 0, dy: 0, lift: 0, claw: 0 };
@@ -148,14 +162,9 @@ function tail(
   return { base, curl, wave, phase, puff, flick, rootX, rootY, reach: 1 };
 }
 
-/**
- * Tail carriage per view. Curl accumulates clockwise on screen, so a tail that
- * leaves to the right lifts its tip with a negative curl and one that leaves to
- * the left lifts with a positive one.
- */
-const FRONT_TAIL_BASE = deg(-20);
-const BACK_TAIL_BASE = deg(-78);
-const SIDE_TAIL_BASE = deg(-170);
+const FRONT_TAIL_BASE = VIEW_TAIL_BASE.front;
+const BACK_TAIL_BASE = VIEW_TAIL_BASE.back;
+const SIDE_TAIL_BASE = VIEW_TAIL_BASE.side;
 
 const BLINK_HOLD = 0.06;
 
@@ -336,6 +345,72 @@ function idleSide(phase: number): CatPose {
     ...front,
     headX: 0.004 * Math.sin(angle),
     tail: tail(SIDE_TAIL_BASE, 1.25, 0.35, angle, 0, 0.45 * Math.sin(angle * 2)),
+  };
+}
+
+/** Sat back on her haunches, her tail drawn round against her side. */
+const SIT_TAIL_CURL = 1.7;
+const SIT_TAIL_WAVE = 0.28;
+const SIT_TAIL_FLICK = 0.4;
+
+function sitFront(phase: number): CatPose {
+  const angle = phase * TWO_PI;
+  return {
+    ...idleFront(phase),
+    sit: 1,
+    tail: tail(
+      FRONT_TAIL_BASE,
+      SIT_TAIL_CURL,
+      SIT_TAIL_WAVE,
+      angle,
+      0,
+      SIT_TAIL_FLICK * Math.sin(angle * 2),
+    ),
+  };
+}
+
+// ── Scamper ──────────────────────────────────────────────────────────────────
+
+/**
+ * A frightened cat's bound in profile: the forepaws reach together and the
+ * hind pair drives together half a cycle behind, each pair a little split so
+ * the near and far paw never land as one.
+ */
+const SCAMPER_REACH = 0.2;
+const SCAMPER_LIFT = 0.13;
+const SCAMPER_HIND_SHARE = 0.85;
+const SCAMPER_PAIR_SPLIT = 0.07;
+const SCAMPER_BOB = 0.035;
+const SCAMPER_LEAN = deg(4);
+/** Ears pinned back and pupils blown: she is running from something, not strolling. */
+const SCAMPER_EARS = -0.7;
+const SCAMPER_PUPIL = 1;
+/** Streamed out low behind her rather than carried up. */
+const SCAMPER_TAIL_CURL = 0.35;
+const SCAMPER_TAIL_WAVE = 0.15;
+const SCAMPER_TAIL_PUFF = 0.4;
+
+function scamperSide(phase: number): CatPose {
+  const angle = phase * TWO_PI;
+  const hindReach = SCAMPER_REACH * SCAMPER_HIND_SHARE;
+  const hindLift = SCAMPER_LIFT * SCAMPER_HIND_SHARE;
+  const rest = restPose();
+  return {
+    ...rest,
+    bob: -SCAMPER_BOB * Math.sin(angle),
+    lean: SCAMPER_LEAN * Math.cos(angle),
+    headY: SCAMPER_BOB * 0.5 * Math.sin(angle),
+    earL: SCAMPER_EARS,
+    earR: SCAMPER_EARS,
+    eyeOpen: 1,
+    pupil: SCAMPER_PUPIL,
+    tail: tail(SIDE_TAIL_BASE, SCAMPER_TAIL_CURL, SCAMPER_TAIL_WAVE, angle, SCAMPER_TAIL_PUFF),
+    frontR: gaitPaw(phase, SCAMPER_REACH, SCAMPER_LIFT),
+    frontL: gaitPaw(phase + SCAMPER_PAIR_SPLIT, SCAMPER_REACH, SCAMPER_LIFT),
+    hindR: gaitPaw(phase + 0.5, hindReach, hindLift),
+    hindL: gaitPaw(phase + 0.5 + SCAMPER_PAIR_SPLIT, hindReach, hindLift),
+    breathe: Math.sin(angle * 2),
+    time: phase,
   };
 }
 
@@ -1409,11 +1484,89 @@ const EAST_ROWS: readonly RowSpec[] = [
     view: 'front',
     pose: (f) => dance(cyclePhase(f, DANCE_FRAMES)),
   },
+  {
+    name: 'sit',
+    facesWest: false,
+    frameCount: IDLE_FRAMES,
+    kind: 'loop',
+    view: 'front',
+    pose: (f) => sitFront(cyclePhase(f, IDLE_FRAMES)),
+  },
+  {
+    name: 'scamper_side',
+    facesWest: false,
+    frameCount: WALK_FRAMES,
+    kind: 'loop',
+    view: 'side',
+    pose: (f) => scamperSide(cyclePhase(f, WALK_FRAMES)),
+  },
+  ...worldMoveRows(),
+  ...talkRows(),
   ...swingRows('chop', { front: CHOP_FRONT, side: CHOP_SIDE, back: CHOP_BACK }),
   ...swingRows('mine', { front: MINE_FRONT, side: MINE_SIDE, back: MINE_BACK }),
   ...carryRows(),
   ...throwRows(),
 ];
+
+/**
+ * Her hops and squeeze in every view she travels in, and the things she does
+ * with paw and nose, head-on.
+ */
+function worldMoveRows(): RowSpec[] {
+  const oneShot = (
+    name: string,
+    frameCount: number,
+    move: (progress: number) => CatPose,
+    view: CardinalView = 'front',
+  ): RowSpec => ({
+    name,
+    facesWest: false,
+    frameCount,
+    kind: 'oneShot',
+    view,
+    pose: (f) => move(shotProgress(f, frameCount)),
+  });
+  const viewed = (name: string, move: ViewedMove): RowSpec[] =>
+    CARDINAL_VIEWS.map((view) =>
+      oneShot(`${name}${VIEW_SUFFIX[view]}`, TRAVERSAL_FRAMES, move[view], view),
+    );
+  return [
+    ...viewed('hop_up', HOP_UP),
+    ...viewed('hop_down', HOP_DOWN),
+    ...viewed('squeeze', SQUEEZE),
+    oneShot('paw_bat', ACTION_FRAMES, pawBat),
+    oneShot('sniff', BREAK_FRAMES, sniff),
+    oneShot('latch_paw', ACTION_FRAMES, latchPaw),
+    {
+      name: 'channel',
+      facesWest: false,
+      frameCount: ACTION_FRAMES,
+      kind: 'loop',
+      view: 'front',
+      pose: (f) => channel(cyclePhase(f, ACTION_FRAMES)),
+    },
+  ];
+}
+
+/** Her talking, laid over her idle in each view. */
+function talkRows(): RowSpec[] {
+  const idles: Readonly<Record<CardinalView, (phase: number) => CatPose>> = {
+    front: idleFront,
+    side: idleSide,
+    back: idleBack,
+  };
+  return CARDINAL_VIEWS.map((view) => ({
+    name: `talk${VIEW_SUFFIX[view]}`,
+    facesWest: false,
+    frameCount: TALK_FRAMES,
+    kind: 'loop',
+    view,
+    pose: (f) => {
+      const phase = cyclePhase(f, TALK_FRAMES);
+      return talkOver(idles[view](phase), phase);
+    },
+  }));
+}
 
 function swingRows(
   hold: 'chop' | 'mine',
@@ -1704,8 +1857,9 @@ function catStateFrames(): Record<string, number> {
  * drew cold cells as she put the thing down and walked off. Twenty-eight
  * leaves those rows their window; the cache's global ceiling is unchanged.
  * Every cat look shares the same cell and the same rows, so a look's working
- * set is the same bytes whoever she is, and one number serves them all; only
- * the cat being played is ever resident (`setCatLook` releases the other).
+ * set is the same bytes whoever she is, and one number serves them all. A
+ * cat that is not the crawler bakes only her row tier's rows, so her working
+ * set is a fraction of this.
  */
 const CAT_FIGURE_BUDGET_MEGABYTES = 28;
 

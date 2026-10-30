@@ -146,7 +146,7 @@ function isDressingTile(tile: TileContent | null): boolean {
 }
 
 function isBlockingDressing(tile: TileContent | null): boolean {
-  return tile !== null && isDressingTile(tile) && !isWalkableTileType(tile);
+  return tile !== null && isDressingTile(tile) && !isWalkableTileType(tile, 'walker');
 }
 
 /** The grid with every dressing prop lifted back off to the floor under it. */
@@ -165,7 +165,7 @@ function componentCount(grid: TileContent[][], tiles: ReadonlyArray<Point>): num
   const inSet = new Set(tiles.map((tile) => `${tile.x},${tile.y}`));
   const walkable = (x: number, y: number): boolean => {
     const tile = tileAt(grid, x, y);
-    return inSet.has(`${x},${y}`) && tile !== null && isWalkableTileType(tile);
+    return inSet.has(`${x},${y}`) && tile !== null && isWalkableTileType(tile, 'walker');
   };
   const seen = new Set<string>();
   let components = 0;
@@ -215,7 +215,7 @@ function depthIn(rect: Rect, tile: Point): number {
 function standsInThroughLine(grid: TileContent[][], tile: Point): boolean {
   const open = (dx: number, dy: number): boolean => {
     const cell = tileAt(grid, tile.x + dx, tile.y + dy);
-    return cell !== null && isWalkableTileType(cell);
+    return cell !== null && isWalkableTileType(cell, 'walker');
   };
   return (open(0, -1) && open(0, 1)) || (open(-1, 0) && open(1, 0));
 }
@@ -454,7 +454,7 @@ function checkMap(data: DungeonData, levelDef: LevelDef, totals: SweepTotals | n
       if (!isBlockingDressing(cell) || PROP_PART_TILE_TYPES.has(cell.type)) continue;
       const open = ORTHOGONAL.some((step) => {
         const neighbour = tileAt(grid, x + step.x, y + step.y);
-        return neighbour !== null && isWalkableTileType(neighbour);
+        return neighbour !== null && isWalkableTileType(neighbour, 'walker');
       });
       if (!open) fail('walled-in', `prop at (${x}, ${y}) has no open floor on any side`);
     }
@@ -610,7 +610,7 @@ function runNegativeTests(): number {
           const x = tile.x + step.x;
           const y = tile.y + step.y;
           const cell = tileAt(data.grid, x, y);
-          return cell !== null && isWalkableTileType(cell) && segment.has(`${x},${y}`);
+          return cell !== null && isWalkableTileType(cell, 'walker') && segment.has(`${x},${y}`);
         });
         const [north, east, south, west] = open;
         const straightLane =
@@ -698,7 +698,7 @@ function runNegativeTests(): number {
         if (!isBlockingDressing(cell) || PROP_PART_TILE_TYPES.has(cell.type)) continue;
         for (const step of ORTHOGONAL) {
           const neighbour = tileAt(data.grid, x + step.x, y + step.y);
-          if (neighbour !== null && isWalkableTileType(neighbour)) {
+          if (neighbour !== null && isWalkableTileType(neighbour, 'walker')) {
             plant(data, { x: x + step.x, y: y + step.y });
           }
         }

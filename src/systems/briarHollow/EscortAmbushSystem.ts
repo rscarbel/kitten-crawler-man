@@ -650,6 +650,7 @@ export class EscortAmbushSystem {
       place.tile.y,
       midgeTile.x,
       midgeTile.y,
+      'walker',
       SPAWN_PATH_BUDGET_TILES,
       true,
     );
@@ -874,7 +875,7 @@ export class EscortAmbushSystem {
     let tail = 0;
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        if (!map.isWalkable(x, y)) continue;
+        if (!map.isWalkable(x, y, 'walker')) continue;
         if (!map.isTileInsideTownWall(x, y)) continue;
         steps[y * size + x] = 0;
         queue[tail++] = y * size + x;
@@ -889,7 +890,7 @@ export class EscortAmbushSystem {
         const nextY = y + dy;
         if (nextX < 0 || nextY < 0 || nextX >= size || nextY >= size) continue;
         const next = nextY * size + nextX;
-        if (steps[next] !== -1 || !map.isWalkable(nextX, nextY)) continue;
+        if (steps[next] !== -1 || !map.isWalkable(nextX, nextY, 'walker')) continue;
         steps[next] = steps[index] + 1;
         queue[tail++] = next;
       }

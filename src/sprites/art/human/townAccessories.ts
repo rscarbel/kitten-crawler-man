@@ -39,7 +39,9 @@ export type AccessoryKind =
   | 'ledgerPencil'
   | 'flourApron'
   | 'vialCase'
-  | 'builderRule';
+  | 'builderRule'
+  | 'towerTabard'
+  | 'guardHelm';
 
 export interface AccessorySpec {
   readonly kind: AccessoryKind;
@@ -251,6 +253,98 @@ function drawStole(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   );
 }
 
+/** The tower's livery hangs to the hip, longer than a street guard's tabard, so the two read apart at a glance. */
+const TOWER_TABARD_BOTTOM = HIP_Y + 0.12;
+const TOWER_TABARD_HALF_WIDTH = 0.14;
+/** The tower's mark on the chest: a keep with three merlons. */
+const TOWER_EMBLEM_HALF_WIDTH = 0.045;
+const TOWER_EMBLEM_TOP = SHOULDER_Y + 0.14;
+const TOWER_EMBLEM_HEIGHT = 0.16;
+const TOWER_EMBLEM_MERLON_HEIGHT = 0.035;
+const TOWER_EMBLEM_MERLONS = 3;
+
+function drawTowerTabard(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
+  if (view === 'side') return;
+  const height = TOWER_TABARD_BOTTOM - TABARD_TOP;
+  const width = TOWER_TABARD_HALF_WIDTH * 2;
+  ctx.fillStyle = spec.color;
+  ctx.fillRect(-TOWER_TABARD_HALF_WIDTH, TABARD_TOP, width, height);
+  const trim = spec.accentColor ?? lit(spec.color);
+  ctx.strokeStyle = trim;
+  ctx.lineWidth = TABARD_OUTLINE_WIDTH;
+  ctx.strokeRect(-TOWER_TABARD_HALF_WIDTH, TABARD_TOP, width, height);
+  if (view === 'back') return;
+  ctx.fillStyle = trim;
+  const keepTop = TOWER_EMBLEM_TOP + TOWER_EMBLEM_MERLON_HEIGHT;
+  ctx.fillRect(
+    -TOWER_EMBLEM_HALF_WIDTH,
+    keepTop,
+    TOWER_EMBLEM_HALF_WIDTH * 2,
+    TOWER_EMBLEM_HEIGHT - TOWER_EMBLEM_MERLON_HEIGHT,
+  );
+  const merlonSlots = TOWER_EMBLEM_MERLONS * 2 - 1;
+  const merlonWidth = (TOWER_EMBLEM_HALF_WIDTH * 2) / merlonSlots;
+  for (let i = 0; i < TOWER_EMBLEM_MERLONS; i++) {
+    const x = -TOWER_EMBLEM_HALF_WIDTH + i * 2 * merlonWidth;
+    ctx.fillRect(x, TOWER_EMBLEM_TOP, merlonWidth, TOWER_EMBLEM_MERLON_HEIGHT);
+  }
+}
+
+/** A kettle helm rides low, its brim at the brow, where a hat's brim sits above the crown. */
+const HELM_BRIM_RISE = HEAD_RY * 0.12;
+const HELM_BRIM_RX = HEAD_RX * 1.22;
+const HELM_BRIM_RY = HEAD_RY * 0.13;
+const HELM_PROFILE_BRIM_RX = HEAD_RX * 1.18;
+const HELM_DOME_RX = HEAD_RX * 1.08;
+/** How far the dome's crown stands above the head's own centre. */
+const HELM_DOME_RISE = HEAD_RY * 1.12;
+const HELM_RIDGE_WIDTH = 0.014;
+const HELM_SHINE_RX = HELM_DOME_RX * 0.35;
+const HELM_SHINE_RY = HEAD_RY * 0.16;
+/** The shine sits up and toward the light, on the dome's upper left. */
+const HELM_SHINE_X = -HELM_DOME_RX * 0.38;
+const HELM_SHINE_RISE = HEAD_RY * 0.72;
+const HELM_SHINE_ALPHA = 0.55;
+
+function drawGuardHelm(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
+  const brimY = HEAD_CENTRE_Y - HELM_BRIM_RISE;
+  const domeRy = HELM_DOME_RISE - HELM_BRIM_RISE;
+  const brimRx = view === 'side' ? HELM_PROFILE_BRIM_RX : HELM_BRIM_RX;
+  ctx.fillStyle = shaded(spec.color);
+  ctx.beginPath();
+  ctx.ellipse(0, brimY, brimRx, HELM_BRIM_RY, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = spec.color;
+  ctx.beginPath();
+  ctx.ellipse(0, brimY, HELM_DOME_RX, domeRy, 0, Math.PI, Math.PI * 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = spec.accentColor ?? lit(spec.color);
+  ctx.lineWidth = PROP_STROKE_WIDTH;
+  ctx.beginPath();
+  ctx.ellipse(0, brimY, brimRx, HELM_BRIM_RY, 0, 0, Math.PI);
+  ctx.stroke();
+  ctx.fillStyle = rgba(LIGHT_TOWARD, HELM_SHINE_ALPHA);
+  ctx.beginPath();
+  ctx.ellipse(
+    HELM_SHINE_X,
+    HEAD_CENTRE_Y - HELM_SHINE_RISE,
+    HELM_SHINE_RX,
+    HELM_SHINE_RY,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  if (view === 'side') return;
+  ctx.strokeStyle = shaded(spec.color);
+  ctx.lineWidth = HELM_RIDGE_WIDTH;
+  ctx.beginPath();
+  ctx.moveTo(0, HEAD_CENTRE_Y - HELM_DOME_RISE);
+  ctx.lineTo(0, brimY);
+  ctx.stroke();
+}
+
 const HOOD_RX = HEAD_RX * 1.15;
 const HOOD_RY = HEAD_RY * 1.2;
 const HOOD_RISE = HEAD_RY * 0.5;
@@ -399,12 +493,15 @@ const ACCESSORY_PAINTERS: Readonly<
   flourApron: drawFlourApron,
   vialCase: drawVialCase,
   builderRule: drawBuilderRule,
+  towerTabard: drawTowerTabard,
+  guardHelm: drawGuardHelm,
 };
 
 /** Worn on the head, so painted where the solved head is rather than where it rests. */
 const HEAD_ACCESSORIES: ReadonlySet<AccessoryKind> = new Set<AccessoryKind>([
   'brimmedHat',
   'patchedHood',
+  'guardHelm',
 ]);
 
 /** Paints `spec`'s accessory, in figure-unit space, over an already-drawn body; head accessories are left to {@link drawHeadAccessory}. */

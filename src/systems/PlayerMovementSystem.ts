@@ -72,10 +72,10 @@ export function applyMovement(
     tileXnext = Math.floor((nextX + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
   }
   const tileYcur = Math.floor((entity.y + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
-  if (map.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
+  if (map.isWalkable(tileXnext, tileYcur, 'walker')) entity.x = nextX;
 
   const nextY = clamp(entity.y + dy, 0, mapPxH - TILE_SIZE);
   const tileXcur = Math.floor((entity.x + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
   const tileYnext = Math.floor((nextY + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
-  if (map.isWalkable(tileXcur, tileYnext)) entity.y = nextY;
+  if (map.isWalkable(tileXcur, tileYnext, 'walker')) entity.y = nextY;
 }

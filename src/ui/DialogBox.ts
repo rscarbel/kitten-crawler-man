@@ -301,9 +301,19 @@ export interface DialogLayout {
 }
 
 function applyTextCase(paragraphs: Paragraphs, textCase: TextCase): Paragraphs {
-  if (textCase === 'as-written') return paragraphs;
   const [first, ...rest] = paragraphs;
-  return [first.toUpperCase(), ...rest.map((paragraph) => paragraph.toUpperCase())];
+  switch (textCase) {
+    case 'as-written':
+      return paragraphs;
+    case 'upper':
+      return [first.toUpperCase(), ...rest.map((paragraph) => paragraph.toUpperCase())];
+    case 'lower':
+      return [first.toLowerCase(), ...rest.map((paragraph) => paragraph.toLowerCase())];
+    default: {
+      const unhandled: never = textCase;
+      return unhandled;
+    }
+  }
 }
 
 export class DialogBox {

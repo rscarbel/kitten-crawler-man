@@ -240,7 +240,7 @@ export function walksToForecourt(
   site: CircusGroundsSite,
   from: TilePoint,
 ): boolean {
-  if (!gameMap.isWalkable(from.x, from.y)) return false;
+  if (!gameMap.isWalkable(from.x, from.y, 'walker')) return false;
   const reachTiles = site.radiusTiles + CIRCUS_TERRAIN_CLEARANCE_TILES;
   const rowWidth = gameMap.structure[0]?.length ?? 0;
   const keyOf = (tile: TilePoint): number => tile.y * rowWidth + tile.x;
@@ -257,7 +257,7 @@ export function walksToForecourt(
       if (seen.has(key)) continue;
       const withinGrounds =
         Math.hypot(next.x - site.centre.x, next.y - site.centre.y) <= reachTiles;
-      if (!withinGrounds || !gameMap.isWalkable(next.x, next.y)) continue;
+      if (!withinGrounds || !gameMap.isWalkable(next.x, next.y, 'walker')) continue;
       seen.add(key);
       frontier.push(next);
     }

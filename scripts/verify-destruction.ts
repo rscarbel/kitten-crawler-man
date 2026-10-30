@@ -175,7 +175,7 @@ function blast(b: Bench, tileX: number, tileY: number): boolean {
   ] as const) {
     const row = b.gameMap.structure[tileY + dy];
     const tile = row?.[tileX + dx];
-    if (tile === undefined || !isWalkableTileType(tile)) continue;
+    if (tile === undefined || !isWalkableTileType(tile, 'walker')) continue;
     b.props.destroyInRadius(centre(tileX + dx), centre(tileY + dy), BLOW_REACH, b.human);
     if (b.gameMap.structure[tileY][tileX].type !== before) return true;
   }
@@ -278,7 +278,7 @@ function checkEveryKindBreaks(): void {
       if (scuttles !== surprises)
         fail('swarm', `${label}: ${scuttles} scuttle cue(s) for ${surprises} burst(s)`);
       for (const at of pieceTiles) {
-        if (!isWalkableTileType(b.gameMap.structure[at.y][at.x])) {
+        if (!isWalkableTileType(b.gameMap.structure[at.y][at.x], 'walker')) {
           fail('break', `${label}: its tile at ${at.x},${at.y} did not open to floor`);
         }
       }
@@ -758,7 +758,7 @@ function standGasCylinder(gameMap: GameMap): { x: number; y: number } {
   const structure = gameMap.structure;
   const open = (x: number, y: number): boolean => {
     const tile = structure[y]?.[x];
-    return tile !== undefined && isWalkableTileType(tile);
+    return tile !== undefined && isWalkableTileType(tile, 'walker');
   };
   for (const room of gameMap.roomBounds) {
     for (let y = room.y + 1; y < room.y + room.h - 1; y++) {

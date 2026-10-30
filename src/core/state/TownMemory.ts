@@ -19,6 +19,7 @@
 
 import type { ResidentId } from './residentIds';
 import { BUILDING_IDS, isBuildingId, type BuildingId } from '../../map/buildingIds';
+import type { SewerWorkId } from '../../map/sewer/sewerLayouts';
 
 /** Places whose first visit opens something: a travel destination, a playlist. */
 export const VISITED_PLACE_IDS = ['circus_grounds', 'starlight_tent'] as const;
@@ -27,15 +28,6 @@ export type VisitedPlaceId = (typeof VISITED_PLACE_IDS)[number];
 export interface TownMemory {
   /** How many times the player has talked to each named resident. */
   residentTalks: Map<ResidentId, number>;
-  /**
-   * Rooms whose hostile occupants have already been dealt with, keyed by
-   * `roomKey`.
-   *
-   * An interior map is regenerated on every entry, so a room that spawns its hostiles from its own layout would
-   * restock them the moment the player stepped back through the door — turning
-   * a fight into a farm.
-   */
-  clearedRooms: Set<RoomKey>;
   /**
    * Wilderness camps whose every resident has been killed, keyed by
    * `campSiteKey`.
@@ -60,22 +52,26 @@ export interface TownMemory {
    *
    * A room's furniture is rebuilt standing on every entry — nothing records
    * *whether* a prop is currently broken — but the loot itself must not be:
-   * without this, leaving and re-entering a room re-stocks every barrel,
-   * exactly the way a cleared room would re-stock its hostiles without
-   * `clearedRooms`.
+   * without this, leaving and re-entering a room re-stocks every barrel.
    */
   paidOutInteriorProps: Set<InteriorPropPayoutKey>;
   /** Places the party has set foot in at least once. */
   visitedPlaces: Set<VisitedPlaceId>;
+  /**
+   * The sewer's valves turned and its fights won. A section is built afresh
+   * on every visit, so its water is put back and its fights left out from
+   * this record rather than from anything on the map.
+   */
+  settledSewerWorks: Set<SewerWorkId>;
 }
 
 export function createTownMemory(): TownMemory {
   return {
     residentTalks: new Map(),
-    clearedRooms: new Set(),
     clearedCamps: new Set(),
     paidOutInteriorProps: new Set(),
     visitedPlaces: new Set(),
+    settledSewerWorks: new Set(),
   };
 }
 
@@ -112,7 +108,7 @@ export function interiorPropPayoutKey(
 const FLOOR_INDEX_PATTERN = /^\d+$/;
 
 /** Narrows a room key read from a save. */
-export function isRoomKey(value: unknown): value is RoomKey {
+function isRoomKey(value: unknown): value is RoomKey {
   if (typeof value !== 'string') return false;
   const separatorAt = value.indexOf(ROOM_KEY_SEPARATOR);
   if (separatorAt < 0) return false;
@@ -186,24 +182,24 @@ export function forgetClearedCamps(memory: TownMemory): void {
 /** A point-in-time copy of the town's memory. */
 export interface TownMemoryCheckpoint {
   residentTalks: ReadonlyArray<readonly [ResidentId, number]>;
-  clearedRooms: ReadonlyArray<RoomKey>;
   clearedCamps: ReadonlyArray<string>;
   paidOutInteriorProps: ReadonlyArray<InteriorPropPayoutKey>;
   visitedPlaces: ReadonlyArray<VisitedPlaceId>;
+  settledSewerWorks: ReadonlyArray<SewerWorkId>;
 }
 
 /**
  * Snapshots the town so a death rewinds it with everything else since the
- * checkpoint: a room cleared or a prop looted after it is fought or looted
- * again, rather than left empty while the rewind takes back what it paid.
+ * checkpoint: a prop looted after it can be looted again, rather than left empty
+ * while the rewind takes back what it paid.
  */
 export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
   return {
     residentTalks: [...memory.residentTalks],
-    clearedRooms: [...memory.clearedRooms],
     clearedCamps: [...memory.clearedCamps],
     paidOutInteriorProps: [...memory.paidOutInteriorProps],
     visitedPlaces: [...memory.visitedPlaces],
+    settledSewerWorks: [...memory.settledSewerWorks],
   };
 }
 
@@ -213,8 +209,8 @@ export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
  */
 export function restoreTownMemory(memory: TownMemory, snapshot: TownMemoryCheckpoint): void {
   memory.residentTalks = new Map(snapshot.residentTalks);
-  memory.clearedRooms = new Set(snapshot.clearedRooms);
   memory.clearedCamps = new Set(snapshot.clearedCamps);
   memory.paidOutInteriorProps = new Set(snapshot.paidOutInteriorProps);
   memory.visitedPlaces = new Set(snapshot.visitedPlaces);
+  memory.settledSewerWorks = new Set(snapshot.settledSewerWorks);
 }

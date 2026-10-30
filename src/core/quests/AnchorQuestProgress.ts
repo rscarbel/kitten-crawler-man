@@ -5,8 +5,7 @@
  * The questline spans two kinds of scene: Madame Voss and the tinker's stall are
  * `DungeonScene`, while Old Lori's cottage and the Temple of the Sky are
  * `BuildingInteriorScene` — and an interior is constructed fresh on every entry.
- * So, exactly as `MurderQuestProgress` and `DoomsdayProgress` do, one mutable
- * object is created by the overworld scene and threaded by reference through
+ * So one mutable object is created by the overworld scene and threaded by reference through
  * every scene and every scene reconstruction.
  *
  * Shard *ownership* is deliberately absent. The two crawlers carry separate

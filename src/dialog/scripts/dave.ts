@@ -165,11 +165,6 @@ export const DAVE_ADVICE = {
     "Whatever the scientist wants, it's at the end of that hallway. You don't have to go. I'd think about it, if I were you.",
   ]),
 
-  krasue_murders: say.line([
-    "I'd stay out of it. You won't, I know.",
-    'So ask questions before you swing at anything, and keep your partner close.',
-  ]),
-
   shady_bounties: say.line(
     "The money's real, and the targets are out where nobody minds the noise. Take the ones you can handle. Leave the rest.",
   ),
@@ -183,4 +178,46 @@ export const DAVE_ADVICE = {
   speed_fizz_tip: say.line(
     'Speed Fizz is for getting out, not getting in. Keep one for when a fight goes wrong.',
   ),
+
+  missing_cats_notices: say.line(
+    "Read the notices before you go knocking. People talk easier when you already know the cat's name.",
+  ),
+
+  missing_cats_owners: say.line([
+    "Let the owner talk first. They'll tell you where to look without knowing they've done it.",
+    "Switch to the cat now and then. Some of it, only she'll see.",
+  ]),
+
+  missing_cats_cellar: say.line([
+    "Whatever's coming up that cistern comes up through the lid. Stand by the lid, not in a corner.",
+    'The elves are with you on this one. Mind where you swing.',
+    'It comes in waves. Drink between them, not during.',
+  ]),
+
+  missing_cats_stakeout: say.line([
+    "Stay hidden. If it sees you, it won't come in. It'll circle off and come back later, so don't go running after it.",
+    'Pick a spot and stay in it. That whole job is sitting still.',
+  ]),
+
+  missing_cats_temple: say.line([
+    "Show him the feather and let him talk. Somebody who's carried a thing that long usually wants to put it down.",
+    "What you do with it after is up to you. I'm not telling you.",
+  ]),
+
+  missing_cats_bait: say.line([
+    "No. I'm not helping with this one.",
+    "That tower took my cat. Pumpkin. We came through this town together, and she went in there and didn't come out.",
+    "You want to sit a cat on a fountain and wave her at it. I can't watch that again.",
+    "Do what you have to. Just don't ask me to be part of it.",
+  ]),
+
+  missing_cats_tower_door: say.line([
+    "Those guards don't hit. They pick you up and put you back on the street, and they're good at it.",
+    "You won't talk your way past them, so don't spend the afternoon trying. Find another door.",
+  ]),
+
+  missing_cats_drain: say.line([
+    'Stay behind the elf. Down there the water decides where you can walk.',
+    "And take the hire. I don't care how good you are. Nobody goes into that tower on their own.",
+  ]),
 } as const satisfies Record<AdviceObjectiveId, DialogLine>;

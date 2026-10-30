@@ -311,7 +311,7 @@ export class SkeletonSummonSystem implements GameSystem {
   ): { x: number; y: number } | null {
     const key = tileKey(request.tileX, request.tileY);
     const standable =
-      this.gameMap.isWalkableForHostile(request.tileX, request.tileY) &&
+      this.gameMap.isWalkableForHostile(request.tileX, request.tileY, 'walker') &&
       this.gameMap.isMobSpawnTile(request.tileX, request.tileY);
     if (!taken.has(key) && standable) {
       taken.add(key);

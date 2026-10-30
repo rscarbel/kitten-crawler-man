@@ -51,7 +51,7 @@ function requestSaying(
 
 /**
  * Mimics the guard every auto-opener in the game uses (Circus's
- * `autoOpenResolution`, Murder's phase auto-opens): don't stomp whatever is
+ * `autoOpenResolution`): don't stomp whatever is
  * on the shared box, and only latch "I've opened" once the open actually
  * happens.
  */

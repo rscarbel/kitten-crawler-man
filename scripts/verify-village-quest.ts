@@ -1073,11 +1073,11 @@ section('11. Bombers in the siege');
       .find(({ segment, tile }) => {
         if (defense.isOpening(segment.id)) return false;
         for (let dy = 1; dy <= BOMBER_STANDOFF_TILES + 1; dy++) {
-          if (!bombRig.map.isWalkable(tile.x, tile.y - dy)) return false;
+          if (!bombRig.map.isWalkable(tile.x, tile.y - dy, 'walker')) return false;
         }
         for (let dy = 1; dy < ENGINE_INSET_TILES + TREBUCHET_HEIGHT_TILES; dy++) {
           for (let dx = 0; dx < TREBUCHET_WIDTH_TILES; dx++) {
-            if (!bombRig.map.isWalkable(tile.x + dx, tile.y + dy)) return false;
+            if (!bombRig.map.isWalkable(tile.x + dx, tile.y + dy, 'walker')) return false;
           }
         }
         return true;

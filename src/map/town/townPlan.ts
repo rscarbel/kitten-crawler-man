@@ -323,8 +323,13 @@ export interface TownPlan {
   readonly props: ReadonlyArray<PlannedProp>;
   /** Named quarters, for the minimap's labels. */
   readonly districts: ReadonlyArray<PlannedDistrict>;
-  /** Where the Doomsday finale's escape stairwell appears, just south of the tower door. */
-  readonly doomsdayEscapeTile: TilePoint;
+  /**
+   * The west tile of the storm-drain grate on the Civic Terrace, the way down
+   * into the sewer. The grate runs `STORM_DRAIN_GRATE_WIDTH_TILES` east from it.
+   */
+  readonly stormDrainGrate: TilePoint;
+  /** Where the tower's two door guards stand, either side of its doorway, for the whole floor. */
+  readonly towerGuardPosts: TowerGuardPosts;
   /** Tiles from the centre inside which no hostile spawns and mobs deaggro. */
   readonly safeRadiusTiles: number;
   readonly groundCover: GroundCoverPlan;
@@ -423,14 +428,14 @@ const KINGS_ROAD_EAST = 0;
 /** Two-wide alleys through the Low Quarter's block. */
 const SERVICE_ALLEY_WEST = 1;
 const SERVICE_ALLEY_EAST = 2;
-const MURDER_ALLEY_WEST = 15;
-const MURDER_ALLEY_EAST = 16;
+const LOW_QUARTER_ALLEY_WEST = 15;
+const LOW_QUARTER_ALLEY_EAST = 16;
 
 /**
  * The dead-end alley Blackwood Lodge fronts. It runs west off the West Lane along
  * the Garrison band's south face and stops at the wall, and the Lodge is the only
- * building on it — which is the cult hideout it is meant to be rather than a
- * lodge on a main lane. (Its door is at the alley's middle, not its end: the alley
+ * building on it — a watch post set back off the lanes rather than a lodge on a
+ * main lane. (Its door is at the alley's middle, not its end: the alley
  * runs three tiles further west to the wall.)
  */
 const LODGE_ALLEY_TOP = UPPER_LANE_TOP;
@@ -488,11 +493,26 @@ const TOWER_ANCHOR_NORTH_OFFSET = 17;
 const TOWER_DOOR_NORTH_OFFSET = 18;
 const TOWER_DOOR_WEST_OFFSET = 1;
 
+/** The tiles the tower's door guards stand on, on the row in front of the tower's foot. */
+export interface TowerGuardPosts {
+  readonly west: TilePoint;
+  readonly east: TilePoint;
+}
+
+/** The guards stand on the first row of terrace in front of the door, beside its approach. */
+const TOWER_GUARD_POST_SOUTH_OF_DOOR = 1;
+/** One column west of the door tile, which is the doorway's west column. */
+const TOWER_GUARD_WEST_POST_WEST_OF_DOOR = 1;
+/** Two columns east of the door tile: past the doorway's second column. */
+const TOWER_GUARD_EAST_POST_EAST_OF_DOOR = 2;
+
 /**
- * The escape stairwell sits this far south of the tower door — on the terrace,
- * clear of the tower's own blocking rows and of the Upper Lane junction.
+ * The storm-drain grate sits on the terrace south-east of the tower door:
+ * east of the door's approach, south of the tower's foot torches, and on the
+ * flagstone the sewer's tower drain runs beneath.
  */
-const STAIRWELL_SOUTH_OF_TOWER_DOOR = 5;
+const STORM_DRAIN_EAST_OF_TOWER_DOOR = 3;
+const STORM_DRAIN_SOUTH_OF_TOWER_DOOR = 5;
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -652,8 +672,13 @@ const PLANNED_SURFACES: ReadonlyArray<PlannedSurface> = [
     tileType: FloorTypeValue.road,
   },
   {
-    name: 'murder alley',
-    bounds: span(MURDER_ALLEY_WEST, LOW_QUARTER_TOP, MURDER_ALLEY_EAST, LOW_QUARTER_BOTTOM),
+    name: 'low quarter alley',
+    bounds: span(
+      LOW_QUARTER_ALLEY_WEST,
+      LOW_QUARTER_TOP,
+      LOW_QUARTER_ALLEY_EAST,
+      LOW_QUARTER_BOTTOM,
+    ),
     tileType: FloorTypeValue.road,
   },
 
@@ -1264,9 +1289,19 @@ export function createTownPlan(size: number): TownPlan {
       name: district.name,
       label: { x: cx + district.label.dx, y: cy + district.label.dy },
     })),
-    doomsdayEscapeTile: {
-      x: cx - TOWER_DOOR_WEST_OFFSET,
-      y: cy - TOWER_DOOR_NORTH_OFFSET + STAIRWELL_SOUTH_OF_TOWER_DOOR,
+    stormDrainGrate: {
+      x: cx - TOWER_DOOR_WEST_OFFSET + STORM_DRAIN_EAST_OF_TOWER_DOOR,
+      y: cy - TOWER_DOOR_NORTH_OFFSET + STORM_DRAIN_SOUTH_OF_TOWER_DOOR,
+    },
+    towerGuardPosts: {
+      west: {
+        x: cx - TOWER_DOOR_WEST_OFFSET - TOWER_GUARD_WEST_POST_WEST_OF_DOOR,
+        y: cy - TOWER_DOOR_NORTH_OFFSET + TOWER_GUARD_POST_SOUTH_OF_DOOR,
+      },
+      east: {
+        x: cx - TOWER_DOOR_WEST_OFFSET + TOWER_GUARD_EAST_POST_EAST_OF_DOOR,
+        y: cy - TOWER_DOOR_NORTH_OFFSET + TOWER_GUARD_POST_SOUTH_OF_DOOR,
+      },
     },
     safeRadiusTiles: TOWN_SAFE_RADIUS_TILES,
     groundCover: {

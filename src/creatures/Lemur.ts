@@ -271,7 +271,7 @@ export class Lemur extends Mob {
       if (this.map) {
         const tx = Math.floor(knife.x / this.tileSize);
         const ty = Math.floor(knife.y / this.tileSize);
-        if (!this.map.isWalkable(tx, ty)) continue;
+        if (!this.map.isWalkable(tx, ty, this.mobility)) continue;
       }
 
       let hit = false;

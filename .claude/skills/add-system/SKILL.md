@@ -33,6 +33,16 @@ A boss room's props, slow ground, hazards and interactables are not a new top-le
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).
 
+## Senses, room works and timed interactions
+
+General mechanisms a quest supplies data to; never fork them for one quest.
+
+- **Mobility** (`src/map/mobility.ts`, described in full in `add-level`). A system that moves a body or asks where one may go passes that body's `mobility` to every walkability and path query — never a literal class for a body it did not make. A system that moves a climber by its own collision code also asks `body.climbing?.crossInto(body, tileX, tileY)` before each axis step and takes no step when it answers true, and takes none at all while `body.isCrossingFooting`.
+
+- **Senses** (`src/systems/senses/SenseLayer.ts`). `SENSES` is a `Record` over `SenseId` (`'scent' | 'ward'`), each entry naming `perceivedBy` (crawler kinds), how a source is painted (painters in `src/ui/world/worldSenses.ts`, inks in `worldPalette.senses`) and its `unperceived` look. A system registers a source on the scene's layer (`DungeonScene.senses`, `BuildingInteriorScene.senses` for the current storey) with `layer.add('scent', { points, sniffAt })` or `layer.add('ward', { segments, hurts, pulse })` and keeps the handle to `remove()` it. The layer fades a sense in over a beat when the steered crawler perceives it, paints it under the bodies, and puts a perceiving cat's nose down (`sniff`) at a `sniffAt` point she stops on. Scent drifts as soft wisps; a harmless ward glows and shimmers on `pulse()`; a harmful ward is a ground warning (`paintWardWarning` through `dangerTelegraph.ts`), full and pulsing for its perceiver and a faint steady red for everyone else (the fairness rule in `docs/difficulty-fairness-rules.md`). A new sense is a `SENSE_IDS` entry, a `SenseSources` field and a `SENSES` entry; one that can hurt uses `warning_when_harmful`.
+- **Room works** (`src/systems/roomMechanisms/`): knock-off props, pressure plates and plate sets, conveyors and signal fixtures. `RoomMechanisms` runs a map's set: `update(ctx)` on world ticks, `tryInteract(crawler)` in the interact chain, `renderGround`, `sortedFigures()` in the sorted pass, `renderMarkers` and `renderPrompt` over it, and `hiddenProps()` merged into the room's hidden props. The data is described in `add-level` ("Room works"). Plate, knock-off and conveyor state lasts the visit; what must outlast it belongs to the owner's own progress record. A plate set's `onSetOpened` raises `plateSetOpened` on the bus, a conveyor raises `conveyorSent` / `conveyorSignalled`; the owner writes the outcome there, and on the next build calls `plates.settleOpen(id)` for a latching set it already opened. Systems watch the room through those events and `plates.isPlateHeld(id)`, never by reaching into the room works' state.
+- **Timed interactions** (`src/systems/MashInteraction.ts`): one family sharing reach, prompt, a `worldBar` progress readout and persistence when the crawler walks off. `MashInteraction` (**press**: one heave per press), `TimingInteraction` (**timing**: a press counts only while its `MashWatcher.isLooking()` is false; one under its eye reports `seen` and the owner decides the cost; the bar switches to `watchedBarStyle`; the cat plays `latch_paw`) and `ChannelInteraction` (**channel**: one press starts it, `tick(worldHalted)` each frame runs it while the crawler stands there, walking off pauses it, a hit interrupts it and knocks back `damageSetbackShare` of the work; the human loops `humanRows`, the cat replays `channel`). Restore half-done work with `pressesDone` / `framesDone`. The owner places it, ticks a channel, routes the press and draws `renderPrompt` / `renderProgress`.
+
 ---
 
 # Standing up a new scene from the kits
@@ -86,17 +96,74 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
 - **`ChatKit`** — the chat box and the universal cheat table. One per scene.
   Pass `sceneCommands` for anything only this scene can answer.
 - **`CutsceneKit`** — the cutscene director (`src/systems/cutscene/`) and the
-  surface that hands it the party. Mount `surface()`, call
+  surfaces that hand it the party and draw its fade. Mount `surfaces(...)`, call
   `tickWorld(active, map, southAnchor)` in the movement phase and skip the
   player's own movement while it returns true, and fold `isActive` into
   anything that asks "does a script own the party". A script is a list of
-  `CutsceneStep`s (walk-up, talk, Caroline's message, the guide teleporting
-  out, a wait, `panCamera`/`holdCamera`/`returnCamera`, `shake` with a
-  `ShakeProfileId` from `SHAKE_PROFILES`, `sound` with a cue's `takes`, and
-  `run` with a world action) given to `director.play(script, onComplete?)`;
-  never hand-roll another party lock, camera pan or cutscene shake. Its deps
-  are the scene's one `Conversation`, `teleportDaveOut`, `playSound`
-  (`cutsceneSoundPlayer(audio)`), `runWorldAction` and the HUD's `pauseButton`.
+  `CutsceneStep`s (walk, glide, join, hide/show, talk, Caroline's message,
+  the guide teleporting out, a wait, `panCamera`/`holdCamera`/`returnCamera`,
+  `shake` with a `ShakeProfileId` from `SHAKE_PROFILES`, `fade`, `sound` with
+  a cue's `takes`, `playCue`/`waitForCue`, and `run` with a world action)
+  given to `director.play(script, onComplete?)`; never hand-roll another party
+  lock, camera pan, fade or cutscene shake. `scriptOwnsParty` folds in
+  `isActive`, and that is the only lock a script needs. Its deps are the
+  scene's one `Conversation`, `teleportDaveOut`, `playSound`
+  (`cutsceneSoundPlayer(audio)`), `runWorldAction`, `cueClock`
+  (`cutsceneCueClock(audio)`) and the HUD's `pauseButton`.
+  - **Actors.** `CutsceneKit<Action, ActorId>` takes the scene's actor-id
+    union too. A script names a body by id, never by reference: the active
+    crawler is always `'activeCrawler'`, and anything else is registered once
+    with `director.actors.register(id, () => actor | null)`. The lookup runs
+    each time a step names the id, so an actor not in the world (a crawler
+    away with her group, a mob not yet spawned) answers null and the step
+    moves straight on. An actor is a `CutsceneActor`
+    (`src/systems/cutscene/cutsceneActors.ts`); build it with `bodyActor`
+    (a crawler or quest NPC, walked by `applyMovement`), `townspersonActor`
+    (an occupant, held by `Townsperson.scripted`) or `stagedActor` (a body a
+    system paints for its scripts alone, with no AI or roster). A
+    crawler's `hold` goes to `CompanionSystem.holdForScript`, so the
+    companion drive leaves the body to the script. Every actor a script moves
+    is held from its first move until the script ends.
+    The dungeon's ids are `DungeonActorId` (`'human' | 'cat'`, in
+    `dungeonWorldActions.ts`); the interior's are `InteriorActorId` (both
+    crawlers and `` `resident:${ResidentId}` `` for any resident in the room,
+    in `src/scenes/interiorCutscene.ts`). A quest system adds an id to the
+    union and registers its actor where it spawns it.
+  - **Walks and glides.** `walkTo { who, tile, face, then }` paths with the
+    actor's own mobility class. The active crawler is the player's body and is
+    never teleported: a walk-up searches `WALK_UP_MAX_PATH_TILES` and gives up
+    after `WALK_UP_TIMEOUT_FRAMES`, ending where they stand. Any other actor
+    gets a time allowance from their path and pace
+    (`SCRIPTED_WALK_TIME_SLACK`), and a walk with no path or out of time sets
+    them down on the tile, so a script never hangs. `glideTo { who, to, frames,
+face, then }` carries a body in a straight line in world pixels, through
+    walls: a drop from above, a body thrown aside, a crawler lifted away.
+    `then: 'waitForArrival'` holds the script; `'carryOn'` sets the move off
+    and runs the next step at once, so several bodies move together, and
+    `awaitActor { who }` joins one later. A script that ends with a move still
+    under way sets it down at its end.
+  - **Hiding.** `hideActor`/`showActor` take a body out of sight and back,
+    past the end of the script, until a checkpoint restore. Hidden is unseen
+    only: the scene's render pass leaves out every body `director.hides(body)`
+    answers true for (both scenes filter crawlers and mobs, and the interior
+    its occupants), and nothing else changes. A new render pass that draws
+    bodies asks it too.
+  - **Fade.** `fade { to, frames }` eases the kit's full-screen fade (the
+    `screenFadeSurface` the prison's capture uses) to `to` and holds the
+    script until it gets there. A script that ends black stays black for
+    `FADE_HOLD_AFTER_SCRIPT_FRAMES`, long enough for the scene change it hands
+    over to, then clears on its own; a script that stays in the scene fades
+    back itself.
+  - **Timed to a cue.** `playCue { cue }` starts a jingle this instant through
+    `AudioManager.playNow` and starts its clock; `waitForCue { cue, atS }`
+    holds the script until the cue has played `atS` seconds on the audio
+    clock, so a drop lands on the recording's hit. Keep the marks as named
+    constants beside the cue's id. The cue's SFX group must be decoded where
+    the script plays: a cue that cannot start this instant stays silent
+    rather than late, and its waits count world ticks
+    (`WORLD_TICKS_PER_SECOND`) instead. A clock that stops moving (a context
+    the browser suspended) lets a wait go `CUE_CLOCK_STALL_GRACE_S` past its
+    mark.
   - The camera and the shake: the scene asks `director.cameraFocus(leader)` in
     its camera chain and adds `director.cameraShake` after clamping;
     `tickWorld` advances both on every world tick, cutscene or not. A script
@@ -106,7 +173,14 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
     `noWorldActions`. The dungeon's is `DungeonWorldAction`
     (`src/scenes/dungeonWorldActions.ts`, e.g. `gatherParty`): a new kind is
     one entry in `DungeonWorldActionPayloads` plus its handler in the host
-    object `DungeonScene` passes to `runDungeonWorldAction`.
+    object `DungeonScene` passes to `runDungeonWorldAction`. The interior's is
+    `InteriorWorldAction` (`src/scenes/interiorCutscene.ts`, e.g.
+    `setPartyDown`), built the same way and run by `runInteriorWorldAction`.
+    A quest's own beat (spawning its creature and registering it as an actor,
+    setting a prop) is one payload entry delegating to its system, as
+    `floodedPumpRoom` does.
+  - `verify:kits` runs every general step headless (`scripts/kitsCutsceneChecks.ts`);
+    a new step gets a case there and a `--fault=` that must turn it red.
   - A death a script shows (`ScriptedDeathKind`, `SCRIPTED_DEATHS` in
     `src/systems/scriptedDeath/`) is played with
     `DungeonScene.scriptedDeaths.play(kind, victim, at)`, or on several
@@ -122,7 +196,7 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
     A walk that cannot finish gives up after `WALK_UP_TIMEOUT_FRAMES` and the
     talk plays from where the crawler stands.
   - Steps start only on a world tick, so a script never opens over the pause
-    menu, and a walk or a wait stops while the world is halted. A talk halts the
+    menu, and a move, a wait or a fade stops while the world is halted. A talk halts the
     world itself, cannot be dismissed or walked away from, and ends its step on
     its last page. A Caroline message does not halt the world.
   - A cutscene asked for while one plays is queued, and `isActive` stays true
@@ -200,11 +274,13 @@ handler. `SceneManager` disposes the scene's `UiRoot`.
 
 ## 7. Give the place something to fight
 
-Once the kits are up, a fight is _content_. `src/systems/interiorHostiles.ts` is
-the worked example: a table says which room holds what, the scene adds them
-through the roster that room already has, and `TownMemory.clearedRooms` remembers
-that the room was cleared — without which a regenerated interior restocks its
-guards every time the door opens, turning a fight into a farm.
+Once the kits are up, a fight is _content_: the scene adds its hostiles through the
+roster that room already has (`AnchorInteriorSystem`'s temple vermin are the worked
+example), placed with `distinctSpawnTiles` and `inPlainViewOnTheWayIn`
+(`src/systems/interiorSpawnTiles.ts`). A regenerated interior restocks whatever it
+spawns from its own layout every time the door opens, so a fight that must stay
+won remembers so in a record that outlives the scene (`TownMemory` or the quest's
+own progress), or it becomes a farm.
 
 ### Chests and ways out
 

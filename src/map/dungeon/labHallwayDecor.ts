@@ -264,7 +264,7 @@ export function registerLabHallwayDecor(
 
 function isOpenAt(grid: TileContent[][], x: number, y: number): boolean {
   if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) return false;
-  return isWalkableTileType(grid[y][x]);
+  return isWalkableTileType(grid[y][x], 'walker');
 }
 
 function isWallAt(grid: TileContent[][], x: number, y: number): boolean {

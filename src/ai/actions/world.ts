@@ -49,12 +49,12 @@ function insideBossRoom(map: GameMap, tile: TilePoint): boolean {
 }
 
 function nearestWalkableTile(map: GameMap, tile: TilePoint): TilePoint | null {
-  if (map.isWalkable(tile.x, tile.y)) return tile;
+  if (map.isWalkable(tile.x, tile.y, 'walker')) return tile;
   for (let radius = 1; radius <= NEAREST_WALKABLE_SEARCH_RADIUS; radius++) {
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         const onRing = Math.abs(dx) === radius || Math.abs(dy) === radius;
-        if (onRing && map.isWalkable(tile.x + dx, tile.y + dy)) {
+        if (onRing && map.isWalkable(tile.x + dx, tile.y + dy, 'walker')) {
           return { x: tile.x + dx, y: tile.y + dy };
         }
       }

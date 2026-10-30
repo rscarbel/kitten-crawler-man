@@ -11,7 +11,8 @@
  * floor's tints lean toward that floor's own materials — a slate blue over
  * the cellars' stone, a colder teal-blue over the service level's concrete — so the
  * water never looks borrowed from the other floor, or from the river on
- * floor 3.
+ * floor 3. The storm drain's is the exception to the blue: town runoff, a murky
+ * green-brown over its brick and silt, but just as opaque from the second step.
  */
 
 import type { DungeonFloorThemeId } from '../../map/dungeon/floorTheme';
@@ -121,6 +122,28 @@ export const DUNGEON_WATER_PLANS: Readonly<Record<DungeonFloorThemeId, DungeonWa
       filmAlpha: 0.38,
       lapFoamAlpha: 0.55,
       restFoamAlpha: 0.3,
+    },
+  },
+  sewer: {
+    byDepth: [
+      { r: 74, g: 76, b: 52, opacity: 0.42 },
+      { r: 56, g: 60, b: 38, opacity: 0.7 },
+      { r: 40, g: 44, b: 28, opacity: 0.97 },
+      { r: 28, g: 31, b: 20, opacity: 1 },
+    ],
+    dryEdge: { r: 56, g: 60, b: 38, opacity: 0.6 },
+    surface: {
+      crest: { r: 128, g: 134, b: 92 },
+      trough: { r: 14, g: 16, b: 8 },
+      foam: { r: 176, g: 174, b: 136 },
+      strengthByDepth: [0.25, 0.6, 0.72, 0.8],
+    },
+    shore: {
+      wet: { r: 22, g: 22, b: 14 },
+      wetAlpha: 0.6,
+      filmAlpha: 0.36,
+      lapFoamAlpha: 0.45,
+      restFoamAlpha: 0.32,
     },
   },
 };

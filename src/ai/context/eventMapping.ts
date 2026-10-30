@@ -112,8 +112,6 @@ export function describeDamageSource(source: DamageSource | null): string {
       return 'their own explosive';
     case 'environmental':
       return source.hazard === undefined ? 'the environment' : humanize(source.hazard);
-    case 'doomsday':
-      return 'the doomsday device';
     case 'siege':
       return 'their own siege engine';
     case 'wheelPenalty':

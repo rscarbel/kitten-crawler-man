@@ -24,14 +24,24 @@ import { asGameContext } from './nodeGameContext';
 import { createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
 import type { BuildingId } from '../src/map/buildingIds';
-import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
-import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
+import { GameMap, TOWER_ENTRANCE_STOREY, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import {
-  TOWN_INTERIOR_PROPS,
-  townInteriorPropArtRiseTiles,
-} from '../src/sprites/art/townInterior/townInteriorProps';
+  everyTowerConditions,
+  towerConditionsKey,
+  towerLandingTiles,
+  towerStoreyAt,
+  TOWER_BINDING_PILLARS,
+  TOWER_CATTERY_CAGES,
+  TOWER_MECHANIC_ZONES,
+  type TowerConditions,
+  type TowerTileRect,
+} from '../src/map/town/interiors/townCenterTower';
+import { MISSING_CATS_PHASES } from '../src/core/quests/missingCatsProgress';
+import { planSewer } from '../src/map/sewer/sewerPlan';
+import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
+import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
+import { wallFaceMisplacements } from '../src/map/town/interiors/wallFaceProps';
 import { townInteriorPropEmitters } from '../src/systems/townInteriorPropAmbience';
-import { drawHawkfolkCorpse } from '../src/sprites/featherfallCorpseSprite';
 import { TILE_SIZE } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer';
@@ -50,7 +60,9 @@ import {
   scanInteriorFurniture,
 } from '../src/systems/InteriorOccupantSystem';
 import type { AnchorKind, FurniturePiece } from '../src/systems/InteriorOccupantSystem';
-import { BUILDING_OCCUPANTS } from '../src/systems/buildingOccupants';
+import { BUILDING_OCCUPANTS, presentOccupants } from '../src/systems/buildingOccupants';
+import type { TownDialogContext } from '../src/systems/townDialog';
+import { missingCatsProgressAt } from '../src/core/quests/missingCatsProgress';
 import { Townsperson } from '../src/creatures/Townsperson';
 import {
   BESPOKE_RESIDENT_FIGURES,
@@ -82,20 +94,8 @@ import { interiorServicesFor } from '../src/systems/townServices';
 import { readableBuildings, readablesFor } from '../src/systems/townReadables';
 import { STAT_BOON_BONUSES } from '../src/core/combat/StatusEffect';
 import { statusVisual } from '../src/sprites/status/statusEffectVisuals';
-import { EventBus } from '../src/core/EventBus';
-import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
-import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
-import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
-import { MISS_QUILL_CAST_RANGE_TILES } from '../src/creatures/MissQuill';
-import { ELF_AGGRO_RANGE_TILES } from '../src/creatures/Elf';
-import { QUEST_BANNER_FRAMES } from '../src/ui/QuestBanners';
-import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
-import { MobRoster } from '../src/systems/kits/SceneWorld';
-import { SpellSystem } from '../src/systems/SpellSystem';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
-import { CatPlayer } from '../src/creatures/CatPlayer';
-import { MIN_STAT_VALUE } from '../src/core/party/crawlerFormulas';
-import { partyLevelOf, spawnForLevel } from '../src/levels/spawner';
+import { spawnForLevel } from '../src/levels/spawner';
 import { level3 } from '../src/levels/level3';
 import { campSiteKey } from '../src/map/overworld/camps';
 import {
@@ -108,8 +108,6 @@ import {
 import { parseTownMemoryCheckpoint } from '../src/core/save/PersistedWorldState';
 import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles';
 import type { Mob } from '../src/creatures/Mob';
-import type { SystemContext } from '../src/systems/GameSystem';
-import { Conversation } from '../src/dialog/Conversation';
 import { setViewportSize } from '../src/core/rendering/Viewport';
 import { ShopSystem } from '../src/systems/ShopSystem';
 import { createShopStock } from '../src/economy/shopStock';
@@ -141,6 +139,11 @@ const SCRIPTED_KINDS: ReadonlySet<BuildingKind> = new Set<BuildingKind>(['club',
 
 /** The floor a walk-in gives you; only the tower has any others. */
 const TOWER_GROUND_FLOOR = 0;
+
+/** A town whose questline is finished, so every occupant the story brings in is in the room. */
+const TOWN_WITH_EVERY_STORY_TOLD: TownDialogContext = {
+  missingCats: missingCatsProgressAt('complete'),
+};
 
 /** Simulated seconds the club's crowd is run for, long enough for everyone to move on. */
 const CROWD_SIM_SECONDS = 600;
@@ -201,29 +204,7 @@ const MIN_TILE_COVERAGE = 0.99;
  * a south wall, so "in" is always north.
  */
 const DOORWAY_CLEAR_DEPTH_TILES = 2;
-/** Alpha below which a body pixel is anti-aliasing fringe rather than the body. */
-const BODY_INK_ALPHA_MIN = 24;
-/** Open floor kept round the magistrate's body, so nothing crowds the scene. */
-const BODY_CLEARANCE_TILES = 0.5;
-
-/** The magistrate's office, and the only storey the Quill confrontation spawns on. */
-const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
-/**
- * How far past its own threat range the confrontation has to spawn from the tile
- * the party climbs in on.
- *
- * Nothing in the room has a windup — every caster in it can loose its first bolt
- * on the frame it acquires a target — and a companion locked to the game's
- * minimum health dies to any one of those bolts, which turns the whole
- * party out of the tower before the fight is visible. So the arrival tile is not
- * allowed to be merely outside the ranges: it has to be outside them by more
- * than the encounter's own guards can drift while they idle.
- */
-const ARRIVAL_SAFETY_MARGIN_TILES = 2;
 const FRAMES_PER_SECOND = 60;
-/** How long the party is left standing on the landing, doing nothing at all. */
-const ARRIVAL_VIGIL_SECONDS = 20;
-const ARRIVAL_VIGIL_FRAMES = ARRIVAL_VIGIL_SECONDS * FRAMES_PER_SECOND;
 
 /** Where Steve Cartwright keeps his range. */
 const CARTWRIGHT_HOME = 'taloncrest_crafting_house';
@@ -343,7 +324,7 @@ function unreachableWalkableTiles(map: GameMap): string[] {
   const width = map.structure[0].length;
   const reached = new Set<string>();
   const start = map.startTile;
-  if (map.isWalkable(start.x, start.y)) {
+  if (map.isWalkable(start.x, start.y, 'walker')) {
     const frontier = [start];
     reached.add(tileKey(start.x, start.y));
     while (frontier.length > 0) {
@@ -354,7 +335,7 @@ function unreachableWalkableTiles(map: GameMap): string[] {
         const ny = tile.y + step.dy;
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
         const key = tileKey(nx, ny);
-        if (reached.has(key) || !map.isWalkable(nx, ny)) continue;
+        if (reached.has(key) || !map.isWalkable(nx, ny, 'walker')) continue;
         reached.add(key);
         frontier.push({ x: nx, y: ny });
       }
@@ -364,7 +345,7 @@ function unreachableWalkableTiles(map: GameMap): string[] {
   const stranded: string[] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (!map.isWalkable(x, y)) continue;
+      if (!map.isWalkable(x, y, 'walker')) continue;
       const key = tileKey(x, y);
       if (reached.has(key)) continue;
       stranded.push(key);
@@ -422,7 +403,12 @@ console.log('\nGeneral Store counter');
   );
 
   const map = buildInterior('taloncrest_general_store', 'store', TOWER_GROUND_FLOOR);
-  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'taloncrest_general_store');
+  const occupants = InteriorOccupantSystem.forBuilding(
+    map,
+    'store',
+    'taloncrest_general_store',
+    TOWN_WITH_EVERY_STORY_TOLD,
+  );
   const kestrel = occupants?.people.find((person) => person.residentId === 'keeper_brenna_kestrel');
   check(kestrel !== undefined, 'the General Store roster actually places Kestrel in the room');
 
@@ -458,7 +444,7 @@ for (const [name, roster] of BUILDING_OCCUPANTS) {
   if (staffed.length === 0) continue;
   check(!SCRIPTED_KINDS.has(kind), `"${name}" is not a scripted interior`);
   const map = buildInterior(name, kind, TOWER_GROUND_FLOOR);
-  const system = InteriorOccupantSystem.forBuilding(map, kind, name);
+  const system = InteriorOccupantSystem.forBuilding(map, kind, name, TOWN_WITH_EVERY_STORY_TOLD);
   for (const spec of staffed) {
     servicesSeen++;
     const who = spec.residentId ?? spec.role;
@@ -499,7 +485,7 @@ for (const name of readableKeys) {
   const kind = buildings.get(name);
   if (kind === undefined) continue;
   const map = buildInterior(name, kind, TOWER_GROUND_FLOOR);
-  const occupants = InteriorOccupantSystem.forBuilding(map, kind, name);
+  const occupants = InteriorOccupantSystem.forBuilding(map, kind, name, TOWN_WITH_EVERY_STORY_TOLD);
   const system = InteriorReadableSystem.forBuilding(
     map,
     name,
@@ -524,7 +510,13 @@ console.log("\nOld Lori roams her cottage's open floor");
   if (kind !== undefined) {
     const map = buildInterior(LORI_HOME, kind, TOWER_GROUND_FLOOR);
     let focus: { x: number; y: number } | null = null;
-    const occupants = InteriorOccupantSystem.forBuilding(map, kind, LORI_HOME, () => focus);
+    const occupants = InteriorOccupantSystem.forBuilding(
+      map,
+      kind,
+      LORI_HOME,
+      TOWN_WITH_EVERY_STORY_TOLD,
+      () => focus,
+    );
     const lori = occupants?.people.find((person) => person.residentId === 'old_lori');
     check(lori !== undefined, 'Old Lori is placed in her cottage');
 
@@ -542,7 +534,7 @@ console.log("\nOld Lori roams her cottage's open floor");
       ] as const) {
         const next = { x: tile.x + dx, y: tile.y + dy };
         const key = `${next.x},${next.y}`;
-        if (reachable.has(key) || !map.isWalkable(next.x, next.y)) continue;
+        if (reachable.has(key) || !map.isWalkable(next.x, next.y, 'walker')) continue;
         reachable.add(key);
         frontier.push(next);
       }
@@ -558,7 +550,9 @@ console.log("\nOld Lori roams her cottage's open floor");
           ROAMER_EXIT_KEEP_OFF_TILES,
       );
     const onOpenFloor = (tile: { x: number; y: number }): boolean =>
-      map.isWalkable(tile.x, tile.y) && reachable.has(`${tile.x},${tile.y}`) && !besideExit(tile);
+      map.isWalkable(tile.x, tile.y, 'walker') &&
+      reachable.has(`${tile.x},${tile.y}`) &&
+      !besideExit(tile);
 
     if (occupants !== null && lori !== undefined) {
       const start = tileUnder(lori);
@@ -642,6 +636,7 @@ console.log('\nSteve Cartwright shoots at his target, and holds fire for anyone 
       map,
       kind,
       CARTWRIGHT_HOME,
+      TOWN_WITH_EVERY_STORY_TOLD,
       () => null,
       () => inLane,
       (cue) => cues.push(cue),
@@ -688,7 +683,7 @@ console.log('\nSteve Cartwright shoots at his target, and holds fire for anyone 
         `he stands square to the target, ${MIN_SHOOTING_LANE_TILES} or more tiles back (${shootingDistance})`,
       );
       check(
-        lane.every((tile) => map.isWalkable(tile.x, tile.y)),
+        lane.every((tile) => map.isWalkable(tile.x, tile.y, 'walker')),
         'the lane between him and the target is open floor',
       );
 
@@ -816,6 +811,7 @@ for (const [home, residentId] of JANITOR_HOMES) {
     map,
     kind,
     home,
+    TOWN_WITH_EVERY_STORY_TOLD,
     () => null,
     () => [],
     (cue) => cues.push(cue),
@@ -894,6 +890,92 @@ for (const [name, kind] of buildings) {
   }
 }
 
+console.log('\nEvery tower storey, in every state the questline leaves it in');
+// Each storey is built from what the quest has done (the conduit, the
+// portcullis, the wards, the cages, the ritual), so a storey that is sound at
+// the start of the floor can still strand a wing in a later phase. Every state
+// is built and held to the interior rules: every walkable tile reachable from
+// the storey's arrival, both stairs' landings open floor, each mechanic zone
+// open floor with nothing standing in it, and on the cattery nothing blocking
+// but its cages, its hearth and its binding pillars, which is what keeps the
+// Lich's walls of fire passable.
+function buildTowerStorey(floor: number, conditions: TowerConditions): GameMap {
+  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  map.generateInterior('tower', floor, plan.tower.id, false, { kind: 'tower', conditions });
+  return map;
+}
+
+function rectTiles(rect: TowerTileRect): Array<{ x: number; y: number }> {
+  const tiles: Array<{ x: number; y: number }> = [];
+  for (let y = rect.y0; y <= rect.y1; y++)
+    for (let x = rect.x0; x <= rect.x1; x++) tiles.push({ x, y });
+  return tiles;
+}
+
+const CATTERY_MAY_BLOCK: ReadonlySet<string> = new Set([
+  'cattery_cage',
+  'binding_pillar',
+  'hearth_wide',
+]);
+
+for (const conditions of everyTowerConditions(MISSING_CATS_PHASES)) {
+  const state = towerConditionsKey(conditions);
+  for (let floor = 0; floor < TOWER_FLOOR_COUNT; floor++) {
+    const storey = towerStoreyAt(floor);
+    if (storey === null) continue;
+    const map = buildTowerStorey(floor, conditions);
+    const where = `tower ${storey} (${state})`;
+    const stranded = unreachableWalkableTiles(map);
+    check(stranded.length === 0, `${where} reaches every walkable tile — ${stranded.join(' ')}`);
+    const footprint = new Set(
+      map.placedInteriorPropFootprintTiles().map((tile) => tileKey(tile.x, tile.y)),
+    );
+    const stairs = [
+      ...map._interiorStairUpTiles.slice(0, 1),
+      ...map._interiorStairDownTiles.slice(0, 1),
+    ];
+    for (const origin of stairs) {
+      const blocked = towerLandingTiles(origin).filter(
+        (tile) =>
+          !map.isWalkable(tile.x, tile.y, 'walker') || footprint.has(tileKey(tile.x, tile.y)),
+      );
+      check(
+        blocked.length === 0,
+        `${where} keeps the landing below its stair at ${tileKey(origin.x, origin.y)} clear — ${blocked.map((t) => tileKey(t.x, t.y)).join(' ')}`,
+      );
+    }
+    const zones: Readonly<Record<string, TowerTileRect>> = TOWER_MECHANIC_ZONES[storey];
+    for (const [zone, rect] of Object.entries(zones)) {
+      const taken = rectTiles(rect).filter(
+        (tile) =>
+          !map.isWalkable(tile.x, tile.y, 'walker') || footprint.has(tileKey(tile.x, tile.y)),
+      );
+      check(
+        taken.length === 0,
+        `${where} keeps its ${zone} zone open floor — ${taken.map((t) => tileKey(t.x, t.y)).join(' ')}`,
+      );
+    }
+    if (storey !== 'cattery') continue;
+    const intruders = map.placedInteriorProps
+      .filter((placed) => !TOWN_INTERIOR_PROPS[placed.propId].passableBy.has('walker'))
+      .filter((placed) => !CATTERY_MAY_BLOCK.has(placed.propId))
+      .map((placed) => placed.propId);
+    check(
+      intruders.length === 0,
+      `${where} blocks nothing but cages, pillars and the hearth — ${intruders.join(' ')}`,
+    );
+    const fittings = [
+      ...Object.values(TOWER_CATTERY_CAGES),
+      ...Object.values(TOWER_BINDING_PILLARS),
+    ];
+    const unplaced = fittings.filter((tile) => !footprint.has(tileKey(tile.x, tile.y)));
+    check(
+      unplaced.length === 0,
+      `${where} places every cage and pillar — ${unplaced.map((t) => tileKey(t.x, t.y)).join(' ')}`,
+    );
+  }
+}
+
 console.log('\nEvery door opens onto clear floor');
 // Reachability alone passes a room whose doorway is half-plugged: the second
 // door column still lets the player in, so nothing is stranded, yet a prop
@@ -901,16 +983,16 @@ console.log('\nEvery door opens onto clear floor');
 // walk-in spawn sits between the two columns, so this is also the first
 // collision anyone meets in the room. Checked for every storey with a door,
 // against both the live movement test and the authored prop footprints, so a
-// prop whose blocking flag failed to land is still caught. A tower's upper
-// storeys are reached by stairs and have no door, so there is nothing to check
-// there; every ground floor must have one, or the check would pass on nothing.
+// prop whose blocking flag failed to land is still caught. Only the tower's
+// gatehouse has a door; its other storeys are reached by stairs. Every room
+// with a street door must have one, or the check would pass on nothing.
 for (const [name, kind] of buildings) {
   for (let floor = 0; floor < floorCount(kind); floor++) {
     const map = buildInterior(name, kind, floor);
     const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name}"`;
     const exitCount = map._interiorExitTiles.length;
-    const isGroundFloor = floor === 0;
-    if (isGroundFloor) {
+    const hasStreetDoor = kind !== 'tower' || floor === TOWER_ENTRANCE_STOREY;
+    if (hasStreetDoor) {
       check(exitCount > 0, `${where} has a door to check (${exitCount} exit tile(s))`);
     }
     if (exitCount === 0) continue;
@@ -926,7 +1008,7 @@ for (const [name, kind] of buildings) {
         const x = exit.x;
         const y = exit.y - depth;
         const key = tileKey(x, y);
-        if (!map.isWalkable(x, y) || blockingFootprint.has(key)) {
+        if (!map.isWalkable(x, y, 'walker') || blockingFootprint.has(key)) {
           const propHere = map.placedInteriorProps.find((placed) => {
             const footprint = TOWN_INTERIOR_PROPS[placed.propId].footprint;
             const coversX = x >= placed.tile.x && x < placed.tile.x + footprint.w;
@@ -953,7 +1035,7 @@ console.log("\nThe club's stages are solid, and the lanes past them open");
     const blockedLane: string[] = [];
     for (let ty = post.stage.y0; ty <= post.stage.y1; ty++) {
       for (let tx = post.stage.x0; tx <= post.stage.x1; tx++) {
-        if (map.isWalkable(tx, ty)) open.push(`${tx},${ty}`);
+        if (map.isWalkable(tx, ty, 'walker')) open.push(`${tx},${ty}`);
       }
     }
     const laneRows = [
@@ -962,7 +1044,7 @@ console.log("\nThe club's stages are solid, and the lanes past them open");
     ];
     for (const ty of laneRows) {
       for (let tx = post.stage.x0; tx <= post.stage.x1; tx++) {
-        if (!map.isWalkable(tx, ty)) blockedLane.push(`${tx},${ty}`);
+        if (!map.isWalkable(tx, ty, 'walker')) blockedLane.push(`${tx},${ty}`);
       }
     }
     check(open.length === 0, `${post.performer}'s stage refuses the party — ${open.join(' ')}`);
@@ -971,7 +1053,12 @@ console.log("\nThe club's stages are solid, and the lanes past them open");
       `the lanes past ${post.performer}'s stage stay open — ${blockedLane.join(' ')}`,
     );
   }
-  const host = InteriorOccupantSystem.forBuilding(map, 'club', 'taloncrest_nightclub');
+  const host = InteriorOccupantSystem.forBuilding(
+    map,
+    'club',
+    'taloncrest_nightclub',
+    TOWN_WITH_EVERY_STORY_TOLD,
+  );
   const brandon = host?.placements.find((placement) => placement.spec.residentId === 'brandon');
   check(
     brandon?.stand.x === CLUB_HOST_MARK.x && brandon.stand.y === CLUB_HOST_MARK.y,
@@ -1217,6 +1304,40 @@ check(
   'a generic house crackles from its hearth',
 );
 
+console.log('\nWindows and hung frames sit on a wall face');
+// A wall-face prop paints its pane into its own footprint, so on a floor tile
+// it is a window lying on the boards. `GameMap` refuses such a layout, and
+// this asks the same rule of every room so the refusal shows as a gate line.
+let wallFacePropCount = 0;
+for (const [name, kind] of buildings) {
+  for (let floor = 0; floor < floorCount(kind); floor++) {
+    const map = buildInterior(name, kind, floor);
+    const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name}"`;
+    const probes = map.placedInteriorProps.map((placed) => ({
+      propId: placed.propId,
+      x: placed.tile.x,
+      y: placed.tile.y,
+    }));
+    wallFacePropCount += probes.filter(
+      (probe) => TOWN_INTERIOR_PROPS[probe.propId].mount === 'wall_face',
+    ).length;
+    const misplaced = wallFaceMisplacements(map.structure, probes);
+    check(
+      misplaced.length === 0,
+      `${where} hangs every wall-face prop on a wall face — ${misplaced.join(' ')}`,
+    );
+  }
+}
+check(wallFacePropCount > 0, `the rooms hold wall-face props to check (${wallFacePropCount})`);
+const apothecaryForProbe = buildInterior('taloncrest_apothecary', 'house', TOWER_GROUND_FLOOR);
+const openFloorTile = apothecaryForProbe.startTile;
+check(
+  wallFaceMisplacements(apothecaryForProbe.structure, [
+    { propId: 'window_dressing', x: openFloorTile.x, y: openFloorTile.y },
+  ]).length === 1,
+  'a window stood on open floor is refused',
+);
+
 console.log('\nCabinet door avoidance');
 // The archway-seal check below is an outcome assertion: it only ever inspects
 // the corner `planSafeRoomClinics` actually lays on the inn's current geometry,
@@ -1283,7 +1404,7 @@ for (const name of safeRoomBuildings) {
     const sealedArchways: string[] = [];
     const archwayRow = bounds.y - 1;
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-      if (!map.isWalkableIgnoringPermanent(x, archwayRow)) continue;
+      if (!map.isWalkableIgnoringPermanent(x, archwayRow, 'walker')) continue;
       if (solidRunTiles.has(tileKey(x, bounds.y))) sealedArchways.push(tileKey(x, archwayRow));
     }
     check(
@@ -1346,10 +1467,11 @@ for (const [name, roster] of BUILDING_OCCUPANTS) {
     );
   }
 
-  const system = InteriorOccupantSystem.forBuilding(map, kind, name);
+  const system = InteriorOccupantSystem.forBuilding(map, kind, name, TOWN_WITH_EVERY_STORY_TOLD);
+  const present = presentOccupants(roster, TOWN_WITH_EVERY_STORY_TOLD);
   check(
-    system?.people.length === roster.length,
-    `"${name}" places all ${roster.length} of its rostered occupants`,
+    system?.people.length === present.length,
+    `"${name}" places all ${present.length} of its rostered occupants`,
   );
 }
 
@@ -1364,7 +1486,7 @@ for (const [name] of BUILDING_OCCUPANTS) {
   const kind = buildings.get(name);
   if (kind === undefined) continue;
   const map = buildInterior(name, kind, TOWER_GROUND_FLOOR);
-  const system = InteriorOccupantSystem.forBuilding(map, kind, name);
+  const system = InteriorOccupantSystem.forBuilding(map, kind, name, TOWN_WITH_EVERY_STORY_TOLD);
   if (system === null) continue;
   for (const placed of system.placements) {
     const who = placed.spec.residentId ?? placed.spec.role;
@@ -1373,7 +1495,7 @@ for (const [name] of BUILDING_OCCUPANTS) {
     if (placement.kind !== 'prop') continue;
     propPlacementsSeen++;
     const { x, y } = placed.stand;
-    check(map.isWalkable(x, y), `"${name}"'s ${who} stands on walkable floor`);
+    check(map.isWalkable(x, y, 'walker'), `"${name}"'s ${who} stands on walkable floor`);
     check(
       !system.reservedStandTiles.has(`${x},${y}`),
       `"${name}"'s ${who} stands clear of the door, the spawns and the doorways`,
@@ -1476,242 +1598,6 @@ for (const [name, kind] of buildings) {
   check(
     hasResident || hasService || hasReadable,
     `"${name}" offers a resident, a service or something to read`,
-  );
-}
-
-/** Everything `QuillConfrontationSystem` is contracted to put in the office. */
-const EXPECTED_CONFRONTATION_MOBS: ReadonlyArray<string> = [
-  'Miss Quill',
-  'Remex, the Living Capacitor',
-];
-const ELF_NAME = 'Elf';
-/** Quill, Remex and two guards. */
-const EXPECTED_CONFRONTATION_MOB_COUNT = 4;
-/**
- * How far a guard may be allowed to drift from its post.
- *
- * The arrival-safety margin below is only true while they stay put, so the
- * leash is asserted as a number rather than inferred from whether anybody
- * happened to get shot.
- */
-const MAX_GUARD_LEASH_TILES = 2;
-
-console.log('\nThe tower confrontation opens on safe ground');
-{
-  const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
-  check(map._interiorStairDownTiles.length > 0, 'the office has the stair the party climbs in on');
-  const stair = map._interiorStairDownTiles[0];
-
-  // Mirrors how `BuildingInteriorScene` places an ascending party: both crawlers
-  // side by side, one row below the stair they arrived on.
-  const arrivalRow = stair.y + 1;
-  const human = new HumanPlayer(stair.x, arrivalRow, TILE_SIZE);
-  const cat = new CatPlayer(stair.x + 1, arrivalRow, TILE_SIZE);
-  human.isActive = true;
-  cat.isActive = false;
-  // The build this fight is hardest on, and the one it was reported broken from:
-  // a crawler holding the game's minimum health has a health pool smaller
-  // than a single soul bolt.
-  cat.setBaseStat('health', MIN_STAT_VALUE);
-
-  const roster = new MobRoster(map, new SpellSystem());
-  const spawned: Mob[] = [];
-  const progress = createMurderQuestProgress();
-  progress.stage = 'confrontation';
-  // The re-entry path: a party that already met Miss Quill and died to her walks
-  // back into the fight itself. The arrival-safety contract below belongs to the
-  // frame the *fight* opens on, and this is the shortest way to reach it. The
-  // first-arrival path, with the office scene in front of it, gets its own block.
-  progress.officeSceneSeen = true;
-  const confrontation = new QuillConfrontationSystem(
-    map,
-    new EventBus(),
-    (mob) => {
-      spawned.push(mob);
-      roster.add(mob);
-    },
-    progress,
-    null,
-    createDoomsdayProgress(),
-    partyLevelOf(human.level, cat.level),
-    undefined,
-    new Conversation(null),
-  );
-
-  // By name and by count, not merely "something spawned": `spawnEncounter` skips
-  // silently when a tile lookup misses, and a run missing Miss Quill herself
-  // would otherwise print three distance lines instead of four and exit 0.
-  const spawnedNames = spawned.map((mob) => mob.displayName);
-  for (const expected of EXPECTED_CONFRONTATION_MOBS) {
-    check(
-      spawnedNames.includes(expected),
-      `the confrontation puts ${expected} in the room (spawned: ${spawnedNames.join(', ')})`,
-    );
-  }
-  check(
-    spawned.length === EXPECTED_CONFRONTATION_MOB_COUNT,
-    `the confrontation fills the room with all ${EXPECTED_CONFRONTATION_MOB_COUNT} of its culprits (found ${spawned.length})`,
-  );
-
-  // The offsets are only safe for as long as the guards stay on them, and the
-  // wander that would carry them off is random — so the posts are asserted
-  // directly rather than left to a health check downstream of 1200 frames of
-  // RNG, which caught a removed leash on barely half its runs.
-  const guards = spawned.filter((mob) => mob.displayName === ELF_NAME);
-  for (const guard of guards) {
-    // Present *and* on the guard's own tile: a guard that was never posted has
-    // no home point at all, and must fail here rather than pass unmeasured.
-    const home = guard.homePoint;
-    check(
-      home?.x === guard.x && home.y === guard.y,
-      'each guard is posted to a home point on the tile the encounter put it on',
-    );
-    const leash = guard.leashRadiusTiles;
-    check(
-      leash !== undefined && leash <= MAX_GUARD_LEASH_TILES,
-      `each guard is leashed within ${MAX_GUARD_LEASH_TILES} tiles of its post (found ${leash ?? Infinity})`,
-    );
-  }
-
-  const threatRangeTiles = Math.max(MISS_QUILL_CAST_RANGE_TILES, ELF_AGGRO_RANGE_TILES);
-  const requiredTiles = threatRangeTiles + ARRIVAL_SAFETY_MARGIN_TILES;
-  for (const mob of spawned) {
-    const nearestCrawlerTiles =
-      Math.min(
-        Math.hypot(mob.x - human.x, mob.y - human.y),
-        Math.hypot(mob.x - cat.x, mob.y - cat.y),
-      ) / TILE_SIZE;
-    check(
-      nearestCrawlerTiles >= requiredTiles,
-      `${mob.displayName} spawns ${nearestCrawlerTiles.toFixed(1)} tiles from the landing (needs ${requiredTiles})`,
-    );
-  }
-
-  check(
-    spawned.every((mob) => mob.aiHeld),
-    'the room is frozen while its own intro banner is on screen',
-  );
-
-  const context: SystemContext = {
-    human,
-    cat,
-    active: human,
-    inactive: cat,
-    activeIsMoving: false,
-    roster,
-    gameMap: map,
-  };
-  const mobLoop = new MobUpdateLoop();
-  const humanStartHp = human.hp;
-  const catStartHp = cat.hp;
-  let releasedAtFrame = -1;
-  for (let frame = 0; frame < ARRIVAL_VIGIL_FRAMES; frame++) {
-    confrontation.update(context);
-    mobLoop.update(context);
-    for (const mob of roster.mobs) mob.tickTimers();
-    if (releasedAtFrame < 0 && spawned.every((mob) => !mob.aiHeld)) releasedAtFrame = frame;
-  }
-  mobLoop.dispose();
-
-  check(
-    releasedAtFrame >= 0 && releasedAtFrame <= QUEST_BANNER_FRAMES,
-    `the room wakes up when the banner clears (woke at frame ${releasedAtFrame})`,
-  );
-  // The party never moved and never swung: whatever happened to them here, they
-  // had no way to answer, which is the whole complaint the offsets exist to fix.
-  check(human.hp === humanStartHp, 'a party that stands still on the landing is not shot at');
-  check(cat.hp === catStartHp, 'nor is the companion beside them');
-  check(cat.isAlive, 'so the companion is still standing, and the party is not turned out');
-}
-
-console.log('\nThe office scene holds the room until it is read');
-{
-  const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
-  check(map._interiorStairDownTiles.length > 0, 'the office has the stair the party climbs in on');
-  const stair = map._interiorStairDownTiles[0];
-
-  const arrivalRow = stair.y + 1;
-  const human = new HumanPlayer(stair.x, arrivalRow, TILE_SIZE);
-  const cat = new CatPlayer(stair.x + 1, arrivalRow, TILE_SIZE);
-  human.isActive = true;
-  cat.isActive = false;
-
-  const roster = new MobRoster(map, new SpellSystem());
-  const spawned: Mob[] = [];
-  const progress = createMurderQuestProgress();
-  progress.stage = 'confrontation';
-  const confrontation = new QuillConfrontationSystem(
-    map,
-    new EventBus(),
-    (mob) => {
-      spawned.push(mob);
-      roster.add(mob);
-    },
-    progress,
-    null,
-    createDoomsdayProgress(),
-    partyLevelOf(human.level, cat.level),
-    undefined,
-    new Conversation(null),
-  );
-
-  check(confrontation.isDialogOpen, 'arriving fresh opens the office scene');
-  check(spawned.length > 0, 'the room is already dressed behind the scene');
-  check(
-    spawned.every((mob) => mob.aiHeld),
-    'nothing in the room moves while the scene plays',
-  );
-
-  const context: SystemContext = {
-    human,
-    cat,
-    active: human,
-    inactive: cat,
-    activeIsMoving: false,
-    roster,
-    gameMap: map,
-  };
-
-  // Well past the banner clock: the hold belongs to the scene, not to a timer,
-  // so a player who walks away mid-conversation must not come back to a fight
-  // that started without them.
-  for (let frame = 0; frame < QUEST_BANNER_FRAMES * 2; frame++) confrontation.update(context);
-  check(
-    spawned.every((mob) => mob.aiHeld),
-    'the room stays frozen for as long as the scene is on screen',
-  );
-  check(!progress.officeSceneSeen, 'the scene is not marked seen until it has been read through');
-
-  // Escape must not strand the room half-held: the scene's last page is what
-  // releases the fight, so there is no other way out of it.
-  check(!confrontation.dismissDialog(), 'the office scene refuses to be dismissed');
-  check(confrontation.isDialogOpen, 'and is still on screen after the attempt');
-
-  let pagesTurned = 0;
-  const PAGE_TURN_CEILING = 32;
-  while (confrontation.isDialogOpen && pagesTurned < PAGE_TURN_CEILING) {
-    confrontation.advanceDialog();
-    pagesTurned++;
-  }
-  check(!confrontation.isDialogOpen, 'the scene closes when its pages run out');
-  check(pagesTurned > 1, 'the scene is more than one page, so turning it is really reading it');
-  check(
-    progress.officeSceneSeen,
-    'reading it through marks it seen, so a death does not replay it',
-  );
-
-  const mobLoop = new MobUpdateLoop();
-  let releasedAtFrame = -1;
-  for (let frame = 0; frame < ARRIVAL_VIGIL_FRAMES; frame++) {
-    confrontation.update(context);
-    mobLoop.update(context);
-    for (const mob of roster.mobs) mob.tickTimers();
-    if (releasedAtFrame < 0 && spawned.every((mob) => !mob.aiHeld)) releasedAtFrame = frame;
-  }
-  mobLoop.dispose();
-  check(
-    releasedAtFrame >= 0 && releasedAtFrame <= QUEST_BANNER_FRAMES,
-    `the fight opens once the scene closes (woke at frame ${releasedAtFrame})`,
   );
 }
 
@@ -1866,75 +1752,38 @@ console.log('\nA cleared camp stays cleared');
   }
 }
 
-console.log("\nNo furniture stands over the magistrate's body");
-// The body is drawn by the confrontation, before the room's sorted furniture,
-// so a prop whose footprint or art reaches over it is drawn on top of him. The
-// body is measured from the ink it actually paints rather than from its tile,
-// because it brings its own desk and chair and spreads well past one tile.
 {
-  const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
-  const progress = createMurderQuestProgress();
-  progress.stage = 'complete';
-  const confrontation = new QuillConfrontationSystem(
-    map,
-    new EventBus(),
-    () => undefined,
-    progress,
-    null,
-    createDoomsdayProgress(),
-    1,
-    undefined,
-    new Conversation(null),
-  );
-  const body = confrontation.bodyTile;
-  const widthPx = map.structure[0].length * TILE_SIZE;
-  const heightPx = map.structure.length * TILE_SIZE;
-  const canvas = createCanvas(widthPx, heightPx);
-  const bodyCtx = canvas.getContext('2d');
-  drawHawkfolkCorpse(asGameContext(bodyCtx), body.x * TILE_SIZE, body.y * TILE_SIZE, TILE_SIZE);
-  const pixels = bodyCtx.getImageData(0, 0, widthPx, heightPx).data;
-  let inkLeft = widthPx;
-  let inkRight = 0;
-  let inkTop = heightPx;
-  let inkBottom = 0;
-  for (let y = 0; y < heightPx; y++) {
-    for (let x = 0; x < widthPx; x++) {
-      if (pixels[(y * widthPx + x) * RGBA_STRIDE + ALPHA_OFFSET] < BODY_INK_ALPHA_MIN) continue;
-      inkLeft = Math.min(inkLeft, x);
-      inkRight = Math.max(inkRight, x + 1);
-      inkTop = Math.min(inkTop, y);
-      inkBottom = Math.max(inkBottom, y + 1);
-    }
-  }
-  check(inkRight > inkLeft, "the magistrate's body paints something to measure");
-  const bodyBox = {
-    left: inkLeft / TILE_SIZE - BODY_CLEARANCE_TILES,
-    right: inkRight / TILE_SIZE + BODY_CLEARANCE_TILES,
-    top: inkTop / TILE_SIZE - BODY_CLEARANCE_TILES,
-    bottom: inkBottom / TILE_SIZE + BODY_CLEARANCE_TILES,
-  };
-  const overBody: string[] = [];
-  for (const placed of map.placedInteriorProps) {
-    const propDef = TOWN_INTERIOR_PROPS[placed.propId];
-    // A rug or a floor stain is ground: it is drawn under the body, never over it.
-    if (propDef.walkable) continue;
-    const propBox = {
-      left: placed.tile.x,
-      right: placed.tile.x + propDef.footprint.w,
-      top: placed.tile.y - townInteriorPropArtRiseTiles(placed.propId, placed.variant),
-      bottom: placed.tile.y + propDef.footprint.h,
-    };
-    const overlaps =
-      propBox.left < bodyBox.right &&
-      propBox.right > bodyBox.left &&
-      propBox.top < bodyBox.bottom &&
-      propBox.bottom > bodyBox.top;
-    if (overlaps) overBody.push(`${placed.propId}@${placed.tile.x},${placed.tile.y}`);
-  }
-  check(
-    overBody.length === 0,
-    `no prop's footprint or art comes within ${BODY_CLEARANCE_TILES} tiles of the body at ${body.x},${body.y} — ${overBody.join(' ')}`,
-  );
+  console.log('\nThe sewer');
+  const sewer = planSewer();
+  sewer.sections.forEach((section, index) => {
+    const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+    map.generateSewer(sewer, index);
+    const name = section.layout.id;
+    check(
+      map.isWalkable(map.startTile.x, map.startTile.y, 'walker'),
+      `${name}: the ladder's foot is walkable`,
+    );
+    check(
+      unreachableWalkableTiles(map).length === 0,
+      `${name}: built dry, every walkway and channel bed is reachable from the ladder`,
+    );
+    check(
+      section.guideStops.every((stop) => map.isWalkable(stop.tile.x, stop.tile.y, 'walker')),
+      `${name}: every guide stop stands on open ground`,
+    );
+    check(
+      section.connections.every(
+        (connection) =>
+          connection.tiles.length > 0 &&
+          connection.tiles.every((tile) => map.isWalkable(tile.x, tile.y, 'walker')),
+      ),
+      `${name}: every connection is used from open ground`,
+    );
+    check(
+      section.valves.every((valve) => map.isWalkable(valve.tile.x, valve.tile.y, 'walker')),
+      `${name}: every valve stands on walkway`,
+    );
+  });
 }
 
 if (failures > 0) {

@@ -265,7 +265,7 @@ export class GiantWasp extends Mob {
       }
       const tileX = Math.floor(spit.x / ts);
       const tileY = Math.floor(spit.y / ts);
-      if (this.map && !this.map.isWalkable(tileX, tileY)) {
+      if (this.map && !this.map.isWalkable(tileX, tileY, this.mobility)) {
         spit.hit = true;
         continue;
       }

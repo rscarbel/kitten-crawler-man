@@ -57,7 +57,7 @@ export function drawLabTile(
         return true;
       }
       // Painted against a west wall; one against an east wall is its mirror.
-      const againstEastWall = tx > 0 && isWalkableTileType(structure[ty][tx - 1]);
+      const againstEastWall = tx > 0 && isWalkableTileType(structure[ty][tx - 1], 'walker');
       const end = !isShelf(tx, ty + 1);
       const frame = sideShelfFrameIndex(variant, end);
       drawSpriteKey(ctx, 'spider_lab_shelf', 'side', frame, sx, sy, ts, { flipX: againstEastWall });

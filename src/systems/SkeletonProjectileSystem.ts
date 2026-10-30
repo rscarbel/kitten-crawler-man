@@ -28,7 +28,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawSoulBolt, drawSoulBurst, drawBoneArrow } from '../sprites/skeletonEffectsSprite';
 import { drawHollowSoulBolt, drawHollowSoulBurst } from '../sprites/hollowSoulBoltSprite';
-import type { GameSystem, SystemContext } from './GameSystem';
+import { type GameSystem, type SystemContext, presentCrawlers } from './GameSystem';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 
 /**
@@ -236,7 +236,13 @@ export class SkeletonProjectileSystem implements GameSystem {
       const targets = this.targetsFor(ctx, projectile);
       const nextX = projectile.x + projectile.vx;
       const nextY = projectile.y + projectile.vy;
-      if (!this.gameMap.isWalkable(Math.floor(nextX / TILE_SIZE), Math.floor(nextY / TILE_SIZE))) {
+      if (
+        !this.gameMap.isWalkable(
+          Math.floor(nextX / TILE_SIZE),
+          Math.floor(nextY / TILE_SIZE),
+          'walker',
+        )
+      ) {
         // Landed at the last clear position rather than inside the wall, so a
         // burst sits on floor the player can actually stand on.
         this.land(projectile, targets);
@@ -315,7 +321,7 @@ export class SkeletonProjectileSystem implements GameSystem {
    * actually aiming at.
    */
   private targetsFor(ctx: SystemContext, projectile: Projectile): readonly Player[] {
-    const targets: Player[] = [ctx.human, ctx.cat];
+    const targets: Player[] = presentCrawlers(ctx);
     /**
      * Defend-quest NPCs are escorted, not hunted. `MobUpdateLoop` strips them
      * out of the shared AI target list for exactly this reason, and losing one

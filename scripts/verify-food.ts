@@ -363,7 +363,7 @@ console.log('\nEvery route to a meal');
 // ── Ground pickups ───────────────────────────────────────────────────────────
 
 function isOnWalkableTile(map: GameMap, x: number, y: number): boolean {
-  return map.isWalkable(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE));
+  return map.isWalkable(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE), 'walker');
 }
 
 function settle(system: GroundPickupSystem): void {

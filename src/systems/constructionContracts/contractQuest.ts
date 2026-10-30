@@ -4,12 +4,12 @@
  * eligibility reads, built from the state either floor-3 scene threads.
  */
 
+import type { InteriorStoryState } from '../interiorStoryOwnership';
 import type { QuestId } from '../../core/quests/QuestManager';
 import type { AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
 import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
 import { releaseAutoPin, type JournalProgress } from '../../core/quests/JournalProgress';
-import type { MurderQuestProgress } from '../../core/quests/MurderQuestProgress';
 import type { ContractWorld } from './contractEligibility';
 
 export const CONSTRUCTION_CONTRACT_QUEST_ID = 'construction_contract' as const satisfies QuestId;
@@ -41,10 +41,9 @@ export function releaseContractAutoPinOnEnd(bus: EventBus, progress: JournalProg
 
 /** Everything {@link buildContractWorld} reads, as either floor-3 scene holds it. */
 export interface ContractWorldSources {
-  /** Absent in a harness with no murder questline behind it. */
-  readonly murderQuest: Pick<MurderQuestProgress, 'stage'> | undefined;
   readonly anchorQuest: Pick<AnchorQuestProgress, 'temple' | 'loriRepairedTypes'>;
   readonly briarHollow: Pick<BriarHollowState, 'quest'>;
+  readonly missingCats: InteriorStoryState['missingCats'];
 }
 
 /**
@@ -54,8 +53,8 @@ export interface ContractWorldSources {
  */
 export function buildContractWorld(sources: ContractWorldSources): ContractWorld {
   return {
-    murderStage: sources.murderQuest?.stage,
     anchor: sources.anchorQuest,
+    missingCats: sources.missingCats,
     villagePhase: sources.briarHollow.quest.phase,
   };
 }

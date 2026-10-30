@@ -1,5 +1,6 @@
 /**
- * "Leave this building?" when the crawler stands on the interior doormat.
+ * "Leave this building?" when the crawler stands on the interior doormat, or
+ * "Go into that one?" at a way out that leads straight into another interior.
  * Exit is the default: standing on the mat is how the player asks to leave,
  * and an accidental Exit only puts the party back on the doorstep.
  */
@@ -14,6 +15,8 @@ import { buildingDisplayName, type BuildingId } from '../../../map/buildingIds';
 export interface ExitBuildingHooks {
   isOpen(): boolean;
   buildingId(): BuildingId;
+  /** The interior the way out leads straight into, or null for the street. */
+  goingInto(): BuildingId | null;
   exit(): void;
   /** Stay: shut the prompt and remember the refusal until the player steps off the mat. */
   stay(): void;
@@ -22,6 +25,13 @@ export interface ExitBuildingHooks {
 const PROMPT_WIDTH: PanelWidth = 'sm';
 const EXIT_BUTTON_INDEX = 1;
 const STAY_HINT = 'Esc or Stay to remain inside';
+
+function exitTitle(hooks: ExitBuildingHooks): string {
+  const into = hooks.goingInto();
+  return into === null
+    ? `Leave ${buildingDisplayName(hooks.buildingId())}?`
+    : `Go into ${buildingDisplayName(into)}?`;
+}
 
 /** The exit prompt as a surface: halts the world and keeps the keyboard while it is up. */
 export function exitBuildingPromptSurface(id: string, hooks: ExitBuildingHooks): Surface {
@@ -37,7 +47,7 @@ export function exitBuildingPromptSurface(id: string, hooks: ExitBuildingHooks):
       id: 'exit-building',
       overline: 'Exit Building',
       icon: iconUnlessCompact(ui, 'logOut'),
-      title: `Leave ${buildingDisplayName(hooks.buildingId())}?`,
+      title: exitTitle(hooks),
       extra: stackParts(ui, [keyboardHint(ui, PROMPT_WIDTH, STAY_HINT)]),
       width: PROMPT_WIDTH,
       buttons: [

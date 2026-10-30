@@ -1,4 +1,7 @@
 import type { StatusDamageOverTime, StatusEffect, StatusId } from './core/combat/StatusEffect';
+import type { ClimberFooting } from './creatures/climberFooting';
+import { drawThrownBombShadow } from './sprites/blackPowderBombSprite';
+import type { MobilityClass } from './map/mobility';
 import { outgoingHitDamageOn, proficiencyWardedAmount } from './core/combat/outgoingHit';
 import {
   CRAWLER_HP_THRESHOLDS,
@@ -131,6 +134,7 @@ import type { PromptFigure } from './ui/InteractionPrompt';
 import type { ScriptedDeathKind } from './systems/scriptedDeath/scriptedDeathKinds';
 
 const NO_SILHOUETTE_LAYERS: readonly SilhouetteLayer[] = [];
+const ALWAYS_PRESENT = (): boolean => true;
 
 /** Every source that scales a crawler's HP regen while it lasts; set and cleared by the same key. */
 export type RegenModifierKey = 'energy_shield' | 'gear_stillness' | 'gear_partner_link';
@@ -168,7 +172,9 @@ type EnvironmentalHazard =
   | 'clownGas'
   | 'lichFirewall'
   | 'lichOrb'
-  | 'trashAvalanche';
+  | 'trashAvalanche'
+  | 'towerWard'
+  | 'towerBell';
 
 /** Which standing hazards are spells, and so turned aside by magic resistance. */
 const HAZARD_IS_MAGIC = {
@@ -180,6 +186,8 @@ const HAZARD_IS_MAGIC = {
   lichFirewall: true,
   lichOrb: true,
   trashAvalanche: false,
+  towerWard: true,
+  towerBell: false,
 } as const satisfies Record<EnvironmentalHazard, boolean>;
 
 /** Which standing hazards are the floor itself hurting whoever stands on it, and how. */
@@ -192,6 +200,8 @@ const HAZARD_GROUND = {
   lichFirewall: null,
   lichOrb: null,
   trashAvalanche: null,
+  towerWard: null,
+  towerBell: null,
 } as const satisfies Record<EnvironmentalHazard, GroundHazard | null>;
 
 /** The ground hazard a blow from `source` is, or null when the floor did not deal it. */
@@ -284,7 +294,6 @@ export type DamageSource =
        */
       readonly hazard?: EnvironmentalHazard;
     }
-  | { readonly kind: 'doomsday' }
   /**
    * A Wheel of Fortune penalty: a forfeit the crawler bet on, never a blow, so
    * nothing dodges it. Dealt with a floor of 1 HP, so it never kills.
@@ -309,7 +318,7 @@ export type DamageSource =
 /**
  * Whether a blow from `source` can be sidestepped: a swung, thrown or bitten
  * attack, or dodgeable siege shrapnel. Status ticks, your own dynamite,
- * standing damage fields and the doomsday clock all land regardless.
+ * and standing damage fields all land regardless.
  */
 function isDodgeableSource(source: DamageSource | undefined): boolean {
   if (source?.kind === 'mob') return source.undodgeable !== true;
@@ -572,12 +581,34 @@ const KO_FONT_REVIVING_FRACTION = 0.28;
 const KO_FONT_KO_FRACTION = 0.38;
 const KO_LABEL_Y_PADDING = 2;
 
+/** Where on its tile a body's floor shadow falls when it stands up on a ledge, as shares of the tile. */
+const FLOOR_SHADOW_FOOT_SHARE = { x: 0.5, y: 0.92 } as const;
 /** Draws a character keeps measuring its overhead stack for after the last ask. */
 const OVERHEAD_MEASURE_HOLD_FRAMES = 30;
 /** How far above its tile a humanoid figure stands, for art that reports no ink of its own. */
 const HUMANOID_STAND_IN_RISE_TILES = HUMANOID_NPC_SCALE - 1;
 
 export abstract class Player implements AboveDarknessDrawer, PromptFigure {
+  /** Where this body can stand: declared by each kind of creature, never implied by its role. */
+  abstract get mobility(): MobilityClass;
+
+  /** A climber's footing and the hops between footings; null for a body that keeps to the floor. */
+  get climbing(): ClimberFooting | null {
+    return null;
+  }
+
+  /** Whether a hop or a squeeze has the body: it takes no step of its own until the crossing lands. */
+  get isCrossingFooting(): boolean {
+    return this.climbing?.isCrossing ?? false;
+  }
+
+  /**
+   * The world line this body sorts on among the world's upright things: its
+   * own top, unless it stands on furniture, which it then sorts below.
+   */
+  get depthY(): number {
+    return this.climbing?.depthY(this) ?? this.y;
+  }
   x: number;
   y: number;
   isActive = false;
@@ -807,7 +838,25 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * unseen is not being unharmable — a blow already swung still lands.
    */
   get hiddenFromMobs(): boolean {
-    return this.concealed || this.gear.live.vanished;
+    return this.concealed || this.isAway || this.gear.live.vanished;
+  }
+
+  private presence: () => boolean = ALWAYS_PRESENT;
+
+  /**
+   * Hands this crawler the question of whether it is on the map being played.
+   * `PlayerManager` is the only caller: it answers from the party's formation.
+   */
+  bindPresence(isPresent: () => boolean): void {
+    this.presence = isPresent;
+  }
+
+  /**
+   * In another group of a split party, on another map: not simulated, drawn,
+   * targeted or harmed, and left exactly as the hand-over froze it.
+   */
+  get isAway(): boolean {
+    return !this.presence();
   }
   /** When true, incoming damage is ignored permanently (god mode). */
   godMode = false;
@@ -1253,6 +1302,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
       !this.godMode &&
       !this.isKnockedOut &&
       !this.concealed &&
+      !this.isAway &&
       this.invulnerableFrames <= 0
     );
   }
@@ -2377,6 +2427,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * nothing that paces a stride or a trail from displacement reads it.
    */
   placeAt(x: number, y: number): void {
+    this.climbing?.land(this);
     this.x = x;
     this.y = y;
     this.isMoving = false;
@@ -2386,6 +2437,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   tickTimers() {
     this.advanceActionClock();
+    this.climbing?.tick(this);
     if (this.freezeGraceFrames > 0) this.freezeGraceFrames--;
     // Held at the ceiling rather than counted forever: the only question anyone
     // asks of it is whether it has reached that value.
@@ -2475,7 +2527,14 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * Sealed: a subclass that overrode this would opt itself out of both without
    * saying so. Subclasses override {@link drawSelf}.
    */
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, groundCamY: number, tileSize: number): void {
+    // A body up on a ledge is drawn at the ledge's height, everything of it
+    // lifted together, with its shadow left on the floor below.
+    const riseTiles = this.climbing?.riseTiles(this) ?? 0;
+    if (riseTiles > 0 && this.climbing?.castsFloorShadow(this) === true) {
+      this.drawFloorShadowBelow(ctx, camX, groundCamY, tileSize, riseTiles);
+    }
+    const camY = groundCamY + riseTiles * tileSize;
     const sx = this.x - camX;
     const sy = this.y - camY;
     const measureOverhead = this.overheadMeasureFramesLeft > 0;
@@ -2528,6 +2587,18 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     // Over the dungeon's darkness too: a burning or poisoned body is something
     // the player has to read wherever it stands.
     if (!deferChrome(this, 'worldFeedback', sx, sy)) this.drawWorldFeedback(ctx, sx, sy);
+  }
+
+  private drawFloorShadowBelow(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+    riseTiles: number,
+  ): void {
+    const footX = this.x - camX + tileSize * FLOOR_SHADOW_FOOT_SHARE.x;
+    const footY = this.y - camY + tileSize * FLOOR_SHADOW_FOOT_SHARE.y;
+    drawThrownBombShadow(ctx, footX, footY, riseTiles * tileSize, tileSize);
   }
 
   /**

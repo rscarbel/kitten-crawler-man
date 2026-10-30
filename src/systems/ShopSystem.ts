@@ -54,6 +54,11 @@ export class ShopSystem implements GameSystem {
     this.keeper = keeper;
   }
 
+  /** Whether `figure` is the keeper this counter's "Shop" prompt floats over. */
+  isKeeper(figure: PromptFigure): boolean {
+    return this.keeper === figure;
+  }
+
   private keeperX(): number {
     return this.keeper?.x ?? this.fallbackKeeperX;
   }

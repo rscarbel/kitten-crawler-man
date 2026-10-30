@@ -15,7 +15,7 @@ import {
   type CanvasSurface,
 } from '../../core/rendering/canvasSurface';
 import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
-import { activeCatFigure, drawCatSprite } from '../../sprites/catSprite';
+import { drawCatSprite, type CatAppearance } from '../../sprites/catSprite';
 import { drawClubCastFigure, type ClubFigureRef } from '../../sprites/clubCastFigure';
 import { drawHumanSprite, emptyHandedHumanFigure } from '../../sprites/humanSprite';
 import { centerIn, inset, splitV, type Rect } from '../core/geom';
@@ -32,7 +32,8 @@ import type { PokerTierId } from '../../systems/casino/poker/pokerStakes';
 
 export type SeatAvatar =
   | { readonly kind: 'regular'; readonly key: string; readonly look: ClubFigureRef }
-  | { readonly kind: 'crawler'; readonly crawler: 'human' | 'cat' }
+  | { readonly kind: 'crawler'; readonly crawler: 'human' }
+  | { readonly kind: 'crawler'; readonly crawler: 'cat'; readonly appearance: CatAppearance }
   | { readonly kind: 'empty' };
 
 export interface SeatTag {
@@ -154,18 +155,26 @@ function castPainter(look: ClubFigureRef): FigurePainter {
     });
 }
 
+function catBust(appearance: CatAppearance): CanvasSurface | null {
+  const cell = appearance.cellFor();
+  return bakedBust(`crawler/cat/${appearance.figure.id}`, CAT_BUST, (ctx, x, y, tile) =>
+    drawCatSprite(ctx, appearance, x, y, tile, cell),
+  );
+}
+
 function avatarBust(avatar: SeatAvatar): CanvasSurface | null {
   switch (avatar.kind) {
     case 'regular':
       return bakedBust(avatar.key, CAST_BUST, castPainter(avatar.look));
     case 'crawler':
-      return avatar.crawler === 'human'
-        ? bakedBust(`crawler/human/${emptyHandedHumanFigure().id}`, HUMAN_BUST, (ctx, x, y, tile) =>
-            drawHumanSprite(ctx, x, y, tile),
-          )
-        : bakedBust(`crawler/cat/${activeCatFigure().id}`, CAT_BUST, (ctx, x, y, tile) =>
-            drawCatSprite(ctx, x, y, tile),
-          );
+      if (avatar.crawler === 'human') {
+        return bakedBust(
+          `crawler/human/${emptyHandedHumanFigure().id}`,
+          HUMAN_BUST,
+          (ctx, x, y, tile) => drawHumanSprite(ctx, x, y, tile),
+        );
+      }
+      return catBust(avatar.appearance);
     case 'empty':
       return null;
   }

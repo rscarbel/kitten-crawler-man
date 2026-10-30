@@ -1,4 +1,3 @@
-import { crawlerDisplayName, HUMAN_CRAWLER_AI_NAME } from '../../../characters/characters';
 import { ownEntry } from '../../util/guards';
 import type { StatId } from '../../party/stats';
 import type { CrawlerKind, SkillId } from '../../skills/SkillManager';
@@ -50,10 +49,13 @@ export type ItemId =
   | 'magic_missile_tome'
   | 'seismic_stomp_tome'
   | 'explosives_handling_tome'
-  | 'doomsday_scenario'
   | 'quest_scythe'
   | 'quest_blueprints'
   | 'quest_prison_key'
+  | 'quest_grey_feather'
+  | 'quest_tuna_tin'
+  | 'quest_key_ring'
+  | 'quest_pumpkin_note'
   | 'skill_book_nine_lives'
   | 'skill_book_warp_speed'
   | 'skill_book_pugilism'
@@ -131,8 +133,6 @@ export type ItemId =
   | 'anchor_shard_tinker'
   | 'anchor_shard_lori'
   | 'anchor_shard_temple'
-  | 'magistrates_writ'
-  | 'unreadable_letter'
   | 'wood'
   | 'stone'
   | 'wood_board'
@@ -658,31 +658,6 @@ const ITEM_DEFS = defineItemDefs({
       'Chipped from the Temple of the Sky’s altar stone, and cold no matter how long you hold it. ' +
       'Madame Voss can weld it to its brothers.',
   },
-  // Same reasoning as the anchor shards above: two `isQuestItem` items would
-  // fight over the single reserved quest slot, and the Krasue murder mystery
-  // hands the party both the writ and the letter at once.
-  magistrates_writ: {
-    id: 'magistrates_writ',
-    category: 'quest',
-    name: "Magistrate's Writ",
-    stackable: false,
-    canHotlist: false,
-    canDrop: false,
-    description:
-      "'The bearer acts on my authority and is not to be detained.' Signed, Magistrate " +
-      'Featherfall. The ink is barely dry. The magistrate has not been seen in weeks.',
-  },
-  unreadable_letter: {
-    id: 'unreadable_letter',
-    category: 'quest',
-    name: 'The Unreadable Letter',
-    stackable: false,
-    canHotlist: false,
-    canDrop: false,
-    description:
-      'Squiggles and triangles in a brown ink you are choosing not to think about. Dave ' +
-      'called it necro-script and told you to burn it. It is warm.',
-  },
   seismic_stomp_tome: {
     id: 'seismic_stomp_tome',
     category: 'book',
@@ -844,22 +819,6 @@ const ITEM_DEFS = defineItemDefs({
     description:
       'Half the pages are missing, and the half that remain are very sure of themselves.',
   },
-  doomsday_scenario: {
-    id: 'doomsday_scenario',
-    category: 'quest',
-    /** The player's name is theirs to choose, so it is read whenever the item is named. */
-    get name(): string {
-      return `${crawlerDisplayName('human')}'s Doomsday Scenario`;
-    },
-    aiName: `${HUMAN_CRAWLER_AI_NAME}'s Doomsday Scenario`,
-    stackable: false,
-    canHotlist: false,
-    canDrop: false,
-    isQuestItem: true,
-    description:
-      'A soul crystal on the verge of levelling a city, sealed inside an enchanted glass ' +
-      'display case and stuffed into your inventory. Not a weapon. Not yet, anyway.',
-  },
   quest_scythe: {
     id: 'quest_scythe',
     category: 'quest',
@@ -898,6 +857,50 @@ const ITEM_DEFS = defineItemDefs({
     description:
       'An absurdly large gold key, lifted from the vault of the Goblin High Security Prison. ' +
       'The gate guard outside will want it back. He will be insufferable about it.',
+  },
+  quest_grey_feather: {
+    id: 'quest_grey_feather',
+    category: 'quest',
+    name: 'A Grey Feather',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      "A long grey flight feather, found beside the millstones at Miller's Farm, where the mill cat used to sleep. " +
+      'Everyone says Hawkfolk feathers are everywhere.',
+  },
+  quest_tuna_tin: {
+    id: 'quest_tuna_tin',
+    category: 'quest',
+    name: 'Tinned Tuna',
+    stackable: true,
+    canHotlist: false,
+    description:
+      'A small tin of tuna in oil from the General Store, the same kind the tower buys by the dozen every week.',
+  },
+  quest_key_ring: {
+    id: 'quest_key_ring',
+    category: 'quest',
+    name: "The Archivist's Key Ring",
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      'A brass ring of iron keys that came down the dumbwaiter from somewhere above. One of them is stamped LARDER.',
+  },
+  quest_pumpkin_note: {
+    id: 'quest_pumpkin_note',
+    category: 'quest',
+    name: 'A Note From Upstairs',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      "A scrap of the archive's paper, sent down the dumbwaiter. No words. One greasy paw print, pressed hard, " +
+      'and a smear that smells unmistakably of fish.',
   },
   wood: {
     id: 'wood',
@@ -1427,7 +1430,7 @@ export function itemAIName(id: ItemId): string {
  * Whether any shop could ever buy this item back — before a specific shop's
  * pricing profile decides whether *it* deals in the item at all. Excludes
  * items marked `unsellable`, quest items, and anything `canDrop: false`
- * (tools, the Anchor and its shards, the magistrate's writ): none of those are
+ * (tools, the Anchor and its shards): none of those are
  * goods a shop counter trades in.
  */
 export function canSellItemId(id: ItemId): boolean {

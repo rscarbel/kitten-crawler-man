@@ -23,7 +23,7 @@ import {
   TOWER_FALL_FRAMES,
 } from '../../sprites/art/trashGremlinRoomArt';
 import { frameTime } from '../../utils';
-import type { SystemContext } from '../GameSystem';
+import { type SystemContext, presentCrawlers } from '../GameSystem';
 import type { CheckpointedDressing, DressingRenderable } from './BossRoomDressing';
 import type { TilePoint, TileRect } from './bossRoomLayout';
 import {
@@ -378,7 +378,7 @@ export class TrashGremlinRoomSystem
     for (const tile of toppled.line) {
       // Only open floor takes rubble: whatever else is in the line — a bag, a
       // heap, a wall — was never part of the fall.
-      if (this.gameMap.isWalkable(tile.x, tile.y)) this.rubble(tile);
+      if (this.gameMap.isWalkable(tile.x, tile.y, 'walker')) this.rubble(tile);
     }
   }
 
@@ -476,7 +476,7 @@ export class TrashGremlinRoomSystem
         }
       }
     }
-    for (const crawler of [ctx.human, ctx.cat]) {
+    for (const crawler of presentCrawlers(ctx)) {
       if (!crawler.isAlive || !crawler.isAttackPeak()) continue;
       const struck = this.towerInSwing(crawler);
       if (struck === null) continue;
@@ -549,7 +549,7 @@ export class TrashGremlinRoomSystem
     const line: TilePoint[] = [];
     for (let i = 1; i <= TOWER_FALL_LINE_TILES; i++) {
       const tile = { x: tower.x + step.dx * i, y: tower.y + step.dy * i };
-      if (!this.gameMap.isWalkable(tile.x, tile.y)) break;
+      if (!this.gameMap.isWalkable(tile.x, tile.y, 'walker')) break;
       line.push(tile);
     }
     return line;
@@ -569,7 +569,7 @@ export class TrashGremlinRoomSystem
     }
     if (topple.frames < TOWER_WOBBLE_FRAMES + TOWER_FALL_TICKS) return;
     topple.landed = true;
-    for (const crawler of [ctx.human, ctx.cat]) {
+    for (const crawler of presentCrawlers(ctx)) {
       if (!crawler.isAlive) continue;
       const under = tileOf(crawler);
       if (topple.line.some((t) => t.x === under.x && t.y === under.y)) {
@@ -640,7 +640,8 @@ export class TrashGremlinRoomSystem
     const exits: TilePoint[] = [];
     for (const step of Object.values(STEP)) {
       const tile = { x: pile.x + step.dx, y: pile.y + step.dy };
-      if (this.gameMap.isWalkable(tile.x, tile.y) && !this.isUnderGremlin(tile)) exits.push(tile);
+      if (this.gameMap.isWalkable(tile.x, tile.y, 'walker') && !this.isUnderGremlin(tile))
+        exits.push(tile);
     }
     exits.sort(
       (a, b) =>
@@ -688,7 +689,7 @@ export class TrashGremlinRoomSystem
   private spawnRoach(ctx: SystemContext, tile: TilePoint): boolean {
     const cap = this.trashGremlin?.cockroachCap ?? 0;
     this.liveRoaches = countLiveRoaches(ctx);
-    if (this.liveRoaches >= cap || !this.gameMap.isWalkable(tile.x, tile.y)) return false;
+    if (this.liveRoaches >= cap || !this.gameMap.isWalkable(tile.x, tile.y, 'walker')) return false;
     if (this.isUnderGremlin(tile)) return false;
     const roach = spawnMob('cockroach', tile, this.gameMap, liveSpawnContext('boss:trash_gremlin'));
     roach.isBossAdd = true;
@@ -725,8 +726,8 @@ export class TrashGremlinRoomSystem
     const centreY = y + TILE_SIZE * HALF;
     const lineCentre = tileCentre(here);
     const offAxis = (centreX - lineCentre.x) * across.dx + (centreY - lineCentre.y) * across.dy;
-    const plusOpen = this.gameMap.isWalkable(here.x + across.dx, here.y + across.dy);
-    const minusOpen = this.gameMap.isWalkable(here.x - across.dx, here.y - across.dy);
+    const plusOpen = this.gameMap.isWalkable(here.x + across.dx, here.y + across.dy, 'walker');
+    const minusOpen = this.gameMap.isWalkable(here.x - across.dx, here.y - across.dy, 'walker');
     const sign =
       plusOpen && minusOpen ? (offAxis >= 0 ? 1 : -1) : plusOpen ? 1 : minusOpen ? -1 : 0;
     if (sign === 0) return { dx: step.dx, dy: step.dy };

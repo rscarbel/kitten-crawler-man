@@ -244,7 +244,7 @@ function makeContext(
     human,
     cat,
     active: cat,
-    inactive: human,
+    partner: human,
     activeIsMoving: true,
     roster,
     gameMap: map,
@@ -273,7 +273,7 @@ function findEnclosedBlockedTile(
 ): { x: number; y: number } | null {
   const size = map.structure.length;
   const isSolid = (x: number, y: number): boolean =>
-    x >= 0 && y >= 0 && x < size && y < size && !map.isWalkable(x, y);
+    x >= 0 && y >= 0 && x < size && y < size && !map.isWalkable(x, y, 'walker');
   for (let radius = Math.ceil(minTiles); radius <= Math.floor(maxTiles); radius++) {
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
@@ -315,9 +315,9 @@ function makeCatWalker(map: GameMap, cat: CatPlayer): () => void {
       const angle = Math.random() * Math.PI * 2;
       const gx = Math.round(from.x + Math.cos(angle) * HOP_TILES);
       const gy = Math.round(from.y + Math.sin(angle) * HOP_TILES);
-      if (!map.isWalkable(gx, gy)) continue;
+      if (!map.isWalkable(gx, gy, 'walker')) continue;
       if (mustHeadOut && Math.hypot(gx - origin.x, gy - origin.y) <= outwardNow) continue;
-      const path = map.findPath(from.x, from.y, gx, gy);
+      const path = map.findPath(from.x, from.y, gx, gy, 'walker');
       if (path.length === 0) continue;
       route = path;
       return true;
@@ -467,7 +467,7 @@ function findOpenTileNear(
           const angle = (step / STEPS_AROUND) * Math.PI * 2;
           const x = Math.round(from.x + Math.cos(angle) * radius);
           const y = Math.round(from.y + Math.sin(angle) * radius);
-          if (!map.isWalkable(x, y)) continue;
+          if (!map.isWalkable(x, y, 'walker')) continue;
           if (roomy && !hasRoomToMove(map, x, y)) continue;
           if (!visibleFrom(x, y)) continue;
           return { x, y };

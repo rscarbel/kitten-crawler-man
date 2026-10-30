@@ -207,7 +207,7 @@ export class ChatKit {
       {
         name: '!levelup',
         run: () => {
-          for (const player of this.world.pm.players()) {
+          for (const player of this.world.pm.wholeParty()) {
             player.advanceLevel();
             this.world.bus.emit('playerLevelUp', { player, newLevel: player.level });
           }
@@ -277,7 +277,7 @@ export class ChatKit {
 
   /** `!lucky`: the hidden dodge boost on both crawlers, plus the flag the casino games read. */
   private setLucky(lucky: boolean): void {
-    for (const player of this.world.pm.players()) {
+    for (const player of this.world.pm.wholeParty()) {
       if (lucky) applyLuckToPlayer(player);
       else removeLuckFromPlayer(player);
     }
@@ -287,7 +287,7 @@ export class ChatKit {
   /** `!tough`: damage immunity plus zero outgoing damage. Exclusive with god mode. */
   private enableToughMode(): void {
     this.disableGodMode();
-    for (const player of this.world.pm.players()) {
+    for (const player of this.world.pm.wholeParty()) {
       player.godMode = true;
       player.zeroDamage = true;
     }
@@ -296,7 +296,7 @@ export class ChatKit {
   }
 
   private disableToughMode(): void {
-    for (const player of this.world.pm.players()) {
+    for (const player of this.world.pm.wholeParty()) {
       player.godMode = false;
       player.zeroDamage = false;
     }

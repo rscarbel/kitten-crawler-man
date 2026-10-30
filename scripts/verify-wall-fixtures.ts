@@ -99,7 +99,7 @@ function buildFloor(level: DungeonFloorNumber, seed: number): GameMap {
 }
 
 function isOpen(gameMap: GameMap, x: number, y: number): boolean {
-  return gameMap.isWalkable(x, y);
+  return gameMap.isWalkable(x, y, 'walker');
 }
 
 // ── Placement ───────────────────────────────────────────────────────────────

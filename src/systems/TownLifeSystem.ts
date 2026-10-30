@@ -135,6 +135,8 @@ const FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER = {
   dwarf: FRONTAGE_GROUNDFOLK_RUN_SHARE,
   otter: FRONTAGE_GROUNDFOLK_RUN_SHARE,
   crocodilian: FRONTAGE_GROUNDFOLK_RUN_SHARE,
+  orc: FRONTAGE_GROUNDFOLK_RUN_SHARE,
+  elf: FRONTAGE_GROUNDFOLK_RUN_SHARE,
 } as const satisfies Record<TownSpecies, number>;
 
 const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
@@ -491,7 +493,7 @@ export class TownLifeSystem implements GameSystem {
   private isCitizenGround(tx: number, ty: number): boolean {
     if (this.doorTiles.has(tileCoordKey(tx, ty))) return false;
     if (!this.isInsideTownWall(tx, ty)) return false;
-    return this.gameMap.isWalkable(tx, ty);
+    return this.gameMap.isWalkable(tx, ty, 'walker');
   }
 
   /**
@@ -634,8 +636,8 @@ export class TownLifeSystem implements GameSystem {
    *
    * Anchors are derived from the map — well tiles are found by type, the smithy
    * and the club by their `buildingEntries` — rather than from copied offsets.
-   * Both of those coordinates have moved before, and the two systems that had
-   * copied them (the murder quest's body, the notice board) are exactly what broke.
+   * Both of those coordinates have moved before, and a system that copies
+   * them breaks the next time they move.
    *
    * An anchor is a wander with a one-tile bubble and a long pause, not a fixed
    * position: standing perfectly still beside a well reads as a statue, and the

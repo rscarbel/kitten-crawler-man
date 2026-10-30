@@ -271,7 +271,7 @@ hover/press treatment). Feature code never calls it; it calls widgets.
 - **`PetNamePrompt`** (`src/ui/screens/dialogs/petNamePrompt.ts`, one per scene on `MenusKit.petNamePrompt`) — a `modal`, `takesText` surface that halts the world and cannot be dismissed: the pet's portrait, a `textField`, the suggestion chips from `PET_NAME_SUGGESTIONS`, "Surprise me" and Confirm, which stays disabled until `parsePetName` (`src/core/party/petNames.ts`) accepts the text. It is an `md` `choiceModal`, so a phone gets a bottom sheet. Ask for a name through `namePetThen` (`src/systems/petNaming.ts`), never by opening the prompt directly; `MissingPetNames` asks once per scene for any pet the party owns unnamed. Text that names a pet reads `petWords(petNames, kind)`, never the species.
 - **`CharacterCreation`** (`src/ui/screens/creation/characterCreation.ts`, one per `TitleScene`, id `CHARACTER_CREATION_SURFACE_ID`) — the `modal` a new game opens before its dive: the name (a `textField`, the rule `playerNameRejection` names under it, Next disabled until `parsePlayerName` passes), the body, then that body's two figures side by side with no words, light left and dark right. Back steps one page back on every page, and Escape does the same, so on the name page both close it. Its pictures go through a `CreationFigurePainter` (`CreationFigureCells`, `src/scenes/title/creationFigures.ts`) that paints into cells of its own, never the shared figure cache, and lets them go on close and on the way back to the body page. Begin hands the `PlayerIdentity` to the title, which calls `setPlayerIdentity` and dives. Continue never opens it.
 - **The arrival banner** (`DungeonIntroSystem`, id `ARRIVAL_BANNER_SURFACE_ID`) — the floor's "find the stairwell" card. A `modal` that halts the world until `arrivalSettled` (mostly faded), then a `panel` that takes nothing while the fade finishes. It is the floor's arrival gate: never start an arrival trigger outside the world frame it holds back.
-- **The cutscene surface** (mounted with the scene's conversation surface through `CutsceneKit.surfaces(conversationOptions)`, which puts the conversation after it so a talk the cutscene opens always stacks above it; id `CUTSCENE_SURFACE_ID`, band `panel`) — open while a `CutsceneDirector` owns the party. It draws nothing, blocks every press and gameplay key, and leaves only pause live: Escape passes beneath it and the HUD's pause button stays tappable. It does not halt the world itself; a talk the cutscene opens does. Never add a `playerLocked` flag or a click chain for a scripted moment: write it as a cutscene (`add-system`).
+- **The cutscene surface** (mounted with the scene's conversation surface through `CutsceneKit.surfaces(conversationOptions)`, which puts the conversation after it so a talk the cutscene opens always stacks above it; id `CUTSCENE_SURFACE_ID`, band `panel`) — open while a `CutsceneDirector` owns the party. It draws nothing, blocks every press and gameplay key, and leaves only pause live: Escape passes beneath it and the HUD's pause button stays tappable. It does not halt the world itself; a talk the cutscene opens does. The same call mounts the cutscene's full-screen fade after them (`CUTSCENE_FADE_SURFACE_ID`, the `screenFadeSurface` the prison's capture uses), driven by the script's `fade` steps; never mount a second fade for a scripted moment. Never add a `playerLocked` flag or a click chain for a scripted moment: write it as a cutscene (`add-system`).
 
 ## Panels, sizes and phones
 
@@ -398,6 +398,19 @@ moves a pill down onto the span between the two. Each scene calls
 once a frame, right after `setInteractionPromptsSuppressed`, so a prompt over
 something shorter than a crawler lifts off their head and their bark. The
 prompt surface clamps every pill onto the screen.
+
+Only one interact-key prompt is ever shown. Each scene raises a link's
+prompts inside `raisePromptsFor(owner, raise)`, where the owner is a
+`PromptOwner` (`src/ui/interactionFocus.ts`): an `InteractableKind` and the
+`act` a press on it runs. The surface shows the prompt ranked first by
+`INTERACTABLE_RANK` (quest business, then people and services, then
+everything else, then the pet and the hireling), nearest first within a rank,
+measured from the point `anchorPromptFocus` set for the frame. The scene's
+interact press goes to `pressFocusedPrompt(owners)` before the rest of its
+chain, so the press reaches the thing the prompt names. A prompt raised
+outside any owner ranks as `other` and its press falls through to the chain,
+so give a new interactable an owner. A prompt with its own `keyOverride`
+names a different key and is always shown.
 
 ## The HUD (`src/ui/hud/`)
 

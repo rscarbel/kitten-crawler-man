@@ -55,6 +55,7 @@ import {
   WENDELL_TROUSER_COLOR,
   wendellPosture,
 } from '../art/human/wendellAttachments';
+import { TOWER_GUARD_ATTACHMENTS, towerGuardPosture } from '../art/human/towerGuardAttachments';
 
 /**
  * A named resident's own clothes and bearing beyond what a shared accessory
@@ -686,12 +687,64 @@ const RESIDENT_ADULT_LOOKS: readonly TownCastLookBiped[] = RESIDENT_ADULT_SPECS.
   adultLook(spec, ADULT_SPECS.length + i),
 );
 
+// ── The Town Center Tower's guards ───────────────────────────────────────────
+//
+// Groundfolk in the tower's livery: a charcoal surcoat over brown hose, the slate tabard with
+// the tower's brass keep on the chest, and a steel kettle helm. `roles: []`
+// keeps them off the street; only `TowerGuard` wears them. Two faces, so a
+// pair posted at one door never reads as twins.
+
+const TOWER_GUARD_LIVERY = {
+  roles: [],
+  hasWork: false,
+  pantsColor: '#3a3329',
+  shoeColor: '#1a1614',
+  garmentColor: '#2b2e38',
+  cut: 'tunic',
+  feminine: false,
+  accessory: { kind: 'towerTabard', color: '#46526e', accentColor: '#c9a24a' },
+  details: {
+    attachments: TOWER_GUARD_ATTACHMENTS,
+    posture: towerGuardPosture,
+    muddyShoes: false,
+  },
+} as const satisfies Omit<AdultSpec, 'id' | 'build' | 'skin' | 'hair' | 'hairStyle'>;
+
+export const TOWER_GUARD_LOOK_IDS = ['tower_guard_a', 'tower_guard_b'] as const;
+export type TowerGuardLookId = (typeof TOWER_GUARD_LOOK_IDS)[number];
+
+const TOWER_GUARD_SPECS = [
+  {
+    ...TOWER_GUARD_LIVERY,
+    id: 'tower_guard_a',
+    build: 'standard',
+    skin: 'brown',
+    hair: 'black',
+    hairStyle: 'bald',
+    facialHair: 'moustache',
+  },
+  {
+    ...TOWER_GUARD_LIVERY,
+    id: 'tower_guard_b',
+    build: 'heavy',
+    skin: 'fair',
+    hair: 'ginger',
+    hairStyle: 'receding',
+    facialHair: 'fullBeard',
+  },
+] as const satisfies ReadonlyArray<AdultSpec & { readonly id: TowerGuardLookId }>;
+
+const TOWER_GUARD_LOOKS: readonly TownCastLookBiped[] = TOWER_GUARD_SPECS.map((spec, i) =>
+  adultLook(spec, ADULT_SPECS.length + RESIDENT_ADULT_SPECS.length + i),
+);
+
 // ── The whole set ────────────────────────────────────────────────────────────
 
 export const TOWN_CAST_LOOKS: readonly TownCastLook[] = [
   ...CHILD_LOOKS,
   ...ADULT_LOOKS,
   ...RESIDENT_ADULT_LOOKS,
+  ...TOWER_GUARD_LOOKS,
 ];
 
 const LOOK_BY_ID: ReadonlyMap<string, TownCastLook> = new Map(
