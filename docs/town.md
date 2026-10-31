@@ -1,4 +1,4 @@
-# The Overworld Town
+# Taloncrest
 
 How the third floor's town, **Taloncrest**, is generated, rendered and tuned. This is reference for
 anyone changing the town's layout, ground, props or the systems anchored to it.
@@ -36,7 +36,7 @@ it. Yard fences (`FENCE`) and the ruins' `RUINED_WALL` are split the same way.
 | ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                                                               |
 | **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the garrison's watch post)            |
-| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                                              |
+| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well, the floor's stairwell                                                                       |
 | **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                                                 |
 | **Market Row**    | south of plaza | Old Lori's Cottage, The Horned Flagon, The Rusty Anvil                                                                                                       |
 | **Low Quarter**   | south band     | The Cloak & Dagger, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the two lamp-lit service alleys through the block |
@@ -1399,13 +1399,20 @@ carries the flag, and `verify:interiors` asserts that.
 
 **`OverworldData` fields.** `startTile`, `buildingEntries`, `mainTowerAnchor`,
 `townSquareCentre`, `fountainCentre`, `circusCentre`,
-`circusRadiusTiles`, `townSafeRadiusTiles`, `hallwaySpawnPoints`.
+`circusRadiusTiles`, `townSafeRadiusTiles`, `hallwaySpawnPoints`, `stairwellTiles` (the
+town square's one stairwell).
 
 **Story geometry.**
 
 - The tower base stays adjacent to the plaza (the tower stairs).
-- Floor 3 has no exit. `level3` is the last floor and has no stairwell, and nothing ends
-  the run there yet.
+- Floor 3 has one stairwell, in the Market Plaza: a 2×2 footprint on the flagstone
+  south of the fountain, one clear row below its basin, at `TOWN_SQUARE_STAIRWELL_OFFSET`
+  from the plaza's centre. It is sealed like every stairwell. `level3`'s exit is
+  `runEnd`, so going in opens the run end screen instead of a descent. The generator
+  throws unless the footprint is plaza flagstone, off every prop, building and doorway,
+  and walkable from the Sleeping Cat Inn's door. Runtime fixtures and the crowd keep off
+  it by rule: `GameMap.isOpenStreetGround` and `TownLifeSystem`'s citizen ground both
+  refuse stairwell tiles.
 - The circus stays 70–90 tiles from centre, outside the safe radius, with a ruins buffer.
   Its road routes to the nearest **gate**, not the town centre — a gate exit is a tile
   the gate's own highway paves, so the joint cannot miss.
@@ -1415,13 +1422,13 @@ carries the flag, and `verify:interiors` asserts that.
 **Centre-relative offsets.** These are tuned to the current town extents. Move the
 layout and they must be re-tuned, not left stale:
 
-| Consumer               | Constants                                                                           |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `market/vendorDefs.ts` | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                                    |
-| `TownPropSystem`       | `BOARD_OFFSET`, `FORTUNE_OFFSET`                                                    |
-| `TownLifeSystem`       | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`              |
-| `DungeonScene`         | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*` |
-| `OverworldGenerator`   | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`                        |
+| Consumer               | Constants                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `market/vendorDefs.ts` | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                                             |
+| `TownPropSystem`       | `BOARD_OFFSET`, `FORTUNE_OFFSET`                                                             |
+| `TownLifeSystem`       | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`                       |
+| `DungeonScene`         | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*`          |
+| `OverworldGenerator`   | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`, `TOWN_SQUARE_STAIRWELL_OFFSET` |
 
 A stale offset drops a stall, bench or notice board into a wall. `?townmap` shows it
 instantly.

@@ -60,14 +60,14 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'fountain',
     'well',
     'ground_masks',
-    // The "find the stairwell" banner shown on entering (or re-entering) any
-    // dungeon floor — not a tile sprite, just a full-screen splash image, but
-    // tracked through SpriteLoader like every other sheet.
-    'find-the-stairwell',
   ],
 
   // Level 3's town: buildings and street furniture.
   town: [
+    // The town square stairwell's seal: its locked pose painted with the floor, the
+    // poses it opens through asked for by the stairwell when a key comes near.
+    'stairwell_seal_locked_street',
+    'stairwell_seal_open_street',
     'barracks',
     'blackwood_lodge',
     'blacksmith',
@@ -227,6 +227,10 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   ],
 
   floor1_tileset: [
+    // The cellars stairwell's seal: its locked pose painted with the floor, the
+    // poses it opens through asked for by the stairwell when a key comes near.
+    'stairwell_seal_locked_cellars',
+    'stairwell_seal_open_cellars',
     'ground_floor1',
     'clay_urn',
     'grain_sack',
@@ -243,6 +247,10 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'straw_scatter',
   ],
   floor2_tileset: [
+    // The service level stairwell's seal: its locked pose painted with the floor, the
+    // poses it opens through asked for by the stairwell when a key comes near.
+    'stairwell_seal_locked_service_level',
+    'stairwell_seal_open_service_level',
     // The service level's faces of the barrel, crate, bookshelf, torch and
     // brazier tiles: drawn instead of the core sheets while its theme is active.
     'steel_drum',

@@ -18,6 +18,7 @@
  * Output lands in `preview/merc-desk/`.
  */
 
+import type { LevelId } from '../src/levels/levelIds';
 import { createCanvas } from 'canvas';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
@@ -58,7 +59,7 @@ const DESK_SURFACE_ID = 'mercenary-desk';
 const CONFIRM_SURFACE_ID = 'mercenary-desk-dismiss';
 /** The confirm dialog's own panel id, under which its answers register. */
 const CONFIRM_PANEL_ID = 'confirm';
-const FLOOR_ID = 'harness_floor';
+const FLOOR_ID = 'level3' as const satisfies LevelId;
 const RICH_PURSE = 400;
 const POOR_PURSE = 150;
 const BACKDROP = '#1a1420';
@@ -237,7 +238,7 @@ function hireCrush(roster: MercenaryRoster): void {
     id: 'crush',
     name: 'Crush',
     terms: 'paid',
-    contractLevelId: FLOOR_ID,
+    contract: { kind: 'floor', levelId: FLOOR_ID },
     introduced: true,
   };
 }

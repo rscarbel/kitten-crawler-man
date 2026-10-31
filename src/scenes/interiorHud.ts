@@ -125,6 +125,7 @@ export function interiorHudOccluders(
     chrome.summon ? buttons.summon : null,
     chrome.build ? buttons.build : null,
     chrome.journal ? buttons.journal : null,
+    buttons.keys,
   ];
   return rects.flatMap((rect) => (rect === null ? [] : [toCanvasRect(rect, uiScale)]));
 }

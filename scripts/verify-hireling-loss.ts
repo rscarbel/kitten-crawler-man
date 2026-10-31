@@ -139,7 +139,7 @@ function checkNewHireRoundTrips(): void {
     id,
     name: getMercenaryTemplate(id).name,
     terms: 'paid',
-    contractLevelId: level3.id,
+    contract: { kind: 'floor', levelId: level3.id },
     introduced: false,
   };
 
@@ -152,7 +152,9 @@ function checkNewHireRoundTrips(): void {
   respawned.floorLevelId = level3.id;
   restoreMercenaryRoster(respawned, parsed);
   check(
-    respawned.active?.id === id && respawned.active.contractLevelId === level3.id,
+    respawned.active?.id === id &&
+      respawned.active.contract.kind === 'floor' &&
+      respawned.active.contract.levelId === level3.id,
     "a hire signed at the desk is gone after a death respawns from the save its building's exit writes",
   );
 

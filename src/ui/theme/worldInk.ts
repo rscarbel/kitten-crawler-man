@@ -152,6 +152,34 @@ export const worldPalette = {
     /** The `!reveal` cheat's arrow toward the spider lab. */
     cheatReveal: '#a855f7',
   },
+  /**
+   * The locked seal over a floor's stairwells. Its padlock is gold because gold
+   * on the lock is what makes the player think "key"; the rest of the seal is
+   * its place's own iron, steel or bronze.
+   */
+  stairwellSeal: {
+    padlockHighlight: '#fff1a8',
+    padlockLight: '#f2c446',
+    padlockBase: '#c78e1c',
+    padlockShade: '#7a500c',
+    padlockOutline: '#2a1903',
+    keyhole: '#140b02',
+    glint: '#fffbe6',
+    /** Gold light running out along the straps and chains as the key turns. */
+    rune: '#ffc93c',
+    runeCore: '#fff4c2',
+    /** The gold motes the padlock bursts into, and the gust the cover leaves in. */
+    mote: '#ffe08a',
+    /** Warm light rising out of a stairwell as it opens, as `r,g,b`. */
+    lightFromBelow: '255,208,128',
+    /** The dust a cover kicks up, as `r,g,b`. */
+    dust: '186,168,140',
+    plateFill: 'rgba(16,11,4,0.84)',
+    plateEdge: '#d9a22c',
+    plateInk: '#fde68a',
+    banner: '#fff1b8',
+    bannerGlow: '#ffb627',
+  },
   /** A crawler down and bleeding out, and the bar that brings them back. */
   knockout: {
     countdown: '#fbbf24',
@@ -591,7 +619,7 @@ export const WORLD_TEXT = {
   ready: style({ size: 11, bold: true, color: worldPalette.ink.gold, outline: true }),
   /** A tiny rank mark beside a health bar. */
   tacticsMark: style({ size: 7, bold: true, color: worldPalette.ink.gold, outline: true }),
-  /** The caption over a prize the room is built around: "THE KEY". */
+  /** The caption over a prize the room is built around: "THE GATE KEY". */
   prizeLabel: style({ size: 16, bold: true, color: worldPalette.ink.gold, outline: true }),
   /** The ? and ! over a guard in an explainer's illustration, drawn larger than in play to read at panel scale. */
   suspicionMark: style({
@@ -632,6 +660,15 @@ export const WORLD_TEXT = {
   }),
   /** A sound written into an explainer's illustration: "THUD". */
   soundWord: style({ size: 12, bold: true, color: worldPalette.ink.secondary, outline: true }),
+  /** Over a sealed stairwell a crawler stepped onto without the key: "Sealed: 1 of 2 fragments". */
+  sealNotice: style({ size: 11, bold: true, color: worldPalette.stairwellSeal.plateInk }),
+  /** Over a stairwell its key has just opened: "The way down is open". */
+  sealBanner: style({
+    size: 18,
+    bold: true,
+    color: worldPalette.stairwellSeal.banner,
+    outline: true,
+  }),
 } as const satisfies Record<string, WorldTextStyle>;
 
 export type WorldTextStyleId = keyof typeof WORLD_TEXT;
@@ -824,6 +861,13 @@ export const WORLD_PLATE = {
     fill: worldPalette.plate.safeFill,
     border: worldPalette.plate.safeEdge,
     borderWidth: PLATE_BORDER_WIDTH,
+  },
+  /** Behind the note over a sealed stairwell, edged in the padlock's gold. */
+  sealNotice: {
+    fill: worldPalette.stairwellSeal.plateFill,
+    border: worldPalette.stairwellSeal.plateEdge,
+    borderWidth: PLATE_BORDER_WIDTH,
+    radius: CAPTION_RADIUS,
   },
   /** A landed blow toward a combo, in the row of pips over the crawler. */
   comboPipLit: {

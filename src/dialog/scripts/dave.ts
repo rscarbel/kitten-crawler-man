@@ -1,7 +1,8 @@
 /**
  * Dave's words outside the story beats: his tutorial reminders, his
- * congratulations behind each boss, the debrief's gear sentences, and his
- * survival tactics for every objective. Which of these he says, and when, is
+ * congratulations behind each boss, his word on the floor's key, the
+ * debrief's gear sentences, and his survival tactics for every objective.
+ * Which of these he says, and when, is
  * decided in `daveAdvice.ts`, `daveDebrief.ts` and the tutorial; this file
  * only holds what he says once that choice has been made. Where a thing is
  * and whether it is optional is Caroline's to say (`caroline.ts`).
@@ -60,7 +61,7 @@ export const DAVE_TUTORIAL_REMINDERS = {
   ),
   SWITCHED_TO_HUMAN: say.line('Use the Follower button. Call the cat over first.'),
   CAT_ARRIVED: null,
-  TALKED_TO_DAVE_AGAIN: say.line("The stairwell's just below this room. Go on down."),
+  TALKED_TO_DAVE_AGAIN: say.line("Stairwell's just below this room. The key'll open it."),
   COMPLETE: null,
 } as const satisfies Record<TutorialState, DialogLine | null>;
 
@@ -81,6 +82,20 @@ export const DAVE_DEBRIEF_CONGRATS = {
     "The Current Goblin's down and neither of you is smoking. Good. Sit down a minute and let your hair settle.",
   ),
 } as const satisfies Record<DebriefBossType, DialogLine>;
+
+/**
+ * What he says of the floor's key: after his congratulations behind a boss,
+ * and tapped with nothing left to raise once the key is whole. Chosen by the
+ * key ring's state rather than by the boss, so it stays true whichever deeds
+ * hold the fragments.
+ */
+export const DAVE_KEY_PROGRESS = {
+  partial: say.line("That's a piece of the key, then. Keep it safe. It goes on your key ring."),
+  whole: say.line("That's the key whole. Go on. Find a stairwell and see what it does."),
+} as const satisfies Record<'partial' | 'whole', DialogLine>;
+
+/** How far along the floor's key is, as Dave speaks of it. */
+export type DaveKeyProgress = keyof typeof DAVE_KEY_PROGRESS;
 
 /** The sentence opening a crawler's unworn-gear list. */
 export function daveDebriefGearFirstSentence(
@@ -146,7 +161,7 @@ export const DAVE_ADVICE = {
   ]),
 
   stealth_gate: say.line(
-    "That prison, you sneak through. You can't fight your way past those guards, so don't try. Stay out of sight, take your time, and get the key.",
+    "That prison, you sneak through. You can't fight your way past those guards, so don't try. Stay out of sight, take your time, and get the gate key.",
   ),
 
   spider_lab: say.line(

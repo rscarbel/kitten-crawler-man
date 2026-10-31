@@ -297,7 +297,7 @@ section("A hireling's blow counts once, credited to the party");
     id: HIRELING_TEMPLATE.id,
     name: HIRELING_TEMPLATE.name,
     terms: 'paid',
-    contractLevelId: FLOOR,
+    contract: { kind: 'floor', levelId: FLOOR },
     introduced: true,
   };
   const system = new MercenarySystem(roster, FLOOR);

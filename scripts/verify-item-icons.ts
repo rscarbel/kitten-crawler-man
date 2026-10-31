@@ -119,6 +119,7 @@ function hotbarSlotModel(item: InventoryItem | null): HotbarSlotModel {
     cooldown: 0,
     cooldownLabel: '',
     unseen: false,
+    glow: 0,
   };
 }
 

@@ -14,6 +14,8 @@ import { StoryDirector } from '../story/StoryDirector';
 import type { StoryFloor } from '../story/storyTypes';
 import type { TilePoint } from '../map/town/townPlan';
 import type { ProgressWipe } from '../ui/screens/dialogs/wipeHold';
+import { KeyRing } from '../core/keys/KeyRing';
+import type { LevelId } from '../levels/levelIds';
 
 /** The party as a save records it, wherever it is standing. */
 export interface SaveParty {
@@ -52,6 +54,8 @@ export interface InteriorPartyRun {
   readonly attackCowState: AttackCowState;
   /** The party's formation, read by the interior's party so an away crawler stays away indoors. */
   readonly partySplit: PartySplitState;
+  /** The floor outside's key ring: a fragment earned indoors goes on the same key. */
+  readonly keyRing: KeyRing;
   /** The run's pet names; a pet named indoors is saved by the floor outside. */
   readonly petNames: PetNameBook;
   /** Where Dave was last, so a building's safe room keeps him between visits. */
@@ -82,11 +86,12 @@ export interface InteriorPartyRun {
 }
 
 /** For an interior with no floor behind it: fresh state and no storage. */
-export function detachedPartyRun(): InteriorPartyRun {
+export function detachedPartyRun(levelId: LevelId): InteriorPartyRun {
   return {
     wheelLedger: createWheelLedger(),
     attackCowState: createAttackCowState(),
     partySplit: createPartySplitState(),
+    keyRing: new KeyRing(levelId),
     petNames: new PetNameBook(),
     daveWhereabouts: new DaveWhereabouts(),
     story: {

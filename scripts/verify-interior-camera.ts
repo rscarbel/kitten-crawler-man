@@ -586,6 +586,7 @@ function checkRoomNameSlot(
     { name: 'Build', rect: buttons.build },
     { name: 'rewards chip', rect: buttons.chip },
     { name: 'Journal', rect: buttons.journal },
+    { name: 'Keys', rect: buttons.keys },
     { name: 'Switch', rect: buttons.switchButton },
     { name: 'Follow', rect: buttons.follower },
     { name: 'Summon', rect: buttons.summon },

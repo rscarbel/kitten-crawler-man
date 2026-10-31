@@ -1,6 +1,7 @@
 import type { GameMap } from '../map/GameMap';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import type { LevelDef } from '../levels/types';
+import type { LevelId } from '../levels/levelIds';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
 import { recommendedPartyLevelFor } from '../levels/spawner';
@@ -11,8 +12,21 @@ import { worldPalette } from '../ui/theme/worldInk';
 import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import { dungeonFloorTheme, type DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { StairwellStyleId } from '../sprites/art/stairwellArt';
-import type { Camera } from '../core/rendering/camera';
+import { screenToWorld, type Camera } from '../core/rendering/camera';
 import { clamp } from '../utils';
+import type { KeyRing, KeyView } from '../core/keys/KeyRing';
+import type { KeyKind } from '../core/keys/keyKinds';
+import type { StairwellTile } from '../core/keys/keyRingState';
+import { STAIRWELL_FOOTPRINT_SPAN } from '../map/DungeonGenerator';
+import { prefersReducedMotion } from '../ui/core/reducedMotion';
+import {
+  paintSealedNotice,
+  paintSealGround,
+  paintUnsealAbove,
+  type SealPlacement,
+  type SealView,
+} from './stairwellSealPainter';
+import { unsealBeatFrames, type UnsealBeat } from './stairwellUnseal';
 
 const TILE_CENTER_OFFSET = 0.5;
 // Stairwell rendering
@@ -296,6 +310,131 @@ function descentWarning(advice: DescentAdvice | null): string | null {
 
 const NEXT_FLOOR_FALLBACK_NAME = 'Next Floor';
 
+/** What the floor's stairwells hand the party to, by the level's `exit`. */
+export interface StairwellExits {
+  /** The descend prompt's Descend, on a floor whose stairwells lead down. */
+  readonly onDescend: (nextLevelId: LevelId) => void;
+  /** The party stepped onto a stairwell on the floor that ends the run. */
+  readonly onRunEnd: () => void;
+  /**
+   * An open stairwell has just offered the party its way out, whichever way
+   * that is: the descend prompt opening, or the run's end. Told before the
+   * offer itself.
+   */
+  readonly onExitOffered: () => void;
+}
+
+/** The part of the floor's key ring the seals read and write. */
+export type StairwellSealRing = Pick<
+  KeyRing,
+  'isUnsealed' | 'markUnsealed' | 'canUnsealStairwells' | 'stairwellOpener' | 'stairwellKeyView'
+>;
+
+/** A stairwell whose key has just been brought to it: the scene its seal opens with. */
+export interface UnsealRequest {
+  readonly tile: StairwellTile;
+  /** The footprint's centre, in world pixels. */
+  readonly center: { readonly x: number; readonly y: number };
+  readonly style: StairwellStyleId;
+  readonly reducedMotion: boolean;
+}
+
+/** What the seals ask of the scene they stand in. */
+export interface StairwellSealHooks {
+  readonly ring: StairwellSealRing;
+  /** A crawler stepped onto a seal without the key: rattle it. */
+  readonly onLocked: (at: { readonly x: number; readonly y: number }) => void;
+  /** A crawler brought the key: play the unseal scene, then call `completeUnseal`. */
+  readonly onUnseal: (request: UnsealRequest) => void;
+  /** The Keys button's centre in screen CSS pixels, where the key flies from; null when it is not drawn. */
+  readonly keyDock: () => { readonly x: number; readonly y: number } | null;
+  /**
+   * A party carrying the key is near a seal of this style: have the poses it
+   * opens through painted before they are needed, so the scene never waits on
+   * them. Called again while the party stays near, which keeps them held.
+   */
+  readonly prewarmOpening: (style: StairwellStyleId) => void;
+  /**
+   * Whether the unseal scene may start at the seal centred on `at` (world
+   * pixels): it holds the party for seconds, so it never starts while
+   * anything is hunting them.
+   */
+  readonly isSafeToUnseal: (at: { readonly x: number; readonly y: number }) => boolean;
+}
+
+/** What the scene announces once a seal is open. */
+export interface UnsealedStairwell {
+  readonly kind: KeyKind;
+  readonly tile: StairwellTile;
+}
+
+/** The picture of a seal opening, advanced in place each world tick rather than rebuilt per frame. */
+interface UnsealingView {
+  readonly kind: 'unsealing';
+  beat: UnsealBeat | null;
+  beatFrame: number;
+  beatLength: number;
+  readonly reducedMotion: boolean;
+}
+
+/** The seal's own scene, from the step that started it to the scene's end. */
+interface UnsealRun {
+  readonly tile: StairwellTile;
+  readonly style: StairwellStyleId;
+  /** The forged key that is opening it, resolved once when it was brought. */
+  readonly kind: KeyKind;
+  readonly view: UnsealingView;
+}
+
+/** The picture of a seal just tried without the key, rattling. */
+interface RattlingView {
+  readonly kind: 'sealed';
+  rattle: number;
+  rattleTick: number;
+}
+
+/** The note over a seal tried without the key, while it shows. */
+interface LockedNotice {
+  readonly tile: StairwellTile;
+  /** Written once, when the seal was tried: the counts do not change while it shows. */
+  readonly text: string;
+  framesLeft: number;
+  /** Only a seal tried without the key rattles; one refused for the danger near it holds still. */
+  readonly rattles: boolean;
+  readonly view: RattlingView;
+}
+
+/** What the seal says when the party brings its key while something is hunting it. */
+export const HUNTED_NOTICE_TEXT = "Not while you're being hunted";
+
+const SEALED_IDLE: SealView = Object.freeze({ kind: 'sealed', rattle: 0, rattleTick: 0 });
+
+/** How often a party carrying the key checks for a seal near enough to ready (1 s at 60 fps). */
+const SEAL_PREWARM_INTERVAL_FRAMES = 60;
+/**
+ * How near a sealed stairwell a party carrying the key must be for its
+ * opening poses to be painted: about two screens, far enough that the paint
+ * has finished well before the crawler can reach the stairs.
+ */
+const SEAL_PREWARM_RADIUS_TILES = 30;
+const SEAL_PREWARM_RADIUS_PX = SEAL_PREWARM_RADIUS_TILES * TILE_SIZE;
+
+/** How long "Sealed: 1 of 2 fragments" stays over a seal (2.5 s at 60 fps). */
+const SEALED_NOTICE_FRAMES = 150;
+/**
+ * The least time between two tries of a seal raising its rattle and note
+ * (2 s at 60 fps), so stepping off and on again does not hammer either.
+ */
+const SEALED_NOTICE_COOLDOWN_FRAMES = 120;
+/** How long the padlock rattles after a try, as a share of the note's time. */
+const SEALED_RATTLE_SHARE = 0.25;
+
+/** The note over a seal, with the key ring's own count of the floor key's fragments. */
+export function sealedNoticeText(key: KeyView): string {
+  const unit = key.needed === 1 ? 'fragment' : 'fragments';
+  return `Sealed: ${key.held} of ${key.needed} ${unit}`;
+}
+
 export class StairwellSystem implements GameSystem {
   private onStairwell = false;
   private _menuOpen = false;
@@ -368,11 +507,21 @@ export class StairwellSystem implements GameSystem {
    *   rebuilt — a stale party level would advise against a floor the crawler has
    *   since grown into.
    */
+  private unseal: UnsealRun | null = null;
+  private lockedNotice: LockedNotice | null = null;
+  private lockedCooldownFrames = 0;
+  /** A seal the party brought its key to while hunted, opened once calm if they wait on it. */
+  private awaitingCalm: StairwellTile | null = null;
+  private sealPrewarmFrames = 0;
+  private readonly sealPlacement: { x: number; y: number; size: number; style: StairwellStyleId } =
+    { x: 0, y: 0, size: 0, style: 'cellars' };
+
   constructor(
-    private readonly gameMap: GameMap,
+    private readonly gameMap: Pick<GameMap, 'stairwellTiles' | 'isStairwellTile'>,
     private readonly levelDef: LevelDef,
-    private readonly onDescend: () => void,
+    private readonly exits: StairwellExits,
     private readonly partyLevel: () => number,
+    private readonly seals: StairwellSealHooks,
   ) {}
 
   captureCheckpoint(): StairwellCheckpoint {
@@ -406,6 +555,10 @@ export class StairwellSystem implements GameSystem {
    * they respawned beside with no motes at all.
    */
   restoreCheckpoint(snapshot: StairwellCheckpoint): void {
+    this.unseal = null;
+    this.lockedNotice = null;
+    this.lockedCooldownFrames = 0;
+    this.awaitingCalm = null;
     this.forceDraftReselect();
     this.wayfinderMotes.length = 0;
     this.wayfinderSpawnCooldownFrames = 0;
@@ -422,7 +575,7 @@ export class StairwellSystem implements GameSystem {
    * player who has already hunted for a minute a fresh 90 seconds of silence.
    */
   armWayfinder(): void {
-    if (!this.levelDef.nextLevelId) return;
+    if (this.nextLevelId() === null) return;
     if (this.wayfinderRetired || this.wayfinderFrames !== null) return;
     this.wayfinderFrames = 0;
   }
@@ -587,10 +740,10 @@ export class StairwellSystem implements GameSystem {
 
   /** The descend prompt's question and advice. */
   descentPrompt(): DescentPrompt {
-    const nextId = this.levelDef.nextLevelId;
+    const nextId = this.nextLevelId();
     const advice = this.descentAdvice();
     return {
-      nextFloorName: nextId ? getLevelDef(nextId).name : NEXT_FLOOR_FALLBACK_NAME,
+      nextFloorName: nextId === null ? NEXT_FLOOR_FALLBACK_NAME : getLevelDef(nextId).name,
       advice,
       warning: descentWarning(advice),
     };
@@ -598,7 +751,34 @@ export class StairwellSystem implements GameSystem {
 
   /** The prompt's Descend. */
   descend(): void {
-    this.onDescend();
+    const exit = this.levelDef.exit;
+    switch (exit.kind) {
+      case 'descend':
+        this.exits.onDescend(exit.nextLevelId);
+        return;
+      case 'runEnd':
+        this.exits.onRunEnd();
+        return;
+      default: {
+        const unhandled: never = exit;
+        return unhandled;
+      }
+    }
+  }
+
+  /** The floor the stairwells lead down to, or null on the floor that ends the run. */
+  private nextLevelId(): LevelId | null {
+    const exit = this.levelDef.exit;
+    switch (exit.kind) {
+      case 'descend':
+        return exit.nextLevelId;
+      case 'runEnd':
+        return null;
+      default: {
+        const unhandled: never = exit;
+        return unhandled;
+      }
+    }
   }
 
   /**
@@ -610,6 +790,79 @@ export class StairwellSystem implements GameSystem {
   update(ctx: SystemContext): void {
     this.updateDraftMotes(ctx.active);
     this.tickWayfinder(ctx.active);
+    this.updateSeals(ctx.active);
+  }
+
+  /**
+   * One world tick of the seals: the opening scene's picture, the note over a
+   * tried seal, readying the opening poses near a party carrying the key, and
+   * opening a seal whose danger has passed under a crawler waiting on it.
+   */
+  updateSeals(active: { x: number; y: number }): void {
+    this.openOnceCalm(active);
+    const run = this.unseal;
+    if (run !== null && run.view.beat !== null) run.view.beatFrame++;
+    if (this.lockedCooldownFrames > 0) this.lockedCooldownFrames--;
+    const notice = this.lockedNotice;
+    if (notice !== null) {
+      notice.framesLeft--;
+      notice.view.rattleTick++;
+      const rattleFrames = SEALED_NOTICE_FRAMES * SEALED_RATTLE_SHARE;
+      const rattleLeft = notice.framesLeft - (SEALED_NOTICE_FRAMES - rattleFrames);
+      notice.view.rattle = notice.rattles ? clamp(rattleLeft / rattleFrames, 0, 1) : 0;
+      if (notice.framesLeft <= 0) this.lockedNotice = null;
+    }
+    this.sealPrewarmFrames++;
+    if (this.sealPrewarmFrames >= SEAL_PREWARM_INTERVAL_FRAMES) {
+      this.sealPrewarmFrames = 0;
+      if (this.sealedStairwellNear(active)) this.seals.prewarmOpening(this.stairwellStyle());
+    }
+  }
+
+  /** Whether the party carries the key within reach of a stairwell it has yet to open. */
+  private sealedStairwellNear(active: { x: number; y: number }): boolean {
+    if (!this.seals.ring.canUnsealStairwells()) return false;
+    const reachSq = SEAL_PREWARM_RADIUS_PX * SEAL_PREWARM_RADIUS_PX;
+    return this.gameMap.stairwellTiles.some((tile) => {
+      if (this.seals.ring.isUnsealed(tile)) return false;
+      const dx = footprintCenterX(tile.x) - active.x;
+      const dy = footprintCenterY(tile.y) - active.y;
+      return dx * dx + dy * dy <= reachSq;
+    });
+  }
+
+  /** Whether a seal's scene is waiting to play or playing: the party is held still for it. */
+  get unsealing(): boolean {
+    return this.unseal !== null;
+  }
+
+  /** The unseal scene has reached `beat`; the seal's picture follows it from here. */
+  beginUnsealBeat(beat: UnsealBeat): void {
+    const run = this.unseal;
+    if (run === null) return;
+    run.view.beat = beat;
+    run.view.beatFrame = 0;
+    run.view.beatLength = unsealBeatFrames(beat, run.style);
+  }
+
+  /**
+   * The unseal scene has ended: the stairwell is open from now on. A crawler
+   * still standing on it is offered its exit at once; one knocked off it
+   * during the scene is offered it on their next step onto the stairs.
+   *
+   * @returns what opened, for the scene to announce, or null when no seal was opening.
+   */
+  completeUnseal(active: { x: number; y: number }): UnsealedStairwell | null {
+    const run = this.unseal;
+    if (run === null) return null;
+    this.unseal = null;
+    this.seals.ring.markUnsealed(run.tile);
+    const standingOn = this.stairwellUnder(active);
+    const stillOnIt = standingOn?.x === run.tile.x && standingOn.y === run.tile.y;
+    this.dismissed = false;
+    this.onStairwell = stillOnIt;
+    if (stillOnIt) this.offerExit();
+    return { kind: run.kind, tile: run.tile };
   }
 
   /** The stairwell's footprint centre in world pixels, matching where `renderStairwells` draws it. */
@@ -626,11 +879,6 @@ export class StairwellSystem implements GameSystem {
    * ones nobody is near.
    */
   private updateDraftMotes(active: { x: number; y: number }): void {
-    if (!this.levelDef.nextLevelId) {
-      this.draftPools.clear();
-      return;
-    }
-
     if (this.playerJumped(active)) this.forceDraftReselect();
     this.lastDraftPlayerX = active.x;
     this.lastDraftPlayerY = active.y;
@@ -759,19 +1007,112 @@ export class StairwellSystem implements GameSystem {
 
   /** Called each gameplay frame. Detects stairwell entry and opens/closes the menu. */
   detect(active: { x: number; y: number }): void {
-    if (!this.levelDef.nextLevelId) {
-      this.onStairwell = false;
-      return;
-    }
-
+    // The unseal scene holds the crawler on the stairs; its end offers the exit.
+    if (this.unseal !== null) return;
     const wasOn = this.onStairwell;
-    this.onStairwell = this.isEntityOnStairwell(active);
+    const tile = this.stairwellUnder(active);
+    this.onStairwell = tile !== null;
 
-    if (!this.onStairwell) {
+    if (tile === null) {
       this.dismissed = false;
       this._menuOpen = false;
-    } else if (!wasOn && !this.dismissed) {
-      this._menuOpen = true;
+      return;
+    }
+    if (wasOn || this.dismissed) return;
+    if (!this.seals.ring.isUnsealed(tile)) {
+      this.tryTheSeal(tile);
+      return;
+    }
+    this.offerExit();
+  }
+
+  /**
+   * A crawler has stepped onto a sealed stairwell. With the floor's key it
+   * opens; without, the padlock rattles and the note says how far off the key
+   * is. A seal never offers the exit itself.
+   */
+  private tryTheSeal(tile: StairwellTile): void {
+    const center = this.footprintCenter(tile);
+    const opener = this.seals.ring.stairwellOpener();
+    if (opener !== null && !this.seals.isSafeToUnseal(center)) {
+      // The scene holds the party still for seconds, so it never opens into a
+      // fight. It starts by itself once the danger passes, if the crawler waits on the stairs.
+      this.awaitingCalm = tile;
+      this.raiseNotice(tile, HUNTED_NOTICE_TEXT, false);
+      return;
+    }
+    if (opener !== null) {
+      this.awaitingCalm = null;
+      const style = this.stairwellStyle();
+      const reducedMotion = prefersReducedMotion();
+      this.lockedNotice = null;
+      this.seals.prewarmOpening(style);
+      this.unseal = {
+        tile,
+        style,
+        kind: opener,
+        view: { kind: 'unsealing', beat: null, beatFrame: 0, beatLength: 0, reducedMotion },
+      };
+      this.seals.onUnseal({ tile, center, style, reducedMotion });
+      return;
+    }
+    if (this.raiseNotice(tile, sealedNoticeText(this.seals.ring.stairwellKeyView()), true)) {
+      this.seals.onLocked(center);
+    }
+  }
+
+  /** Puts a note over a seal, unless one was raised too lately; returns whether it was. */
+  private raiseNotice(tile: StairwellTile, text: string, rattles: boolean): boolean {
+    if (this.lockedCooldownFrames > 0) return false;
+    this.lockedCooldownFrames = SEALED_NOTICE_COOLDOWN_FRAMES;
+    this.lockedNotice = {
+      tile,
+      text,
+      framesLeft: SEALED_NOTICE_FRAMES,
+      rattles,
+      view: { kind: 'sealed', rattle: rattles ? 1 : 0, rattleTick: 0 },
+    };
+    return true;
+  }
+
+  /**
+   * A crawler with the key who was refused for the danger near and is still
+   * standing on that seal: open it the moment the danger has passed.
+   */
+  private openOnceCalm(active: { x: number; y: number }): void {
+    const waiting = this.awaitingCalm;
+    if (waiting === null || this.unseal !== null) return;
+    const standingOn = this.stairwellUnder(active);
+    if (standingOn?.x !== waiting.x || standingOn.y !== waiting.y) {
+      this.awaitingCalm = null;
+      return;
+    }
+    if (!this.seals.isSafeToUnseal(this.footprintCenter(waiting))) return;
+    this.tryTheSeal(waiting);
+  }
+
+  /** The note over a seal tried without the key, or null while none shows. */
+  get sealedNotice(): string | null {
+    return this.lockedNotice?.text ?? null;
+  }
+
+  /** Opens the floor's way out for a crawler on an open stairwell. */
+  private offerExit(): void {
+    this.exits.onExitOffered();
+    const exit = this.levelDef.exit;
+    switch (exit.kind) {
+      case 'descend':
+        this._menuOpen = true;
+        return;
+      case 'runEnd':
+        // Once per step onto the stairs, as the descend prompt is.
+        this.dismissed = true;
+        this.exits.onRunEnd();
+        return;
+      default: {
+        const unhandled: never = exit;
+        return unhandled;
+      }
     }
   }
 
@@ -782,18 +1123,104 @@ export class StairwellSystem implements GameSystem {
     return this.gameMap.isStairwellTile(tx, ty);
   }
 
+  /** The footprint the entity stands in, by its top-left tile, or null off every stairwell. */
+  private stairwellUnder(entity: { x: number; y: number }): StairwellTile | null {
+    if (!this.isEntityOnStairwell(entity)) return null;
+    const tx = Math.floor((entity.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ty = Math.floor((entity.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    return (
+      this.gameMap.stairwellTiles.find(
+        (tile) =>
+          tx >= tile.x &&
+          tx < tile.x + STAIRWELL_FOOTPRINT_SPAN &&
+          ty >= tile.y &&
+          ty < tile.y + STAIRWELL_FOOTPRINT_SPAN,
+      ) ?? null
+    );
+  }
+
+  /**
+   * What the floor's stairwells are built of. The overworld's stairwell is cut
+   * into the town square's paving, whatever dungeon theme was last set.
+   */
+  private stairwellStyle(): StairwellStyleId {
+    if (this.levelDef.isOverworld === true) return 'street';
+    return STAIRWELL_STYLE_BY_THEME[dungeonFloorTheme().id];
+  }
+
+  private sealViewOf(tile: StairwellTile): SealView | null {
+    const run = this.unseal;
+    if (run !== null && run.tile.x === tile.x && run.tile.y === tile.y) return run.view;
+    if (this.seals.ring.isUnsealed(tile)) return null;
+    const notice = this.lockedNotice;
+    if (notice?.tile.x === tile.x && notice.tile.y === tile.y) return notice.view;
+    return SEALED_IDLE;
+  }
+
+  /**
+   * What crosses in front of the crawlers: the unseal scene's key, light,
+   * motes and banner, and the note over a seal tried without the key.
+   */
+  renderAbove(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const run = this.unseal;
+    if (run !== null && run.view.beat !== null) {
+      const dock = this.seals.keyDock();
+      const dockWorld = dock === null ? null : screenToWorld(camera, dock.x, dock.y);
+      paintUnsealAbove(ctx, this.placementOf(run.tile, camera), run.view, {
+        keyFrom:
+          dockWorld === null ? null : { x: dockWorld.x - camera.x, y: dockWorld.y - camera.y },
+        keyKind: run.kind,
+        banner: this.unsealBanner(),
+      });
+    }
+    const notice = this.lockedNotice;
+    if (notice !== null) {
+      paintSealedNotice(
+        ctx,
+        this.placementOf(notice.tile, camera),
+        notice.text,
+        notice.framesLeft / SEALED_NOTICE_FRAMES,
+      );
+    }
+  }
+
+  /** Where a seal draws this frame, written into one placement the painters read and never keep. */
+  private placementOf(tile: StairwellTile, camera: Camera): SealPlacement {
+    const placement = this.sealPlacement;
+    placement.x = tile.x * TILE_SIZE - camera.x;
+    placement.y = tile.y * TILE_SIZE - camera.y;
+    placement.size = TILE_SIZE * STAIRWELL_SCALE;
+    placement.style = this.stairwellStyle();
+    return placement;
+  }
+
+  /** The banner over a seal as it opens, by where the floor's stairwells lead. */
+  private unsealBanner(): string {
+    const exit = this.levelDef.exit;
+    switch (exit.kind) {
+      case 'descend':
+        return 'The way down is open';
+      case 'runEnd':
+        // This stairwell does not lead down to another floor.
+        return 'The way is open';
+      default: {
+        const unhandled: never = exit;
+        return unhandled;
+      }
+    }
+  }
+
   renderStairwells(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const { x: camX, y: camY } = camera;
-    if (!this.levelDef.nextLevelId) return;
     const ts = TILE_SIZE;
     const bw = ts * STAIRWELL_SCALE;
     const bh = ts * STAIRWELL_SCALE;
+    const now = Date.now();
     const pulse =
-      STAIRWELL_PULSE_CENTER +
-      Math.sin(Date.now() / STAIRWELL_PULSE_SPEED) * STAIRWELL_PULSE_AMPLITUDE;
-    for (const { x, y } of this.gameMap.stairwellTiles) {
-      const sx = x * ts - camX;
-      const sy = y * ts - camY;
+      STAIRWELL_PULSE_CENTER + Math.sin(now / STAIRWELL_PULSE_SPEED) * STAIRWELL_PULSE_AMPLITUDE;
+    for (const tile of this.gameMap.stairwellTiles) {
+      const sx = tile.x * ts - camX;
+      const sy = tile.y * ts - camY;
       if (
         sx < -bw * STAIRWELL_OFFSCREEN_MARGIN ||
         sx > camera.viewWidth ||
@@ -802,15 +1229,13 @@ export class StairwellSystem implements GameSystem {
       )
         continue;
 
-      drawSpriteKey(
-        ctx,
-        'stairwell',
-        STAIRWELL_STYLE_BY_THEME[dungeonFloorTheme().id],
-        0,
-        sx,
-        sy,
-        bw,
-      );
+      drawSpriteKey(ctx, 'stairwell', this.stairwellStyle(), 0, sx, sy, bw);
+
+      const seal = this.sealViewOf(tile);
+      if (seal !== null) {
+        paintSealGround(ctx, this.placementOf(tile, camera), seal, now);
+        continue;
+      }
 
       ctx.save();
       ctx.globalAlpha = pulse;
@@ -944,8 +1369,8 @@ export class StairwellSystem implements GameSystem {
    * on a floor that opts out of the advice altogether.
    */
   private descentAdvice(): DescentAdvice | null {
-    const nextId = this.levelDef.nextLevelId;
-    if (!nextId) return null;
+    const nextId = this.nextLevelId();
+    if (nextId === null) return null;
     if (this.levelDef.suppressDescentAdvice === true) return null;
     const party = this.partyLevel();
     const profile = activeDifficultyProfile();

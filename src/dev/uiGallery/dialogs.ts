@@ -15,6 +15,7 @@ import { FIXTURES as CONVERSATION } from './dialogs/conversation';
 import { FIXTURES as END_SCREENS } from './dialogs/endScreens';
 import { FIXTURES as EXPLAINERS } from './dialogs/explainers';
 import type { DialogFixture } from './dialogs/fixture';
+import { FIXTURES as FLOOR_INTRO } from './dialogs/floorIntro';
 import { FIXTURES as PET_NAME } from './dialogs/petName';
 import { FIXTURES as PIPE_BOARD } from './dialogs/pipeBoard';
 import { FIXTURES as POKER } from './dialogs/poker';
@@ -36,4 +37,5 @@ export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...PIPE_BOARD,
   ...AI_INTERACTIONS,
   ...CAROLINE,
+  ...FLOOR_INTRO,
 ];

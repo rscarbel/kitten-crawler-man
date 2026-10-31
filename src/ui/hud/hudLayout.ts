@@ -382,6 +382,7 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     buttons.follower,
     buttons.chip,
     buttons.journal,
+    buttons.keys,
     buttons.summon,
     ...(buttons.build === null ? [] : [buttons.build]),
     ...(buttons.switchButton === null ? [] : [buttons.switchButton]),

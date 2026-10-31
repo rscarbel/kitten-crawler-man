@@ -35,7 +35,10 @@ const FRAME_TEXT = ['System AI message:', 'Caroline -'] as const;
 /** Text that begins with what her frame already draws. */
 type CarriesFrameText = `${(typeof FRAME_TEXT)[number]}${string}`;
 
-const SPEAKER: CarolineSpeakerRef = { kind: 'caroline', name: 'Caroline', [AUTHORED]: true };
+/** The name her lines are credited to. */
+export const CAROLINE_NAME = 'Caroline' as const satisfies CarolineSpeakerRef['name'];
+
+const SPEAKER: CarolineSpeakerRef = { kind: 'caroline', name: CAROLINE_NAME, [AUTHORED]: true };
 
 /** `text` without any frame text at its start, for a string the compiler could not check. */
 function withoutFrameText(text: string): string {

@@ -38,7 +38,15 @@ import { floorTwoPropVariantSheetPlans } from './propVariantSheets';
 import { remainsSheetPlans } from './remainsSheets';
 import { rockSheetPlans } from './rockSheets';
 import { serviceFurnitureSheetPlans } from './serviceFurnitureSheets';
+import {
+  STAIRWELL_SEAL_SHEETS,
+  stairwellSealLockedPlan,
+  stairwellSealOpenPlan,
+} from './stairwellSealSheets';
+import { wantEnvironmentSheet } from '../../map/environmentArtCache';
+import type { StairwellStyleId } from '../art/stairwellArt';
 import { stairwellSheetPlans } from './stairwellSheets';
+import { STAIRWELL_STYLE_IDS } from '../art/stairwellArt';
 import { TREE_READY_ROWS, treeSheetPlans } from './treeSheets';
 import { townscapeSheetPlans } from './townscapeSheets';
 import { villageSheetPlans } from './villageSheets';
@@ -102,6 +110,12 @@ function environmentFamilies(groups: ReadonlyArray<AssetGroup>): EnvironmentFami
     // sheet is the same whichever floor painted it.
     families.push(props(stairwellSheetPlans(), false));
   }
+  // Only the locked seal of the floor's own stairwells; the poses it opens
+  // through are asked for by the stairwell as a key comes near.
+  const sealPlans = STAIRWELL_STYLE_IDS.filter((style) =>
+    wanted.has(STAIRWELL_SEAL_SHEETS[style].group),
+  ).map(stairwellSealLockedPlan);
+  if (sealPlans.length > 0) families.push(props(sealPlans, false));
   // A skull is the same skull on every floor; its looks are picked per tile.
   // Only the sheets the groups list: the overworld scatters loose bones but
   // never lays out a skeleton.
@@ -204,4 +218,14 @@ export function plannedEnvironmentSheetSizes(
     }
   }
   return sizes;
+}
+
+/**
+ * Asks for the poses a stairwell's seal opens through, which no floor group
+ * paints: queued when first asked, repainted when the idle sweep let it go,
+ * and touched while it is already resident so it stays held while asked for.
+ */
+export function requestStairwellSealOpening(style: StairwellStyleId): void {
+  requestPropSheets([stairwellSealOpenPlan(style)], { variesWithFloorSeed: false });
+  wantEnvironmentSheet(STAIRWELL_SEAL_SHEETS[style].open);
 }

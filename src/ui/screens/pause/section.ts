@@ -22,9 +22,11 @@ import type { GlyphId } from '../../theme/glyphs';
 import type { TextRole } from '../../theme/skins';
 import { measureTextHeight, text } from '../../widgets/text';
 import type { PetNames } from '../../../core/party/petNames';
+import type { KeyRingView } from '../../../core/keys/KeyRing';
 
 export const PAUSE_SECTION_IDS = [
   'journal',
+  'keys',
   'character',
   'abilities',
   'crafts',
@@ -95,6 +97,8 @@ export interface PauseContext {
   readonly floorNumber: number;
   /** Null on floors without a Journal, which hides it. */
   readonly journal: JournalContext | null;
+  /** The keys of the floor the party is on. */
+  readonly keyRing: KeyRingView;
   readonly audio: PauseAudio | null;
   /** The run's music library, or null where no run is bound (which hides the music page). */
   readonly musicLibrary: MusicLibrary | null;

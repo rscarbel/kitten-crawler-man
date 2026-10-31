@@ -141,6 +141,16 @@ export interface OnMobKilledSpawn {
   spreadRadius: number;
 }
 
+/**
+ * What a level's stairwells lead to. Every switch over `kind` ends in a
+ * `never` check.
+ */
+export type LevelExit =
+  /** Down to the next floor. */
+  | { readonly kind: 'descend'; readonly nextLevelId: LevelId }
+  /** The end of the run: the stairwell offers the run's summary and a new game. */
+  | { readonly kind: 'runEnd' };
+
 /** How far a floor's ambient bands may follow a party past their authored tops. */
 export interface AmbientTracking {
   /** The highest level any ambient mob on the floor may be slid up to. */
@@ -399,8 +409,8 @@ export interface LevelDef {
    * `progression.gauntlets`.
    */
   bossRooms?: BossRoomRule[];
-  /** ID of the next level in the registry, if any. */
-  nextLevelId?: LevelId;
+  /** What the floor's stairwells lead to. */
+  exit: LevelExit;
   /**
    * Diminishing returns on XP earned here — kills, bosses and quest rewards
    * alike — so an early floor can't be farmed into trivialising the ones below

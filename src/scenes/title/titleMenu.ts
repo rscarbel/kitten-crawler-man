@@ -9,9 +9,8 @@ import type { InputManager } from '../../core/input/InputManager';
 import { DungeonScene, type DungeonSceneOptions } from '../DungeonScene';
 import { TutorialController } from '../../systems/TutorialController';
 import { getLevelDef } from '../../levels';
-import { difficultyStats } from '../../core/difficulty/DifficultyStats';
-import { bindRunStats } from '../../core/progression/GameStats';
-import { MusicLibrary, bindMusicLibrary } from '../../core/music/MusicLibrary';
+import { beginNewRun } from '../../core/save/newGame';
+import { MusicLibrary } from '../../core/music/MusicLibrary';
 import { inset, splitV, type Rect } from '../../ui/core/geom';
 import type { Surface, Ui } from '../../ui/core/UiRoot';
 import { button, buttonHeight } from '../../ui/widgets/button';
@@ -76,16 +75,6 @@ function diveFade(clock: TitleClock): number {
 
 /** Button sizes, roomiest first; the first whose column fits the menu's room wins. */
 const BUTTON_SIZES: readonly ControlSize[] = ['lg', 'md', 'sm'];
-
-/**
- * The library of a new run that skips the tutorial. Nothing ever leads back to
- * the tutorial, so its song would otherwise stay locked for the whole run.
- */
-function musicLibrarySkippingTutorial(): MusicLibrary {
-  const library = new MusicLibrary();
-  library.markRequested(['tutorial_island']);
-  return library;
-}
 
 export interface TitleMenuChoice {
   readonly id: 'continue' | 'tutorial' | 'level1';
@@ -292,20 +281,8 @@ export class TitleMenu {
     }
   }
 
-  /**
-   * A new game is a new run, whichever way the player reached this menu. Reset
-   * Game clears the run-scoped counters before it gets here, but the finished
-   * run's Main Menu does not — it keeps the save to continue — so a new game
-   * started from it has to clear them itself.
-   */
-  private beginNewRun(): void {
-    difficultyStats.beginRun();
-    bindRunStats(null);
-    bindMusicLibrary(null);
-  }
-
   private launchTutorial(): void {
-    this.beginNewRun();
+    beginNewRun();
     const { input, sceneManager, baseOptions } = this.deps;
     const tutorialDef = getLevelDef('tutorial');
     const tutorialController = TutorialController.createForTutorial();
@@ -318,13 +295,13 @@ export class TitleMenu {
   }
 
   private launchLevel1(): void {
-    this.beginNewRun();
+    beginNewRun();
     const { input, sceneManager, baseOptions } = this.deps;
     const level1Def = getLevelDef('level1');
     sceneManager.replace(
       new DungeonScene(level1Def, input, sceneManager, {
         ...baseOptions,
-        musicLibrary: musicLibrarySkippingTutorial(),
+        musicLibrary: MusicLibrary.skippingTutorial(),
         skippedTutorial: true,
         arrivedOnFloor: true,
       }),

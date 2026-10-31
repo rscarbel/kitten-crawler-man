@@ -219,6 +219,7 @@
     "gates:fairy": "tsx scripts/gate.ts tsx scripts/gates-fairy.ts",
     "review:index": "tsx scripts/build-review-index.ts",
     "verify:anchor-travel": "tsx scripts/gate.ts tsx scripts/verify-anchor-travel.ts",
+    "verify:floor-keys": "tsx scripts/gate.ts tsx scripts/verify-floor-keys.ts",
     "verify:assets": "tsx scripts/gate.ts tsx scripts/verify-assets.ts",
     "verify:environment-sheet-budget": "tsx scripts/gate.ts tsx scripts/verify-environment-sheet-budget.ts",
     "verify:starlight-tent": "tsx scripts/gate.ts tsx scripts/verify-starlight-tent-maze.ts",

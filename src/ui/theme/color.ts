@@ -9,7 +9,8 @@ const HEX_RADIX = 16;
 const CHANNEL_MAX = 255;
 const HEX_CHANNEL_DIGITS = 2;
 
-interface Rgb {
+/** A colour's red, green and blue channels, 0..255. */
+export interface Rgb {
   readonly r: number;
   readonly g: number;
   readonly b: number;
@@ -24,6 +25,11 @@ function parseHex(hex: string): Rgb {
     g: parseInt(g, HEX_RADIX),
     b: parseInt(b, HEX_RADIX),
   };
+}
+
+/** `hex` (#RRGGBB) split into its channels. */
+export function rgbOf(hex: string): Rgb {
+  return parseHex(hex);
 }
 
 function channelHex(value: number): string {

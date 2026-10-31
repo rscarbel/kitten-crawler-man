@@ -2924,10 +2924,12 @@ export class GameMap {
    * {@link isWalkableIgnoringPermanent}, for the idempotence that method gives,
    * and not under a sprite building's art. The roof rows a crawler may walk
    * behind are walkable, but a stall, lamp or pell placed there would stand
-   * hidden under the roof.
+   * hidden under the roof. A stairwell is walkable too, but a prop on one
+   * stands in the hole a crawler descends through.
    */
   isOpenStreetGround(tileX: number, tileY: number): boolean {
     if (this.isSpriteBuildingTile(tileX, tileY)) return false;
+    if (this.isStairwellTile(tileX, tileY)) return false;
     return this.isWalkableIgnoringPermanent(tileX, tileY, 'walker');
   }
 

@@ -241,6 +241,96 @@
       }
     }
   },
+  "stairwell_seal_locked_cellars": {
+    "frameWidth": 192,
+    "frameHeight": 224,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 128,
+    "states": {
+      "sealed": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "stairwell_seal_open_cellars": {
+    "frameWidth": 192,
+    "frameHeight": 224,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 128,
+    "states": {
+      "open": {
+        "row": 0,
+        "frameCount": 7
+      },
+      "cover": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
+  "stairwell_seal_locked_service_level": {
+    "frameWidth": 192,
+    "frameHeight": 224,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 128,
+    "states": {
+      "sealed": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "stairwell_seal_open_service_level": {
+    "frameWidth": 192,
+    "frameHeight": 224,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 128,
+    "states": {
+      "open": {
+        "row": 0,
+        "frameCount": 7
+      },
+      "cover": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
+  "stairwell_seal_locked_street": {
+    "frameWidth": 192,
+    "frameHeight": 224,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 128,
+    "states": {
+      "sealed": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "stairwell_seal_open_street": {
+    "frameWidth": 192,
+    "frameHeight": 224,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 128,
+    "states": {
+      "open": {
+        "row": 0,
+        "frameCount": 7
+      },
+      "cover": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
   "crawler_sign": {
     "frameWidth": 64,
     "frameHeight": 72,

@@ -63,6 +63,7 @@ import {
 } from '../src/core/save/progressPersistence';
 import { LOCAL_PROGRESS_STORAGE, writeLocalProgress } from '../src/core/save/LocalProgress';
 import { stampGameProgress } from '../src/core/save/saveFormat';
+import { NOTHING_CARRIED } from '../src/core/save/newGameCarry';
 import { AuthClient, type GameProgressInput } from '../src/auth/AuthClient';
 import { restorePlayer, snapPlayer } from '../src/core/save/PlayerSnapshot';
 import { parsePlayerSnapshot } from '../src/core/save/playerSnapshotFormat';
@@ -529,6 +530,7 @@ function latchFixture(): GameProgressInput {
     objectivesBriefed: [],
     petNames: {},
     playerIdentity: latchFixtureIdentity(),
+    carried: NOTHING_CARRIED,
   };
 }
 

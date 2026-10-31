@@ -278,6 +278,7 @@ class FakeScene implements AIContextSource {
     },
     location: { kind: 'corridor', label: 'dark corridor', inSafeRoom: false, inBossArena: false },
     nearbyMobs: [],
+    keys: [],
     combatInProgress: false,
     bossFightActive: false,
     isPaused: false,

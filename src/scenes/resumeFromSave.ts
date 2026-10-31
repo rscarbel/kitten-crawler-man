@@ -111,6 +111,7 @@ export function sceneSetupFromSave(
   options.storyDirector ??= storyDirectorFromSave(progress);
   // And for the pets: a name given after the save is still the pet's name.
   options.petNames ??= new PetNameBook(progress.petNames);
+  options.carried = progress.carried;
   // Clamped against the maximum the restored ability level implies, which the
   // save does not store.
   const petMaxHp = getDeinonychusStats(options.abilityManager.getLevel('deinonychus')).maxHp;

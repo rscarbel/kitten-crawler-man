@@ -264,7 +264,7 @@ async function verifyCitizenWithHireling(): Promise<void> {
     id: 'crush',
     name: 'Crush',
     terms: 'paid',
-    contractLevelId: level3.id,
+    contract: { kind: 'floor', levelId: level3.id },
     introduced: true,
   };
   const scene = new DungeonScene(level3, new InputManager(), sceneManager, {

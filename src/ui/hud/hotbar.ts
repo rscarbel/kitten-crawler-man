@@ -13,6 +13,7 @@
 import { QUEST_SLOT_IDX } from '../../core/items/defs/ItemDefs';
 import { HOTBAR_ACTIONS, keybindings } from '../../core/input/Keybindings';
 import type { Ui } from '../core/UiRoot';
+import { withAlpha } from '../theme/color';
 import { skinsFor } from '../theme/skins';
 import { itemSlot, slotContent } from '../widgets/itemSlot';
 import { drawGlass, fillRounded, strokeRounded } from '../widgets/paint';
@@ -20,6 +21,7 @@ import type { HotbarRects } from './hudLayout';
 import type { HotbarModel } from './hudModel';
 
 const QUEST_EDGE_WIDTH = 2;
+const GLOW_EDGE_WIDTH = 3;
 const DIVIDER_WIDTH = 1;
 const UNSEEN_DOT_RATIO = 0.16;
 
@@ -68,6 +70,10 @@ export function hotbar(ui: Ui, rects: HotbarRects, model: HotbarModel): void {
     }
     if (isQuest) {
       strokeRounded(ctx, rect, theme.radius.md, palette.accent.base, QUEST_EDGE_WIDTH);
+    }
+    if (slot.glow > 0) {
+      const ink = withAlpha(palette.accent.hover, slot.glow);
+      strokeRounded(ctx, rect, theme.radius.md, ink, GLOW_EDGE_WIDTH);
     }
     if (slot.unseen && !slot.equipped) {
       const dot = Math.max(space.sm, rect.w * UNSEEN_DOT_RATIO);

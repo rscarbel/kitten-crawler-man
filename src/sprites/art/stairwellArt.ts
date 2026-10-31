@@ -30,8 +30,11 @@ import { mulberry32, type Rng } from '../person/rng';
 type Ctx = CanvasRenderingContext2D;
 type Rgb = readonly [number, number, number];
 
+/** Every place a stairwell is cut into, in sheet row order. */
+export const STAIRWELL_STYLE_IDS = ['cellars', 'service_level', 'street'] as const;
+
 /** Which place the stairwell is cut into, and so what it is built of. */
-export type StairwellStyleId = 'cellars' | 'service_level' | 'street';
+export type StairwellStyleId = (typeof STAIRWELL_STYLE_IDS)[number];
 
 // ── Geometry, as fractions of the footprint's side ───────────────────────────
 

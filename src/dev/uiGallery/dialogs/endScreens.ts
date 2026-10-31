@@ -31,13 +31,9 @@ import { LevelCompleteScreen } from '../../../ui/screens/dialogs/LevelCompleteSc
 import { questRewardSurface } from '../../../ui/screens/dialogs/questRewardScreen';
 import { RunCompleteScreen, type RunSummary } from '../../../ui/screens/dialogs/RunCompleteScreen';
 import { screenFadeSurface } from '../../../ui/ScreenFade';
+import { runStatLines, type RunStatsReading } from '../../../ui/screens/runStatLines';
 import type { DialogFixture, FixtureRig } from './fixture';
-import {
-  PET_NAME_SUGGESTIONS,
-  PetNameBook,
-  parsePetName,
-  petWords,
-} from '../../../core/party/petNames';
+import { FIXTURES as KEY_CEREMONY_FIXTURES } from './keyCeremonies';
 import { WORLD_TICKS_PER_SECOND } from '../../../core/constants';
 
 /** Render frames that carry the death fade to full and the button live. */
@@ -47,7 +43,7 @@ const LEVEL_COMPLETE_SETTLED_FRAMES = 120;
 /** Midway through the run-complete count-up. */
 const RUN_COMPLETE_COUNTING_FRAMES = 95;
 /** Past the run-complete buttons' fade, with confetti still falling. */
-const RUN_COMPLETE_SETTLED_FRAMES = 320;
+const RUN_COMPLETE_SETTLED_FRAMES = 460;
 /** A couple of reward lines in, the rest still to come. */
 const QUEST_REWARD_REVEALING_FRAMES = 34;
 const QUEST_REWARD_SETTLED_FRAMES = 160;
@@ -58,6 +54,7 @@ const CHEST_OPENED_TICKS = 42;
 const FADE_HALF_ALPHA = 0.5;
 const FADE_BLACK_ALPHA = 1;
 const PLAYED_MINUTES = 197;
+const FLOOR_MINUTES = 64;
 const SECONDS_PER_MINUTE = 60;
 
 function frames(count: number): (rig: FixtureRig) => void {
@@ -99,48 +96,94 @@ const SAMPLE_KILLS: Readonly<Record<string, number>> = {
 const POTIONS_GIVEN = 3;
 const BURGERS_GIVEN = 5;
 
-/** A run whose Deinonychus was given a name. */
-function namedRun(): PetNameBook {
-  const book = new PetNameBook();
-  const name = parsePetName(PET_NAME_SUGGESTIONS.deinonychus[0]);
-  if (name !== null) book.give('deinonychus', name);
-  return book;
-}
-
-const SAMPLE_SUMMARY: RunSummary = {
+const SAMPLE_RUN_STATS: RunStatsReading = {
   framesPlayed: PLAYED_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND,
+  floorFramesPlayed: FLOOR_MINUTES * SECONDS_PER_MINUTE * WORLD_TICKS_PER_SECOND,
+  totalKills: 1_342,
+  bossesDefeated: 9,
   deaths: 7,
   damageDealt: 184_230,
   damageTaken: 41_877,
   potionsUsed: 63,
   goldEarned: 12_480,
-  achievementsUnlocked: 41,
-  achievementsTotal: 58,
-  humanLevel: 24,
-  catLevel: 26,
-  deinonychusLevel: 19,
-  deinonychusWords: petWords(namedRun(), 'deinonychus'),
-  totalKills: 1_342,
-  bossesDefeated: 9,
   mercenariesHired: 5,
   mercenariesLost: 2,
-  deinonychusPets: 48,
   cowPets: 37,
-  midgePets: 12,
   townCatPets: 21,
-  topKills: Object.entries(SAMPLE_KILLS),
 };
+
+const SAMPLE_FLOOR = 3;
+const SAMPLE_ACHIEVEMENTS_UNLOCKED = 41;
+const SAMPLE_ACHIEVEMENTS_TOTAL = 58;
+
+/** Built when the fixture opens, since the human's name exists only once a run has an identity. */
+function sampleSummary(): RunSummary {
+  return {
+    crawlers: [
+      {
+        crawler: 'human',
+        name: crawlerDisplayName('human'),
+        level: 24,
+        stats: {
+          health: 18,
+          melee: 22,
+          magic: 4,
+          evasiveness: 9,
+          ranged: 11,
+          explosivesHandling: 7,
+        },
+        gear: ['Hobnail Boots', 'Riot Kneeguards', "Scrapper's Wraps"],
+      },
+      {
+        crawler: 'cat',
+        name: crawlerDisplayName('cat'),
+        level: 26,
+        stats: {
+          health: 12,
+          melee: 6,
+          magic: 24,
+          evasiveness: 19,
+          ranged: 8,
+          explosivesHandling: 3,
+        },
+        gear: [],
+      },
+    ],
+    lines: [
+      ...runStatLines(SAMPLE_RUN_STATS, SAMPLE_FLOOR),
+      { label: 'Floors Cleared', value: SAMPLE_FLOOR, format: { kind: 'count' }, role: 'value' },
+      {
+        label: 'Achievements',
+        value: SAMPLE_ACHIEVEMENTS_UNLOCKED,
+        format: { kind: 'outOf', total: SAMPLE_ACHIEVEMENTS_TOTAL },
+        role: 'accent',
+      },
+    ],
+    topKills: Object.entries(SAMPLE_KILLS),
+  };
+}
+
+/** Frames for the new-game confirmation to come up over the settled screen. */
+const RUN_COMPLETE_CONFIRM_FRAMES = 30;
+
+function runCompleteConfirmFixture(name: string): DialogFixture {
+  return {
+    ...runCompleteFixture(name, RUN_COMPLETE_SETTLED_FRAMES),
+    interact: (rig) => {
+      frames(RUN_COMPLETE_SETTLED_FRAMES)(rig);
+      rig.tap(rig.need(`${name}/new-game`));
+      frames(RUN_COMPLETE_CONFIRM_FRAMES)(rig);
+    },
+  };
+}
 
 function runCompleteFixture(name: string, frameCount: number): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       const model = new RunCompleteScreen();
-      model.activate(SAMPLE_SUMMARY, {
-        onKeepExploring: () => undefined,
-        onMainMenu: () => undefined,
-      });
-      return [gated(shown, model.surface({ id: name }))];
+      model.activate(sampleSummary(), { onStay: () => undefined, onNewGame: () => undefined });
+      return model.surfaces({ id: name }).map((surface) => gated(shown, surface));
     },
     interact: frames(frameCount),
   };
@@ -259,6 +302,7 @@ function fadeFixture(name: string, alpha: number): DialogFixture {
 }
 
 export const FIXTURES: readonly DialogFixture[] = [
+  ...KEY_CEREMONY_FIXTURES,
   fadeFixture('screen-fade-half', FADE_HALF_ALPHA),
   fadeFixture('screen-fade-black', FADE_BLACK_ALPHA),
   deathFixture(
@@ -289,6 +333,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   },
   runCompleteFixture('run-complete-counting', RUN_COMPLETE_COUNTING_FRAMES),
   runCompleteFixture('run-complete', RUN_COMPLETE_SETTLED_FRAMES),
+  runCompleteConfirmFixture('run-complete-confirm'),
   questRewardFixture('quest-reward-revealing', defendSpec, QUEST_REWARD_REVEALING_FRAMES),
   questRewardFixture('quest-reward', defendSpec, QUEST_REWARD_SETTLED_FRAMES),
   questRewardFixture('quest-reward-unlocks', pleaSpec, QUEST_REWARD_SETTLED_FRAMES),

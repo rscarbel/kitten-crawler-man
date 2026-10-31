@@ -3841,7 +3841,7 @@ export const LOUDNESS = {
     lufs: -11.9,
     truePeakDbtp: 0.2,
     hash: 'bbdcc97a8a0df813',
-    trimDb: -4.1,
+    trimDb: 2.9,
   },
   golden_key_fly_to_ring: {
     bus: 'sfx',
@@ -4489,7 +4489,7 @@ export const LOUDNESS = {
     lufs: -11.1,
     truePeakDbtp: 0,
     hash: 'b6055ce773c4367f',
-    trimDb: -4.9,
+    trimDb: 0.1,
   },
   key_fragment_rise: {
     bus: 'sfx',

@@ -6,7 +6,8 @@ import type { Player } from '../../Player';
 import { mobLabel } from './eventMapping';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
 import type { TrackerEntry } from '../../systems/questTracker';
-import type { CrawlerState, NearbyMobState, QuestSummary, ThreatLevel } from './types';
+import type { KeyRingView } from '../../core/keys/KeyRing';
+import type { CrawlerState, KeyState, NearbyMobState, QuestSummary, ThreatLevel } from './types';
 
 /** Mobs further than this from the active crawler are not "nearby" for the AI. */
 export const NEARBY_MOB_RADIUS_TILES = 15;
@@ -69,6 +70,16 @@ export function readActiveQuests(entries: ReadonlyArray<TrackerEntry>): QuestSum
       name: entry.aiName ?? entry.name,
       objective: entry.objective,
     }));
+}
+
+/** The floor's keys as told to the AI: each by name, with the fragments held of it. */
+export function readKeys(view: KeyRingView): KeyState[] {
+  return view.keys.map((key) => ({
+    name: key.def.name,
+    fragmentsHeld: key.fragments.filter((piece) => piece.held).map((piece) => piece.fragment.name),
+    fragmentsNeeded: key.needed,
+    forged: key.forged,
+  }));
 }
 
 export function readCrawler(player: Player, kind: CrawlerKind): CrawlerState {

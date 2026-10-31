@@ -48,6 +48,7 @@ const SCANNED_FILES: readonly string[] = [
   'src/systems/ShopSystem.ts',
   'src/systems/SkillPointReminderSystem.ts',
   'src/systems/StairwellSystem.ts',
+  'src/systems/stairwellSealPainter.ts',
   'src/systems/SystemNoticeSystem.ts',
   'src/systems/TacticsNoticeSystem.ts',
   'src/systems/TowerStairSystem.ts',

@@ -145,17 +145,21 @@ const sceneManager = new SceneManager();
 
 /**
  * What the scene asked the audio to start, and whether its loading screen was
- * up at the time: the floor's sting and a room's music announce what the
+ * up at the time: the floor intro's swell and a room's music announce what the
  * player is about to see, so neither may start under the screen.
  */
-const ANNOUNCING_SOUND = 'level_begins';
+const { KEY_CUES } = await import('../src/audio/keySoundCues.js');
+const { FLOOR_INTRO_THEMES } = await import('../src/ui/screens/floorIntro/floorIntroThemes.js');
+const INTRO_SWELLS: ReadonlySet<string> = new Set(
+  Object.values(FLOOR_INTRO_THEMES).flatMap((theme) => KEY_CUES[theme.swell.cue]),
+);
 const audio = new AudioManager();
 const announcements: Array<{ readonly what: string; readonly underScreen: boolean }> = [];
 let screenUp = (): boolean => false;
-const playWhenReady = audio.playWhenReady.bind(audio);
-audio.playWhenReady = (id, opts) => {
-  if (id === ANNOUNCING_SOUND) announcements.push({ what: id, underScreen: screenUp() });
-  playWhenReady(id, opts);
+const play = audio.play.bind(audio);
+audio.play = (id, opts) => {
+  if (INTRO_SWELLS.has(id)) announcements.push({ what: id, underScreen: screenUp() });
+  play(id, opts);
 };
 const claimMusic = audio.music.claim.bind(audio.music);
 audio.music.claim = (claim, holder) => {
@@ -369,10 +373,13 @@ check(
   `started under the loading screen: ${heardUnderScreen.map((a) => a.what).join(', ')}`,
 );
 const floorAnnouncesItself =
-  environment === 'level1' || environment === 'level2' || environment === 'level3';
+  environment === 'tutorial' ||
+  environment === 'level1' ||
+  environment === 'level2' ||
+  environment === 'level3';
 check(
-  !floorAnnouncesItself || announcements.some((a) => a.what === ANNOUNCING_SOUND),
-  `the floor's ${ANNOUNCING_SOUND} sting never played once the screen closed`,
+  !floorAnnouncesItself || announcements.some((a) => INTRO_SWELLS.has(a.what)),
+  "the floor intro's swell never played once the screen closed",
 );
 check(thrown.length === 0, `${thrown.length} frame(s) threw:\n${thrown.slice(0, 1).join('\n')}`);
 

@@ -27,15 +27,7 @@ import { WORLD_TICKS_PER_SECOND } from '../core/constants';
 
 export type TrackerStatus = 'available' | 'active' | 'completed' | 'failed';
 
-/**
- * A tile the Journal can point the player at, and how big the thing on it is.
- *
- * The footprint is inherited from the beacon's own type rather than restated, so
- * a source describing a three-tile doorway cannot describe it in terms the
- * beacon does not read. A source that omits it marks one tile, as every source
- * used to.
- */
-export interface TrackerTarget extends ObjectiveBeaconFootprint {
+interface TrackerTargetFields {
   readonly x: number;
   readonly y: number;
   /**
@@ -90,6 +82,15 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    */
   readonly drawsOwnRoute?: boolean;
 }
+
+/**
+ * A tile the Journal can point the player at, and how big the thing on it is.
+ *
+ * The footprint is the beacon's own type rather than restated, so a source
+ * describing a three-tile doorway cannot describe it in terms the beacon does
+ * not read. A source that omits it marks one tile.
+ */
+export type TrackerTarget = TrackerTargetFields & ObjectiveBeaconFootprint;
 
 /**
  * How the party is led to an indoor place once on its storey: by the arrow

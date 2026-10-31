@@ -182,6 +182,7 @@ function drawChrome(ctx: CanvasRenderingContext2D, geometry: HudGeometry, uiScal
     { name: 'Build', rect: buttons.build },
     { name: 'Chip', rect: buttons.chip },
     { name: 'Journal', rect: buttons.journal },
+    { name: 'Keys', rect: buttons.keys },
     { name: 'Switch', rect: buttons.switchButton },
     { name: 'Follow', rect: buttons.follower },
     { name: 'Summon', rect: buttons.summon },

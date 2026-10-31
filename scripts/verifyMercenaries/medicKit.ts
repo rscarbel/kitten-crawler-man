@@ -191,7 +191,7 @@ function build(
     id: 'brother_anselm',
     name: getMercenaryTemplate('brother_anselm').name,
     terms: 'paid',
-    contractLevelId: FLOOR,
+    contract: { kind: 'floor', levelId: FLOOR },
     introduced: true,
   };
   const system = new MercenarySystem(roster, FLOOR);

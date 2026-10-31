@@ -46,6 +46,8 @@ export function dockButtonRect(rects: HudButtonRects, id: DockButtonId): Rect | 
       return rects.chip;
     case 'journal':
       return rects.journal;
+    case 'keys':
+      return rects.keys;
     case 'follower':
       return rects.follower;
     case 'switch':

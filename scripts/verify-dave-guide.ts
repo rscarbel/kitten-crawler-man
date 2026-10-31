@@ -15,7 +15,8 @@
  *   - Caroline's floor arrival message, opened with two updates run before a
  *     frame is drawn (the scene manager's catch-up), stacks above the
  *     cutscene that opened it and is read to its end with Space alone, and
- *     still is after a pause and resume.
+ *     still is after a pause and resume, and when it waited for another box
+ *     that closed between two drawn frames.
  *   - Caroline's intel about an objective shows once, however many rooms are
  *     entered while it is current.
  *   - A death rewound to the last save stands Dave in that save's room.
@@ -65,6 +66,7 @@ const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level1 } = await import('../src/levels/level1.js');
 const { Conversation } = await import('../src/dialog/Conversation.js');
+const { speakerLines } = await import('../src/dialog/line.js');
 const { DaveGuideSystem } = await import('../src/systems/DaveGuideSystem.js');
 const { SafeRoomSystem } = await import('../src/systems/SafeRoomSystem.js');
 const { CutsceneKit, CUTSCENE_SURFACE_ID } = await import('../src/systems/kits/CutsceneKit.js');
@@ -113,6 +115,8 @@ const MAX_DEPARTURE_FRAMES = 120;
 const MAX_CAROLINE_ARRIVAL_FRAMES = 600;
 /** Updates the scene manager runs before one drawn frame after a slow frame. */
 const CATCH_UP_UPDATES_PER_DRAW = 2;
+/** Drawn frames another box is left up while her arrival message waits behind it. */
+const OTHER_BOX_FRAMES = 30;
 /** Frames a fight near the room is given to lose interest before Caroline must have spoken. */
 const MAX_CALM_FRAMES = 1200;
 /** More presses than any talk has pages, reveals included. */
@@ -529,26 +533,64 @@ function catchUpFrame(harness: Harness): void {
   harness.scene.ui.focusSurfaceId();
 }
 
-async function verifyCarolineArrivalReads(pauseFirst: boolean): Promise<void> {
-  console.log(
-    pauseFirst
-      ? "\nCaroline's arrival message still reads with Space after a pause and resume"
-      : "\nCaroline's arrival message, opened between two drawn frames, reads with Space",
-  );
+/** What happens before her arrival message is read: nothing, a pause and resume, or another box she waits behind. */
+type CarolineArrivalCase = 'plain' | 'pauseFirst' | 'afterAnotherBox';
+
+const CAROLINE_ARRIVAL_CASE_TITLES = {
+  plain: "\nCaroline's arrival message, opened between two drawn frames, reads with Space",
+  pauseFirst: "\nCaroline's arrival message still reads with Space after a pause and resume",
+  afterAnotherBox:
+    "\nCaroline's arrival message reads with Space after the box she waited behind closes between two drawn frames",
+} as const satisfies Record<CarolineArrivalCase, string>;
+
+/**
+ * A box the player opened and reads with the world running, as a chat with
+ * Dave or the doctor is. Her message waits for it to close; when it closes
+ * after one drawn frame and hers opens before the next, the stack never sees
+ * the conversation closed, and only a fresh opening puts hers back above the
+ * cutscene that holds the party.
+ */
+function openAnotherBox(
+  conversation: Harness['conversation'],
+): ReturnType<Harness['conversation']['open']> {
+  return conversation.open({
+    lines: [speakerLines('narrator').line('A box the player opened.')],
+    reward: null,
+    questRelated: false,
+    ending: { kind: 'close', onClosed: () => undefined },
+    dismiss: { kind: 'allowed', onDismissed: () => undefined },
+    haltsWorld: false,
+    anchor: null,
+    locksKeyboard: false,
+  });
+}
+
+async function verifyCarolineArrivalReads(arrivalCase: CarolineArrivalCase): Promise<void> {
+  console.log(CAROLINE_ARRIVAL_CASE_TITLES[arrivalCase]);
   const harness = await openFloorOne({ arrivedOnFloor: true });
   const { scene, conversation, cutscenes } = harness;
   const pause = sceneField(scene, 'menus', MenusKit).pauseScreen;
-  for (let tick = 0; tick < MAX_CAROLINE_ARRIVAL_FRAMES && !conversation.isOpen; tick++) {
+  if (arrivalCase === 'afterAnotherBox') {
+    const other = openAnotherBox(conversation);
+    for (let tick = 0; tick < OTHER_BOX_FRAMES; tick++) catchUpFrame(harness);
+    check(
+      conversation.isActive(other) && !cutscenes.isActive,
+      'control: her message waits while the other box is up',
+    );
+    conversation.close();
+  }
+  const carolineUp = (): boolean => conversation.isOpen && cutscenes.isActive;
+  for (let tick = 0; tick < MAX_CAROLINE_ARRIVAL_FRAMES && !carolineUp(); tick++) {
     catchUpFrame(harness);
   }
-  check(conversation.isOpen && cutscenes.isActive, 'her message is up, inside its cutscene');
+  check(carolineUp(), 'her message is up, inside its cutscene');
   const stack = scene.ui.openSurfaceIds();
   check(
     stack.includes(CUTSCENE_SURFACE_ID) &&
       stack.indexOf(CUTSCENE_SURFACE_ID) < stack.indexOf('conversation'),
     `the message stacks above the cutscene holding the party (${stack.join(' < ')})`,
   );
-  if (pauseFirst) {
+  if (arrivalCase === 'pauseFirst') {
     pressKey('Escape');
     catchUpFrame(harness);
     check(pause.isOpen, 'Escape opens the pause menu over it');
@@ -673,7 +715,10 @@ function verifyTalkLength(): void {
     human.addItem(item.id, 1);
     cat.addItem(item.id, 1);
   }
-  const state = { unworn: [...unwornGear('human', human), ...unwornGear('cat', cat)] };
+  const state = {
+    unworn: [...unwornGear('human', human), ...unwornGear('cat', cat)],
+    key: { stairwellKeyKnownWhole: () => false },
+  };
   let memory = EMPTY_DEBRIEF_MEMORY;
   const allPages = debriefPages('trash_gremlin', memory, state) ?? [];
   const whole = debriefTalk(allPages, Number.POSITIVE_INFINITY, displayPageCount);
@@ -701,6 +746,7 @@ function verifyTalkLength(): void {
     },
     persist: () => undefined,
     calm: () => true,
+    bus: { emit: () => undefined },
   });
   delivery.playDaveMoment({
     event: {
@@ -926,6 +972,7 @@ function verifyWholeRunArrivals(condition: ArrivalCondition): void {
     },
     persist: () => undefined,
     calm: () => true,
+    bus: { emit: () => undefined },
   });
   let briefs = 0;
   let walksUp = 0;
@@ -1029,8 +1076,9 @@ async function verifyArrivalAfterFortuneTeller(): Promise<void> {
 
 await verifyRoomsAndBeats();
 await verifyArrivalTiming();
-await verifyCarolineArrivalReads(false);
-await verifyCarolineArrivalReads(true);
+await verifyCarolineArrivalReads('plain');
+await verifyCarolineArrivalReads('pauseFirst');
+await verifyCarolineArrivalReads('afterAnotherBox');
 verifyTalkLength();
 verifyArrivalRule();
 for (const condition of ARRIVAL_CONDITIONS) verifyWholeRunArrivals(condition);

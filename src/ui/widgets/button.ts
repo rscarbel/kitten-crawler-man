@@ -55,7 +55,7 @@ export function measureButton(
 }
 
 /** The height a button of `size` is drawn at. */
-export function buttonHeight(ui: Ui, size: ControlSize = 'md'): number {
+export function buttonHeight(ui: Pick<Ui, 'theme'>, size: ControlSize = 'md'): number {
   return skinsFor(ui.theme).controlSize[size].height;
 }
 

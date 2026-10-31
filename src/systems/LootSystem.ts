@@ -313,6 +313,11 @@ export class LootSystem implements GameSystem {
     return inPile || this.floorItems.some((item) => item.id === id);
   }
 
+  /** Whether a burst of kill or break loot is still in the air, so what the party earned has not landed yet. */
+  hasLootFalling(): boolean {
+    return this.pendingLoots.some((pile) => !pile.collected && pile.pickupDelay > 0);
+  }
+
   /**
    * Piles collected this frame, split by what they held so the scene can pick
    * the matching cue — a purse of coins should not sound like a picked-up item.

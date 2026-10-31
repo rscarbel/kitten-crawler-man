@@ -19,20 +19,23 @@ import { BigRooster } from '../../src/creatures/BigRooster.js';
 import { Kraken } from '../../src/creatures/Kraken.js';
 import { ElectricGoblin } from '../../src/creatures/ElectricGoblin.js';
 import { TrashGremlin } from '../../src/creatures/TrashGremlin.js';
+import { BOSS_DISPLAY_NAMES } from '../../src/core/mobs/debriefBossTypes.js';
 import {
-  BOSS_DISPLAY_NAMES,
   EMPTY_DEBRIEF_MEMORY,
   MAX_ITEMS_PER_DEBRIEF_PAGE,
   debriefHasNews,
   debriefPages,
+  debriefTalk,
   isStrictUpgrade,
   isSupersededDebrief,
   rememberDebriefHeard,
   sameDebriefMemory,
   unwornGear,
+  type DebriefKeyReader,
   type DebriefMemory,
   type DebriefState,
 } from '../../src/systems/daveDebrief.js';
+import { DAVE_DEBRIEF_CONGRATS, DAVE_KEY_PROGRESS } from '../../src/dialog/scripts/dave.js';
 import {
   ALL_DEBRIEF_BOSS_TYPES,
   debriefBossType,
@@ -47,8 +50,12 @@ function check(ok: boolean, message: string): void {
   if (!ok) failures.push(message);
 }
 
-/** Congratulations already spoken, so each gate sees only the section it measures. */
-const CONGRATULATED: DebriefMemory = { ...EMPTY_DEBRIEF_MEMORY, congratulated: true };
+/** Congratulations and the key already spoken, so each gate sees only the section it measures. */
+const CONGRATULATED: DebriefMemory = {
+  ...EMPTY_DEBRIEF_MEMORY,
+  congratulated: true,
+  keyNoted: true,
+};
 
 /** Any boss will do where the gate is not about the congratulations. */
 const ANY_BOSS: DebriefBossType = 'trash_gremlin';
@@ -162,9 +169,20 @@ function wear(inventory: Inventory, item: InventoryItem): void {
   );
 }
 
-function stateOf(human: Inventory, cat: Inventory): DebriefState {
+const KEY_IN_PIECES: DebriefKeyReader = { stairwellKeyKnownWhole: () => false };
+const KEY_WHOLE: DebriefKeyReader = { stairwellKeyKnownWhole: () => true };
+
+/** Every page fills one box, so a page budget counts pages. */
+const ONE_BOX_PER_PAGE = (): number => 1;
+
+function stateOf(
+  human: Inventory,
+  cat: Inventory,
+  key: DebriefKeyReader = KEY_IN_PIECES,
+): DebriefState {
   return {
     unworn: [...unwornGear('human', human), ...unwornGear('cat', cat)],
+    key,
   };
 }
 
@@ -247,6 +265,47 @@ export function debriefCheckResults(): {
     debriefPages(ANY_BOSS, EMPTY_DEBRIEF_MEMORY, emptyState) !== null,
     'control: an uncongratulated party gets no pages',
   );
+  {
+    const [partialLine] = DAVE_KEY_PROGRESS.partial.paragraphs;
+    const [wholeLine] = DAVE_KEY_PROGRESS.whole.paragraphs;
+    const inPieces = spoken(EMPTY_DEBRIEF_MEMORY, emptyState);
+    const whole = spoken(
+      EMPTY_DEBRIEF_MEMORY,
+      stateOf(inventoryOf('human', []), inventoryOf('cat', []), KEY_WHOLE),
+    );
+    check(
+      inPieces.includes(partialLine) && !inPieces.includes(wholeLine),
+      'with the key in pieces, the congratulations do not call it a piece of the key',
+    );
+    check(
+      whole.includes(wholeLine) && !whole.includes(partialLine),
+      'with the key forged, the congratulations do not call it whole',
+    );
+  }
+  {
+    const [partialLine] = DAVE_KEY_PROGRESS.partial.paragraphs;
+    const congratsPages = DAVE_DEBRIEF_CONGRATS[ANY_BOSS].paragraphs.length;
+    const pages = debriefPages(ANY_BOSS, EMPTY_DEBRIEF_MEMORY, emptyState) ?? [];
+    const cut = debriefTalk(pages, congratsPages, ONE_BOX_PER_PAGE);
+    const full = debriefTalk(pages, Number.POSITIVE_INFINITY, ONE_BOX_PER_PAGE);
+    check(
+      cut !== null && cut.keyNoteSpoken === null,
+      'fixture: a talk with room for the congratulations alone still reached the key',
+    );
+    check(
+      full?.keyNoteSpoken === 'partial',
+      'a whole debrief does not report the key line it spoke',
+    );
+    const afterCut = rememberDebriefHeard(EMPTY_DEBRIEF_MEMORY, cut?.heard ?? []);
+    check(
+      debriefHasNews(afterCut, emptyState),
+      'a talk cut off before the key line leaves no `!` for it',
+    );
+    check(
+      spoken(afterCut, emptyState).includes(partialLine),
+      'a talk cut off before the key line loses the key line for good',
+    );
+  }
   check(
     debriefPages(ANY_BOSS, CONGRATULATED, emptyState) === null,
     'congratulated with nothing pending, the debrief still speaks instead of handing back to the advice',
@@ -568,6 +627,7 @@ export function debriefCheckResults(): {
   {
     const memoryA: DebriefMemory = {
       congratulated: true,
+      keyNoted: true,
       namedItemIds: ['hearthguard_cap', 'hearthguard_quilted_vest'],
     };
     const memoryACopy: DebriefMemory = { ...memoryA, namedItemIds: [...memoryA.namedItemIds] };

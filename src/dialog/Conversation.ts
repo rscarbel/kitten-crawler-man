@@ -656,6 +656,7 @@ export class Conversation {
         return locks();
       },
       isOpen: () => this.isOpen,
+      openGeneration: () => this.generation,
       render: (ui) => this.renderSurface(ui, opts.offBoxClick),
       onKey: (key, mods) => this.surfaceKey(key, mods, opts.handOffPress),
       close: opts.dismiss ?? (() => void this.dismiss()),

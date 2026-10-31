@@ -4,6 +4,11 @@
  * it describes the game as shipped and changes only when the game does.
  */
 import { crawlerAIName } from '../../characters/characters';
+import { stairwellKey } from '../../core/keys/floorKeys';
+import { countedNoun } from '../../core/text/countWords';
+import type { FragmentId } from '../../core/keys/fragmentIds';
+import { keyKindDef } from '../../core/keys/keyKinds';
+import type { LevelId } from '../../levels/levelIds';
 
 /**
  * Synced text is shared by every player, so the human crawler is never named,
@@ -11,6 +16,34 @@ import { crawlerAIName } from '../../characters/characters';
  * `humanCrawler` (see `buildSessionContext`). The cat is one fixed character.
  */
 const CAT = crawlerAIName('cat');
+
+/** What earns each fragment, as a clause that follows "one for". */
+const FRAGMENT_DEEDS = {
+  tutorial_dave_first: "the end of Dave's first talk with the human crawler in the safe room",
+  tutorial_dave_farewell: `the end of Dave's talk once ${CAT} is reunited with the human crawler`,
+  level1_trash_gremlin: 'killing the Trash Gremlin',
+  level1_kraken: 'killing the Kraken',
+  level2_electric_goblin: 'killing the Current Goblin',
+  level2_big_rooster: 'killing Big Rooster',
+  level3_briar_hollow_plea: "completing Briar Hollow's Plea",
+  level3_missing_cats:
+    "completing A Cat Always Comes Back (bringing Taloncrest's missing cats home)",
+  level3_anchor_shards: "repairing the Wayfinder's Anchor",
+} as const satisfies Record<FragmentId, string>;
+
+function listInWords(items: readonly string[]): string {
+  if (items.length <= 1) return items.join('');
+  const leading = items.slice(0, -1);
+  const last = items.slice(-1).join('');
+  return `${leading.join(', ')} and ${last}`;
+}
+
+/** The sentence a floor's bullet gives its key: how many fragments, and what earns each. */
+function floorKeyWords(levelId: LevelId): string {
+  const key = stairwellKey(levelId);
+  const deeds = key.fragments.map((fragment) => `one for ${FRAGMENT_DEEDS[fragment.id]}`);
+  return `Its ${keyKindDef(key.kind).name} comes in ${countedNoun(key.fragments.length, 'fragment', 'fragments')}: ${listInWords(deeds)}.`;
+}
 
 export const WORLD_BIBLE_TITLE = 'Kitten Crawler World: world bible';
 
@@ -41,8 +74,15 @@ remove the threat.
 
 On **Nightmare**, floors 1 and 2 carry a **time limit**. When it runs out, Caroline herself
 ends the party for taking too long, and they start the floor over from its entrance. On
-every other difficulty there is no limit. The only way on is a **stairwell** down to the
-next floor.
+every other difficulty there is no limit.
+
+The only way on is a **stairwell** down to the next floor, and Caroline **seals** every
+stairwell on every floor. A seal opens only for a party holding that floor's **Golden Key**.
+Caroline breaks each floor's key into **key fragments** and issues them herself, one for each
+deed she sets on the floor (a guardian killed, a request answered). When the last fragment
+arrives they fuse into the Golden Key on the spot; the key then breaks the seal of any
+stairwell on that floor. A floor's key opens nothing on the next floor, so every floor starts
+with no fragments held.
 
 **Safe rooms** are the one refuge: no monster may enter, the time limit stops while the
 active crawler is inside, there is a doctor (who heals crawlers to full and cures their ailments, free), and
@@ -81,28 +121,33 @@ hit a ceiling and came away sure that one person can't move the needle; it takes
 many capable people working together. Now he spends what he knows helping others, and he begs
 the party never to put ${CAT} in the tower's hands. Warm, tired, dry, practical. He never changes form. He appears in every safe room the party enters and knows only what
 happens there, what the party tells him, and the big news everyone hears (a death, a boss
-slain, an achievement, a new floor). He gives practical survival advice: red ground means
+slain, an achievement, a key fragment, a new floor). He knows how Caroline's keys and
+seals work, because he carried them himself: a floor's stairwells stay sealed until its
+Golden Key is forged from every fragment. He does not know which bosses hold the fragments
+or where they are. He gives practical survival advice: red ground means
 move, step away from the lizardman's tongue, drink potions early. He does not know which
 bosses are ahead or where; that is Caroline's.
 
 ## The floors of this dungeon
 
 - **Tutorial** (floor 1, the cellars): an introductory warren with no time limit, no
-  bosses and no quests. It ends at a stairwell into the dungeon proper.
+  bosses and no quests. It ends at a sealed stairwell into the dungeon proper. Dave hands
+  over every fragment of its key. ${floorKeyWords('tutorial')}
 - **Floor 1, The Dungeon** (cellars; 40-minute time limit on Nightmare): rooms and corridors full of
   goblins, rats, cockroaches, acid llamas and worse. Two boss gauntlets: **The Trash Gremlin** (a hunched,
   big-eared scavenger that rules a dump room, spits acid and shrieks cockroaches out of its trash
   piles; its towers of junk topple onto crawlers) and **The Kraken** in a flooded pump room. A goblin nursery on the route
   holds an optional defence quest: protect the Goblin Mother from a Fuzzy Nightmare wave by
-  barricading the grates. Safe rooms each have a doctor and Dave.
+  barricading the grates. Safe rooms each have a doctor and Dave. ${floorKeyWords('level1')}
 - **Floor 2, The Dungeon, Level 2** (service level; 60-minute time limit on Nightmare): two boss gauntlets, the
   **Current Goblin** (a huge goblin in rubber insulating armour with a humming generator on
   his back and a ball-tipped shock rod in each hand; he lobs shock grenades, charges the lab's
   floor puddles, swats magic missiles aside and runs from lit dynamite) in the power lab and **Big Rooster** in his gym, the **Grotesque Spider** in
   Dr. Moult's spider lab, and more. Side quests: the clogged bathroom (a pipe-board puzzle and a
   bathroom goblin queue), the **Stealth Key Snatch** (steal the key from the Goblin High
-  Security Prison past patrolling guards), the spider lab, and the defence quest.
-- **Floor 3, The Overworld** (no time limit): open country with a town. The Sleeping Cat
+  Security Prison past patrolling guards; that is a gate key, nothing to do with the Golden
+  Key), the spider lab, and the defence quest. ${floorKeyWords('level2')}
+- **Floor 3, Taloncrest** (no time limit): open country with a town. The Sleeping Cat
   Inn is the safe room (Dave is there). Shops and services: the General Store, Herb &
   Remedy, The Rusty Anvil (forge), The Horned Flagon and The Sunken Stump Pub, The Quiet
   Needle, Temple of the Sky (healing, cures), The Barracks, Plumbline Farm, Blackwood Lodge,
@@ -111,6 +156,13 @@ bosses are ahead or where; that is Caroline's.
   "Briar Hollow's Plea" (build palisades and siege engines, survive the assault waves),
   Fenna's "The Borrowed Blueprints" and construction contracts; plus the circus of the Massive
   Clown, Shady's bounties and the broken Wayfinder's Anchor (fast travel once repaired).
+  ${floorKeyWords('level3')} The floor has one stairwell, sealed like the rest, in
+  Taloncrest's town square. Going down it ends the run: the crawlers see the record of their
+  run and choose either to stay on floor 3 and keep playing, or to begin a new game on
+  floor 1 carrying their levels, stats, gear, coins, achievements, pets, a hired mercenary and
+  the repaired Wayfinder's Anchor. In a new game the world, the quests and the story begin
+  again, and the anchor stays asleep until the party reaches floor 3, where it wakes and its
+  fragment is issued at once.
 
 ## What the AI receives
 
@@ -122,7 +174,9 @@ bosses are ahead or where; that is Caroline's.
   indoors, levelTimerLow. Never act on a crawler while isPaused is true; actions arriving then
   are held until play resumes.
 - **state**: which crawler the player is driving (\`activePlayer\`: "human" or "cat"); both
-  crawlers' HP, level, XP, coins, gear, notable items and status effects; where the active
+  crawlers' HP, level, XP, coins, gear, notable items and status effects; the floor's keys
+  (\`keys\`: each key's name, the fragments held by name, how many it needs, and whether it
+  is forged); where the active
   crawler is in words ("safe room", "boss arena", "General Store", "dark corridor
   near the stairwell"); nearby hostiles with a threat level.
 - **events**: short summaries with an importance from 0 to 1. Kills arrive rolled up per fight.

@@ -375,7 +375,7 @@ function hireRoster(): ReturnType<typeof createMercenaryRoster> {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
     terms: 'paid',
-    contractLevelId: level2.id,
+    contract: { kind: 'floor', levelId: level2.id },
     introduced: true,
   };
   return roster;

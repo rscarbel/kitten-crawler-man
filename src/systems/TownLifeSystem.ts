@@ -561,6 +561,7 @@ export class TownLifeSystem implements GameSystem {
     if (this.doorTiles.has(tileCoordKey(tx, ty))) return false;
     if (!this.isInsideTownWall(tx, ty)) return false;
     if (this.gameMap.isSpriteBuildingTile(tx, ty)) return false;
+    if (this.gameMap.isStairwellTile(tx, ty)) return false;
     return this.gameMap.isWalkable(tx, ty, 'walker');
   }
 

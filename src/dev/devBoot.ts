@@ -43,6 +43,7 @@ import { UiGalleryScene } from '../scenes/UiGalleryScene';
 import { TitleScene, type TitleStartState } from '../scenes/title/TitleScene';
 import { getLevelDef } from '../levels/index';
 import { createPartyCraftsState } from '../core/labour/partyCrafts';
+import { repairedAnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
 import { perfMonitor } from '../core/perf/PerfMonitor';
 import { setDeviceMemoryOverride } from '../core/perf/deviceMemoryBudget';
 import { renderQuality } from '../core/perf/RenderQuality';
@@ -55,7 +56,7 @@ import { installPerfMemory } from './perfMemory';
 import { installPerfRecorder } from './perfRecorder';
 import { drawDifficultyOverlay } from './difficultyOverlay';
 import { showPriceBreakdowns } from '../ui/screens/shop/priceBreakdowns';
-import { getPlaytestPreset } from './playtestPresets';
+import { getPlaytestPreset, type PlaytestPreset } from './playtestPresets';
 import {
   beginAssaultForPlaytest,
   fortifyBriarHollow,
@@ -86,7 +87,9 @@ import { createGodModeState } from '../core/state/GodMode';
 import { isLevelId, type LevelId } from '../levels/levelIds';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { TutorialController } from '../systems/TutorialController';
-import { isStoryBeatId } from '../story/storyBeatIds';
+import { isStoryBeatId, type StoryBeatId } from '../story/storyBeatIds';
+import { stairwellKey } from '../core/keys/floorKeys';
+import { KeyRing } from '../core/keys/KeyRing';
 import { storyDirectorBefore, storyPreviewLevel } from '../story/storyPreview';
 
 /**
@@ -281,7 +284,8 @@ function prisonLayoutNamed(value: string): PrisonLayout | null {
  * Prison, built from that layout on that difficulty; leaving it comes out in
  * floor 2's gate room. `?story=floor1_dave_chosen` boots the floor a story beat
  * is heard on, with every beat before it already heard, and plays the beat at
- * once. The rest are art preview harnesses.
+ * once. `?keymoment=fragment|forge|unseal` lands a step before that key
+ * ceremony. The rest are art preview harnesses.
  *
  * A booted floor never writes the real saved game unless `&save` is added (e.g.
  * `?playtest=spider&save`): a kitted preset or a seeded quest stage written over
@@ -545,72 +549,20 @@ function devRouteNamed(
     };
   }
 
+  const keyMoment = params.get('keymoment');
+  if (keyMoment !== null) {
+    const boot = keyMomentBoot(sceneManager, input, options, params, keyMoment);
+    if (boot !== null) return boot;
+    console.error(
+      `Unknown key moment: "${keyMoment}"; expected one of ${KEY_MOMENT_ROUTES.join(', ')}`,
+    );
+  }
+
   const playtestId = params.get('playtest');
   if (playtestId !== null) {
     const preset = getPlaytestPreset(playtestId);
     if (preset !== null) {
-      return () => {
-        if (preset.difficulty !== undefined) settings.setDifficultyForSession(preset.difficulty);
-        const boot = buildPlaytestBoot(preset);
-        const floorOptions = withPlaytestBoot(options, boot);
-        if (preset.hire !== undefined) {
-          floorOptions.mercenaryRoster = {
-            active: {
-              id: preset.hire,
-              name: getMercenaryTemplate(preset.hire).name,
-              terms: 'paid',
-              contractLevelId: boot.levelDef.id,
-              introduced: false,
-            },
-            lastDeceased: null,
-            towerLoanSigned: false,
-            floorLevelId: null,
-          };
-        }
-        const defences = preset.briarHollowDefences;
-        if (defences !== undefined) {
-          const wallsFlag = params.get('walls');
-          const trebuchetsFlag = params.get('trebuchets');
-          const wallTier = parseWallTier(wallsFlag) ?? defences.wallTier;
-          const trebuchets = parseTrebuchetCount(trebuchetsFlag) ?? defences.trebuchets;
-          if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
-            console.error(
-              `Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`,
-            );
-          }
-          const assaultNow = params.get('assaultNow') !== null;
-          floorOptions.prepareBriarHollow = (kit, gameMap) => {
-            fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
-            if (assaultNow) beginAssaultForPlaytest(kit);
-          };
-        } else if (preset.constructionContracts !== undefined) {
-          floorOptions.briarHollowState = contractsPlaytestState(preset.constructionContracts);
-        } else if (preset.briarHollowBlueprints !== undefined) {
-          floorOptions.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
-        } else if (preset.briarHollowUnlockAll === true) {
-          floorOptions.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
-        }
-        if (preset.toolTiers !== undefined) {
-          floorOptions.partyCrafts = {
-            ...createPartyCraftsState(),
-            tools: { ...preset.toolTiers },
-          };
-        }
-        if (preset.spawnAtCircus === true) floorOptions.spawnAtCircus = true;
-        if (preset.stormDrain !== undefined) floorOptions.stormDrainOpenAtStart = true;
-        if (preset.stormDrain === 'enter') floorOptions.devEnterSewerAtStart = true;
-        if (preset.missingCatsPhase !== undefined) {
-          floorOptions.devMissingCatsPhase = preset.missingCatsPhase;
-        }
-        sceneManager.replace(
-          new DungeonScene(
-            boot.levelDef,
-            input,
-            sceneManager,
-            devFloorOptions(floorOptions, params),
-          ),
-        );
-      };
+      return () => bootPlaytestPreset(sceneManager, input, options, params, preset);
     }
     console.error(`Unknown playtest preset: "${playtestId}"`);
   }
@@ -618,16 +570,7 @@ function devRouteNamed(
   const storyParam = params.get('story');
   if (storyParam !== null) {
     if (isStoryBeatId(storyParam)) {
-      return () => {
-        const levelId = storyPreviewLevel(storyParam);
-        bootDevFloor(sceneManager, input, params, levelId, {
-          ...options,
-          storyDirector: storyDirectorBefore(storyParam),
-          storyPreview: storyParam,
-          tutorialController:
-            levelId === TUTORIAL_LEVEL_ID ? TutorialController.createForTutorial() : undefined,
-        });
-      };
+      return () => bootStoryPreview(sceneManager, input, options, params, storyParam);
     }
     console.error(`Unknown story beat: "${storyParam}"`);
   }
@@ -635,6 +578,178 @@ function devRouteNamed(
   const levelId = params.get('level');
   if (levelId === null || !isLevelId(levelId)) return null;
   return () => bootDevFloor(sceneManager, input, params, levelId, options);
+}
+
+/**
+ * The key ring a preset's floor starts from. Recorded as already built there:
+ * the party has stood on the floor since it arrived, so a quest it finished
+ * there is its own deed, claimed silently, not one a new game carried in and
+ * owes a ceremony for.
+ */
+function presetKeyRing(levelId: LevelId): KeyRing {
+  const ring = new KeyRing(levelId);
+  ring.markFloorBuilt();
+  return ring;
+}
+
+/** Opens a playtest preset: its floor, its spawn, its party and the run behind it. */
+function bootPlaytestPreset(
+  sceneManager: SceneManager,
+  input: InputManager,
+  options: DungeonSceneOptions,
+  params: URLSearchParams,
+  preset: PlaytestPreset,
+): void {
+  if (preset.difficulty !== undefined) settings.setDifficultyForSession(preset.difficulty);
+  const boot = buildPlaytestBoot(preset);
+  const floorOptions = withPlaytestBoot(options, boot);
+  floorOptions.keyRing = presetKeyRing(boot.levelDef.id);
+  if (preset.hire !== undefined) {
+    floorOptions.mercenaryRoster = {
+      active: {
+        id: preset.hire,
+        name: getMercenaryTemplate(preset.hire).name,
+        terms: 'paid',
+        contract: { kind: 'floor', levelId: boot.levelDef.id },
+        introduced: false,
+      },
+      lastDeceased: null,
+      towerLoanSigned: false,
+      floorLevelId: null,
+    };
+  }
+  const defences = preset.briarHollowDefences;
+  if (defences !== undefined) {
+    const wallsFlag = params.get('walls');
+    const trebuchetsFlag = params.get('trebuchets');
+    const wallTier = parseWallTier(wallsFlag) ?? defences.wallTier;
+    const trebuchets = parseTrebuchetCount(trebuchetsFlag) ?? defences.trebuchets;
+    if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
+      console.error(`Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`);
+    }
+    const assaultNow = params.get('assaultNow') !== null;
+    floorOptions.prepareBriarHollow = (kit, gameMap) => {
+      fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+      if (assaultNow) beginAssaultForPlaytest(kit);
+    };
+  } else if (preset.constructionContracts !== undefined) {
+    floorOptions.briarHollowState = contractsPlaytestState(preset.constructionContracts);
+  } else if (preset.briarHollowBlueprints !== undefined) {
+    floorOptions.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
+  } else if (preset.briarHollowUnlockAll === true) {
+    floorOptions.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
+  }
+  if (preset.toolTiers !== undefined) {
+    floorOptions.partyCrafts = {
+      ...createPartyCraftsState(),
+      tools: { ...preset.toolTiers },
+    };
+  }
+  if (preset.spawnAtCircus === true) floorOptions.spawnAtCircus = true;
+  if (preset.stormDrain !== undefined) floorOptions.stormDrainOpenAtStart = true;
+  if (preset.stormDrain === 'enter') floorOptions.devEnterSewerAtStart = true;
+  if (preset.missingCatsPhase !== undefined) {
+    floorOptions.devMissingCatsPhase = preset.missingCatsPhase;
+  }
+  if (preset.anchorRepaired === true)
+    floorOptions.anchorQuestProgress = repairedAnchorQuestProgress();
+  // Every tutorial milestone stands past its last lesson.
+  if (boot.levelDef.id === TUTORIAL_LEVEL_ID) {
+    floorOptions.tutorialController = TutorialController.createFinished();
+  }
+  sceneManager.replace(
+    new DungeonScene(boot.levelDef, input, sceneManager, devFloorOptions(floorOptions, params)),
+  );
+}
+
+/** Opens the floor a story beat is heard on, every earlier beat heard, and plays the beat at once. */
+function bootStoryPreview(
+  sceneManager: SceneManager,
+  input: InputManager,
+  options: DungeonSceneOptions,
+  params: URLSearchParams,
+  beat: StoryBeatId,
+): void {
+  const levelId = storyPreviewLevel(beat);
+  bootDevFloor(sceneManager, input, params, levelId, {
+    ...options,
+    storyDirector: storyDirectorBefore(beat),
+    storyPreview: beat,
+    tutorialController:
+      levelId === TUTORIAL_LEVEL_ID ? TutorialController.createForTutorial() : undefined,
+  });
+}
+
+/** The ceremonies `?keymoment=` lands a step before. */
+const KEY_MOMENT_ROUTES = ['fragment', 'forge', 'unseal'] as const;
+type KeyMomentRoute = (typeof KEY_MOMENT_ROUTES)[number];
+
+function keyMomentRouteNamed(value: string): KeyMomentRoute | undefined {
+  return KEY_MOMENT_ROUTES.find((route) => route === value);
+}
+
+/** The preset `?keymoment=unseal` boots: the Golden Key forged, a few tiles short of a sealed stairwell. */
+const UNSEAL_ROUTE_PRESET_ID = 'stairwell';
+
+/**
+ * The story beat whose end hands over the tutorial key's first or last
+ * fragment, read from the floor's key table, or null when the table issues
+ * that fragment some other way. The first beat's end plays one fragment's
+ * ceremony; the last's plays a fragment's and flows into the forge, since a
+ * story preview has heard every earlier beat and so holds every earlier piece.
+ */
+function tutorialFragmentBeat(which: 'first' | 'last'): StoryBeatId | null {
+  const { fragments } = stairwellKey(TUTORIAL_LEVEL_ID);
+  const index = which === 'first' ? 0 : fragments.length - 1;
+  const fragment = fragments.find((_, position) => position === index);
+  if (fragment === undefined) return null;
+  const { source } = fragment;
+  switch (source.kind) {
+    case 'storyBeat':
+      return source.beat;
+    case 'bossDefeated':
+    case 'questCompleted':
+      return null;
+    default: {
+      const unhandled: never = source;
+      return unhandled;
+    }
+  }
+}
+
+/**
+ * The boot `?keymoment=` names, one step short of watching that ceremony
+ * live, or null for a value that names none. `fragment` and `forge` replay the
+ * tutorial talk whose end hands Dave's fragment over, so the ceremony opens as
+ * the talk closes; `unseal` stands the party by floor 1's stairwell with the
+ * key already forged, for the first step onto the seal.
+ */
+function keyMomentBoot(
+  sceneManager: SceneManager,
+  input: InputManager,
+  options: DungeonSceneOptions,
+  params: URLSearchParams,
+  value: string,
+): (() => void) | null {
+  const route = keyMomentRouteNamed(value);
+  if (route === undefined) return null;
+  const beatBoot = (beat: StoryBeatId | null): (() => void) | null =>
+    beat === null ? null : () => bootStoryPreview(sceneManager, input, options, params, beat);
+  switch (route) {
+    case 'fragment':
+      return beatBoot(tutorialFragmentBeat('first'));
+    case 'forge':
+      return beatBoot(tutorialFragmentBeat('last'));
+    case 'unseal': {
+      const preset = getPlaytestPreset(UNSEAL_ROUTE_PRESET_ID);
+      if (preset === null) return null;
+      return () => bootPlaytestPreset(sceneManager, input, options, params, preset);
+    }
+    default: {
+      const unhandled: never = route;
+      return unhandled;
+    }
+  }
 }
 
 /**

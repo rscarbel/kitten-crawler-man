@@ -21,6 +21,7 @@ import { GENERATOR_RIG_HUM_LOOP } from './loopLevels';
 import { FLOODED_PUMP_ROOM_CUES } from './floodedPumpRoomSoundCues';
 import { SEWER_CUES } from './sewerSoundCues';
 import { CAT_SENSE_CUE } from './catSenseSoundCues';
+import { KEY_SOUND_IDS } from './keySoundCues';
 import { TOWER_CUES } from './towerSoundCues';
 import {
   CAPTURE_CUE,
@@ -205,7 +206,11 @@ const INTERIOR_BREAK_SFX_IDS: readonly SoundId[] = [
   'sack_tear_2',
 ];
 
-/** Sounds `DUNGEON_CUES` (`dungeonSoundCues.ts`) plays that no boot-loaded group carries; floors 1 and 2 share it. */
+/**
+ * Sounds `DUNGEON_CUES` (`dungeonSoundCues.ts`) plays that no boot-loaded
+ * group carries; every floor dressed as a dungeon (a `groundTheme` on its
+ * level) shares it: the tutorial and floors 1 and 2.
+ */
 const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'rumble',
   'glass_break_1',
@@ -329,6 +334,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     ...ELECTRIFIED_JOLT_SOUNDS,
     // Any map can lay a sense only the cat perceives.
     ...CAT_SENSE_CUE.takes,
+    // Fragments, forging, seals and the floor intros happen on every floor.
+    ...KEY_SOUND_IDS,
     'ability_level_up',
     'achievement_awarded',
     // Deinonychus's own three cues. `DungeonScene` constructs `DeinonychusSystem` for every
@@ -419,7 +426,6 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'seismic_stomp_quake',
     'human_splash',
     'jugg_juice',
-    'level_begins',
     'level_complete',
     'lizardman_tongue_lash',
     'menu_change_follower',
@@ -1289,8 +1295,12 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    */
   interiorRoutines: occupantRoutineSoundIds().filter((id) => !STREAMING_SOUND_IDS.has(id)),
 
-  /** The tutorial's gates (`TUTORIAL_CUES`): only its hand-built cellar raises them. */
-  tutorial: decodedCueIds(TUTORIAL_CUES),
+  /**
+   * The tutorial's gates (`TUTORIAL_CUES`), which only its hand-built cellar
+   * raises, and the dungeon's own cues: its cellar is dressed like floor 1's,
+   * so it drips, settles and has torches and candles to smash.
+   */
+  tutorial: [...decodedCueIds(TUTORIAL_CUES), ...DUNGEON_CUE_SFX_IDS],
 
   /**
    * No id currently lands here — every non-streaming `SoundId` found a home

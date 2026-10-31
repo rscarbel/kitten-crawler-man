@@ -276,9 +276,9 @@ export function playRunHistory(
 }
 
 /**
- * Dave's debriefs for `bosses`, already given: congratulated, and every piece
- * the party is not wearing already named, as he would have in each exit room
- * the party walked through.
+ * Dave's debriefs for `bosses`, already given: congratulated, told about the
+ * key, and every piece the party is not wearing already named, as he would
+ * have in each exit room the party walked through.
  */
 export function debriefsHeard(
   bosses: readonly DebriefBossType[],
@@ -289,6 +289,7 @@ export function debriefsHeard(
     ...unwornGear('cat', party.cat.inventory),
   ].map((item) => item.id);
   const checkpoint: DaveDebriefCheckpoint = {};
-  for (const boss of bosses) checkpoint[boss] = { congratulated: true, namedItemIds };
+  for (const boss of bosses)
+    checkpoint[boss] = { congratulated: true, keyNoted: true, namedItemIds };
   return checkpoint;
 }

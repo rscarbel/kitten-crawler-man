@@ -109,6 +109,7 @@ function drawChrome(ctx: CanvasRenderingContext2D, geometry: HudGeometry, uiScal
     { name: 'Pause', rect: buttons.pause },
     { name: 'Bag', rect: buttons.bag },
     { name: 'Journal', rect: buttons.journal },
+    { name: 'Keys', rect: buttons.keys },
     { name: 'Switch', rect: buttons.switchButton },
     { name: 'Hotbar', rect: geometry.hotbar.strip },
   ];

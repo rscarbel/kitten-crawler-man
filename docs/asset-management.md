@@ -52,13 +52,14 @@ exactly one definition.
 
 ## Eviction is keyed on floor identity, not scene construction
 
-`DungeonScene` calls `sceneManager.replace` at four sites, and only one of them is a
-floor change: the stairwell's completion callback, which builds the scene for
-`levelDef.nextLevelId`. Entering a building interior, leaving one, and the death restart
-all rebuild `DungeonScene` around the _same_ floor. Evicting on scene construction would
-re-download and re-decode hundreds of megabytes every time the player opened a shop door.
-`releaseSpritesExcept` is called once, at the stairs transition, keyed on the new floor's
-required keys.
+`DungeonScene` calls `sceneManager.replace` from several places, and only two of them are
+floor changes: the descent down an unsealed stairwell (`descendTo`), which builds the scene
+for the `nextLevelId` of the floor's `descend` exit, and the new game begun from floor 3's
+run end (`beginNewGame`), which builds floor 1 afresh. Entering a building interior,
+leaving one, and the death restart all rebuild `DungeonScene` around the _same_ floor.
+Evicting on scene construction would re-download and re-decode hundreds of megabytes every
+time the player opened a shop door. `releaseSpritesExcept` is called only at those two floor
+changes, keyed on the new floor's required keys.
 
 Art a scene bakes for its own map is the exception: it is released when that scene exits,
 because no other scene will draw it. `GameMap.releaseTileArt` gives back a map's tile

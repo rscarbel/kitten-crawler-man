@@ -17,9 +17,12 @@ import { traitScore, type GearTraitKind } from '../gear/traits';
 import { crawlerDisplayName } from '../characters/characters';
 import { crawlerPronouns } from '../characters/crawlerPronouns';
 import { type CrawlerKind } from '../core/skills/SkillManager';
+import type { KeyFragmentSystem } from './keys/KeyFragmentSystem';
 import {
   DAVE_DEBRIEF_CONGRATS,
   DAVE_DEBRIEF_GEAR_CLOSING,
+  DAVE_KEY_PROGRESS,
+  type DaveKeyProgress,
   daveDebriefGearFirstSentence,
   daveDebriefGearMoreSentence,
   daveSpokenPages,
@@ -39,14 +42,6 @@ export function isSupersededDebrief(
   return laterBosses.some((later) => defeatedBossTypes.has(later));
 }
 
-/** Must match each mob's `displayName`; `verify:dave-guide` checks it. */
-export const BOSS_DISPLAY_NAMES = {
-  trash_gremlin: 'The Trash Gremlin',
-  big_rooster: 'Big Rooster',
-  kraken: 'The Kraken',
-  electric_goblin: 'The Current Goblin',
-} as const satisfies Record<DebriefBossType, string>;
-
 const CRAWLER_ORDER: ReadonlyArray<CrawlerKind> = ['human', 'cat'];
 
 /** Item names are long and the dialog box is short on phones. */
@@ -58,12 +53,27 @@ export interface UnwornItem {
   readonly owner: CrawlerKind;
 }
 
+/**
+ * What the debrief reads of the floor's key: whether the party has seen its
+ * stairwell key whole. A type the key ring itself does not satisfy, since the
+ * ring calls the key whole the moment its last piece is claimed, before the
+ * forge ceremony has shown the player.
+ */
+export type DebriefKeyReader = Pick<KeyFragmentSystem, 'stairwellKeyKnownWhole'>;
+
 export interface DebriefState {
   readonly unworn: ReadonlyArray<UnwornItem>;
+  readonly key: DebriefKeyReader;
+}
+
+function keyProgress(key: DebriefKeyReader): DaveKeyProgress {
+  return key.stairwellKeyKnownWhole() ? 'whole' : 'partial';
 }
 
 export interface DebriefMemory {
   readonly congratulated: boolean;
+  /** Whether he has given his word on the floor's key behind this boss. */
+  readonly keyNoted: boolean;
   /** Cumulative, so re-unequipping an item he already named is not news. */
   readonly namedItemIds: ReadonlyArray<ItemId>;
 }
@@ -72,6 +82,7 @@ export type DaveDebriefCheckpoint = Partial<Record<DebriefBossType, DebriefMemor
 
 export const EMPTY_DEBRIEF_MEMORY: DebriefMemory = {
   congratulated: false,
+  keyNoted: false,
   namedItemIds: [],
 };
 
@@ -166,6 +177,7 @@ function unnamedItems(memory: DebriefMemory, state: DebriefState): UnwornItem[] 
 
 interface DebriefSections {
   readonly congratulations: boolean;
+  readonly keyNote: boolean;
   readonly gear: boolean;
 }
 
@@ -176,6 +188,7 @@ interface DebriefSections {
 function sectionsFor(memory: DebriefMemory, state: DebriefState): DebriefSections {
   return {
     congratulations: !memory.congratulated,
+    keyNote: !memory.keyNoted,
     gear: unnamedItems(memory, state).length > 0,
   };
 }
@@ -183,7 +196,7 @@ function sectionsFor(memory: DebriefMemory, state: DebriefState): DebriefSection
 /** The `!`: cleared by hearing him out, not by acting on it, so it cannot nag forever. */
 export function debriefHasNews(memory: DebriefMemory, state: DebriefState): boolean {
   const sections = sectionsFor(memory, state);
-  return sections.congratulations || sections.gear;
+  return sections.congratulations || sections.keyNote || sections.gear;
 }
 
 /** One page of the debrief: what it says, and what hearing it records. */
@@ -191,6 +204,8 @@ export interface DebriefPage {
   readonly text: string;
   /** Whether this page is his congratulations. */
   readonly congratulates: boolean;
+  /** How far along he says the floor's key is on this page, or null for a page not about it. */
+  readonly keyNote: DaveKeyProgress | null;
   /** The items this page names. */
   readonly itemIds: ReadonlyArray<ItemId>;
 }
@@ -205,6 +220,7 @@ export function rememberDebriefHeard(
 ): DebriefMemory {
   return {
     congratulated: memory.congratulated || heard.some((page) => page.congratulates),
+    keyNoted: memory.keyNoted || heard.some((page) => page.keyNote !== null),
     namedItemIds: [...new Set([...memory.namedItemIds, ...heard.flatMap((page) => page.itemIds)])],
   };
 }
@@ -212,6 +228,7 @@ export function rememberDebriefHeard(
 export function sameDebriefMemory(a: DebriefMemory, b: DebriefMemory): boolean {
   return (
     a.congratulated === b.congratulated &&
+    a.keyNoted === b.keyNoted &&
     a.namedItemIds.length === b.namedItemIds.length &&
     a.namedItemIds.every((id) => b.namedItemIds.includes(id))
   );
@@ -277,6 +294,7 @@ function gearPages(unworn: ReadonlyArray<UnwornItem>): DebriefPage[] {
   const pages: DebriefPage[] = packGearPages(gearSentences(unworn)).map((page) => ({
     ...page,
     congratulates: false,
+    keyNote: null,
   }));
   // Count-neutral wording: many armour names are plural ("the Hearthguard Boots").
   const closing = DAVE_DEBRIEF_GEAR_CLOSING;
@@ -285,15 +303,15 @@ function gearPages(unworn: ReadonlyArray<UnwornItem>): DebriefPage[] {
   if (lastPage !== undefined && lastPage.itemIds.length < MAX_ITEMS_PER_DEBRIEF_PAGE) {
     pages[pages.length - 1] = { ...lastPage, text: `${lastPage.text} ${closing}` };
   } else {
-    pages.push({ text: closing, congratulates: false, itemIds: [] });
+    pages.push({ text: closing, congratulates: false, keyNote: null, itemIds: [] });
   }
   return pages;
 }
 
 /**
  * Everything he owes the party about `bossType`, page by page: the
- * congratulations once, then the unworn gear he has not named yet. `null`
- * hands the talk on to the floor advice.
+ * congratulations once, his word on the floor's key once, then the unworn
+ * gear he has not named yet. `null` hands the talk on to the floor advice.
  */
 export function debriefPages(
   bossType: DebriefBossType,
@@ -304,7 +322,13 @@ export function debriefPages(
   const pages: DebriefPage[] = [];
   if (sections.congratulations) {
     for (const text of DAVE_DEBRIEF_CONGRATS[bossType].paragraphs) {
-      pages.push({ text, congratulates: true, itemIds: [] });
+      pages.push({ text, congratulates: true, keyNote: null, itemIds: [] });
+    }
+  }
+  if (sections.keyNote) {
+    const progress = keyProgress(state.key);
+    for (const text of DAVE_KEY_PROGRESS[progress].paragraphs) {
+      pages.push({ text, congratulates: false, keyNote: progress, itemIds: [] });
     }
   }
   if (sections.gear) pages.push(...gearPages(unnamedItems(memory, state)));
@@ -315,6 +339,8 @@ export function debriefPages(
 export interface DebriefTalk {
   readonly line: DialogLine;
   readonly heard: ReadonlyArray<DebriefPage>;
+  /** What he said of the floor's key in this talk, or null when it held no word on it. */
+  readonly keyNoteSpoken: DaveKeyProgress | null;
 }
 
 /**
@@ -337,5 +363,7 @@ export function debriefTalk(
     used += cost;
   }
   const line = daveSpokenPages(heard.map((page) => page.text));
-  return line === null ? null : { line, heard };
+  if (line === null) return null;
+  const keyNoteSpoken = heard.find((page) => page.keyNote !== null)?.keyNote ?? null;
+  return { line, heard, keyNoteSpoken };
 }

@@ -117,6 +117,7 @@ import { DungeonLifeSystem } from '../src/systems/dungeon/DungeonLifeSystem.js';
 import { floorSurfaceOf } from '../src/map/dungeon/floorSurface.js';
 import { UINT32_SPAN } from '../src/core/world/WorldRandom.js';
 import { StairwellSystem } from '../src/systems/StairwellSystem.js';
+import { KeyRing } from '../src/core/keys/KeyRing.js';
 import { LabHallwayAtmosphere } from '../src/systems/spiderQuest/LabHallwayAtmosphere.js';
 import { parseLevelId } from '../src/levels/levelIds.js';
 import { worldPx, UNZOOMED, cameraAt } from '../src/core/rendering/camera.js';
@@ -801,8 +802,16 @@ if (stairwellRequested) {
   new StairwellSystem(
     gameMap,
     levelDef,
-    () => undefined,
+    { onDescend: () => undefined, onRunEnd: () => undefined, onExitOffered: () => undefined },
     () => 1,
+    {
+      ring: new KeyRing(levelDef.id),
+      onLocked: () => undefined,
+      onUnseal: () => undefined,
+      keyDock: () => null,
+      prewarmOpening: () => undefined,
+      isSafeToUnseal: () => true,
+    },
   ).renderStairwells(ctx, cameraAt({ x: camX, y: camY }, UNZOOMED));
 }
 life?.renderAir(ctx, {

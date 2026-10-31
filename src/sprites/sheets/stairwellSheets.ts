@@ -7,7 +7,7 @@
  * picks the row for where it is standing.
  */
 
-import { paintStairwell, type StairwellStyleId } from '../art/stairwellArt';
+import { paintStairwell, STAIRWELL_STYLE_IDS } from '../art/stairwellArt';
 import type { PropSheetPlan, PropSheetRow } from './propSheetPlan';
 
 /**
@@ -16,10 +16,8 @@ import type { PropSheetPlan, PropSheetRow } from './propSheetPlan';
  */
 export const STAIRWELL_FRAME_PX = 128;
 
-const STAIRWELL_ROWS: ReadonlyArray<StairwellStyleId> = ['cellars', 'service_level', 'street'];
-
 export function stairwellSheetPlans(): PropSheetPlan[] {
-  const rows: PropSheetRow[] = STAIRWELL_ROWS.map((style) => ({
+  const rows: PropSheetRow[] = STAIRWELL_STYLE_IDS.map((style) => ({
     state: style,
     frames: [
       (ctx, originX, originY) => paintStairwell(ctx, originX, originY, STAIRWELL_FRAME_PX, style),

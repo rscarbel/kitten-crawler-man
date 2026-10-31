@@ -12,8 +12,17 @@
 
 import { rarityAtLeast, rarityRank, type Rarity } from '../../../core/items/defs/rarity';
 import type { Rect } from '../../core/geom';
-import { withAlpha } from '../../theme/color';
 import type { Theme } from '../../theme/tokens';
+import {
+  SCATTER_STREAM as STREAM,
+  paintLightColumn,
+  paintMoteDrift,
+  paintRayFan,
+  paintScreenFlash,
+  paintShockRing,
+  paintSparkleBurst as paintSparkles,
+} from '../celebration/celebrationLight';
+import { FULL_TURN, paintSoftPool, scatter } from '../../../sprites/lightMaps';
 import { rarityColor } from '../dialogs/canvasChrome';
 import { progress, type ChestTimeline } from './chestTimeline';
 
@@ -27,22 +36,7 @@ export interface EffectScene {
   readonly screen: Rect;
 }
 
-const FULL_TURN = Math.PI * 2;
 const HALF = 0.5;
-
-/**
- * Strides that give each property of a particle its own run of scatter, so
- * a particle's angle never predicts its speed.
- */
-const STREAM = { angle: 3, swing: 5, speed: 7, spin: 9, kind: 11, rise: 13 } as const;
-
-/** Repeatable scatter in [0, 1). */
-function scatter(seed: number): number {
-  const PRIME_A = 12.9898;
-  const PRIME_B = 43758.5453;
-  const value = Math.sin(seed * PRIME_A) * PRIME_B;
-  return value - Math.floor(value);
-}
 
 function rank(scene: EffectScene): number {
   return rarityRank(scene.timeline.rarity);
@@ -62,13 +56,7 @@ export function paintBackdrop(scene: EffectScene): void {
   const open = progress(frame, timeline.anticipationEnd, timeline.lidEnd);
   const reach = chestWidth * BACKDROP_REACH;
   const alpha = BACKDROP_ALPHA + (BACKDROP_OPEN_ALPHA - BACKDROP_ALPHA) * open;
-  const glow = ctx.createRadialGradient(mouth.x, mouth.y, 0, mouth.x, mouth.y, reach);
-  glow.addColorStop(0, withAlpha(color(scene, 'glow'), alpha));
-  glow.addColorStop(1, withAlpha(color(scene, 'glow'), 0));
-  ctx.save();
-  ctx.fillStyle = glow;
-  ctx.fillRect(mouth.x - reach, mouth.y - reach, reach * 2, reach * 2);
-  ctx.restore();
+  paintSoftPool(ctx, mouth.x, mouth.y, reach, reach, color(scene, 'glow'), alpha, 'linear');
   paintRays(scene);
 }
 
@@ -103,22 +91,13 @@ function paintRays(scene: EffectScene): void {
 
 function rays(scene: EffectScene, tint: string, turn: number, alpha: number): void {
   const { ctx, mouth, chestWidth } = scene;
-  const reach = chestWidth * RAY_REACH;
-  const fade = ctx.createRadialGradient(mouth.x, mouth.y, 0, mouth.x, mouth.y, reach);
-  fade.addColorStop(0, withAlpha(tint, alpha));
-  fade.addColorStop(1, withAlpha(tint, 0));
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = fade;
-  for (let i = 0; i < RAY_COUNT; i++) {
-    const a = turn + (i / RAY_COUNT) * FULL_TURN;
-    ctx.beginPath();
-    ctx.moveTo(mouth.x, mouth.y);
-    ctx.arc(mouth.x, mouth.y, reach, a - RAY_HALF_ANGLE, a + RAY_HALF_ANGLE);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
+  const fan = {
+    count: RAY_COUNT,
+    halfAngle: RAY_HALF_ANGLE,
+    reach: chestWidth * RAY_REACH,
+    turn,
+  };
+  paintRayFan(ctx, mouth, fan, tint, alpha);
 }
 
 const COLUMN_HEIGHT = 3.2;
@@ -136,49 +115,28 @@ export function paintColumn(scene: EffectScene): void {
   const { ctx, mouth, chestWidth, frame, timeline } = scene;
   const open = progress(frame, timeline.anticipationEnd, timeline.lidEnd);
   if (open <= 0) return;
-  const top = mouth.y - chestWidth * COLUMN_HEIGHT;
-  const halfBase = mouth.w * HALF * open;
-  const halfTop = halfBase * COLUMN_WIDEN;
-  const beam = ctx.createLinearGradient(0, mouth.y, 0, top);
-  beam.addColorStop(
-    0,
-    withAlpha(
-      color(scene, 'glow'),
-      (COLUMN_ALPHA_BASE + rank(scene) * COLUMN_ALPHA_PER_RANK) * open,
-    ),
-  );
-  beam.addColorStop(1, withAlpha(color(scene, 'glow'), 0));
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = beam;
-  ctx.beginPath();
-  ctx.moveTo(mouth.x - halfBase, mouth.y);
-  ctx.lineTo(mouth.x - halfTop, top);
-  ctx.lineTo(mouth.x + halfTop, top);
-  ctx.lineTo(mouth.x + halfBase, mouth.y);
-  ctx.closePath();
-  ctx.fill();
+  const column = {
+    base: mouth,
+    halfBase: mouth.w * HALF * open,
+    widen: COLUMN_WIDEN,
+    height: chestWidth * COLUMN_HEIGHT,
+  };
+  const columnAlpha = (COLUMN_ALPHA_BASE + rank(scene) * COLUMN_ALPHA_PER_RANK) * open;
+  paintLightColumn(ctx, column, color(scene, 'glow'), columnAlpha);
   const ring = progress(
     frame,
     timeline.anticipationEnd,
     timeline.anticipationEnd + SHOCKWAVE_FRAMES,
   );
   if (ring > 0 && ring < 1) {
-    ctx.strokeStyle = withAlpha(color(scene, 'light'), SHOCKWAVE_ALPHA * (1 - ring));
-    ctx.lineWidth = chestWidth * SHOCKWAVE_WIDTH * (1 - ring);
-    ctx.beginPath();
-    ctx.ellipse(
-      mouth.x,
-      mouth.y,
-      chestWidth * SHOCKWAVE_REACH * ring,
-      chestWidth * SHOCKWAVE_REACH * ring * HALF,
-      0,
-      0,
-      FULL_TURN,
-    );
-    ctx.stroke();
+    const shock = {
+      at: mouth,
+      radius: chestWidth * SHOCKWAVE_REACH * ring,
+      squash: HALF,
+      lineWidth: chestWidth * SHOCKWAVE_WIDTH * (1 - ring),
+    };
+    paintShockRing(ctx, shock, color(scene, 'light'), SHOCKWAVE_ALPHA * (1 - ring));
   }
-  ctx.restore();
 }
 
 const FOUNTAIN_BASE = 14;
@@ -282,23 +240,6 @@ const SPARKLE_PER_RANK = 3;
 const SPARKLE_FRAMES = 26;
 const SPARKLE_REACH = 0.32;
 const SPARKLE_SIZE = 0.03;
-const SPARKLE_WAIST = 0.28;
-const SEED_SPARKLE = 900;
-
-function star(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  const waist = size * SPARKLE_WAIST;
-  ctx.beginPath();
-  ctx.moveTo(x, y - size);
-  ctx.lineTo(x + waist, y - waist);
-  ctx.lineTo(x + size, y);
-  ctx.lineTo(x + waist, y + waist);
-  ctx.lineTo(x, y + size);
-  ctx.lineTo(x - waist, y + waist);
-  ctx.lineTo(x - size, y);
-  ctx.lineTo(x - waist, y - waist);
-  ctx.closePath();
-  ctx.fill();
-}
 
 /** A burst of four-pointed sparkles at `at`, `landAt` being the frame the reward landed there. */
 export function paintSparkleBurst(
@@ -309,26 +250,15 @@ export function paintSparkleBurst(
   seed: number,
 ): void {
   const { ctx, frame, chestWidth, theme } = scene;
-  const age = frame - landAt;
-  if (age < 0 || age > SPARKLE_FRAMES) return;
-  const p = age / SPARKLE_FRAMES;
-  const count = SPARKLE_BASE + rank(scene) * SPARKLE_PER_RANK;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < count; i++) {
-    const a = (i / count) * FULL_TURN + scatter(SEED_SPARKLE + seed * count + i);
-    const reach =
-      chestWidth * SPARKLE_REACH * (HALF + HALF * scatter(SEED_SPARKLE + i * STREAM.speed)) * p;
-    ctx.globalAlpha = 1 - p;
-    ctx.fillStyle = i % 2 === 0 ? tint : theme.palette.text.primary;
-    star(
-      ctx,
-      at.x + Math.cos(a) * reach,
-      at.y + Math.sin(a) * reach,
-      chestWidth * SPARKLE_SIZE * (1 - p * HALF),
-    );
-  }
-  ctx.restore();
+  const burst = {
+    at,
+    progress: (frame - landAt) / SPARKLE_FRAMES,
+    count: SPARKLE_BASE + rank(scene) * SPARKLE_PER_RANK,
+    reach: chestWidth * SPARKLE_REACH,
+    size: chestWidth * SPARKLE_SIZE,
+    seed,
+  };
+  paintSparkles(ctx, burst, tint, theme.palette.text.primary);
 }
 
 const MOTE_BASE = 6;
@@ -351,21 +281,19 @@ export function paintAmbient(scene: EffectScene): void {
   const { ctx, mouth, chestWidth, frame, timeline, screen, theme } = scene;
   if (frame < timeline.lidEnd) return;
   const age = frame - timeline.lidEnd;
-  const motes = MOTE_BASE + rank(scene) * MOTE_PER_RANK;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < motes; i++) {
-    const phase = ((age + scatter(SEED_MOTE + i) * MOTE_PERIOD) % MOTE_PERIOD) / MOTE_PERIOD;
-    const x =
-      mouth.x +
-      (scatter(SEED_MOTE + i * STREAM.swing) - HALF) * mouth.w +
-      Math.sin(age * FEATHER_SWAY_PER_FRAME + i) * MOTE_SWAY * chestWidth;
-    const y = mouth.y - phase * MOTE_RISE * chestWidth;
-    ctx.globalAlpha = Math.sin(phase * Math.PI);
-    ctx.fillStyle = color(scene, i % 2 === 0 ? 'glow' : 'light');
-    star(ctx, x, y, MOTE_SIZE * chestWidth);
-  }
-  ctx.restore();
+  const drift = {
+    origin: mouth,
+    spread: mouth.w,
+    rise: MOTE_RISE * chestWidth,
+    sway: MOTE_SWAY * chestWidth,
+    count: MOTE_BASE + rank(scene) * MOTE_PER_RANK,
+    size: MOTE_SIZE * chestWidth,
+    age,
+    period: MOTE_PERIOD,
+    swayPerFrame: FEATHER_SWAY_PER_FRAME,
+    seed: SEED_MOTE,
+  };
+  paintMoteDrift(ctx, drift, [color(scene, 'glow'), color(scene, 'light')]);
   const held = timeline.beats.find((b) => b.held);
   if (!rarityAtLeast(timeline.rarity, FEATHERS_FROM) || held === undefined) return;
   if (frame < held.riseAt) return;
@@ -417,11 +345,7 @@ export function paintFlash(scene: EffectScene): void {
   for (const flash of flashes) {
     const p = progress(frame, flash.at, flash.at + FLASH_FRAMES);
     if (p <= 0 || p >= 1) continue;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = withAlpha(color(scene, 'glow'), Math.min(1, flash.alpha) * (1 - p));
-    ctx.fillRect(screen.x, screen.y, screen.w, screen.h);
-    ctx.restore();
+    paintScreenFlash(ctx, screen, color(scene, 'glow'), flash.alpha * (1 - p));
   }
 }
 

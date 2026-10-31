@@ -23,6 +23,7 @@ import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { CutsceneDirector } from './cutscene/CutsceneDirector';
+import type { EventBus } from '../core/EventBus';
 import { pinMatchesEntry, resolvePinnedEntry, type TrackerEntry } from './questTracker';
 import type { CutsceneScript, CutsceneStep, WalkToStep } from './cutscene/cutsceneSteps';
 
@@ -79,6 +80,8 @@ export interface StoryDeliveryDeps {
    * nothing else holds the screen. Her messages wait until it is true.
    */
   readonly calm: () => boolean;
+  /** Told each beat as its conversation ends (`storyBeatFinished`). */
+  readonly bus: Pick<EventBus, 'emit'>;
 }
 
 /** One message waiting for a calm moment. */
@@ -402,7 +405,10 @@ export class StoryDelivery {
    */
   private complete(id: StoryBeatId): void {
     const director = this.deps.director;
-    if (director.finish(id)) this.deps.persist();
+    if (director.finish(id)) {
+      this.deps.persist();
+      this.deps.bus.emit('storyBeatFinished', { beat: id });
+    }
     for (const after of director.dueBeats({ kind: 'beatFinished', beat: id })) {
       this.enqueueBeat(after, { kind: 'beatFinished', beat: id });
     }

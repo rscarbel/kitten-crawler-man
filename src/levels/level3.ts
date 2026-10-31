@@ -49,7 +49,7 @@ const SKYF_12_X = -4;
 const SKYF_12_Y = -4;
 
 /**
- * Level 3 — "The Overworld".
+ * Level 3 — Taloncrest.
  * An outdoor world with grass, forests, roads, and a town.
  * The town has a large tower and many smaller buildings that can be entered.
  */
@@ -169,7 +169,7 @@ const FLOOR3_FAIRY_SCATTER_HEALER_CHANCE = 0.2;
 
 export const level3: LevelDef = {
   id: 'level3',
-  name: 'The Overworld',
+  name: 'Taloncrest',
   floorNumber: 3,
   // The town is the heaviest arrival in the game: fifteen painted facades, its
   // street furniture and a crowd of several dozen, all of which would otherwise
@@ -249,6 +249,7 @@ export const level3: LevelDef = {
   ],
   bossRooms: [],
   isOverworld: true,
+  exit: { kind: 'runEnd' },
   worldGearDrops: true,
   fairies: {
     roomRatesByRegion: [],

@@ -718,7 +718,8 @@ class Run {
       if (questId !== MISSING_CATS_QUEST_ID) return;
       this.questCompletions++;
       notePhase();
-      if (FAULT === 'completion-descends') Reflect.set(level3, 'nextLevelId', 'level1');
+      if (FAULT === 'completion-descends')
+        Reflect.set(level3, 'exit', { kind: 'descend', nextLevelId: 'level1' });
     });
     bus.on('questRewardShown', (spec) => this.rewardsShown.push(spec.questTitle));
     bus.on('levelComplete', () => this.floorEnds.push('levelComplete'));
@@ -4601,7 +4602,7 @@ function checkTowerLoan(): void {
     id: HIRE,
     name: HIRE,
     terms: 'paid',
-    contractLevelId: level3.id,
+    contract: { kind: 'floor', levelId: level3.id },
     introduced: false,
   };
   const keptPaid = !new MercenarySystem(paid, level3.id).endTowerLoan();
@@ -4622,8 +4623,12 @@ function checkCompletion(walk: Walk): void {
   check('no exit', run.floorEnds.length === 0, 'nothing on the way ended the floor');
   check('no exit', completion.transfersAfter === 0, 'completing moves the party nowhere');
   check('no exit', run.split.formation.kind === 'together', 'the party is whole on the floor');
-  check('no exit', level3.nextLevelId === undefined, 'floor 3 still leads nowhere further down');
-  check('no exit', TOWN_MAP.stairwellTiles.length === 0, 'the town has no stairwell');
+  check('no exit', level3.exit.kind === 'runEnd', 'floor 3 still leads nowhere further down');
+  check(
+    'no exit',
+    TOWN_MAP.stairwellTiles.length === 1,
+    `the town's only stairwell is the town square's (${TOWN_MAP.stairwellTiles.length})`,
+  );
   const complete = run.snapshots.get('complete');
   if (complete !== undefined) {
     const street = settleAt(complete.record, { kind: 'overworld', tile: TOWN_MAP.startTile });

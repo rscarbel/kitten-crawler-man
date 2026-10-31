@@ -13,6 +13,7 @@ import {
   type MercenaryTemplate,
   type MercenaryAudioTag,
 } from '../core/party/mercenaryTemplates';
+import type { HireContract } from '../core/party/MercenaryRoster';
 import { MERCENARY_ART, type MercenaryArt } from '../sprites/mercenaryArt';
 import {
   type CardinalView,
@@ -44,6 +45,26 @@ import { drawHealSparkleSprite } from '../sprites/healSparkleSprite';
 import { MERCENARY_ARMBAND } from '../sprites/mercenaryArmband';
 import { HIRELING_STUCK_MIN_STEP_PX } from './mercenaries/hirelingCatchUp';
 import { TargetHoldOffs, type HoldOffQuery } from './targetHoldOffs';
+
+const FLOOR_CONTRACT_TERM = 'Contract runs to the end of the floor.';
+const CARRIED_CONTRACT_TERM = 'Walks with the party for the whole run.';
+
+function contractTerm(contract: HireContract): string {
+  switch (contract.kind) {
+    case 'floor':
+      return FLOOR_CONTRACT_TERM;
+    case 'carried':
+      return CARRIED_CONTRACT_TERM;
+    default: {
+      const unhandled: never = contract;
+      return unhandled;
+    }
+  }
+}
+
+function hirelingDescription(role: string, term: string): string {
+  return `A Barracks mercenary, ${role.toLowerCase()}. ${term}`;
+}
 
 /**
  * A mercenary hired at The Barracks Mercenaries' desk — a friendly
@@ -275,7 +296,7 @@ export class Mercenary extends Mob {
     this.kitContext = new ShellKitContext(this);
     this.audioTag = template.audioTag;
     this.displayName = name;
-    this.description = `A Barracks mercenary, ${template.role.toLowerCase()}. Contract runs to the end of the floor.`;
+    this.description = hirelingDescription(template.role, FLOOR_CONTRACT_TERM);
     this.aggroRangePx = tileSize * this.kit.engageRadiusTiles;
     this.strikeRangePx = tileSize * this.kit.strikeRangeTiles;
     this.leashPx = tileSize * this.kit.leashRadiusTiles;
@@ -531,6 +552,11 @@ export class Mercenary extends Mob {
     if (utterance.grunt === 'grunt') this.specialSoundPending = true;
     if (utterance.grunt === 'frustrated') this.damageSoundPending = true;
     return true;
+  }
+
+  /** Names how long the hire's contract runs in its tooltip, which differs for a hire carried into the run. */
+  setContract(contract: HireContract): void {
+    this.description = hirelingDescription(this.template.role, contractTerm(contract));
   }
 
   /** Keeps the hire's small talk to the leg of the tower errand the party is on; null lets it talk freely. */

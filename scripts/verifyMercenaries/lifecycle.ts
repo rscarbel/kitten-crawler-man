@@ -29,6 +29,7 @@
  * that cannot see its effect fails rather than passes.
  */
 
+import type { LevelId } from '../../src/levels/levelIds';
 import { PLAYER_SPEED, TILE_SIZE, WORLD_TICKS_PER_SECOND } from '../../src/core/constants';
 import { PARTY_TRAIL_SPACING_TILES, PartyLine } from '../../src/systems/partyTrail';
 import { GameMap } from '../../src/map/GameMap';
@@ -86,8 +87,9 @@ export interface LifecycleGateReporter {
   checkCatches(ruleHolds: boolean, message: string): void;
 }
 
-const FLOOR = 'level3';
-const NEXT_FLOOR = 'level4';
+const FLOOR = 'level3' as const satisfies LevelId;
+/** Any floor but the one the contract was signed on. */
+const NEXT_FLOOR = 'level2' as const satisfies LevelId;
 const TILE_CENTER = 0.5;
 
 // ── Maps ─────────────────────────────────────────────────────────────────────
@@ -180,7 +182,7 @@ function buildScene(hire: MercenaryTemplateId | null, layout: SceneLayout): Scen
           id: hire,
           name: getMercenaryTemplate(hire).name,
           terms: 'paid',
-          contractLevelId: FLOOR,
+          contract: { kind: 'floor', levelId: FLOOR },
           introduced: true,
         };
   const system = new MercenarySystem(roster, FLOOR);
@@ -329,7 +331,7 @@ function buildSceneDeferred(id: MercenaryTemplateId, map: GameMap): Scene {
     id,
     name: getMercenaryTemplate(id).name,
     terms: 'paid',
-    contractLevelId: FLOOR,
+    contract: { kind: 'floor', levelId: FLOOR },
     introduced: true,
   };
   return { ...scene, system };

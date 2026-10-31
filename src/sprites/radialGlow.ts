@@ -9,13 +9,8 @@
  * colour stops for the lifetime of the page.
  */
 
-import {
-  allocCanvas,
-  releaseSurface,
-  surfaceContext,
-  type CanvasSurface,
-} from '../core/rendering/canvasSurface';
-import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
+import type { CanvasSurface } from '../core/rendering/canvasSurface';
+import { bakedBytes, bakedSurface } from './lightMaps';
 
 /**
  * Texture resolution. Glows are soft by definition, so this is comfortably
@@ -30,45 +25,34 @@ export interface GlowStop {
   color: string;
 }
 
-const texturesByStops = new Map<string, CanvasSurface>();
-// Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => {
-  for (const texture of texturesByStops.values()) releaseSurface(texture);
-  texturesByStops.clear();
-});
-
 function stopsKey(stops: ReadonlyArray<GlowStop>, coreFraction: number): string {
   return `${coreFraction}#${stops.map((stop) => `${stop.offset}:${stop.color}`).join('|')}`;
 }
 
-function textureFor(stops: ReadonlyArray<GlowStop>, coreFraction: number): CanvasSurface {
-  const key = stopsKey(stops, coreFraction);
-  const cached = texturesByStops.get(key);
-  if (cached !== undefined) return cached;
+/** Every glow texture's key in the shared light-map cache starts with this. */
+const GLOW_KEY_PREFIX = 'radial-glow|';
 
-  const texture = allocCanvas('effects', GLOW_TEXTURE_PX, GLOW_TEXTURE_PX);
-  const ctx = surfaceContext(texture);
-  const radius = GLOW_TEXTURE_PX / 2;
-  const gradient = ctx.createRadialGradient(
-    radius,
-    radius,
-    radius * coreFraction,
-    radius,
-    radius,
-    radius,
-  );
-  for (const stop of stops) gradient.addColorStop(stop.offset, stop.color);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, GLOW_TEXTURE_PX, GLOW_TEXTURE_PX);
-  texturesByStops.set(key, texture);
-  return texture;
+function textureFor(stops: ReadonlyArray<GlowStop>, coreFraction: number): CanvasSurface | null {
+  const key = `${GLOW_KEY_PREFIX}${stopsKey(stops, coreFraction)}`;
+  return bakedSurface(key, 'effects', GLOW_TEXTURE_PX, GLOW_TEXTURE_PX, (ctx) => {
+    const radius = GLOW_TEXTURE_PX / 2;
+    const gradient = ctx.createRadialGradient(
+      radius,
+      radius,
+      radius * coreFraction,
+      radius,
+      radius,
+      radius,
+    );
+    for (const stop of stops) gradient.addColorStop(stop.offset, stop.color);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, GLOW_TEXTURE_PX, GLOW_TEXTURE_PX);
+  });
 }
-
-const BYTES_PER_PIXEL = 4;
 
 /** Bytes held by every glow texture baked so far, for memory gates. */
 export function radialGlowTextureBytes(): number {
-  return texturesByStops.size * GLOW_TEXTURE_PX * GLOW_TEXTURE_PX * BYTES_PER_PIXEL;
+  return bakedBytes(GLOW_KEY_PREFIX);
 }
 
 /** A glow whose first stop starts at the exact centre. */
@@ -92,6 +76,8 @@ export function drawRadialGlow(
   stops: ReadonlyArray<GlowStop>,
   coreFraction = NO_FLAT_CORE,
 ): void {
+  const texture = textureFor(stops, coreFraction);
+  if (texture === null) return;
   const diameter = radius * 2;
-  ctx.drawImage(textureFor(stops, coreFraction), cx - radius, cy - radius, diameter, diameter);
+  ctx.drawImage(texture, cx - radius, cy - radius, diameter, diameter);
 }

@@ -35,6 +35,7 @@ import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
 import { interiorRoomOwnedByStory } from '../systems/interiorStoryOwnership';
 import { GameMap } from '../map/GameMap';
 import type { GauntletBossType } from '../map/bossRoomSizes';
+import { playKeyCue } from '../audio/keySoundCues';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
 import { WORLD_GENERATOR_VERSION } from '../core/save/SavedWorld';
@@ -43,7 +44,10 @@ import { prepareGroundTone } from '../map/tiles/groundTiles';
 import { warmDungeonWater } from '../map/tiles/dungeonWaterShore';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { releaseEnvironmentArt } from '../map/environmentArtCache';
-import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
+import {
+  requestEnvironmentSheetsForGroups,
+  requestStairwellSealOpening,
+} from '../sprites/sheets/environmentSheets';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
 import { despawnMob, type Mob, type LootDrop } from '../creatures/Mob';
@@ -84,6 +88,13 @@ import { getLevelDef, levelLoadingKicker } from '../levels';
 import { mapSourceForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { LevelCompleteScreen } from '../ui/screens/dialogs/LevelCompleteScreen';
+import {
+  buildRunSummary,
+  countPartyAchievements,
+  crawlerRecord,
+  RunCompleteScreen,
+} from '../ui/screens/dialogs/RunCompleteScreen';
+import { beginNewRun, NEW_GAME_LEVEL_ID, newGameProgress } from '../core/save/newGame';
 import { MENU_TAP_MAX_DISTANCE } from '../ui/core/pointer';
 import {
   PAUSE_SURFACE_ID,
@@ -240,6 +251,7 @@ import type { GroundPickupCheckpoint } from '../systems/GroundPickupSystem';
 import {
   hostileWithinRadius,
   interactionStance,
+  partyIsInDanger,
   shouldShowInteractionPrompts,
 } from '../systems/interactionPromptGate';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
@@ -276,7 +288,8 @@ import {
   createCompanionStanceState,
   type CompanionStanceState,
 } from '../systems/CompanionSystem';
-import { StairwellSystem } from '../systems/StairwellSystem';
+import { StairwellSystem, type UnsealRequest } from '../systems/StairwellSystem';
+import { unsealScript } from '../systems/stairwellUnseal';
 import {
   RECALL_COOLDOWN_FRAMES,
   RecallSystem,
@@ -470,7 +483,6 @@ import { CircusGroundsAmbience } from '../systems/circus/CircusGroundsAmbience';
 import { HighStrikerSystem } from '../systems/circus/HighStrikerSystem';
 import {
   captureAnchorQuestProgress,
-  createAnchorQuestProgress,
   restoreAnchorQuestProgress,
   type AnchorQuestProgress,
 } from '../core/quests/AnchorQuestProgress';
@@ -625,11 +637,18 @@ import {
 } from '../systems/briarHollow/resourceZones';
 import {
   captureMercenaryRoster,
-  createMercenaryRoster,
   restoreMercenaryRoster,
   type MercenaryRoster,
   type MercenaryRosterCheckpoint,
 } from '../core/party/MercenaryRoster';
+import { CarriedAnchorWake } from '../systems/keys/CarriedAnchorWake';
+import {
+  NOTHING_CARRIED,
+  anchorProgressCarrying,
+  rosterCarrying,
+  runCarryOf,
+  type NewGameCarry,
+} from '../core/save/newGameCarry';
 import { createGodModeState, type GodModeState } from '../core/state/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
 import { AttackCowSystem } from '../systems/AttackCowSystem';
@@ -665,6 +684,7 @@ import {
   adviceTactics,
   asOptional,
   gatewayAdviceId,
+  keyWholeNote,
   nextAdviceObjective,
   type AdviceObjective,
   type AdviceSlot,
@@ -701,7 +721,13 @@ import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
 import { aiFloorKey, type AILevelTimer } from '../ai/actions/types';
 import { aiCameraSpotlight } from '../ai/actions/cameraSpotlight';
 import type { AIContextSource, SemanticLocation, SessionInput } from '../ai/context/types';
-import { readActiveQuests, readCrawler, readNearbyMobs, tileOf } from '../ai/context/sceneReaders';
+import {
+  readActiveQuests,
+  readCrawler,
+  readKeys,
+  readNearbyMobs,
+  tileOf,
+} from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
 import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/progression/GameStats';
 import { MusicLibrary, bindMusicLibrary } from '../core/music/MusicLibrary';
@@ -738,7 +764,7 @@ import {
 import { KEYBOARD_HERO_SONG, type AudioScope } from '../audio/AudioScope';
 import { bossTrack, wireBossMusic } from '../audio/music/bossTracks';
 import { KrakenFightMusic } from '../systems/bossRooms/floodedPumpRoom/krakenFightMusic';
-import type { MusicSelection } from '../audio/music/MusicDirector';
+import type { MusicClaim, MusicSelection } from '../audio/music/MusicDirector';
 import {
   MACHINERY_LOOP,
   SPIDER_WALKING_LOOP,
@@ -749,6 +775,11 @@ import { Conversation } from '../dialog/Conversation';
 import { WOOD_SMASHING_SOUNDS, type MusicTrackId, type SoundId } from '../audio/sounds';
 import { rectCentre, rectContains } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId, compressedSfxForLevelId } from '../audio/sfxGroups';
+import type { LevelId } from '../levels/levelIds';
+import { KeyRing, type CheckpointRunProgress } from '../core/keys/KeyRing';
+import { newGameCarryOf } from '../core/save/newGameCarry';
+import { KeyFragmentSystem, type KeySourceLedger } from '../systems/keys/KeyFragmentSystem';
+import { KeyCeremonySystem } from '../systems/keys/KeyCeremonySystem';
 import { DUNGEON_CUES, playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
 import {
   downedCompanionArrowCandidate,
@@ -963,6 +994,12 @@ export interface DungeonSceneOptions {
   townMemory?: TownMemory;
   /** The party's formation and what its groups left each other, threaded by reference like `townMemory`. */
   partySplit?: PartySplitState;
+  /**
+   * The floor's key ring, threaded by reference like `townMemory` through
+   * every scene of the floor. A scene for a new floor is handed a ring already
+   * begun on it (`KeyRing.beginFloor`); absent, the ring starts empty.
+   */
+  keyRing?: KeyRing;
   /** The card this arrival shows in place of the floor's own: a split's "Meanwhile…". */
   arrivalCard?: ArrivalCard;
   /**
@@ -990,6 +1027,12 @@ export interface DungeonSceneOptions {
   shopStock?: ShopStock;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
   mercenaryRoster?: MercenaryRoster;
+  /**
+   * What the run carries across a floor change: a carried hire and the
+   * anchor's repair. Read only where `mercenaryRoster` or `anchorQuestProgress`
+   * is not handed over, to build them.
+   */
+  carried?: NewGameCarry;
   /** Companion combat stance, threaded by reference so passive/aggressive survives building/floor transitions. */
   companionStance?: CompanionStanceState;
   /** `!god` / `!tough` / `!lucky` cheat state, threaded by reference so it survives scene transitions. */
@@ -1351,6 +1394,19 @@ const COMBAT_COOLDOWN_FRAMES = 300;
 /** The chest each crawler earns for a boss after Boss Slayer is already theirs. */
 const BOSS_REPEAT_CHEST_RARITY = ACHIEVEMENT_DEFS.boss_slayer.reward.rarity;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
+/**
+ * A hostile on the hunt this near a seal keeps its unseal scene from
+ * starting: about a room's width, the ground a hunter crosses in the
+ * seconds the scene holds the party still.
+ */
+const UNSEAL_DANGER_RADIUS_TILES = 12;
+const UNSEAL_DANGER_RADIUS_PX = UNSEAL_DANGER_RADIUS_TILES * TILE_SIZE;
+/**
+ * Renewed every tick of the unseal scene, so the party is never harmed while
+ * it is held still. Two ticks, so the guard cannot lapse between renewals.
+ */
+const UNSEAL_GUARD_FRAMES = 2;
+
 /** Within this many tiles of a stairwell the AI is told the party is at it. */
 const AI_AT_STAIRWELL_TILES = 3;
 /** Within this many tiles, places are described as "near the stairwell". */
@@ -1401,6 +1457,11 @@ const SPIDER_LAB_MUSIC = 'spider_lab' as const satisfies MusicTrackId;
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 /** Gold, matching the pinned Journal row it belongs to. */
 const PINNED_ARROW_COLOR = worldPalette.objective.ready;
+const INTRO_MUSIC_HOLD = {
+  owner: 'floor_intro',
+  layer: 'activity',
+  selection: { kind: 'silence' },
+} as const satisfies MusicClaim;
 /** The span of an objective target that does not say how wide it is. */
 const SINGLE_TILE_TARGET_WIDTH = 1;
 const STAIRWELL_ARROW_COLOR = worldPalette.ink.gold;
@@ -1718,6 +1779,10 @@ export class DungeonScene extends GameplayScene {
   /** Read and written by the attack cow's system; saved as top-level fields. */
   readonly attackCowState: AttackCowState;
   private readonly townMemory: TownMemory;
+  private readonly keyRing: KeyRing;
+  private readonly keyFragments: KeyFragmentSystem;
+  private readonly carriedAnchorWake: CarriedAnchorWake;
+  private readonly keyCeremony: KeyCeremonySystem;
   private readonly partySplit: PartySplitState;
   /** Runs a split party from the overworld: hand-overs, regroups and quest chapter tables. */
   readonly partySplitDirector: SplitDirector;
@@ -1767,15 +1832,17 @@ export class DungeonScene extends GameplayScene {
   private readonly godModeState: GodModeState;
   private difficultyTelemetry = new DifficultyTelemetrySystem();
   /**
-   * Whether the floor has already been told where its stairwell is.
+   * Whether the floor has been told where its stairwell is: `owed` from the
+   * forge until its ceremony has closed, since a line posted under the
+   * ceremony would run out unseen behind it.
    *
    * Latches for the life of the scene, and pointedly is *not* part of the world
-   * checkpoint: a restore puts the gauntlet boss back on its feet, so the same
-   * kill can be earned twice, and rewinding this would let the line play twice
-   * in one run. The floor only opens once no matter how many times the player
-   * dies proving it.
+   * checkpoint: a restore puts the boss holding the last fragment back on its
+   * feet, so the same key can be forged twice, and rewinding this would let the
+   * line play twice in one run. The floor only opens once no matter how many
+   * times the player dies proving it.
    */
-  private stairwellHintAnnounced = false;
+  private stairwellHint: 'unsaid' | 'owed' | 'said' = 'unsaid';
   private readonly deinonychusSystem: DeinonychusSystem;
   private readonly deinonychusPetState: DeinonychusPetState;
   /**
@@ -1815,6 +1882,7 @@ export class DungeonScene extends GameplayScene {
   private readonly crawlerBarks = new CrawlerBarkSystem();
 
   private levelCompleteScreen = new LevelCompleteScreen();
+  private readonly runCompleteScreen = new RunCompleteScreen();
 
   private achievementUI: AchievementUISystem;
   /** Pays every award this scene's crawlers earn; see {@link AchievementAwards}. */
@@ -1827,7 +1895,7 @@ export class DungeonScene extends GameplayScene {
   private catAchievements: AchievementManager;
 
   private bossIntro = new BossIntroSystem();
-  private readonly dungeonIntro = new DungeonIntroSystem();
+  private readonly dungeonIntro: DungeonIntroSystem;
   private readonly skipIntro: boolean;
 
   private readonly abilityManager: AbilityManager;
@@ -1838,6 +1906,12 @@ export class DungeonScene extends GameplayScene {
   protected readonly rewardFly = new RewardFlySystem();
 
   private floorEntryHumanSnap: PlayerSnapshot;
+  /**
+   * Where a tutorial begun with its lessons done set the party down, or null.
+   * Its map is fixed and snapshots hold no position, so a death restart is
+   * put back here rather than in the lessons' separate start rooms.
+   */
+  private finishedTutorialEntryTile: { x: number; y: number } | null = null;
   private floorEntryCatSnap: PlayerSnapshot;
   private floorEntryHumanAchievements: AchievementManager;
   private floorEntryCatAchievements: AchievementManager;
@@ -2082,6 +2156,7 @@ export class DungeonScene extends GameplayScene {
           gatherParty: ({ target }) => this.gatherParty(target),
           floodedPumpRoom: ({ beat }) =>
             this.bossRoomDressings.parts.floodedPumpRoom?.runIntroBeat(beat),
+          stairwellUnseal: ({ beat }) => this.stairwell.beginUnsealBeat(beat),
         }),
       cueClock: cutsceneCueClock(this.audio),
       pauseButton: () => {
@@ -2107,6 +2182,7 @@ export class DungeonScene extends GameplayScene {
       cutscenes: this.cutscenes.director,
       persist: () => this.persistStory(),
       calm: () => this.carolineMaySpeak(),
+      bus: this.bus,
     });
     this.skippedTutorialStart = options?.skippedTutorial === true;
     this.arrivedOnFloor = options?.arrivedOnFloor === true;
@@ -2145,18 +2221,31 @@ export class DungeonScene extends GameplayScene {
       this.pm.cat.y = tutMap.catStartTile.y * TILE_SIZE;
 
       tutorialController.initializePlayers(this.human, this.cat);
+      if (tutorialController.lessonsDone) {
+        if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
+        if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
+        const finishedSpawn = options?.resolveSpawnTile?.(tutMap) ?? options?.spawnAt ?? null;
+        if (finishedSpawn !== null) {
+          this.pm.setPartyDown(findPartyArrivalTiles(tutMap, finishedSpawn));
+          this.finishedTutorialEntryTile = finishedSpawn;
+        }
+      }
       this.floorEntryHumanSnap = snapPlayer(this.human);
       this.floorEntryCatSnap = snapPlayer(this.cat);
 
-      initialMobs.push(...tutorialController.allMobs);
-      // The tutorial's treasure room has no guards, so its chest unlocks at once.
-      this.treasureChests.addWoodenChest(
-        TUTORIAL_CHEST_POS.x,
-        TUTORIAL_CHEST_POS.y,
-        TUTORIAL_TREASURE_ROOM_BOUNDS,
-        { coins: 0, items: [] },
-        'when_room_clear',
-      );
+      if (tutorialController.lessonsDone) {
+        this.treasureChests.addOpenedChest(TUTORIAL_CHEST_POS.x, TUTORIAL_CHEST_POS.y, 'wooden');
+      } else {
+        initialMobs.push(...tutorialController.allMobs);
+        // The tutorial's treasure room has no guards, so its chest unlocks at once.
+        this.treasureChests.addWoodenChest(
+          TUTORIAL_CHEST_POS.x,
+          TUTORIAL_CHEST_POS.y,
+          TUTORIAL_TREASURE_ROOM_BOUNDS,
+          { coins: 0, items: [] },
+          'when_room_clear',
+        );
+      }
       this.gameMap.blockTilePermanently(TUTORIAL_CHEST_POS.x, TUTORIAL_CHEST_POS.y);
     } else {
       this.gameMap =
@@ -2602,7 +2691,8 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
     this.starlightTentProgress = options?.starlightTentProgress ?? createStarlightTentProgress();
-    this.anchorQuestProgress = options?.anchorQuestProgress ?? createAnchorQuestProgress();
+    const carried = options?.carried ?? NOTHING_CARRIED;
+    this.anchorQuestProgress = options?.anchorQuestProgress ?? anchorProgressCarrying(carried);
     this.missingCatsProgress =
       options?.missingCatsProgress ??
       (options?.devMissingCatsPhase === undefined
@@ -2629,6 +2719,22 @@ export class DungeonScene extends GameplayScene {
       },
     });
     this.townMemory = options?.townMemory ?? createTownMemory();
+    this.keyRing = options?.keyRing ?? new KeyRing(levelDef.id);
+    if (this.keyRing.levelId !== levelDef.id) {
+      throw new Error(`A ${this.keyRing.levelId} key ring was handed to ${levelDef.id}`);
+    }
+    this.keyFragments = new KeyFragmentSystem(this.bus, this.keyRing);
+    this.carriedAnchorWake = new CarriedAnchorWake(
+      () => this.keyFragments.nextMoment(),
+      this.audio ?? null,
+    );
+    this.keyCeremony = new KeyCeremonySystem({
+      keys: this.keyFragments,
+      audio: this.audio,
+      calm: () => this.keyCeremonyMayOpen(),
+      flyKey: ({ moment, at, keyWidth }) =>
+        this.rewardFly.flyKey(moment.keyKind, at.x, at.y, keyWidth),
+    });
     this.partySplit = options?.partySplit ?? createPartySplitState();
     this.pm.bindPartySplit(this.partySplit);
     this.partySplitDirector = new SplitDirector({
@@ -2647,7 +2753,7 @@ export class DungeonScene extends GameplayScene {
     this.partyTools.reconcile(this.human, this.cat);
     this.briarHollowState = options?.briarHollowState ?? createBriarHollowState();
     this.shopStock = options?.shopStock ?? createShopStock();
-    this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
+    this.mercenaryRoster = options?.mercenaryRoster ?? rosterCarrying(carried);
     this.floorEntryMercenaryRoster =
       options?.floorEntryMercenaryRoster ?? captureMercenaryRoster(this.mercenaryRoster);
     this.mercenarySystem = new MercenarySystem(
@@ -2836,7 +2942,9 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('menu_change_follower');
       this.companion.setFollowMe(this.human.isActive);
       this.dropPresentPartnerTarget();
-      this.tutorial?.onFollowMeSelected();
+      const advancedTutorial = this.tutorial?.onFollowMeSelected() === true;
+      // The tutorial's next beat plays out in the world, which an open menu would cover.
+      if (advancedTutorial) this.followerMenu.close();
     };
     this.followerMenu.onDoNotMove = () => {
       this.audio?.play('menu_change_follower');
@@ -2861,114 +2969,30 @@ export class DungeonScene extends GameplayScene {
     this.stairwell = new StairwellSystem(
       this.gameMap,
       levelDef,
-      () => {
-        if (!levelDef.nextLevelId) return;
-        const nextDef = getLevelDef(levelDef.nextLevelId);
-
-        // A floor that suppresses its descent advice is not progression, so the
-        // gap it would record is not a difficulty signal: the tutorial's party
-        // cannot reach the level the next floor's mob bands imply, and booking
-        // that as underlevelled is the telemetry lying to itself.
-        const recommendedLevel =
-          levelDef.suppressDescentAdvice === true
-            ? null
-            : recommendedPartyLevelFor(nextDef, activeDifficultyProfile());
-        difficultyStats.recordDescend(partyLevel(), recommendedLevel);
-
-        // Gear's once-per-floor effects are readied for the floor below before
-        // the save, so a reload on arrival finds them ready too.
-        this.human.gear.startNewFloor();
-        this.cat.gear.startNewFloor();
-
-        // Save progress immediately so the floor is recorded as complete even if
-        // the player closes the browser during the celebration screen.
-        const floorCompleteHumanSnap = revivedSnapshot(snapPlayer(this.human));
-        const floorCompleteCatSnap = revivedSnapshot(snapPlayer(this.cat));
-        void this.dispatchSaveProgress({
-          humanSnap: floorCompleteHumanSnap,
-          catSnap: floorCompleteCatSnap,
-          ...this.partyRunSaveFields({
-            human: floorCompleteHumanSnap,
-            cat: floorCompleteCatSnap,
-            ...this.deinonychusPetSaveState(),
-          }),
-          levelId: levelDef.nextLevelId,
-          // No `world`: everything in it describes the floor being left, and a
-          // reload has to build the next floor fresh, exactly as the stairs do.
-        });
-
-        this.bus.emit('levelComplete', {});
-        this.mercenarySystem.endContractForFloor();
-
-        // Drain now: the celebration screen stops `updateGameplay`, and the queue
-        // does not survive into the next scene, so a level-up earned on the last
-        // step of the floor would otherwise never be announced.
-        this.systemNotices.drainFor(this.human, this.cat);
-
-        this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
-          // Dismiss Deinonychus and any hired merc before floor transition
-          this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-          this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
-          this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-          this.attackCowSystem.prepareForNewFloor();
-          // The cache-wide flush below returns cells but keeps pins, so what
-          // this floor's residency holds is unpinned here.
-          this.residency.releaseAll();
-          // This is the one genuine floor change among DungeonScene's four
-          // `sceneManager.replace` sites, so it's the only one that runs the
-          // sprite eviction pass — building enter/exit rebuild the scene around
-          // the same floor identity and must never evict. Keyed on the *new*
-          // floor's required keys, not the old floor's: anything the two
-          // floors share (core, dungeon_common, ...) simply isn't touched.
-          const nextFloorKeys = requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups);
-          releaseSpritesExcept(nextFloorKeys);
-          // The same keep set on the same beat, so the painted sheets and the
-          // defs pointing at them can never disagree about what is still live.
-          // Anything seeded goes regardless: the next floor draws its own art
-          // seed, including for a key the two floors share.
-          releaseEnvironmentArt(nextFloorKeys);
-          // The painted creatures give their memory back on the same beat and
-          // for the same reason: whatever the next floor still shows is
-          // repainted lazily, and nothing else is carried down the stairs.
-          flushFigureFrameCache();
-          this.gameStats.beginFloor();
-          this.sceneManager.replace(
-            new DungeonScene(nextDef, this.input, this.sceneManager, {
-              arrivedOnFloor: true,
-              // Taking the stairs regroups the party: a companion carried down
-              // still knocked out would time out on arrival with no way to reach them.
-              humanSnap: revivedSnapshot(snapPlayer(this.human)),
-              catSnap: revivedSnapshot(snapPlayer(this.cat)),
-              humanAchievements: this.humanAchievements,
-              catAchievements: this.catAchievements,
-              musicLibrary: this.musicLibrary,
-              storyDirector: this.storyDirector,
-              petNames: this.petNames,
-              deinonychusUnlocked: this.deinonychusSystem.unlocked,
-              deinonychusPetState: this.deinonychusPetState,
-              wheelLedger: this.wheelLedger,
-              attackCowState: this.attackCowState,
-              abilityManager: this._cleanAbilityManager(),
-              // Party progress, not floor state: an axe bought on this floor is
-              // still the axe in hand on the next one.
-              partyCrafts: this.partyCrafts,
-              saveProgress: this.onSaveProgress,
-              audio: this.audio ?? undefined,
-              onResetGame: this.onResetGameCallback ?? undefined,
-              progressWipe: this.progressWipe ?? undefined,
-              godModeState: this.godModeState,
-              companionStance: this.companionStance,
-              // Unlike the journal or the club, this is run-scoped: a trait
-              // announced once stays announced for every floor of the run.
-              tacticsNoticesSeen: this.tacticsNoticesSeen,
-              // Run-scoped for the same reason: the run-complete screen sums up
-              // every floor, not the last one.
-              gameStats: this.gameStats,
-            }),
-          );
-        });
+      {
+        onDescend: (nextLevelId) => this.descendTo(nextLevelId),
+        onRunEnd: () => this.openRunEnd(),
+        onExitOffered: () => this.bus.emit('stairwellFound', {}),
       },
       partyLevel,
+      {
+        ring: this.keyRing,
+        onLocked: (at) => playKeyCue(this.audio, 'sealLockedRattle', at),
+        onUnseal: (request) => this.playUnsealScene(request),
+        keyDock: () => {
+          const rect = this.hud.cssDockRect('keys');
+          return rect === null ? null : { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+        },
+        prewarmOpening: (style) => requestStairwellSealOpening(style),
+        isSafeToUnseal: (at) =>
+          !partyIsInDanger(
+            this.world.roster.mobs,
+            this.world.roster.grid,
+            this.pm.presentCrawlers(),
+            at,
+            UNSEAL_DANGER_RADIUS_PX,
+          ),
+      },
     );
 
     const travelState: TravelUnlockState = {
@@ -3212,7 +3236,8 @@ export class DungeonScene extends GameplayScene {
       bus: this.bus,
       challenges: this.aiChallenges,
     });
-    this.achievementUI.presentationGate = () => this.showsAchievementUi;
+    this.achievementUI.presentationGate = () =>
+      this.showsAchievementUi && !this.keyCeremony.holdsPresentations;
     this.achievementUI.onPresentationOpened = (presentation) =>
       joinDeinonychusOnOpen(presentation, this.deinonychusSystem);
     this.achievementUI.onPresentationClosed = (presentation) =>
@@ -3353,7 +3378,8 @@ export class DungeonScene extends GameplayScene {
       if (!signs.isEmpty) this.crawlerSigns = signs;
     }
     this.skipIntro = options?.skipIntro ?? false;
-    if (this.skipIntro || this.tutorial !== null) this.dungeonIntro.skip();
+    this.dungeonIntro = new DungeonIntroSystem(levelDef.id);
+    if (this.skipIntro) this.dungeonIntro.skip();
     this.overworldMusic =
       levelDef.isOverworld && this.audioScope !== null
         ? new OverworldMusicSystem(this.gameMap, this.audioScope, () =>
@@ -3470,6 +3496,8 @@ export class DungeonScene extends GameplayScene {
       this.applyPersistedWorldState(options.persistedWorldState, options.savedIndoorsIn ?? null);
     }
     if (interiorReturn !== null) this.applyInteriorReturn(interiorReturn);
+    this.keyFragments.reconcile(this.keySourceLedger());
+    this.revealStairwellOfKeyAlreadyForged();
     this.updateSfxGates();
 
     this.wireEventBus();
@@ -3659,9 +3687,50 @@ export class DungeonScene extends GameplayScene {
     defeated.length = 0;
   }
 
-  /** Fires once, the frame the floor's last gauntlet boss dies. */
+  /**
+   * The map gives up the stairwell once the key that opens it is forged, not
+   * when some boss dies, so the reveal stays honest whichever deed holds the
+   * last fragment. A live forge, in this scene or a building's, owes the line
+   * saying so; a key already forged when the floor is built or rewound is
+   * marked again in silence. The tutorial's stairwell sits beside the safe
+   * room Dave points the party out of, so there is nothing there to reveal.
+   */
+  private revealStairwellOfForgedKey(): void {
+    const forgedLive = this.keyRing.moments.takeStairwellReveal();
+    if (this.tutorial !== null) return;
+    if (forgedLive) this.revealNearestStairwell('announced');
+  }
+
+  /** {@link revealStairwellOfForgedKey}'s silent half, for a floor built or rewound with the key already forged. */
+  private revealStairwellOfKeyAlreadyForged(): void {
+    if (this.tutorial !== null || !this.keyRing.canUnsealStairwells()) return;
+    this.revealNearestStairwell('silent');
+  }
+
+  /**
+   * Marks the stairwell nearest the active crawler on the minimap; an
+   * announced reveal also owes, the first time, the line saying so.
+   */
+  private revealNearestStairwell(how: 'announced' | 'silent'): void {
+    const active = this.active();
+    const nearestStairwell = this.stairwell.nearestStairwellTile({
+      x: pixelToTile(active.x),
+      y: pixelToTile(active.y),
+    });
+    if (nearestStairwell === undefined) return;
+    this.miniMap.revealStairwellNeighborhood(nearestStairwell);
+    if (how === 'announced' && this.stairwellHint === 'unsaid') this.stairwellHint = 'owed';
+  }
+
+  private announceStairwellHintOnceClear(): void {
+    if (this.stairwellHint !== 'owed' || this.keyCeremony.holdsPresentations) return;
+    this.stairwellHint = 'said';
+    this.menus.announce(DungeonScene.STAIRWELL_HINT_ANNOUNCEMENT);
+  }
+
+  /** Fires once, the first time the floor's key is forged. */
   private static readonly STAIRWELL_HINT_ANNOUNCEMENT =
-    'The floor shudders. Something has opened below — your map remembers where.';
+    'The key hums in your hand. Your map remembers where its stairwell lies.';
 
   /** Fires once, the first time the Wayfinder fail-safe sheds a mote. */
   private static readonly WAYFINDER_ANNOUNCEMENT =
@@ -3713,17 +3782,6 @@ export class DungeonScene extends GameplayScene {
       if (e.bossType !== lastGauntletBossType) return;
       difficultyStats.startStairwellHunt();
       this.stairwell.armWayfinder();
-
-      const bossTX = Math.floor((e.mob.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-      const bossTY = Math.floor((e.mob.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-      const nearestStairwell = this.stairwell.nearestStairwellTile({ x: bossTX, y: bossTY });
-      if (nearestStairwell !== undefined) {
-        this.miniMap.revealStairwellNeighborhood(nearestStairwell);
-        if (!this.stairwellHintAnnounced) {
-          this.stairwellHintAnnounced = true;
-          this.menus.announce(DungeonScene.STAIRWELL_HINT_ANNOUNCEMENT);
-        }
-      }
     });
     bus.on('stairwellFound', () => {
       difficultyStats.finishStairwellHunt();
@@ -4047,24 +4105,24 @@ export class DungeonScene extends GameplayScene {
       this.overworldMusic?.claimZoneAt(arrival.x, arrival.y);
     }
     let introBegun = false;
-    // A gesture also unlocks the audio, so its sting is heard with the banner;
-    // the silent fallback drops it, since an announcement long after the
-    // banner is worse than none.
+    // A gesture also unlocks the audio, so the intro's sounds are heard with
+    // its picture; the silent fallback plays it mute, since sound arriving
+    // long after the picture is worse than none.
     const startIntro = (announce: boolean): void => {
       if (introBegun) return;
       introBegun = true;
-      this.dungeonIntro.start();
+      this.dungeonIntro.start(announce && !this.skipIntro ? this.audio : null);
+      this.syncIntroMusicHold();
       if (this.tutorial !== null) {
         this.audio?.duckMusic('tutorial', TUTORIAL_MUSIC_DUCK_LEVEL);
       } else {
         // The duck outlives the tutorial's scene, so every later floor lets go of it.
         this.audio?.unduckMusic('tutorial');
-        if (announce && !this.skipIntro) this.audio?.playWhenReady('level_begins');
       }
       this.claimFloorMusic();
     };
-    // Behind the loading screen too: the sting announces the floor, so it is
-    // heard with the banner it belongs to, not over the loading bar.
+    // Behind the loading screen too: the intro announces the floor, so its
+    // sounds are heard with it, not over the loading bar.
     this.arrivalLoading.whenClosed(() => {
       if (this.audio === null || this.audio.isRunning) {
         startIntro(true);
@@ -4116,6 +4174,7 @@ export class DungeonScene extends GameplayScene {
         if (!this.hasQuestJournal) return;
         if (this.openQuestJournal()) this.audio?.play('menu_open');
       },
+      toggleKeyRing: () => void this.openKeyRing(),
       openChat: () => this.triggerOpenChat(),
       deinonychusSummon: () => this.toggleDeinonychusSummon(),
       buildAction: () => this.triggerBuildAction(),
@@ -4260,6 +4319,9 @@ export class DungeonScene extends GameplayScene {
     // dialog that never got its close callback can never surface as a
     // permanently-low coin counter on whatever replaces this scene.
     this.rewardFly.reset();
+    this.keyCeremony.dispose();
+    this.keyFragments.dispose();
+    this.dungeonIntro.dispose();
     this.crawlerTalk.stop(this.human, this.cat);
     // Every loop and bed the floor started dies with the scene — unlike music,
     // which may deliberately survive a building round-trip.
@@ -4568,6 +4630,20 @@ export class DungeonScene extends GameplayScene {
     return true;
   }
 
+  /** Pauses into the key ring: the Keys button's action and its key's. */
+  private openKeyRing(): boolean {
+    if (this.gameOver) return false;
+    if (this.tutorial !== null && !this.tutorial.canOpenKeyRing) {
+      this.audio?.play('error');
+      return false;
+    }
+    this.closeConversationForMenu();
+    this.menus.pauseScreen.open('keys');
+    this.menus.closePanels();
+    playKeyCue(this.audio, 'keyRingOpen', null, 'ui');
+    return true;
+  }
+
   /**
    * Hands the pause screen this frame's journal, or takes it away.
    *
@@ -4710,7 +4786,9 @@ export class DungeonScene extends GameplayScene {
       renderables.push({
         x: target.x * TILE_SIZE,
         y: target.y * TILE_SIZE,
-        cullMarginTiles: target.heightTiles ?? FRONT_BEAM_CULL_MARGIN_TILES,
+        cullMarginTiles:
+          (target.kind === 'frame' ? target.depthTiles : target.heightTiles) ??
+          FRONT_BEAM_CULL_MARGIN_TILES,
         render(ctx, camX, camY, tileSize) {
           drawObjectiveBeacon(
             ctx,
@@ -4787,9 +4865,11 @@ export class DungeonScene extends GameplayScene {
   private objectiveTargetCentre(target: TrackerTarget): { x: number; y: number } {
     const footprintCentreTiles =
       (target.widthTiles ?? SINGLE_TILE_TARGET_WIDTH) * TILE_CENTRE_FRACTION;
+    const depthCentreTiles =
+      target.kind === 'frame' ? target.depthTiles * TILE_CENTRE_FRACTION : TILE_CENTRE_FRACTION;
     return {
       x: (target.x + footprintCentreTiles) * TILE_SIZE,
-      y: (target.y + TILE_CENTRE_FRACTION) * TILE_SIZE,
+      y: (target.y + depthCentreTiles) * TILE_SIZE,
     };
   }
 
@@ -6087,6 +6167,7 @@ export class DungeonScene extends GameplayScene {
       casinoState: this.casinoState,
       townMemory: this.townMemory,
       partySplit: this.partySplit,
+      keyRing: this.keyRing,
       briarHollowState: this.briarHollowState,
       shopStock: this.shopStock,
       mercenaryRoster: this.mercenaryRoster,
@@ -6295,6 +6376,8 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.bossIntro.cancel();
+    this.keyCeremony.dismiss();
+    this.carriedAnchorWake.reset();
     this.combatCooldownFrames = 0;
 
     // Dying mid-fight and restoring here never emits `bossDefeated`, so
@@ -6328,15 +6411,18 @@ export class DungeonScene extends GameplayScene {
   private applyWorldCheckpoint(
     world: WorldCheckpoint,
     floorElapsedFrames: number,
-    runProgress: 'rewind' | 'keep',
+    runProgress: CheckpointRunProgress,
   ): void {
     this.floorElapsedFrames = floorElapsedFrames;
     // A clock put back under the limit can run out again.
     this.timeLimitDetonated = false;
     this.restoreFloorCheckpoint(world);
     if (runProgress === 'rewind') this.restoreRunProgress(world);
+    this.keyRing.applyCheckpoint(world.keyRing, runProgress);
     this.fairies.resetForCheckpoint(this.world.roster.mobs, this.bossRoom.defeatedBossTypes);
     this.forgetDebriefsOfLivingBosses();
+    this.keyFragments.reconcile(this.keySourceLedger());
+    this.revealStairwellOfKeyAlreadyForged();
   }
 
   /**
@@ -6385,6 +6471,7 @@ export class DungeonScene extends GameplayScene {
       attackCowState: captureAttackCowState(this.attackCowState),
       partySplit: capturePartySplit(this.partySplit),
       briarHollow: captureBriarHollowState(this.briarHollowState),
+      keyRing: this.keyRing.capture(),
 
       krakenKilled: this.krakenKilled,
       bigRoosterKilled: this.bigRoosterKilled,
@@ -6514,10 +6601,24 @@ export class DungeonScene extends GameplayScene {
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
       briarHollow: captureBriarHollowState(this.briarHollowState),
       partySplit: capturePartySplit(this.partySplit),
+      keyRing: this.keyRing.capture(),
 
       krakenKilled: this.krakenKilled,
       bigRoosterKilled: this.bigRoosterKilled,
       bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
+    };
+  }
+
+  /** Where the key system reads the deeds this floor records outside its checkpoint. */
+  private keySourceLedger(): KeySourceLedger {
+    return {
+      beatSeen: (beat) => this.storyDirector.hasSeen(beat),
+      bossDefeated: (boss) => this.bossRoom.defeatedBossTypes.has(boss),
+      questComplete: {
+        briar_hollow_plea: () => this.briarHollowState.quest.phase === 'complete',
+        taloncrest_missing_cats: () => phaseReached(this.missingCatsProgress, 'complete'),
+        anchor_shards: () => this.anchorQuestProgress.status === 'completed',
+      },
     };
   }
 
@@ -6565,6 +6666,7 @@ export class DungeonScene extends GameplayScene {
       bossRoomDressing,
       briarHollow,
       partySplit,
+      keyRing,
       krakenKilled,
       bigRoosterKilled,
       bigRoosterBossRoomIdx,
@@ -6612,6 +6714,7 @@ export class DungeonScene extends GameplayScene {
     restorePartySplit(this.partySplit, partySplit);
     this.pm.steerLiveGroup();
     this.oweIndoorsResume(savedIndoorsIn);
+    this.keyRing.restore(keyRing);
 
     this.daveDebrief = { ...daveDebrief };
     // `TacticsNoticeSystem` holds this exact Set by reference, so it's refilled
@@ -6689,11 +6792,200 @@ export class DungeonScene extends GameplayScene {
     this.wipeHold.begin(this.progressWipe, restart);
   }
 
+  /**
+   * The descend prompt's Descend: records the floor as complete, saves the run
+   * on the floor below, and takes the party down after the celebration.
+   */
+  private descendTo(nextLevelId: LevelId): void {
+    const nextDef = getLevelDef(nextLevelId);
+
+    // A floor that suppresses its descent advice is not progression, so the
+    // gap it would record is not a difficulty signal: the tutorial's party
+    // cannot reach the level the next floor's mob bands imply, and booking
+    // that as underlevelled is the telemetry lying to itself.
+    const recommendedLevel =
+      this.levelDef.suppressDescentAdvice === true
+        ? null
+        : recommendedPartyLevelFor(nextDef, activeDifficultyProfile());
+    difficultyStats.recordDescend(partyLevelOf(this.human.level, this.cat.level), recommendedLevel);
+
+    // Gear's once-per-floor effects are readied for the floor below before
+    // the save, so a reload on arrival finds them ready too.
+    this.human.gear.startNewFloor();
+    this.cat.gear.startNewFloor();
+
+    // Save progress immediately so the floor is recorded as complete even if
+    // the player closes the browser during the celebration screen.
+    const floorCompleteHumanSnap = revivedSnapshot(snapPlayer(this.human));
+    const floorCompleteCatSnap = revivedSnapshot(snapPlayer(this.cat));
+    void this.dispatchSaveProgress({
+      humanSnap: floorCompleteHumanSnap,
+      catSnap: floorCompleteCatSnap,
+      ...this.partyRunSaveFields({
+        human: floorCompleteHumanSnap,
+        cat: floorCompleteCatSnap,
+        ...this.deinonychusPetSaveState(),
+      }),
+      levelId: nextLevelId,
+      // No `world`: everything in it describes the floor being left, and a
+      // reload has to build the next floor fresh, exactly as the stairs do.
+    });
+
+    this.bus.emit('levelComplete', {});
+    this.mercenarySystem.endContractForFloor();
+
+    // Drain now: the celebration screen stops `updateGameplay`, and the queue
+    // does not survive into the next scene, so a level-up earned on the last
+    // step of the floor would otherwise never be announced.
+    this.systemNotices.drainFor(this.human, this.cat);
+
+    this.levelCompleteScreen.activate(this.levelDef.name, nextDef.name, () => {
+      // Dismiss Deinonychus and any hired merc before floor transition
+      this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+      this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+      const carried = this.runCarry();
+      this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+      this.attackCowSystem.prepareForNewFloor();
+      // The cache-wide flush below returns cells but keeps pins, so what
+      // this floor's residency holds is unpinned here.
+      this.residency.releaseAll();
+      // This is the one genuine floor change among DungeonScene's four
+      // `sceneManager.replace` sites, so it's the only one that runs the
+      // sprite eviction pass — building enter/exit rebuild the scene around
+      // the same floor identity and must never evict. Keyed on the *new*
+      // floor's required keys, not the old floor's: anything the two
+      // floors share (core, dungeon_common, ...) simply isn't touched.
+      const nextFloorKeys = requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups);
+      releaseSpritesExcept(nextFloorKeys);
+      // The same keep set on the same beat, so the painted sheets and the
+      // defs pointing at them can never disagree about what is still live.
+      // Anything seeded goes regardless: the next floor draws its own art
+      // seed, including for a key the two floors share.
+      releaseEnvironmentArt(nextFloorKeys);
+      // The painted creatures give their memory back on the same beat and
+      // for the same reason: whatever the next floor still shows is
+      // repainted lazily, and nothing else is carried down the stairs.
+      flushFigureFrameCache();
+      this.gameStats.beginFloor();
+      this.keyRing.beginFloor(nextDef.id);
+      this.sceneManager.replace(
+        new DungeonScene(nextDef, this.input, this.sceneManager, {
+          arrivedOnFloor: true,
+          keyRing: this.keyRing,
+          carried,
+          // Taking the stairs regroups the party: a companion carried down
+          // still knocked out would time out on arrival with no way to reach them.
+          humanSnap: revivedSnapshot(snapPlayer(this.human)),
+          catSnap: revivedSnapshot(snapPlayer(this.cat)),
+          humanAchievements: this.humanAchievements,
+          catAchievements: this.catAchievements,
+          musicLibrary: this.musicLibrary,
+          storyDirector: this.storyDirector,
+          petNames: this.petNames,
+          deinonychusUnlocked: this.deinonychusSystem.unlocked,
+          deinonychusPetState: this.deinonychusPetState,
+          wheelLedger: this.wheelLedger,
+          attackCowState: this.attackCowState,
+          abilityManager: this._cleanAbilityManager(),
+          // Party progress, not floor state: an axe bought on this floor is
+          // still the axe in hand on the next one.
+          partyCrafts: this.partyCrafts,
+          saveProgress: this.onSaveProgress,
+          audio: this.audio ?? undefined,
+          onResetGame: this.onResetGameCallback ?? undefined,
+          progressWipe: this.progressWipe ?? undefined,
+          godModeState: this.godModeState,
+          companionStance: this.companionStance,
+          // Unlike the journal or the club, this is run-scoped: a trait
+          // announced once stays announced for every floor of the run.
+          tacticsNoticesSeen: this.tacticsNoticesSeen,
+          // Run-scoped for the same reason: the run-complete screen sums up
+          // every floor, not the last one.
+          gameStats: this.gameStats,
+        }),
+      );
+    });
+  }
+
+  /**
+   * The party has stepped into the town square's stairwell, on the floor that
+   * ends the run: its record, and the choice to stay or begin again. Staying
+   * needs nothing undone; the stairwell stays open, and stepping onto it again
+   * brings the screen back.
+   */
+  private openRunEnd(): void {
+    if (this.runCompleteScreen.isActive) return;
+    const summary = buildRunSummary({
+      stats: this.gameStats,
+      floorNumber: this.levelDef.floorNumber,
+      achievements: countPartyAchievements(this.humanAchievements, this.catAchievements),
+      crawlers: [crawlerRecord(this.human, 'human'), crawlerRecord(this.cat, 'cat')],
+    });
+    this.runCompleteScreen.activate(summary, {
+      onStay: () => undefined,
+      onNewGame: () => this.beginNewGame(),
+    });
+    playKeyCue(this.audio, 'runEndReveal');
+  }
+
+  /**
+   * A new game carrying everything: the party's save is rebuilt by
+   * `NEW_GAME_CARRY` onto floor 1, written, and the new run arrives there the
+   * way one that skipped the tutorial does. The difficulty is a setting, not
+   * part of the run, so it stays.
+   */
+  private beginNewGame(): void {
+    playKeyCue(this.audio, 'newGameBegin');
+    // The companions' health reaches the state the save is built from only as
+    // they are dismissed, and this scene is about to be thrown away.
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    const current = this.buildSaveProgress({
+      human: snapPlayer(this.human),
+      cat: snapPlayer(this.cat),
+      ...this.deinonychusPetSaveState(),
+    });
+    const carry = newGameCarryOf({
+      roster: this.mercenaryRoster,
+      anchor: this.anchorQuestProgress,
+    });
+    const progress = newGameProgress(current, carry);
+    void this.dispatchSaveProgress(progress);
+    beginNewRun();
+    this.residency.releaseAll();
+    const nextDef = getLevelDef(NEW_GAME_LEVEL_ID);
+    const nextFloorKeys = requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups);
+    releaseSpritesExcept(nextFloorKeys);
+    releaseEnvironmentArt(nextFloorKeys);
+    flushFigureFrameCache();
+    const { levelDef, options } = sceneSetupFromSave(
+      {
+        audio: this.audio ?? undefined,
+        saveProgress: this.onSaveProgress,
+        onResetGame: this.onResetGameCallback ?? undefined,
+        progressWipe: this.progressWipe ?? undefined,
+        godModeState: this.godModeState,
+        companionStance: this.companionStance,
+      },
+      progress,
+    );
+    this.sceneManager.replace(
+      new DungeonScene(levelDef, this.input, this.sceneManager, {
+        ...options,
+        keyRing: new KeyRing(NEW_GAME_LEVEL_ID),
+        skippedTutorial: true,
+        arrivedOnFloor: true,
+      }),
+    );
+  }
+
   private interiorPartyRun(doorstep: TilePoint): InteriorPartyRun {
     return {
       wheelLedger: this.wheelLedger,
       attackCowState: this.attackCowState,
       partySplit: this.partySplit,
+      keyRing: this.keyRing,
       petNames: this.petNames,
       daveWhereabouts: this.daveWhereabouts,
       story: {
@@ -6752,7 +7044,13 @@ export class DungeonScene extends GameplayScene {
       objectivesBriefed: this.storyDirector.briefedInOrder(),
       petNames: this.petNames.saved(),
       playerIdentity: playerIdentity(),
+      carried: this.runCarry(),
     };
+  }
+
+  /** What the run carries across its next floor change, read from the live world. */
+  private runCarry(): NewGameCarry {
+    return runCarryOf({ roster: this.mercenaryRoster, anchor: this.anchorQuestProgress });
   }
 
   private backfillMusicFromStartingState(): void {
@@ -7026,6 +7324,21 @@ export class DungeonScene extends GameplayScene {
     return { kind: 'loop', id };
   }
 
+  /**
+   * A silent claim above every area claim while the intro's own sounds ring,
+   * so the floor's track and the overworld's zone music both wait for the
+   * swell's tail instead of starting under it, and come in on their own fade
+   * once it is gone.
+   */
+  private syncIntroMusicHold(): void {
+    const scope = this.audioScope;
+    if (scope === null) return;
+    const ringing = this.dungeonIntro.soundsRinging;
+    if (ringing === scope.isMusicClaimed(INTRO_MUSIC_HOLD.owner)) return;
+    if (ringing) scope.claimMusic(INTRO_MUSIC_HOLD);
+    else scope.releaseMusic(INTRO_MUSIC_HOLD.owner);
+  }
+
   private claimFloorMusic(): void {
     const selection = this.floorMusic;
     if (selection === null) return;
@@ -7105,6 +7418,30 @@ export class DungeonScene extends GameplayScene {
       this.world.roster.grid,
       TILE_SIZE * DungeonScene.STAIRWELL_SAVE_ENGAGEMENT_RADIUS_TILES,
     );
+  }
+
+  /** Plays the scene that opens a sealed stairwell the party has brought its key to. */
+  private playUnsealScene(request: UnsealRequest): void {
+    this.cutscenes.director.play(
+      unsealScript({
+        center: request.center,
+        style: request.style,
+        reducedMotion: request.reducedMotion,
+        beginBeat: (beat) => ({ kind: 'stairwellUnseal', beat }),
+      }),
+      () => this.finishUnsealScene(),
+    );
+  }
+
+  private finishUnsealScene(): void {
+    const opened = this.stairwell.completeUnseal(this.active());
+    if (opened !== null) {
+      this.bus.emit('stairwellUnsealed', {
+        kind: opened.kind,
+        tileX: opened.tile.x,
+        tileY: opened.tile.y,
+      });
+    }
   }
 
   /**
@@ -7271,6 +7608,9 @@ export class DungeonScene extends GameplayScene {
     this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     restoreMercenaryRoster(this.mercenaryRoster, this.floorEntryMercenaryRoster);
+    // The floor's bosses and its village stand again, so their fragments go;
+    // whatever deeds the restart keeps are claimed back when the floor is built.
+    this.keyRing.beginFloor(this.levelDef.id);
     // A fresh-seed restart of the same floor identity — the new scene's own
     // residency holds what is near the party moments from now, so there is
     // nothing gained by leaving the old one's held meanwhile.
@@ -7300,7 +7640,8 @@ export class DungeonScene extends GameplayScene {
         attackCowState: this.attackCowState,
         audio: this.audio ?? undefined,
         tutorialController:
-          this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
+          this.tutorial !== null ? TutorialController.createForRestart(this.tutorial) : undefined,
+        spawnAt: this.finishedTutorialEntryTile ?? undefined,
         saveProgress: this.onSaveProgress,
         onResetGame: this.onResetGameCallback ?? undefined,
         progressWipe: this.progressWipe ?? undefined,
@@ -7315,6 +7656,7 @@ export class DungeonScene extends GameplayScene {
         bountyProgress: this.bountyProgress,
         casinoState: this.casinoState,
         townMemory: this.townMemory,
+        keyRing: this.keyRing,
         partyCrafts: this.partyCrafts,
         // No `briarHollowState`: the village is per-floor and belongs to the
         // floor this restart throws away, so the constructor's fresh state is
@@ -7784,11 +8126,13 @@ export class DungeonScene extends GameplayScene {
         dismissNearGoblinDialog: () => tutorial?.dismissNearGoblinDialog(),
       }),
       this.achievementUI.surface(),
+      ...this.keyCeremony.surfaces(),
       deathScreenSurface(this.combat.deathScreen, {
         isOpen: () => this.gameOver,
         onRespawn: () => this.respawnAfterDeath(),
       }),
       this.levelCompleteScreen.surface(),
+      ...this.runCompleteScreen.surfaces(),
       this.chat.surface(),
       ...(this.noticeBoard === null ? [] : [this.noticeBoard.surface('notice-board')]),
       ...(this.marketPanel === null
@@ -7919,6 +8263,7 @@ export class DungeonScene extends GameplayScene {
       catAchievements: this.catAchievements,
       gameStats: this.gameStats,
       floorNumber: this.levelDef.floorNumber,
+      keyRing: this.keyFragments.keyRingView(),
     };
   }
 
@@ -8091,7 +8436,7 @@ export class DungeonScene extends GameplayScene {
    * Dave's answer when tapped, from the highest-ranked source that has one:
    *
    *     tutorial reminder → story beat his arrival held → post-boss debrief
-   *       → tactics for the current objective → AI chat
+   *       → tactics for the current objective → the key is whole, once → AI chat
    *
    * His tactics sit above the AI chat because they are the deterministic
    * answer to "how do I get through what is next", and need no server; the
@@ -8144,6 +8489,7 @@ export class DungeonScene extends GameplayScene {
       onHeard: () => {
         const remembered = rememberDebriefHeard(memory, talk.heard);
         this.daveDebrief[bossType] = remembered;
+        if (talk.keyNoteSpoken === 'whole') this.daveWhereabouts.toldKeyWhole = true;
         // Boxes repeat every talk; don't pay a server round trip for a repeat.
         const worthSaving = !sameDebriefMemory(memory, remembered);
         if (
@@ -8192,6 +8538,7 @@ export class DungeonScene extends GameplayScene {
         ...unwornGear('human', this.human.inventory),
         ...unwornGear('cat', this.cat.inventory),
       ],
+      key: this.keyFragments,
     };
   }
 
@@ -8221,14 +8568,26 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
-  /** Dave's tactics for the objective of the safe room the player is standing in, or null when there is none. */
+  /**
+   * Dave's tactics for the objective of the safe room the player is standing
+   * in; with none left, his word that the key is whole when he owes it; else null.
+   */
   private floorTactics(active: { x: number; y: number }): DialogLine | null {
     const room = this.safeRoom.safeRoomInfoAt(active);
     const objective = room === null ? null : this.currentObjective(room);
-    if (objective === null) return null;
+    if (objective === null) return this.keyWholeNoteOwed();
     this.bus.emit('daveAdviceGiven', { objectiveId: objective.id });
     this.daveWhereabouts.tacticsGiven.add(objective.id);
     return adviceTactics(objective);
+  }
+
+  private keyWholeNoteOwed(): DialogLine | null {
+    const note = keyWholeNote(
+      this.keyFragments.stairwellKeyKnownWhole(),
+      this.daveWhereabouts.toldKeyWhole,
+    );
+    if (note !== null) this.daveWhereabouts.toldKeyWhole = true;
+    return note;
   }
 
   // ── The story ──────────────────────────────────────────────────────────────
@@ -8239,10 +8598,12 @@ export class DungeonScene extends GameplayScene {
       this.storyOpeningPending = false;
       this.openStory();
     }
+    // A key ceremony owed goes first: Dave's talk follows the deed's fragment, never cuts ahead of it.
     const daveFree =
       this.dave.isPresent &&
       !this.story.isTellingDaveMoment &&
       !this.cutscenes.isActive &&
+      !this.keyCeremony.holdsPresentations &&
       !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
     const owedRoom = this.daveArrivalOwed;
     if (owedRoom !== null && daveFree && this.activeCrawlerIsWithDaveIn(owedRoom)) {
@@ -8425,6 +8786,25 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Whether a key ceremony may take the screen: nothing else holds it, no
+   * boss intro or cutscene is playing, a quest's reward plaque has gone up
+   * and come down first, the kill loot of the deed has landed, and nothing is
+   * still fighting the party (a boss room's healer outlives its boss).
+   */
+  private keyCeremonyMayOpen(): boolean {
+    return this.keyCeremonyCalm() && !this.carriedAnchorWake.holdsCeremony();
+  }
+
+  /** Nothing else is holding the screen, so a key ceremony, or the anchor's wake before one, may begin. */
+  private keyCeremonyCalm(): boolean {
+    if (this.gameOver || this.gameplayHalted || this.conversation.isOpen) return false;
+    if (this.bossIntro.isActive || this.cutscenes.isActive) return false;
+    if (this.menus.questReward.isOpen || this.menus.questReward.queuedCount > 0) return false;
+    if (this.destruction.loot.hasLootFalling()) return false;
+    return !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
+  }
+
+  /**
    * Caroline speaks only into a calm moment: nothing hostile is fighting
    * either crawler, nothing halts the world and no other box is open. In the
    * tutorial she also waits until Dave has met the human and for any lesson
@@ -8433,6 +8813,7 @@ export class DungeonScene extends GameplayScene {
    */
   private carolineMaySpeak(): boolean {
     if (this.gameOver || this.gameplayHalted || this.conversation.isOpen) return false;
+    if (this.keyCeremony.holdsPresentations) return false;
     const tutorial = this.storyPreview === null ? this.tutorial : null;
     const lessonHoldsHer =
       tutorial !== null && (!tutorial.showAchievementUI || tutorial.pauseRestriction() !== null);
@@ -8989,6 +9370,7 @@ export class DungeonScene extends GameplayScene {
           this.menus.itemCooldowns,
           invPlayer,
           invPlayer === this.human ? this.readiedDynamiteId() : null,
+          { itemId: 'wayfinders_anchor', strength: this.carriedAnchorWake.pulse },
         ),
         input: hotbarPressInput(
           () => this.hotbarHost(),
@@ -9106,6 +9488,16 @@ export class DungeonScene extends GameplayScene {
         onTap: () => void this.openQuestJournal(),
       });
     }
+    dock.push({
+      id: 'keys',
+      icon: 'keyRound',
+      label: 'Keys',
+      key: keybindings.labelFor('toggleKeyRing'),
+      bounce: this.rewardFly.keysBouncePulse(),
+      // Silent: opening the ring plays its own cue, on the key path as well as the tap.
+      sound: null,
+      onTap: () => void this.openKeyRing(),
+    });
     if (this.showsFollowerButton) {
       const humanLeads = this.human.isActive;
       const ordersChanged =
@@ -9369,6 +9761,9 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.update();
     this.chat.update();
     this.achievementUI.tick();
+    this.keyCeremony.update();
+    this.revealStairwellOfForgedKey();
+    this.announceStairwellHintOnceClear();
     this.resolvePendingQuestSwitch();
     playRewardLandingCues(this.audio, this.rewardFly.update());
     // Above the boss-intro return below: an award overlay raised on the frame a
@@ -9388,6 +9783,8 @@ export class DungeonScene extends GameplayScene {
     this.chestKit.tick();
 
     this.dungeonIntro.tick();
+    this.syncIntroMusicHold();
+    if (this.keyCeremonyCalm()) this.carriedAnchorWake.tickSettled();
 
     if (this.bossIntro.isActive) {
       this.silenceFrozenWorldLoops();
@@ -9412,7 +9809,8 @@ export class DungeonScene extends GameplayScene {
     }
     // Gameplay stops ticking the soundscape under all three end screens, so its
     // loops would hold their last volume behind the screen until it closed.
-    const endScreenShowing = this.gameOver || this.levelCompleteScreen.isActive;
+    const endScreenShowing =
+      this.gameOver || this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive;
     if (endScreenShowing) {
       this.dungeonAmbience?.silence();
       this.labHallway?.silence();
@@ -10067,6 +10465,7 @@ export class DungeonScene extends GameplayScene {
     // Every menu and dialog, bottom to top in stack order; the hit regions
     // they register here are what the next press is tested against.
     this.ui.frame(ctx);
+    this.ui.measureIn(ctx, (target) => this.keyCeremony.prepare(target));
 
     // Flies over every dialog above: it is reporting a grant that already
     // happened, not asking for input, so nothing on screen should be able to
@@ -10099,7 +10498,9 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    if (this.tutorial !== null) {
+    // The first hint would read through the intro's fade before the floor is
+    // the player's to act on.
+    if (this.tutorial !== null && this.dungeonIntro.arrivalSettled) {
       const activePlayer = this.active();
       const pauseButton = this.hud.cssDockRect('pause');
       const hotbarFrame = this.hud.frame;
@@ -10184,6 +10585,7 @@ export class DungeonScene extends GameplayScene {
         characterSectionOpen: this.menus.pauseScreen.shownSectionId === 'character',
         statSpendButtonRect,
         menuCloseRect,
+        keyMomentPending: this.keyCeremony.holdsPresentations,
       };
       this.tutorial.renderOverlay(ctx, camera, activePlayer, tutRenderCtx);
     }
@@ -10334,6 +10736,13 @@ export class DungeonScene extends GameplayScene {
     const player = this.active();
     const southAnchor = this.southAnchor;
     const scriptMovedParty = this.cutscenes.tickWorld(player, this.gameMap, southAnchor);
+    // The scene starts only with nothing hunting the party, but a mob can
+    // still wander in during it; the party, held still, takes no harm until it ends.
+    if (this.stairwell.unsealing) {
+      for (const crawler of this.pm.presentCrawlers()) {
+        crawler.invulnerableFrames = Math.max(crawler.invulnerableFrames, UNSEAL_GUARD_FRAMES);
+      }
+    }
     const move = readMovement(
       this.input,
       this.holdRestsOnStructure() ? null : this.touch.moveTarget,
@@ -10836,14 +11245,9 @@ export class DungeonScene extends GameplayScene {
 
     revealMinimap(player, this.miniMap);
 
-    const wasStairwellOpen = this.stairwell.menuOpen;
-    this.stairwell.detect(this.active());
-    if (!wasStairwellOpen && this.stairwell.menuOpen) {
-      this.bus.emit('stairwellFound', {});
-    }
-    if (this.stairwell.menuOpen && this.tutorial !== null && !this.tutorial.canUseStairwell) {
-      this.stairwell.closeMenu();
-    }
+    // As with a building's door: a script walking the crawler over a seal is
+    // not the player trying it. The unseal scene offers the exit itself.
+    if (!this.cutscenes.isActive) this.stairwell.detect(this.active());
     // A script carries the steered crawler where it likes, through walls and
     // over doorsteps: Belle lifted from the fountain to the spire crosses the
     // tower's sealed door. Only a crawler the player walks there is trying it.
@@ -11318,6 +11722,7 @@ export class DungeonScene extends GameplayScene {
           },
           location: this.aiLocation(active),
           nearbyMobs: readNearbyMobs(this.world.roster.mobs, active),
+          keys: readKeys(this.keyFragments.keyRingView()),
           combatInProgress: this.combatCooldownFrames > 0,
           bossFightActive: this.bossRoom.anyLocked,
           isPaused: this.gameOver || this.menus.pauseScreen.isOpen || menuOpen,
@@ -11368,7 +11773,7 @@ export class DungeonScene extends GameplayScene {
       return {
         ...base,
         kind: 'overworld',
-        label: inVillage ? 'Briar Hollow' : `the overworld${nearStairwell}`,
+        label: inVillage ? 'Briar Hollow' : `Taloncrest${nearStairwell}`,
       };
     }
     if (inRoom) return { ...base, kind: 'room', label: `dungeon room${nearStairwell}` };

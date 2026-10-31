@@ -420,6 +420,14 @@ export class TutorialGates {
     return this.cues.splice(0, this.cues.length);
   }
 
+  /** Every gate unlocked and standing open, silently: a tutorial whose lessons are already done. */
+  openAll(): void {
+    for (const gate of this.gates) {
+      gate.unlocked = true;
+      gate.phase = 'open';
+    }
+  }
+
   private gate(id: TutorialGateId): GateState {
     const found = this.gates.find((gate) => gate.def.id === id);
     if (found === undefined) throw new Error(`no tutorial gate ${id}`);

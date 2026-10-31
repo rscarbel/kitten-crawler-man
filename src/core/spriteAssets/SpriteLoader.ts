@@ -15,7 +15,6 @@ import environmentTrashGremlinManifest from '../../images/environment/trash_grem
 import environmentGymManifest from '../../images/environment/gym/manifest.json';
 import environmentSpiderLabManifest from '../../images/environment/spider_lab/manifest.json';
 import environmentTaloncrestManifest from '../../images/environment/towns/taloncrest/manifest.json';
-import interfacesManifest from '../../images/interfaces/manifest.json';
 import environmentServiceLevelManifest from '../../images/environment/service_level/manifest.json';
 import environmentCellarPropsManifest from '../../images/environment/cellar_props/manifest.json';
 import { TILE_SIZE } from '../constants';
@@ -80,7 +79,6 @@ const environmentManifest = {
 const manifestJson = {
   ...effectsManifest,
   ...environmentManifest,
-  ...interfacesManifest,
 } as const;
 
 export interface SpriteStateDef {
@@ -194,16 +192,18 @@ interface LoadedSpriteDef extends SpriteDef {
 
 const _defs = new Map<string, LoadedSpriteDef>();
 
-/** Told of every lookup of a runtime-painted key that is not published. */
-let paintedSpriteMissHandler: ((key: string) => void) | null = null;
+/** Told of every lookup of a runtime-painted key that is not published; answers whether its repaint is now owed. */
+let paintedSpriteMissHandler: ((key: string) => boolean) | null = null;
 
 /**
  * Hears every lookup of a runtime-painted sheet that is not published, so the
- * cache that let one go can paint it again the moment something wants it. One
- * listener: the environment cache is the only painter that gives sheets back
- * while their floor is still being played.
+ * cache that let one go can paint it again the moment something wants it, and
+ * answers whether it has queued that repaint. A sheet given back and being
+ * painted again is missing by design, so its miss is not reported as a sprite
+ * that failed to load. One listener: the environment cache is the only
+ * painter that gives sheets back while their floor is still being played.
  */
-export function onPaintedSpriteMiss(handler: (key: string) => void): void {
+export function onPaintedSpriteMiss(handler: (key: string) => boolean): void {
   paintedSpriteMissHandler = handler;
 }
 
@@ -569,12 +569,25 @@ export async function prewarmGroups(
  */
 export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
   const def = _defs.get(key);
-  if (def === undefined) {
-    recordMiss(key);
-    void ensureLoading(key, _manifest[key], DEFAULT_IMAGE_BASE);
-  }
+  if (def === undefined) requestMissed(key, _manifest[key]);
   def?.onLookup?.();
   return def;
+}
+
+/**
+ * A lookup found no sheet for `key`: asks for it, and reports the miss unless
+ * it is a painted sheet whose painter gave it back and is now repainting it.
+ * A key with no manifest entry has nothing to ask for and is always reported.
+ */
+function requestMissed(key: string, entry: SpriteManifestEntry | undefined): void {
+  if (entry === undefined) {
+    recordMiss(key);
+    return;
+  }
+  const isPainted = entry.path === undefined;
+  const repaintOwed = isPainted && paintedSpriteMissHandler?.(key) === true;
+  if (!repaintOwed) recordMiss(key);
+  if (!isPainted) void ensureLoading(key, entry, DEFAULT_IMAGE_BASE);
 }
 
 /**
@@ -846,11 +859,7 @@ export function getBlockedTileOffsets(tileTypeId: number): ReadonlyArray<TileOff
  */
 export function getSpriteDefByKey(key: string): SpriteDef | undefined {
   const def = _defs.get(key);
-  if (def === undefined) {
-    recordMiss(key);
-    const entry = manifestEntryFor(key);
-    if (entry !== undefined) void ensureLoading(key, entry, DEFAULT_IMAGE_BASE);
-  }
+  if (def === undefined) requestMissed(key, manifestEntryFor(key));
   def?.onLookup?.();
   return def;
 }

@@ -69,6 +69,9 @@
  *       its file is kept; an
  *       on-demand sting's unplayed file goes with its scope.
  *
+ *   27. Every floor dressed as a dungeon preloads every decoded sound its
+ *       dungeon cues can raise.
+ *
  *   npm run verify:audio
  *   npx tsx scripts/verify-audio.ts --only=15
  */
@@ -95,7 +98,11 @@ const { compressedSfxForLevelId, CORE_SFX_IDS, GATED_SFX_GROUPS, SFX_GROUPS, sfx
 const { FloorSfxGates, groupsActiveAnywhere, SFX_GATE_APPROACH_TILES, SFX_GATE_LEAVE_TILES } =
   await import('../src/systems/FloorSfxGates.js');
 const { AmbientSoundSystem } = await import('../src/systems/AmbientSoundSystem.js');
-const { ON_DEMAND_SOUND_IDS, SOUND_MANIFEST } = await import('../src/audio/sounds.js');
+const { ON_DEMAND_SOUND_IDS, SOUND_MANIFEST, STREAMING_SOUND_IDS } =
+  await import('../src/audio/sounds.js');
+const { DUNGEON_CUES } = await import('../src/systems/dungeon/dungeonSoundCues.js');
+const { getLevelDef } = await import('../src/levels/index.js');
+const { LEVEL_IDS } = await import('../src/levels/levelIds.js');
 const { MACHINERY_LOOP, SPIDER_WALKING_LOOP, WADING_LOOP, WALKING_LOOP } =
   await import('../src/audio/loopLevels.js');
 const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
@@ -913,6 +920,26 @@ const unlockGesture = (type: string): void => {
   harness.gesture(() => shim.window.dispatch(new ShimEvent(type, '', 0)));
 };
 
+/**
+ * A floor dressed as a dungeon (a `groundTheme` on its level) runs the
+ * dungeon's life and soundscape, which raise `DUNGEON_CUES`; a decoded cue
+ * its preload leaves out never sounds there.
+ */
+function checkDungeonFloorsPreloadDungeonCues(): void {
+  const decodedCueIds = [...new Set(Object.values(DUNGEON_CUES).flat())].filter(
+    (id) => !STREAMING_SOUND_IDS.has(id),
+  );
+  for (const levelId of LEVEL_IDS) {
+    if (getLevelDef(levelId).groundTheme === undefined) continue;
+    const preloaded = new Set<SoundId>([...CORE_SFX_IDS, ...sfxGroupsForLevelId(levelId)]);
+    const missing = decodedCueIds.filter((id) => !preloaded.has(id));
+    check(
+      missing.length === 0,
+      `${levelId} preloads every dungeon cue (${missing.length === 0 ? 'none missing' : `missing ${missing.join(', ')}`})`,
+    );
+  }
+}
+
 const CHECKS: readonly AudioCheck[] = [
   {
     id: 1,
@@ -982,6 +1009,11 @@ const CHECKS: readonly AudioCheck[] = [
     id: 26,
     name: 'objective chime by quest',
     run: () => voices.checkObjectiveChime(harness, check),
+  },
+  {
+    id: 27,
+    name: 'dungeon floors preload the dungeon cues',
+    run: () => Promise.resolve(checkDungeonFloorsPreloadDungeonCues()),
   },
 ];
 

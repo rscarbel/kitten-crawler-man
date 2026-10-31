@@ -470,6 +470,14 @@ export const STINGER_IDS = [
   'achievement_unlocked',
   'new_unlock',
   'briar_hollow_victory',
+  'stairwell_key_turn',
+  'stairwell_seal_runes_ignite',
+  'stairwell_padlock_burst',
+  'stairwell_chains_fall',
+  'stairwell_cover_drag_oak',
+  'stairwell_cover_swing_steel',
+  'stairwell_cover_fold_bronze',
+  'stairwell_light_from_below',
 ] as const satisfies readonly SoundId[];
 
 /** One id's own departures from its folder. */

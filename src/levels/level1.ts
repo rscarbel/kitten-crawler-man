@@ -180,7 +180,7 @@ export const level1: LevelDef = {
   floorNumber: 1,
   arrivalLoadingScreen: {
     tips: [
-      'The Trash Gremlin and then the Kraken stand between you and the stairwells.',
+      "The Trash Gremlin and the Kraken each hold a fragment of the floor's key.",
       'Something big has flooded the pump room. Wade carefully, and watch the water.',
       'A safe room saves your run, and a death returns you to your last save.',
       'The doctor in each safe room patches you up for free: full health, ailments cured.',
@@ -295,7 +295,7 @@ export const level1: LevelDef = {
   levelledCurve: LEARNING_FLOOR_LEVELLED_CURVE,
   nightmareTimeLimitFrames: LEVEL1_NIGHTMARE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,
-  nextLevelId: 'level2',
+  exit: { kind: 'descend', nextLevelId: 'level2' },
   stairwellCountMultiplier: LEVEL1_STAIRWELL_MULTIPLIER,
   xpDiminishingTiers: [
     { minPlayerLevel: LEVEL1_XP_HALF_LEVEL, multiplier: LEVEL1_XP_HALF_MULTIPLIER },

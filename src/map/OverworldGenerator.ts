@@ -27,7 +27,8 @@ import {
 } from './tileTypes';
 import { randomInt } from '../utils';
 import { TileGrid } from './town/tileGrid';
-import { STORM_DRAIN_ID } from './buildingIds';
+import { STORM_DRAIN_ID, type PlannedBuildingId } from './buildingIds';
+import { STAIRWELL_FOOTPRINT_SPAN } from './DungeonGenerator';
 import { doorwayKeepClearTiles } from '../systems/doorwayKeepClear';
 import { tileKey } from '../systems/tileKey';
 import { STORM_DRAIN_GRATE_WIDTH_TILES } from './tiles/stormDrainGrateTile';
@@ -38,6 +39,7 @@ import {
   type BuildingKind,
   type TilePoint,
   type TileRect,
+  type TownOffset,
   type TownPlan,
 } from './town/townPlan';
 import {
@@ -558,6 +560,8 @@ export function generateOverworld(size: number): OverworldData {
     buildingEntries,
     circus.centre,
   );
+  const townSquareStairwell = townSquareStairwellTile(townSquareCentre);
+  assertTownSquareStairwellIsClear(grid, plan, townSquareStairwell, buildingEntries);
 
   return {
     grid: grid.cells,
@@ -576,7 +580,7 @@ export function generateOverworld(size: number): OverworldData {
       ...point,
       terrain: classifySpawnTerrain(grid.cells, point.x, point.y),
     })),
-    stairwellTiles: [],
+    stairwellTiles: [townSquareStairwell],
     mainTowerAnchor,
     townSafeRadiusTiles: plan.safeRadiusTiles,
     townSquareCentre,
@@ -596,6 +600,91 @@ export function generateOverworld(size: number): OverworldData {
       camps,
     },
   };
+}
+
+/**
+ * Top-left of the town square's stairwell footprint, from the plaza's centre.
+ *
+ * South of the fountain with one row of flagstone between them, so a crawler
+ * walking up to the fountain from Market Street does not step onto the stairs
+ * on the way. That keeps it off the benches either side of the fountain's middle
+ * row, the stalls and vendors on the centre rows, the board and the fortune
+ * teller in the north half, and King's Road's arrival axis to the west.
+ */
+const TOWN_SQUARE_STAIRWELL_OFFSET: TownOffset = { dx: 3, dy: 6 };
+
+/** The safe room a floor-3 party returns to, whose door the town square's stairwell must be walkable from. */
+const STAIRWELL_REACHED_FROM_BUILDING = 'taloncrest_inn' as const satisfies PlannedBuildingId;
+
+function townSquareStairwellTile(townSquareCentre: TilePoint): TilePoint {
+  return {
+    x: townSquareCentre.x + TOWN_SQUARE_STAIRWELL_OFFSET.dx,
+    y: townSquareCentre.y + TOWN_SQUARE_STAIRWELL_OFFSET.dy,
+  };
+}
+
+function plannedPropTiles(plan: TownPlan): Set<string> {
+  const tiles = new Set<string>();
+  for (const prop of plan.props) {
+    switch (prop.kind) {
+      case 'torch':
+      case 'well':
+        tiles.add(tileKey(prop.tile.x, prop.tile.y));
+        break;
+      case 'fountain': {
+        const { x, y, w, h } = prop.bounds;
+        for (let py = y; py < y + h; py++) {
+          for (let px = x; px < x + w; px++) tiles.add(tileKey(px, py));
+        }
+        break;
+      }
+      default: {
+        const unhandled: never = prop;
+        throw new Error(`Unhandled town prop ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+  return tiles;
+}
+
+/**
+ * The town square's stairwell must stand on open plaza flagstone, off every
+ * prop, building and doorway, and be walkable from the Sleeping Cat Inn's door.
+ * Runs over the finished grid. The fixtures placed at runtime keep off it on
+ * their own: `GameMap.isOpenStreetGround` refuses stairwell tiles.
+ */
+function assertTownSquareStairwellIsClear(
+  grid: TileGrid,
+  plan: TownPlan,
+  stairwell: TilePoint,
+  buildingEntries: ReadonlyArray<BuildingEntry>,
+): void {
+  const inn = buildingEntries.find((entry) => entry.id === STAIRWELL_REACHED_FROM_BUILDING);
+  if (inn === undefined) {
+    throw new Error(`The town square's stairwell has no '${STAIRWELL_REACHED_FROM_BUILDING}' door`);
+  }
+  const fromInn = new Reachability(grid, inn.doorTile);
+  const keepClear = doorwayKeepClearTiles(buildingEntries);
+  const propTiles = plannedPropTiles(plan);
+  const { plaza } = plan;
+  for (let dy = 0; dy < STAIRWELL_FOOTPRINT_SPAN; dy++) {
+    for (let dx = 0; dx < STAIRWELL_FOOTPRINT_SPAN; dx++) {
+      const x = stairwell.x + dx;
+      const y = stairwell.y + dy;
+      const where = `The town square's stairwell tile ${x},${y}`;
+      const insidePlaza =
+        x >= plaza.x && y >= plaza.y && x < plaza.x + plaza.w && y < plaza.y + plaza.h;
+      if (!insidePlaza) throw new Error(`${where} is outside the plaza`);
+      const type = grid.typeAt(x, y);
+      if (type !== PLAZA_STONE) {
+        throw new Error(`${where} stands on tile type ${String(type)}, not flagstone`);
+      }
+      if (grid.cells[y][x].spriteKey !== undefined) throw new Error(`${where} is under a building`);
+      if (propTiles.has(tileKey(x, y))) throw new Error(`${where} stands on a prop`);
+      if (keepClear.has(tileKey(x, y))) throw new Error(`${where} blocks a doorway`);
+      if (!fromInn.reached(x, y)) throw new Error(`${where} cannot be walked to from the inn`);
+    }
+  }
 }
 
 /**

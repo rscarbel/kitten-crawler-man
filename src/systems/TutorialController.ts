@@ -41,6 +41,7 @@ import {
 import type { DialogLine } from '../dialog/line';
 import type { CutsceneDirector } from './cutscene/CutsceneDirector';
 import { DAVE_TUTORIAL_REMINDERS } from '../dialog/scripts/dave';
+import { stairwellKeyName } from '../core/keys/floorKeys';
 import {
   drawArrowAbovePlayer,
   drawBouncingArrowAboveEntity,
@@ -216,6 +217,8 @@ function hintTexts(mode: InputMode): Record<TutorialState, string> {
   return cachedHintTexts.texts;
 }
 
+const TUTORIAL_COMPLETE_HINT = `Tutorial complete! Take the ${stairwellKeyName('tutorial')} to the stairwell.`;
+
 const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   SEPARATE_ROOMS: 'Move by pressing and holding in the direction you want to go.',
   HUMAN_MOVED: 'A goblin is ahead — get close!',
@@ -239,7 +242,7 @@ const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   },
   SWITCHED_TO_HUMAN: 'Tap the Follower button and call the cat to you.',
   CAT_ARRIVED: 'Your partner is with you. Dave wants a word.',
-  TALKED_TO_DAVE_AGAIN: 'Tutorial complete! Find the stairs to continue.',
+  TALKED_TO_DAVE_AGAIN: TUTORIAL_COMPLETE_HINT,
   COMPLETE: '',
 };
 
@@ -269,7 +272,7 @@ function pointerHintTexts(): Record<TutorialState, string> {
     AWAITING_SWITCH_TO_HUMAN: `Switch back to ${crawlerDisplayName('human')}. Press ${keyLabel('switchCharacter')}.`,
     SWITCHED_TO_HUMAN: `Press "${keyLabel('companionFollow')}" to bring up the follower menu and call the cat to you.`,
     CAT_ARRIVED: 'Your partner is with you. Dave wants a word.',
-    TALKED_TO_DAVE_AGAIN: 'Tutorial complete! Find the stairwell and descend to begin.',
+    TALKED_TO_DAVE_AGAIN: TUTORIAL_COMPLETE_HINT,
     COMPLETE: '',
   };
 }
@@ -417,15 +420,15 @@ const CHEST_BEACON: TrackerTarget = {
   brightness: DUNGEON_BEACON_BRIGHTNESS,
 };
 /**
- * The stairwell is a hole two tiles across, anchored at its top-left: the
- * beam stands on its south row, spans its width, and rises from the middle
- * of its depth so the light pools over the whole hole.
+ * A frame round the stairwell's whole seal rather than a beam: a beam's pool
+ * lands on the padlock in the seal's middle and washes it out.
  */
 const STAIRWELL_BEACON: TrackerTarget = {
+  kind: 'frame',
   x: TUTORIAL_STAIR_FOOTPRINT.x,
-  y: TUTORIAL_STAIR_FOOTPRINT.y + TUTORIAL_STAIR_FOOTPRINT.h - 1,
+  y: TUTORIAL_STAIR_FOOTPRINT.y,
   widthTiles: TUTORIAL_STAIR_FOOTPRINT.w,
-  backsetTiles: TUTORIAL_STAIR_FOOTPRINT.h / 2,
+  depthTiles: TUTORIAL_STAIR_FOOTPRINT.h,
   brightness: DUNGEON_BEACON_BRIGHTNESS,
 };
 const NO_PLACE_BEACONS: ReadonlyArray<TrackerTarget> = [];
@@ -562,6 +565,8 @@ export interface TutorialRenderContext {
   statSpendButtonRect: Rect | null;
   /** Screen-space rect of the open menu's close button (the pause menu's, else the inventory's), or null. */
   menuCloseRect: Rect | null;
+  /** True while a key fragment's or the key's ceremony is on screen or owed. */
+  keyMomentPending: boolean;
 }
 
 export interface TutorialMobs {
@@ -707,6 +712,38 @@ export class TutorialController implements ObjectiveBeaconSource {
     return new TutorialController(map, TutorialController.createMobs(map));
   }
 
+  /**
+   * A controller whose lessons are all behind it: Dave's farewell heard,
+   * every gate open, the goblins and the chest dealt with. For a dev boot
+   * that stands the party by the tutorial's stairwell.
+   */
+  static createFinished(): TutorialController {
+    const controller = TutorialController.createForTutorial();
+    controller._lessonsDone = true;
+    controller.chestOpened = true;
+    controller.gates.openAll();
+    controller.advance('TALKED_TO_DAVE_AGAIN');
+    return controller;
+  }
+
+  /** A controller for a restart of the tutorial `previous` ran: begun again, or finished again. */
+  static createForRestart(previous: TutorialController): TutorialController {
+    return previous.lessonsDone
+      ? TutorialController.createFinished()
+      : TutorialController.createForTutorial();
+  }
+
+  private _lessonsDone = false;
+
+  /**
+   * Whether this controller began with every lesson already done
+   * ({@link createFinished}): the scene then keeps the party it was handed
+   * and puts no goblins on the floor.
+   */
+  get lessonsDone(): boolean {
+    return this._lessonsDone;
+  }
+
   /** Wire in the scene's cutscene director, so no guidance is drawn over a script. */
   setCutscenes(cutscenes: TutorialCutscenes): void {
     this.cutscenes = cutscenes;
@@ -729,6 +766,15 @@ export class TutorialController implements ObjectiveBeaconSource {
    */
   get canSwitchCharacter(): boolean {
     return this.atOrPast('AWAITING_SWITCH_TO_HUMAN');
+  }
+
+  /**
+   * False until the menu lessons are over. The key ring opens inside the pause
+   * menu, so before the tutorial has taught that menu the Keys button would
+   * teach the player it is the way to their inventory and skill points.
+   */
+  get canOpenKeyRing(): boolean {
+    return this.atOrPast('CAT_EQUIPPED_MAGIC_MISSILE');
   }
 
   /** While true the skill-point badge shows whatever else would hide it: the step points at it. */
@@ -764,11 +810,6 @@ export class TutorialController implements ObjectiveBeaconSource {
   /** True when the near-goblin tutorial dialog should be shown (pauses game). */
   get showNearGoblinDialog(): boolean {
     return this._state === 'HUMAN_NEAR_GOBLIN' && !this._nearGoblinDialogDismissed;
-  }
-
-  /** False until Dave has seen the party off. */
-  get canUseStairwell(): boolean {
-    return this.atOrPast('TALKED_TO_DAVE_AGAIN');
   }
 
   /** Reward chests wait in their queue until Dave has met the human. */
@@ -1082,11 +1123,14 @@ export class TutorialController implements ObjectiveBeaconSource {
     return DAVE_TUTORIAL_REMINDERS[this._state];
   }
 
-  /** Called by DungeonScene when the player selects "Follow me" from the follower menu. */
-  onFollowMeSelected(): void {
-    if (this._state === 'SWITCHED_TO_HUMAN') {
-      this.advance('CAT_ARRIVED');
-    }
+  /**
+   * Called by DungeonScene when the player selects "Follow me" from the
+   * follower menu. Returns whether the choice advanced the tutorial.
+   */
+  onFollowMeSelected(): boolean {
+    if (this._state !== 'SWITCHED_TO_HUMAN') return false;
+    this.advance('CAT_ARRIVED');
+    return true;
   }
 
   /** Every gate sound raised since the last call, each at the gate it came from. */
@@ -1365,6 +1409,9 @@ export class TutorialController implements ObjectiveBeaconSource {
 
     // A script owns the screen: no guidance may point the player elsewhere mid-walk or mid-talk.
     if (this.cutscenes?.isActive === true) return;
+    // Dave's fragment is handed over between his talk and the next step's
+    // errand, so the errand's hint waits until its ceremony has been and gone.
+    if (renderCtx.keyMomentPending) return;
 
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
     const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;

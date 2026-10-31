@@ -2,7 +2,9 @@ import type { LevelId } from '../levels/levelIds';
 import type { AchievementId } from '../core/progression/achievementSave';
 import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { DebriefBossType } from '../core/mobs/debriefBossTypes';
-import type { GearId } from '../loot/gearPools';
+import { GEAR_SOURCES, isGearId, type GearId } from '../loot/gearPools';
+import { fragmentsOnFloor } from '../core/keys/floorKeys';
+import type { QuestId } from '../core/quests/QuestManager';
 import { STORY_BEAT_ORDER, type StoryBeatId } from '../story/storyBeatIds';
 
 /**
@@ -18,6 +20,8 @@ import { STORY_BEAT_ORDER, type StoryBeatId } from '../story/storyBeatIds';
  * triggers; `?story=<beatId>` replays any one beat on its own.
  */
 export const RUN_MILESTONES = [
+  /** Every tutorial lesson done and Dave's farewell heard, the stairwell ahead. */
+  'tutorial_end',
   /** Out of the tutorial and down the stairs onto floor 1. */
   'floor1_start',
   /** In the safe room guarding the Trash Gremlin. */
@@ -36,10 +40,17 @@ export const RUN_MILESTONES = [
   'floor2_past_current_goblin',
   /** Through the stealth gate and floor 2's nursery, in the safe room guarding Big Rooster. */
   'floor2_before_big_rooster',
+  /** Both of floor 2's bosses dead, the stairwell ahead. */
+  'floor2_past_big_rooster',
   /** Just down the stairs into the town on floor 3, the Sleeping Cat Inn not yet visited. */
   'floor3_arrival',
   /** A while on floor 3: the inn's safe room visited enough times for all of Dave's floor-3 talks. */
   'floor3_settled',
+  /**
+   * Floor 3 done: Briar Hollow's Plea, A Cat Always Comes Back and the
+   * Wayfinder's Anchor all finished, the town square's stairwell ahead.
+   */
+  'floor3_complete',
 ] as const;
 
 export type RunMilestone = (typeof RUN_MILESTONES)[number];
@@ -57,7 +68,7 @@ export const BOSS_FLOOR = {
 
 /** What a party standing at one {@link RunMilestone} has already done. */
 export interface RunProgress {
-  readonly levelId: Extract<LevelId, 'level1' | 'level2' | 'level3'>;
+  readonly levelId: Extract<LevelId, 'tutorial' | 'level1' | 'level2' | 'level3'>;
   /** The newest beat heard; every beat before it in play order has been heard too. */
   readonly lastBeatHeard: StoryBeatId;
   /** Objectives Caroline has briefed, each one the party has since put behind it. */
@@ -86,6 +97,18 @@ export interface RunProgress {
  * preset's run played the tutorial, so this one was never needed.
  */
 const SKIPPED_TUTORIAL_BEAT: StoryBeatId = 'skipped_tutorial_dave_intro';
+
+const TUTORIAL_END = {
+  levelId: 'tutorial',
+  lastBeatHeard: 'tutorial_dave_farewell',
+  objectivesBriefed: [],
+  bossesDefeated: [],
+  playAchievements: ['first_kill', 'up_close', 'magic_touch'],
+  dungeonKills: 0,
+  nurseriesHeld: 0,
+  questGear: [],
+  woodenChestsOpened: { 1: 0, 2: 0 },
+} as const satisfies RunProgress;
 
 const FLOOR1_START = {
   levelId: 'level1',
@@ -168,10 +191,9 @@ const FLOOR2_BEFORE_BIG_ROOSTER = {
   woodenChestsOpened: { 1: 14, 2: 13 },
 } as const satisfies RunProgress;
 
-const FLOOR3_ARRIVAL = {
+const FLOOR2_PAST_BIG_ROOSTER = {
   ...FLOOR2_BEFORE_BIG_ROOSTER,
-  levelId: 'level3',
-  lastBeatHeard: 'floor3_caroline_arrival',
+  lastBeatHeard: 'floor2_caroline_pressure',
   objectivesBriefed: [...FLOOR2_BEFORE_BIG_ROOSTER.objectivesBriefed, 'big_rooster'],
   bossesDefeated: [...FLOOR2_BEFORE_BIG_ROOSTER.bossesDefeated, 'big_rooster'],
   playAchievements: [...FLOOR2_BEFORE_BIG_ROOSTER.playAchievements, 'pecking_order'],
@@ -179,12 +201,72 @@ const FLOOR3_ARRIVAL = {
   woodenChestsOpened: { 1: 14, 2: 16 },
 } as const satisfies RunProgress;
 
+const FLOOR3_ARRIVAL = {
+  ...FLOOR2_PAST_BIG_ROOSTER,
+  levelId: 'level3',
+  lastBeatHeard: 'floor3_caroline_arrival',
+} as const satisfies RunProgress;
+
 const FLOOR3_SETTLED = {
   ...FLOOR3_ARRIVAL,
   lastBeatHeard: 'floor3_caroline_chosen_first',
 } as const satisfies RunProgress;
 
+/**
+ * Every objective floor 3 briefs on the way through its questlines, so a
+ * party past them hears none again.
+ */
+const FLOOR3_OBJECTIVES = [
+  'shady_bounties',
+  'anchor_offer',
+  'anchor_stone',
+  'missing_cats_notices',
+  'missing_cats_owners',
+  'missing_cats_cellar',
+  'missing_cats_stakeout',
+  'missing_cats_temple',
+  'missing_cats_bait',
+  'missing_cats_tower_door',
+  'missing_cats_drain',
+] as const satisfies readonly AdviceObjectiveId[];
+
+/** The quests floor 3's key fragments come from, read from the floor's key table. */
+function floorFragmentQuests(levelId: LevelId): QuestId[] {
+  const quests: QuestId[] = [];
+  for (const { source } of fragmentsOnFloor(levelId)) {
+    switch (source.kind) {
+      case 'questCompleted':
+        quests.push(source.questId);
+        break;
+      case 'storyBeat':
+      case 'bossDefeated':
+        break;
+      default: {
+        const unhandled: never = source;
+        return unhandled;
+      }
+    }
+  }
+  return quests;
+}
+
+/** The gear finishing floor 3's fragment quests pays out. */
+const FLOOR3_QUEST_GEAR: readonly GearId[] = Object.keys(GEAR_SOURCES)
+  .filter(isGearId)
+  .filter((id) =>
+    GEAR_SOURCES[id].some(
+      (source) => source.kind === 'quest' && floorFragmentQuests('level3').includes(source.quest),
+    ),
+  );
+
+const FLOOR3_COMPLETE = {
+  ...FLOOR3_SETTLED,
+  objectivesBriefed: [...FLOOR3_SETTLED.objectivesBriefed, ...FLOOR3_OBJECTIVES],
+  questGear: [...FLOOR3_SETTLED.questGear, ...FLOOR3_QUEST_GEAR],
+} as const satisfies RunProgress;
+
 export const RUN_PROGRESS: Readonly<Record<RunMilestone, RunProgress>> = {
+  tutorial_end: TUTORIAL_END,
   floor1_start: FLOOR1_START,
   floor1_before_trash_gremlin: FLOOR1_BEFORE_TRASH_GREMLIN,
   floor1_nursery: FLOOR1_NURSERY,
@@ -194,8 +276,10 @@ export const RUN_PROGRESS: Readonly<Record<RunMilestone, RunProgress>> = {
   floor2_before_current_goblin: FLOOR2_BEFORE_CURRENT_GOBLIN,
   floor2_past_current_goblin: FLOOR2_PAST_CURRENT_GOBLIN,
   floor2_before_big_rooster: FLOOR2_BEFORE_BIG_ROOSTER,
+  floor2_past_big_rooster: FLOOR2_PAST_BIG_ROOSTER,
   floor3_arrival: FLOOR3_ARRIVAL,
   floor3_settled: FLOOR3_SETTLED,
+  floor3_complete: FLOOR3_COMPLETE,
 };
 
 /** Every beat a party at `progress` has heard, in play order. */

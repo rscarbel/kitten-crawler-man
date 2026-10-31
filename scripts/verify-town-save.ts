@@ -558,9 +558,11 @@ async function checkDescentSaveKeepsAchievements(): Promise<void> {
     check(false, 'the descent wrote no save the device can read back');
     return;
   }
+  const level2Exit = level2.exit;
+  const floorBelow = level2Exit.kind === 'descend' ? level2Exit.nextLevelId : null;
   check(
-    reloaded.levelId === level2.nextLevelId,
-    `the descent save resumes on ${reloaded.levelId}, not ${String(level2.nextLevelId)}`,
+    reloaded.levelId === floorBelow,
+    `the descent save resumes on ${reloaded.levelId}, not ${String(floorBelow)}`,
   );
   const reloadedHuman = AchievementManager.fromSerialized(reloaded.humanAchievements);
   const reloadedCat = AchievementManager.fromSerialized(reloaded.catAchievements);

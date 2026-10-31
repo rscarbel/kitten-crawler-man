@@ -163,7 +163,7 @@ function build(id: MercenaryTemplateId, extras: Player[] = []): Harness | null {
     id,
     name: getMercenaryTemplate(id).name,
     terms: 'paid',
-    contractLevelId: FLOOR,
+    contract: { kind: 'floor', levelId: FLOOR },
     introduced: true,
   };
   const system = new MercenarySystem(roster, FLOOR);

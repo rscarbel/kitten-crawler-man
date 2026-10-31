@@ -272,7 +272,7 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 **Level 2: Safe Haven** — A larger dungeon with tougher enemies (lizardmen, acid llamas, goblins, gravedigger beetles that hatch from the dead). Two boss rooms await: the Current Goblin in his power lab and Big Rooster in his gym, where Little Rooster and Slightly Bent Rooster peck and punch at the door. Also features the Grotesque Spider and Fuzzy Nightmares that spawn from floor grates.
 
-**Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and a restaurant whose kitchen is a safe room). Hawkfolk roam the outskirts.
+**Level 3: Taloncrest** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and a restaurant whose kitchen is a safe room). Hawkfolk roam the outskirts.
 
 ### Bosses
 
@@ -408,7 +408,7 @@ src/
 │   ├── types.ts               ← LevelDef and MobSpawnRule interfaces
 │   ├── level1.ts              ← "The Dungeon" (goblins, acid llamas, rats, Trash Gremlin, Kraken)
 │   ├── level2.ts              ← "Safe Haven" (lizardmen, Current Goblin, Big Rooster)
-│   ├── level3.ts              ← "The Overworld" (outdoor town, buildings)
+│   ├── level3.ts              ← Taloncrest (outdoor town, buildings)
 │   ├── spawner.ts             ← mob factory: LevelDef + map → Mob[]
 │   └── index.ts               ← level registry
 ├── map/

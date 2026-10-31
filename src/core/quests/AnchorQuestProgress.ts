@@ -128,6 +128,17 @@ export function createAnchorQuestProgress(): AnchorQuestProgress {
   };
 }
 
+/** The questline finished: every shard's errand done and the stone welded. */
+export function repairedAnchorQuestProgress(): AnchorQuestProgress {
+  return {
+    ...createAnchorQuestProgress(),
+    status: 'completed',
+    tinker: 'done',
+    lori: 'done',
+    temple: 'done',
+  };
+}
+
 export interface AnchorQuestProgressCheckpoint {
   readonly status: QuestStatus;
   readonly tinker: AnchorStepState;

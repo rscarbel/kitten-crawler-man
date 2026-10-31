@@ -188,6 +188,16 @@ export class MusicLibrary {
     for (const id of saved.menuUnseen) library.menuUnseenIds.add(id);
     return library;
   }
+
+  /**
+   * The library of a new run that skips the tutorial. Nothing ever leads back to
+   * the tutorial, so its song would otherwise stay locked for the whole run.
+   */
+  static skippingTutorial(): MusicLibrary {
+    const library = new MusicLibrary();
+    library.markRequested(['tutorial_island']);
+    return library;
+  }
 }
 
 /**

@@ -64,6 +64,10 @@ export const MAX_TRIM_DB = 12;
  */
 export const FEATURED_SFX_TARGET_LUFS = {
   shark_breach_bite: -10,
+  /** A key fragment's reveal: the most enticing reward in the game after the Golden Key's own. */
+  key_fragment_fanfare: -11,
+  /** The Golden Key forged whole: the biggest reward sound in the game. */
+  golden_key_fanfare: -9,
 } as const satisfies Partial<Record<SoundId, number>>;
 
 /**

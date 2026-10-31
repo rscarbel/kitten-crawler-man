@@ -42,6 +42,8 @@ import type { MusicPlayerControls, MusicPlayerMode } from '../../audio/music/Mus
 import type { MusicBusId, MusicTrackId } from '../../audio/sounds';
 import type { DialogFixture, FixtureRig } from './dialogs/fixture';
 import { PetNameBook } from '../../core/party/petNames';
+import { KeyRing, type KeyRingView } from '../../core/keys/KeyRing';
+import type { LevelId } from '../../levels/levelIds';
 
 const PLAYER_TILE = 10;
 const FIXTURE_XP = 140;
@@ -89,6 +91,24 @@ const KILLS: ReadonlyArray<readonly [string, number]> = [
   ['Clown', CLOWN_KILLS],
   ['Grotesque Spider', 1],
 ];
+
+/** The floor whose key the pause fixtures show unless a fixture names another. */
+const FIXTURE_KEY_FLOOR = 'level2' satisfies LevelId;
+
+/** How much of a floor's key a fixture's party holds. */
+type FixtureKeyProgress = 'none' | 'first' | 'forged';
+
+/** A key ring on `levelId` holding none of its fragments, the first of each key's, or every one forged. */
+function fixtureKeyRing(levelId: LevelId, progress: FixtureKeyProgress): KeyRingView {
+  const ring = new KeyRing(levelId);
+  for (const key of ring.keysOnFloor()) {
+    const claimed = progress === 'forged' ? key.fragments : key.fragments.slice(0, 1);
+    if (progress !== 'none') for (const fragment of claimed) ring.claim(fragment.id);
+    const ticket = ring.unforgedWholeKey(key.kind);
+    if (ticket !== null) ring.forge(ticket);
+  }
+  return ring.view();
+}
 
 /** A party, abilities, achievements and stats for the pause screen to show. */
 export interface PauseFixtureData {
@@ -196,6 +216,7 @@ export function pauseFixtureData(): PauseFixtureData {
       catAchievements,
       gameStats,
       floorNumber: FIXTURE_FLOOR,
+      keyRing: fixtureKeyRing(FIXTURE_KEY_FLOOR, 'first'),
     },
   };
 }
@@ -405,6 +426,8 @@ interface PauseFixtureSpec {
   readonly name: string;
   readonly section: PauseSectionId | null;
   readonly restriction?: PauseRestriction;
+  /** The key ring the page shows, where it differs from the shared fixture's. */
+  readonly keys?: { readonly levelId: LevelId; readonly progress: FixtureKeyProgress };
   readonly interact?: (rig: FixtureRig, surfaceId: string, screen: PauseScreen) => void;
 }
 
@@ -414,7 +437,15 @@ function pauseFixture(spec: PauseFixtureSpec): DialogFixture {
   return {
     name: spec.name,
     surfaces: (shown) => {
-      const data = pauseFixtureData();
+      const shared = pauseFixtureData();
+      const keys = spec.keys;
+      const data: PauseFixtureData =
+        keys === undefined
+          ? shared
+          : {
+              ...shared,
+              frame: { ...shared.frame, keyRing: fixtureKeyRing(keys.levelId, keys.progress) },
+            };
       const screen = pauseFixtureScreen(data);
       built.screen = screen;
       screen.open(spec.section);
@@ -449,6 +480,26 @@ function pauseFixture(spec: PauseFixtureSpec): DialogFixture {
 export const PAUSE_FIXTURES: readonly DialogFixture[] = [
   pauseFixture({ name: 'menu', section: null }),
   pauseFixture({ name: 'journal', section: 'journal' }),
+  pauseFixture({
+    name: 'keys-none',
+    section: 'keys',
+    keys: { levelId: 'level1', progress: 'none' },
+  }),
+  pauseFixture({
+    name: 'keys-one',
+    section: 'keys',
+    keys: { levelId: 'level3', progress: 'first' },
+  }),
+  pauseFixture({
+    name: 'keys-forged',
+    section: 'keys',
+    keys: { levelId: 'tutorial', progress: 'forged' },
+  }),
+  pauseFixture({
+    name: 'keys-forged-town',
+    section: 'keys',
+    keys: { levelId: 'level3', progress: 'forged' },
+  }),
   pauseFixture({ name: 'character', section: 'character' }),
   pauseFixture({
     name: 'character-skills',

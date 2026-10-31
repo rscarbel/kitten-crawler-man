@@ -73,6 +73,10 @@ import type { AIInteractionStage } from '../src/ai/interactions/AIInteractionSta
 import type { AIChallengeSystem } from '../src/systems/AIChallengeSystem.js';
 import type { AchievementUISystem } from '../src/systems/AchievementUISystem.js';
 import type { AchievementManager } from '../src/core/progression/AchievementManager.js';
+import type { KeyRing } from '../src/core/keys/KeyRing.js';
+import type { KeyRingState } from '../src/core/keys/keyRingState.js';
+import type { KeyFragmentSystem } from '../src/systems/keys/KeyFragmentSystem.js';
+import type { KeyCeremonySystem } from '../src/systems/keys/KeyCeremonySystem.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 import type { ResidentId } from '../src/core/state/residentIds.js';
 import { buildingDisplayName } from '../src/map/buildingIds.js';
@@ -1484,6 +1488,64 @@ function rewardChestOpener<S>(
   );
 }
 
+const { fragmentsOnFloor } = await import('../src/core/keys/floorKeys.js');
+const { KEY_FRAGMENT_SURFACE_ID, KEY_FORGE_SURFACE_ID } =
+  await import('../src/systems/keys/KeyCeremonySystem.js');
+
+/** Where a scene keeps the floor's key: its ring, the system awarding fragments, and the ceremonies. */
+interface KeyParts {
+  readonly ring: KeyRing;
+  readonly keys: KeyFragmentSystem;
+  readonly ceremony: KeyCeremonySystem;
+}
+
+/**
+ * The fragment ceremony and the forge, raised the way the game raises them: a
+ * fragment of the floor's key claimed live and the next owed ceremony begun.
+ * For the forge every fragment is claimed and their ceremonies played through
+ * first. The ring is put back after each, so every case starts from the floor
+ * as it was.
+ */
+function keyCeremonyOpeners<S>(partsOf: (scene: S) => KeyParts): Opener<S>[] {
+  let before: KeyRingState | null = null;
+  const claim = (scene: S, all: boolean): void => {
+    const { ring, keys } = partsOf(scene);
+    before = ring.capture();
+    const due = fragmentsOnFloor(ring.levelId).filter((fragment) => !ring.holds(fragment.id));
+    for (const fragment of all ? due : due.slice(0, 1)) keys['claimLive'](fragment);
+  };
+  const begin = (scene: S): void => partsOf(scene).ceremony['openNext']();
+  const putBack = (scene: S): void => {
+    const { ring, ceremony } = partsOf(scene);
+    ceremony.dismiss();
+    if (before !== null) ring.restore(before);
+    before = null;
+  };
+  return [
+    opener<S>(
+      KEY_FRAGMENT_SURFACE_ID,
+      (scene) => {
+        claim(scene, false);
+        begin(scene);
+      },
+      putBack,
+    ),
+    opener<S>(
+      KEY_FORGE_SURFACE_ID,
+      (scene) => {
+        claim(scene, true);
+        const { keys } = partsOf(scene);
+        while (keys.nextMoment()?.kind === 'fragment') {
+          keys.beginMoment();
+          keys.endMoment();
+        }
+        begin(scene);
+      },
+      putBack,
+    ),
+  ];
+}
+
 /** The AI's question and, where the scene runs challenges, its offer card. */
 function aiInteractionOpeners<S>(
   stageOf: (scene: S) => AIInteractionStage,
@@ -1554,6 +1616,24 @@ function townOpeners(): Opener<Town>[] {
     ),
     cutsceneOpener<Town>((scene) => scene['cutscenes']),
     cutsceneFadeOpener<Town>((scene) => scene['cutscenes']),
+    ...keyCeremonyOpeners<Town>((scene) => ({
+      ring: scene['keyRing'],
+      keys: scene['keyFragments'],
+      ceremony: scene['keyCeremony'],
+    })),
+    menu(
+      'run-complete',
+      (scene) => scene['openRunEnd'](),
+      (scene) => scene['runCompleteScreen'].stay(),
+    ),
+    menu(
+      'run-complete/confirm',
+      (scene) => {
+        scene['openRunEnd']();
+        scene['runCompleteScreen']['askNewGame']();
+      },
+      (scene) => scene['runCompleteScreen'].stay(),
+    ),
     menu(
       'wipe-hold',
       (scene) =>
@@ -1996,6 +2076,11 @@ function roomOpeners(): Opener<Interior>[] {
     ...aiInteractionOpeners<Interior>((scene) => scene['aiInteractions'], null),
     cutsceneOpener<Interior>((scene) => scene['cutscenes']),
     cutsceneFadeOpener<Interior>((scene) => scene['cutscenes']),
+    ...keyCeremonyOpeners<Interior>((scene) => ({
+      ring: scene.partyRun.keyRing,
+      keys: scene['keyFragments'],
+      ceremony: scene['keyCeremony'],
+    })),
     menu(
       'conversation',
       (scene) => void scene['conversation'].open(haltingRequest()),

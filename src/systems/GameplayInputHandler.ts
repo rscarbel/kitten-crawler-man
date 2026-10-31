@@ -40,6 +40,7 @@ export interface GameplayInputActions {
   switchCharacter?(): void;
   spaceAction?(): void;
   toggleQuestTracker?(): void;
+  toggleKeyRing(): void;
   deinonychusSummon?(): void;
   /**
    * Spends boards on whatever the active crawler stands at. Returns whether it
@@ -107,6 +108,7 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: GameplayInput
     toggleMute: (actions) => actions.toggleMute(),
     companionFollow: (actions) => actions.companionFollow(),
     toggleQuestTracker: (actions) => actions.toggleQuestTracker?.(),
+    toggleKeyRing: (actions) => actions.toggleKeyRing(),
     buildSummon: (actions) => {
       if (actions.buildAction?.() === true) return;
       actions.deinonychusSummon?.();

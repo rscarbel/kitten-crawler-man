@@ -14,6 +14,7 @@ import { withAlpha } from '../../theme/color';
 import type { Theme, TypeStyle } from '../../theme/tokens';
 import { panelBodyMaxHeight, panelBodyWidth, type PanelOptions } from '../../widgets/panel';
 import { scrollGutterWidth } from '../../widgets/scrollView';
+import type { PaintTarget } from '../../widgets/paint';
 import { measureText, text, type TextAlign } from '../../widgets/text';
 
 const FULL_TURN = Math.PI * 2;
@@ -425,7 +426,11 @@ const HEADLINE_SCALE = 1.6;
  * itself. A phone keeps the plain display size, since its height is what
  * runs out first.
  */
-export function headlineStyle(ui: Ui, content: string, maxWidth: number): TypeStyle {
+export function headlineStyle(
+  ui: Pick<Ui, 'ctx' | 'theme' | 'size'>,
+  content: string,
+  maxWidth: number,
+): TypeStyle {
   const display = ui.theme.type.display;
   if (ui.size === 'compact') return display;
   const big: TypeStyle = {
@@ -451,7 +456,7 @@ export function headlineStyle(ui: Ui, content: string, maxWidth: number): TypeSt
  * are the same style.
  */
 export function fitStyleToWidth(
-  ui: Ui,
+  ui: PaintTarget,
   content: string,
   style: TypeStyle,
   floor: TypeStyle,

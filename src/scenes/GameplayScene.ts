@@ -409,13 +409,14 @@ export abstract class GameplayScene extends Scene {
     );
   }
 
-  /** Where flying coins and items land: the coin pill and the Bag button as last drawn. */
+  /** Where flying coins, items and forged keys land: the coin pill, the Bag and the Keys buttons as last drawn. */
   protected hudFlyTargets(): FlyTargets {
     const coin = this.hudCoinTarget();
     return {
       coinX: coin.x,
       coinY: coin.y,
       bagRect: this.hud.cssDockRect('bag') ?? { x: coin.x, y: coin.y, w: 0, h: 0 },
+      keysRect: this.hud.cssDockRect('keys'),
     };
   }
 

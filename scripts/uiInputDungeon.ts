@@ -205,7 +205,7 @@ function requireDockPoint(scene: Scene, id: DockId): Point {
 }
 
 /** The dock buttons whose action {@link hudUntouched} sees. */
-const WATCHED_DOCK_BUTTONS: readonly DockId[] = ['pause', 'bag', 'follower', 'journal'];
+const WATCHED_DOCK_BUTTONS: readonly DockId[] = ['pause', 'bag', 'follower', 'journal', 'keys'];
 
 /** HUD buttons a press could be aimed at, by name, where they stand this frame. */
 function hudButtons(scene: Scene): ReadonlyArray<{ name: string; at: Point }> {

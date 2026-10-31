@@ -186,7 +186,7 @@ export class MercenaryGuildSystem {
       id: template.id,
       name: template.name,
       terms: loaned ? 'tower_loan' : 'paid',
-      contractLevelId,
+      contract: { kind: 'floor', levelId: contractLevelId },
       introduced: false,
     };
     this.hirePending = true;

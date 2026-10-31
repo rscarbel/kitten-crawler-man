@@ -276,7 +276,7 @@ frame (about 10 ms of the HUD's frame headless before glass was baked).
 
 - **`PetNamePrompt`** (`src/ui/screens/dialogs/petNamePrompt.ts`, one per scene on `MenusKit.petNamePrompt`) — a `modal`, `takesText` surface that halts the world and cannot be dismissed: the pet's portrait, a `textField`, the suggestion chips from `PET_NAME_SUGGESTIONS`, "Surprise me" and Confirm, which stays disabled until `parsePetName` (`src/core/party/petNames.ts`) accepts the text. It is an `md` `choiceModal`, so a phone gets a bottom sheet. Ask for a name through `namePetThen` (`src/systems/petNaming.ts`), never by opening the prompt directly; `MissingPetNames` asks once per scene for any pet the party owns unnamed. Text that names a pet reads `petWords(petNames, kind)`, never the species.
 - **`CharacterCreation`** (`src/ui/screens/creation/characterCreation.ts`, one per `TitleScene`, id `CHARACTER_CREATION_SURFACE_ID`) — the `modal` a new game opens before its dive: the name (a `textField`, the rule `playerNameRejection` names under it, Next disabled until `parsePlayerName` passes), the body, then that body's two figures side by side with no words, light left and dark right. Back steps one page back on every page, and Escape does the same, so on the name page both close it. Its pictures go through a `CreationFigurePainter` (`CreationFigureCells`, `src/scenes/title/creationFigures.ts`) that paints into cells of its own, never the shared figure cache, and lets them go on close and on the way back to the body page. Begin hands the `PlayerIdentity` to the title, which calls `setPlayerIdentity` and dives. Continue never opens it.
-- **The arrival banner** (`DungeonIntroSystem`, id `ARRIVAL_BANNER_SURFACE_ID`) — the floor's "find the stairwell" card. A `modal` that halts the world until `arrivalSettled` (mostly faded), then a `panel` that takes nothing while the fade finishes. It is the floor's arrival gate: never start an arrival trigger outside the world frame it holds back.
+- **The arrival intro** (`DungeonIntroSystem`, id `ARRIVAL_BANNER_SURFACE_ID`) — the floor's "Find the Key" sequence, painted at runtime from `FLOOR_INTRO_THEMES` (`src/ui/screens/floorIntro/`, a `Record<LevelId, …>`, inks in `theme/introInk.ts`): the floor's name over its ambience, the key's silhouette counting its sockets out of `FLOOR_KEYS`, the title's slam, the subline. Its beats are pure functions of the clock (`floorIntroTimeline.ts`) fitted to the floor's swell: the swell plays whole from the first frame, the slam lands at its measured `cutsOutAtMs`, the beats before it are paced to fill the time, and any tail rings on into play. It plays its own sounds on those beats. A `modal` that halts the world until `arrivalSettled` (mostly faded), then a `panel` that takes nothing while the fade finishes. It is the floor's arrival gate: never start an arrival trigger outside the world frame it holds back.
 - **The cutscene surface** (mounted with the scene's conversation surface through `CutsceneKit.surfaces(conversationOptions)`, which puts the conversation after it so a talk the cutscene opens always stacks above it; id `CUTSCENE_SURFACE_ID`, band `panel`) — open while a `CutsceneDirector` owns the party. It draws nothing, blocks every press and gameplay key, and leaves only pause live: Escape passes beneath it and the HUD's pause button stays tappable. It does not halt the world itself; a talk the cutscene opens does. The same call mounts the cutscene's full-screen fade after them (`CUTSCENE_FADE_SURFACE_ID`, the `screenFadeSurface` the prison's capture uses), driven by the script's `fade` steps; never mount a second fade for a scripted moment. Never add a `playerLocked` flag or a click chain for a scripted moment: write it as a cutscene (`add-system`).
 
 ## Panels, sizes and phones
@@ -465,7 +465,7 @@ host lifts it over its own panels. Mount both.
   (`{ frames, paused } | null`; the HUD decides chip or band card).
 - **Dock:** `DockButtonModel { id, icon, label, key?, badge?, selected?, pulse?, bounce?, onTap }`.
   Buttons fire on release. `hudButtonLayout` fixes the column order (Pause, Bag,
-  Build, rewards chip, Journal, then a scene's `extras`, which never shift
+  Build, rewards chip, Journal, Keys, then a scene's `extras`, which never shift
   the shared ones); on touch the cluster is packed into free room by
   `hudPacking.ts`, keeping clear of the HP meters, unit frames, the fight-bar
   reserve and the hotbar. Pointer screens show keycap hints.
@@ -599,7 +599,38 @@ shop, the casino).
   drill-in list with a back chevron on `compact`. `open()` or
   `open('journal' | 'character' | …)`. Its confirms are `choiceModal` surfaces
   from `confirmSurfaces()`, mounted beside it. Key rebinding is the Controls
-  page's `RebindCapture`. `npm run verify:pause-keyboard`.
+  page's `RebindCapture`. `npm run verify:pause-keyboard`. The Keys page
+  (`keyRingSection.ts`, id `keys`) is the key ring: each key the floor holds,
+  its fragments held and missing (with each missing one's `hint`), and once
+  forged what it opens. It reads the scene's `KeyRingView` from the section
+  context and everything about a kind from `KEY_KIND_DEFS` and `FLOOR_KEYS`,
+  so it never names a kind or a count; a tab strip appears only when a floor
+  holds more than one kind. The HUD's Keys dock button (the `toggleKeyRing` binding)
+  opens it. Neither the button nor the page carries a badge or a pulse: the
+  ceremonies are the news, and the ring has no unread state. In the tutorial
+  the button and the key answer with the error sound until the menu lessons
+  are over (`TutorialController.canOpenKeyRing`).
+- **`src/ui/screens/keys/`** — the key ceremonies: `KeyFragmentScreen` (a
+  fragment rises out of a column of light into the key's silhouette, then its
+  name, the count and Caroline's `issueLine`) and `GoldenKeyForgeScreen` (every
+  fragment fused into the key; bigger and longer on purpose). Each is a
+  `modal` that halts the world and keeps the keyboard; a first press jumps to
+  the settled state, the next continues. Their timelines (`fragmentTimeline.ts`,
+  `forgeTimeline.ts`) are pure functions of the clock, so a gallery fixture is
+  a time (`src/dev/uiGallery/dialogs/keyCeremonies.ts`). They never open by
+  themselves: `KeyCeremonySystem` (`src/systems/keys/`) takes each moment from
+  `KeyFragmentSystem` at a calm moment and plays the forge straight after the
+  fragment that completed its key. Key art is `src/sprites/art/keyArt.ts` (shape and
+  cuts in `keyArtShape.ts`, metal shaded per pixel in `keyArtMetal.ts`, every
+  picture baked and cached by `keyArtBakes.ts`; `paintKeyTurned` and
+  `paintKeyFragmentTurned` draw a turning solid, and a ceremony warms what it
+  will draw with `warmKeyArt` a picture a frame), its inks `theme/keyInk.ts`,
+  both `Record<KeyKind, …>`; key sounds go only through
+  `playKeyCue` (`src/audio/keySoundCues.ts`). A screen that must not jump in
+  front of a ceremony waits on `KeyCeremonySystem.holdsPresentations`, as
+  Caroline and the achievement presentations do.
+- **`src/ui/screens/floorIntro/`** — the floor's "Find the Key" intro (see
+  "Surfaces with fixed jobs").
 - **`src/ui/screens/construction/`** — `ConstructionScreen` (option cards in a
   `grid()` with structure art, `costChips`, a state ribbon, tabs past
   `CONSTRUCTION_TABS_FROM` options, the world placement ghost while a card is
@@ -613,7 +644,10 @@ shop, the casino).
   keyboard but leaves the world running), the stair/door/tower prompts as
   `choiceModalSurface`s fed by their system's state (`stairwellPrompt.ts` reads
   `StairwellSystem.menuOpen`/`descentPrompt`/`descend`/`closeMenu`), end screens
-  (death, level complete, run complete, quest reward, chest reward), explainers
+  (death, level complete, quest reward, chest reward, and `RunCompleteScreen`,
+  floor 3's run end: the party's stats and the run's numbers, with Stay in
+  Taloncrest as the default and Begin a new game behind a `choiceModal`
+  confirmation), explainers
   (`CraftExplainers`: `register(id, entry)` once, `open(id)`, one surface per
   scene), `NoticeBoard`, `ReadableOverlay`.
 - **`src/ui/LoadingScreen.ts`** — `LoadingOverlay` ticks a `LoadRunner` and is

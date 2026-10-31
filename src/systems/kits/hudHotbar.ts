@@ -17,6 +17,12 @@ import { WORLD_TICKS_PER_SECOND } from '../../core/constants';
 const COOLDOWN_SECONDS_SHOWN_MAX = 99;
 const COOLDOWN_OVERFLOW_LABEL = '…';
 
+/** An item whose hotbar slot glows, and how brightly, 0 to 1. */
+export interface HotbarGlow {
+  readonly itemId: ItemId;
+  readonly strength: number;
+}
+
 /**
  * Each hotbar slot of `owner`'s bar.
  *
@@ -24,11 +30,13 @@ const COOLDOWN_OVERFLOW_LABEL = '…';
  *
  * @param heldItemId Something else in hand and not yet spent — a readied
  *   stick of dynamite — which reads the same way.
+ * @param glowing An item calling for the eye, whose slot glows.
  */
 export function hotbarSlotModels(
   cooldowns: ReadonlyMap<string, ItemCooldown>,
   owner: Pick<Player, 'inventory' | 'gear'>,
   heldItemId: ItemId | null = null,
+  glowing: HotbarGlow | null = null,
 ): HotbarSlotModel[] {
   const inventory = owner.inventory;
   return inventory.actionBar.slots.map((item) => {
@@ -45,6 +53,7 @@ export function hotbarSlotModels(
       cooldownLabel:
         seconds > COOLDOWN_SECONDS_SHOWN_MAX ? COOLDOWN_OVERFLOW_LABEL : String(seconds),
       unseen: item !== null && inventory.unseenUpgrades.has(item.id),
+      glow: item !== null && item.id === glowing?.itemId ? glowing.strength : 0,
     };
   });
 }

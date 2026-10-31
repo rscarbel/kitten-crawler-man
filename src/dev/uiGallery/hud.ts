@@ -151,6 +151,7 @@ function hotbarSlots(cooling: boolean): HotbarSlotModel[] {
       cooldown: onCooldown ? COOLDOWN_FRACTION : 0,
       cooldownLabel: String(COOLDOWN_SECONDS),
       unseen: index === 1,
+      glow: 0,
     };
   });
 }
@@ -218,6 +219,7 @@ function dock(extra: readonly DockButtonModel['id'][]): DockButtonModel[] {
     { id: 'pause', icon: 'pause', label: 'Pause', key: 'Esc', onTap: record },
     { id: 'bag', icon: 'bag', label: 'Bag', key: 'I', badge: '2', onTap: record },
     { id: 'journal', icon: 'compass', label: 'Quest Journal', key: 'J', badge: '3', onTap: record },
+    { id: 'keys', icon: 'keyRound', label: 'Keys', key: 'K', onTap: record },
     { id: 'follower', icon: 'users', label: 'Follower orders', key: 'F', onTap: record },
     { id: 'switch', icon: 'cat', label: `Switch to ${crawlerDisplayName('cat')}`, onTap: record },
   ];

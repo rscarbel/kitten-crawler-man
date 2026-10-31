@@ -150,7 +150,7 @@ const CAPTURE_FADE_SURFACE_ID = 'prison-capture-fade';
 /** What the capture toast says when nothing else rewrites it. */
 export const CAPTURE_TOAST = 'Caught! Thrown in a cell.';
 /** What the capture toast says when the party is caught holding the key, which the guards never take. */
-export const CAPTURE_WITH_KEY_TOAST = "Caught! They didn't notice the key.";
+export const CAPTURE_WITH_KEY_TOAST = "Caught! They didn't notice the gate key.";
 
 /** The prompt over an intact cell door while a crawler stands inside its cell. */
 export const CELL_DOOR_PROMPT = 'Break door';

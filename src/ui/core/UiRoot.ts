@@ -66,6 +66,9 @@ export interface KeyModifiers {
   readonly predatesSurface?: boolean;
 }
 
+/** What a layout is measured from: enough of a {@link Ui} to size text and place rects, nothing to draw or hit with. */
+export type UiMeasure = Pick<Ui, 'ctx' | 'theme' | 'viewport' | 'size'>;
+
 /**
  * Anything on screen that can take input or hide the world.
  *
@@ -79,6 +82,18 @@ export interface Surface {
   readonly id: string;
   readonly band: Band;
   isOpen(): boolean;
+  /**
+   * For a surface that can be opened anew while it is already open, as the
+   * scene's one conversation is when a request replaces the one on screen:
+   * a value that changes with every such opening. The stack can only see a
+   * surface open or closed when it looks, so a close and a fresh open
+   * between two looks would otherwise keep the old opening's place under
+   * whatever opened since, and a surface holding the party above it would
+   * take every key meant for it. A changed value counts as a close and a
+   * fresh open: the surface's state is cleared and it goes to the top of
+   * its band.
+   */
+  openGeneration?(): number;
   render(ui: Ui): void;
   /** Present means Escape closes it. Absent means Escape passes beneath (or is blocked by `blocksEscape`). */
   close?(): void;
@@ -371,6 +386,8 @@ export type KeyOutcome = 'consumed' | 'gameplay' | 'blocked';
 interface MountedSurface {
   readonly surface: Surface;
   open: boolean;
+  /** The surface's `openGeneration` when the stack last saw it open; null while closed or for a surface without one. */
+  generation: number | null;
   openSeq: number;
   openedAt: number;
 }
@@ -514,6 +531,7 @@ export class UiRoot {
     this.mounted.push({
       surface,
       open: false,
+      generation: null,
       openSeq: 0,
       openedAt: 0,
     });
@@ -531,6 +549,27 @@ export class UiRoot {
   /** The viewport resolved at the last frame. */
   get viewport(): UiViewport {
     return this.viewportState;
+  }
+
+  /**
+   * Runs `use` with what a surface measures its layout from, in UI units over
+   * `ctx` as the last frame drew: for work outside a surface's own render that
+   * must lay out exactly as that surface will, such as baking its art ahead.
+   */
+  measureIn(ctx: CanvasRenderingContext2D, use: (target: UiMeasure) => void): void {
+    const viewport = this.viewportState;
+    ctx.save();
+    try {
+      ctx.scale(viewport.uiScale, viewport.uiScale);
+      use({
+        ctx,
+        theme: resolveTheme(viewport.density),
+        viewport: viewport.safe,
+        size: viewport.size,
+      });
+    } finally {
+      ctx.restore();
+    }
   }
 
   /** CSS pixels per UI unit; `PointerInput` divides CSS coordinates by this. */
@@ -640,14 +679,16 @@ export class UiRoot {
     const now = this.clock();
     for (const entry of this.mounted) {
       const open = entry.surface.isOpen();
-      if (open && !entry.open) {
+      const generation = open ? (entry.surface.openGeneration?.() ?? null) : null;
+      const reopened = open && entry.open && generation !== entry.generation;
+      if (reopened || (!open && entry.open)) this.store.clearSurface(entry.surface.id);
+      if (reopened || (open && !entry.open)) {
         this.openCounter++;
         entry.openSeq = this.openCounter;
         entry.openedAt = now;
-      } else if (!open && entry.open) {
-        this.store.clearSurface(entry.surface.id);
       }
       entry.open = open;
+      entry.generation = generation;
     }
     this.stack = this.mounted
       .filter((entry) => entry.open)

@@ -199,7 +199,7 @@ const PERF_SCENES: readonly PerfScene[] = [
   {
     id: 'descent',
     description:
-      "Onto floor 1's stairwell and down to floor 2's arrival. It ends there: the next floor draws its own seed, so a lap of it would cross a different map every run",
+      "Onto floor 1's stairwell with the Golden Key forged, through the seal's opening and down to floor 2's arrival. It ends there: the next floor draws its own seed, so a lap of it would cross a different map every run",
     query: pinnedFloor('playtest=stairwell'),
     route: { steps: takePrompt({ kind: 'stairwell' }) },
   },

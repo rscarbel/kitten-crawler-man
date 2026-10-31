@@ -1038,12 +1038,15 @@ export function wantEnvironmentSheet(key: string): boolean {
   return true;
 }
 
-/** Owes an evicted sheet's repaint, unless it belongs to a floor that has gone. */
-function repaintEvicted(key: string): void {
+/**
+ * Owes an evicted sheet's repaint, unless it belongs to a floor that has gone.
+ * Returns whether a repaint is now queued.
+ */
+function repaintEvicted(key: string): boolean {
   const sheet = evicted.get(key);
-  if (sheet === undefined) return;
+  if (sheet === undefined) return false;
   evicted.delete(key);
-  if (sheet.variesWithFloorSeed && sheet.artSeed !== floorArtSeed()) return;
+  if (sheet.variesWithFloorSeed && sheet.artSeed !== floorArtSeed()) return false;
   replays.push({
     key,
     replan: sheet.replan,
@@ -1052,6 +1055,7 @@ function repaintEvicted(key: string): void {
     afterEviction: true,
   });
   evictionStats.repaintsAfterEviction += 1;
+  return true;
 }
 
 /**
@@ -1363,7 +1367,17 @@ function repaintEnvironmentArtAfterPurge(): void {
   for (const settled of interruptedChains) settled();
 }
 
-onPaintedSpriteMiss(repaintEvicted);
+/**
+ * A lookup missed a painted sheet: queues its repaint when it was let go, and
+ * answers whether it is on its way, as a repaint waiting its turn or a sheet
+ * still being painted.
+ */
+function repaintOnMiss(key: string): boolean {
+  if (repaintEvicted(key)) return true;
+  return pending.has(key) || replays.some((replay) => replay.key === key);
+}
+
+onPaintedSpriteMiss(repaintOnMiss);
 
 onCanvasRecovery((cause) => {
   // Under memory pressure the sheets are correct and the costliest art there is

@@ -71,7 +71,7 @@ function hiredRoster(): MercenaryRoster {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
     terms: 'paid',
-    contractLevelId: level3.id,
+    contract: { kind: 'floor', levelId: level3.id },
     introduced: true,
   };
   return roster;

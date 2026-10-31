@@ -521,7 +521,7 @@ function checkBlastChangesNothing(harness: PrisonHarness): void {
 const KEY_ITEM = 'quest_prison_key';
 /** A quest item that takes the one quest slot from the key. */
 const EVICTING_QUEST_ITEM = 'quest_blueprints';
-const KEY_RETURNED_TOAST = 'The key went back to its pedestal in the prison vault.';
+const KEY_RETURNED_TOAST = 'The gate key went back to its pedestal in the prison vault.';
 /** How far the follower may stand from a point the leader occupied, in pixels: rounding only. */
 const TRAIL_TOLERANCE_PX = 0.5;
 const LEADER_STEP_PX = 2;

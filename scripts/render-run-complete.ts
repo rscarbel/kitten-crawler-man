@@ -4,7 +4,7 @@
  * mid count-up and settled, into `preview/run-complete/` (or
  * `--out-dir=<dir>`). The screen draws itself from a `RunSummary`, so a sample
  * one stands in for a finished run; a second, leaner summary checks the
- * no-Deinonychus, no-kills layout.
+ * no-gear, no-kills layout.
  *
  *   npx tsx scripts/render-run-complete.ts
  */
@@ -18,12 +18,7 @@ import { RunCompleteScreen, type RunSummary } from '../src/ui/screens/dialogs/Ru
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
-import {
-  PET_NAME_SUGGESTIONS,
-  PetNameBook,
-  parsePetName,
-  petWords,
-} from '../src/core/party/petNames.js';
+import { runStatLines, type RunStatsReading } from '../src/ui/screens/runStatLines.js';
 
 /** Render frames into the count-up at which the "mid" shot is taken. */
 const MID_COUNT_UP_FRAME = 95;
@@ -32,6 +27,7 @@ const SETTLED_FRAME = 420;
 const FRAME_MS = 16;
 const FRAMES_PER_MINUTE = 3600;
 const FULL_RUN_MINUTES = 327;
+const FLOOR_MINUTES = 88;
 const BACKDROP_COLOUR = '#1f2937';
 
 const viewports: ReadonlyArray<{ name: string; w: number; h: number; density: Density }> = [
@@ -40,57 +36,95 @@ const viewports: ReadonlyArray<{ name: string; w: number; h: number; density: De
   { name: 'phone-landscape', w: 667, h: 375, density: 'touch' },
 ];
 
-/** A run whose Deinonychus was given a name. */
-function namedRun(): PetNameBook {
-  const book = new PetNameBook();
-  const name = parsePetName(PET_NAME_SUGGESTIONS.deinonychus[0]);
-  if (name !== null) book.give('deinonychus', name);
-  return book;
-}
-
-const FULL_RUN: RunSummary = {
+const FULL_STATS: RunStatsReading = {
   framesPlayed: FULL_RUN_MINUTES * FRAMES_PER_MINUTE,
+  floorFramesPlayed: FLOOR_MINUTES * FRAMES_PER_MINUTE,
+  totalKills: 1_412,
+  bossesDefeated: 11,
   deaths: 7,
   damageDealt: 184_302,
   damageTaken: 21_577,
   potionsUsed: 64,
   goldEarned: 12_840,
-  achievementsUnlocked: 38,
-  achievementsTotal: 52,
-  humanLevel: 24,
-  catLevel: 23,
-  deinonychusLevel: 12,
-  deinonychusWords: petWords(namedRun(), 'deinonychus'),
-  totalKills: 1_412,
-  bossesDefeated: 11,
   mercenariesHired: 3,
   mercenariesLost: 1,
-  deinonychusPets: 48,
   cowPets: 37,
-  midgePets: 12,
   townCatPets: 21,
-  topKills: [
-    ['Goblin', 402],
-    ['Rat-kin Skirmisher', 211],
-    ['Cockroach', 188],
-    ['Raveling', 96],
-    ['Grotesque Spider Hatchling', 71],
-  ],
 };
 
-const LEAN_RUN: RunSummary = {
-  ...FULL_RUN,
-  deinonychusWords: petWords(new PetNameBook(), 'deinonychus'),
-  deinonychusLevel: null,
-  totalKills: 0,
-  topKills: [],
-  mercenariesHired: 0,
-  mercenariesLost: 0,
-  deinonychusPets: 0,
-  cowPets: 0,
-  midgePets: 0,
-  townCatPets: 0,
+const FLOOR = 3;
+
+function summaryOf(
+  stats: RunStatsReading,
+  gear: readonly string[],
+  topKills: RunSummary['topKills'],
+): RunSummary {
+  return {
+    crawlers: [
+      {
+        crawler: 'human',
+        name: 'Sam',
+        level: 24,
+        stats: {
+          health: 18,
+          melee: 22,
+          magic: 4,
+          evasiveness: 9,
+          ranged: 11,
+          explosivesHandling: 7,
+        },
+        gear,
+      },
+      {
+        crawler: 'cat',
+        name: 'Belle',
+        level: 23,
+        stats: {
+          health: 12,
+          melee: 6,
+          magic: 24,
+          evasiveness: 19,
+          ranged: 8,
+          explosivesHandling: 3,
+        },
+        gear: [],
+      },
+    ],
+    lines: [
+      ...runStatLines(stats, FLOOR),
+      { label: 'Floors Cleared', value: FLOOR, format: { kind: 'count' }, role: 'value' },
+      { label: 'Achievements', value: 38, format: { kind: 'outOf', total: 52 }, role: 'accent' },
+    ],
+    topKills,
+  };
+}
+
+const FULL_KILLS: Readonly<Record<string, number>> = {
+  Goblin: 402,
+  'Rat-kin Skirmisher': 211,
+  Cockroach: 188,
+  Raveling: 96,
+  'Grotesque Spider Hatchling': 71,
 };
+
+const FULL_RUN = summaryOf(
+  FULL_STATS,
+  ['Hobnail Boots', 'Riot Kneeguards', "Scrapper's Wraps"],
+  Object.entries(FULL_KILLS),
+);
+
+const LEAN_RUN = summaryOf(
+  {
+    ...FULL_STATS,
+    totalKills: 0,
+    mercenariesHired: 0,
+    mercenariesLost: 0,
+    cowPets: 0,
+    townCatPets: 0,
+  },
+  [],
+  [],
+);
 
 const outFlag = process.argv.find((arg) => arg.startsWith('--out-dir='));
 const outDir =
@@ -113,8 +147,8 @@ function bake(summary: RunSummary, label: string): void {
       warn: () => undefined,
     });
     const screen = new RunCompleteScreen();
-    root.mount(screen.surface());
-    screen.activate(summary, { onKeepExploring: () => undefined, onMainMenu: () => undefined });
+    for (const surface of screen.surfaces()) root.mount(surface);
+    screen.activate(summary, { onStay: () => undefined, onNewGame: () => undefined });
     const canvas = createCanvas(viewport.w, viewport.h);
     const ctx = asGameContext(canvas.getContext('2d'));
     for (let frame = 1; frame <= SETTLED_FRAME; frame++) {

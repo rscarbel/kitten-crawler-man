@@ -88,6 +88,7 @@ export const DOCK_BUTTON_IDS = [
   'build',
   'chip',
   'journal',
+  'keys',
   'follower',
   'switch',
 ] as const;
@@ -144,6 +145,8 @@ export interface HotbarSlotModel {
   readonly cooldownLabel: string;
   /** The bag holds an upgrade for this item the player has not looked at. */
   readonly unseen: boolean;
+  /** How brightly the slot glows to draw the eye to its item, 0 to 1; zero for none. */
+  readonly glow: number;
 }
 
 /**

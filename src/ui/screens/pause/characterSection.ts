@@ -5,7 +5,6 @@
 
 import { displayHp } from '../../../core/party/crawlerFormulas';
 import { ALL_STATS, STAT_DEFS, type StatId } from '../../../core/party/stats';
-import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
 import { crawlerDisplayName } from '../../../characters/characters';
 import {
   getSkillDef,
@@ -38,6 +37,7 @@ import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import { choiceRow, perCrawler, type Choice } from './parts';
 import { activeGearLines } from '../../itemEffectLines';
 import type { PauseContext, PauseSection, SectionLayout } from './section';
+import { formatRunStat, runStatLines } from '../runStatLines';
 
 type CharacterTab = 'attributes' | 'skills' | 'stats';
 
@@ -332,64 +332,6 @@ function renderSkills(layout: SectionLayout, ctx: PauseContext): void {
 
 // ── Statistics ──────────────────────────────────────────────────────────────
 
-/** The first floor on which the Stats tab splits time played into the run's and the floor's. */
-const FIRST_FLOOR_WITH_FLOOR_TIME = 2;
-
-interface StatRow {
-  readonly label: string;
-  readonly value: string;
-  readonly role: TextRole;
-}
-
-/**
- * Time played: one clock on the first floor, where the floor's time is the
- * run's, and the run's and the floor's side by side from the second on.
- */
-function timeRows(stats: GameStats, floorNumber: number): StatRow[] {
-  if (floorNumber < FIRST_FLOOR_WITH_FLOOR_TIME) {
-    return [{ label: 'Time Played', value: formatPlayTime(stats.framesPlayed), role: 'value' }];
-  }
-  return [
-    { label: 'Total Time', value: formatPlayTime(stats.framesPlayed), role: 'value' },
-    { label: 'Floor Time', value: formatPlayTime(stats.floorFramesPlayed), role: 'value' },
-  ];
-}
-
-/** Kept off the tab until a mercenary is hired, since a run without one would show only zeros. */
-function mercenaryRows(stats: GameStats): StatRow[] {
-  if (stats.mercenariesHired === 0) return [];
-  return [
-    { label: 'Mercenaries Hired', value: `${stats.mercenariesHired}`, role: 'value' },
-    { label: 'Mercenaries Lost', value: `${stats.mercenariesLost}`, role: 'muted' },
-  ];
-}
-
-/** A pet tally gets its row once the party has given one, as the mercenaries' rows wait on a hire. */
-function petRows(stats: GameStats): StatRow[] {
-  const tallies = [
-    { label: 'Cows Petted', count: stats.cowPets },
-    { label: 'Cats Petted', count: stats.townCatPets },
-  ];
-  return tallies
-    .filter((tally) => tally.count > 0)
-    .map((tally) => ({ label: tally.label, value: `${tally.count}`, role: 'success' }));
-}
-
-function statRows(stats: GameStats, floorNumber: number): StatRow[] {
-  return [
-    ...timeRows(stats, floorNumber),
-    { label: 'Total Kills', value: `${stats.totalKills}`, role: 'accent' },
-    { label: 'Bosses Slain', value: `${stats.bossesDefeated}`, role: 'accent' },
-    { label: 'Deaths', value: `${stats.deaths}`, role: 'danger' },
-    { label: 'Damage Dealt', value: `${stats.damageDealt}`, role: 'value' },
-    { label: 'Damage Taken', value: `${stats.damageTaken}`, role: 'danger' },
-    { label: 'Potions Used', value: `${stats.potionsUsed}`, role: 'success' },
-    { label: 'Gold Earned', value: `${stats.goldEarned}`, role: 'accent' },
-    ...mercenaryRows(stats),
-    ...petRows(stats),
-  ];
-}
-
 function valueRow(layout: SectionLayout, label: string, value: string, role: TextRole): void {
   const { ui } = layout;
   const rect = layout.row(ui.theme.size.row, 0);
@@ -403,8 +345,8 @@ function valueRow(layout: SectionLayout, label: string, value: string, role: Tex
 
 function renderStats(layout: SectionLayout, ctx: PauseContext): void {
   const stats = ctx.gameStats;
-  for (const row of statRows(stats, ctx.floorNumber)) {
-    valueRow(layout, row.label, row.value, row.role);
+  for (const line of runStatLines(stats, ctx.floorNumber)) {
+    valueRow(layout, line.label, formatRunStat(line), line.role);
   }
   layout.heading('Enemies killed');
   const kills = [...stats.killsByType.entries()].sort((a, b) => b[1] - a[1]);

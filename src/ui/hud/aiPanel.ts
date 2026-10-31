@@ -340,6 +340,7 @@ function hudObstacles(geometry: HudGeometry): Rect[] {
     buttons.follower,
     buttons.chip,
     buttons.journal,
+    buttons.keys,
     buttons.summon,
     ...buttons.extras,
     ...optional,

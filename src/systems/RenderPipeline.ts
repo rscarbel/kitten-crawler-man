@@ -822,6 +822,8 @@ export class RenderPipeline {
     // whoever they are landing on.
     rc.bossRoomDressings.renderAbove(ctx, camera);
     rc.scriptedDeaths?.renderAbove(ctx, camX, camY);
+    // A stairwell's opening crosses in front of the crawler standing on it.
+    rc.stairwell.renderAbove(ctx, camera);
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.
     rc.seismicStompFx.render(ctx, camX, camY);

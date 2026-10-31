@@ -304,6 +304,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     },
     location: CORRIDOR,
     nearbyMobs: [],
+    keys: [],
     combatInProgress: false,
     bossFightActive: false,
     isPaused: false,

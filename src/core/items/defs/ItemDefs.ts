@@ -850,7 +850,7 @@ const ITEM_DEFS = defineItemDefs({
     id: 'quest_prison_key',
     category: 'quest',
     carriedInJaws: 'carried_prison_key',
-    name: 'The Key',
+    name: 'The Gate Key',
     stackable: false,
     canHotlist: false,
     canDrop: false,

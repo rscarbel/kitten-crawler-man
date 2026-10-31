@@ -17,7 +17,7 @@ A boss room's props, slow ground, hazards and interactables are not a new top-le
 
 - `DynamiteSystem` — `constructor(private readonly gameMap: GameMap)`, `update(ctx)`, `render(...)`, exposes an `explosionSoundPending` flag the scene drains.
 - `TreasureChestSystem` — no ctor deps; imperative API (`addWoodenChest`, `addBandChest`, `addOpenedChest`) plus callback setters (`setOnOpen`), opened through a `ChestKit` (see "Chests and ways out").
-- `StairwellSystem` — `constructor(gameMap, levelDef, onDescend)`; `update(ctx)`, world render methods, and the state its prompt reads (`menuOpen`, `descentPrompt()`, `descend()`, `closeMenu()`); the prompt itself is a `choiceModalSurface` in `src/ui/screens/dialogs/stairwellPrompt.ts`.
+- `StairwellSystem` — `constructor(gameMap, levelDef, exits, partyLevel, seals)`: `exits` is what the level's `exit` hands the party to (`onDescend`, `onRunEnd`) and `seals` is the scene's side of the seals (the key ring, `onLocked`, `onUnseal`, the Keys button's position). `update(ctx)`, world render methods, `detect(active)`, and the state its prompt reads (`menuOpen`, `descentPrompt()`, `descend()`, `closeMenu()`); the prompt itself is a `choiceModalSurface` in `src/ui/screens/dialogs/stairwellPrompt.ts`. The unseal scene is a cutscene script built in `src/systems/stairwellUnseal.ts`.
 
 ## Checklist
 

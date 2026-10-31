@@ -40,6 +40,7 @@ import { characterSection } from './characterSection';
 import { controlsSection } from './controlsSection';
 import { craftsSection } from './craftsSection';
 import { journalSection } from './journalSection';
+import { keyRingSection } from './keyRingSection';
 import { musicSection } from './musicSection';
 import { RebindCapture } from './rebindCapture';
 import {
@@ -55,6 +56,7 @@ import {
 } from './section';
 import { settingsSection } from './settingsSection';
 import type { PetNames } from '../../../core/party/petNames';
+import type { KeyRingView } from '../../../core/keys/KeyRing';
 
 /** What the scene hands the screen each frame it draws. */
 export interface PauseFrame {
@@ -62,6 +64,7 @@ export interface PauseFrame {
   readonly catAchievements: AchievementManager;
   readonly gameStats: GameStats;
   readonly floorNumber: number;
+  readonly keyRing: KeyRingView;
 }
 
 /**
@@ -219,6 +222,7 @@ export class PauseScreen {
   constructor(private readonly deps: PauseScreenDeps) {
     this.sections = [
       journalSection(),
+      keyRingSection(),
       characterSection(),
       abilitiesSection(),
       craftsSection(),
@@ -377,6 +381,7 @@ export class PauseScreen {
       gameStats: frame.gameStats,
       floorNumber: frame.floorNumber,
       journal: this.journalContext,
+      keyRing: frame.keyRing,
       audio: this.deps.audio,
       musicLibrary: (this.deps.musicLibrary ?? activeMusicLibrary)(),
       guides: this.deps.guides,

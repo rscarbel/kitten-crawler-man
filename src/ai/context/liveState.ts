@@ -1,5 +1,5 @@
 import { createMergePatch, type JsonObject } from './json';
-import type { CrawlerState, LiveInput } from './types';
+import type { CrawlerState, KeyState, LiveInput } from './types';
 
 /** The server keeps up with one snapshot a second; anything faster is wasted bandwidth. */
 export const SNAPSHOT_MIN_INTERVAL_MS = 1_000;
@@ -26,6 +26,15 @@ function crawlerJson(crawler: CrawlerState): JsonObject {
   };
 }
 
+function keyJson(key: KeyState): JsonObject {
+  return {
+    name: key.name,
+    fragmentsHeld: [...key.fragmentsHeld],
+    fragmentsNeeded: key.fragmentsNeeded,
+    forged: key.forged,
+  };
+}
+
 /** The live state as the AI sees it. Absent fields are left out rather than nulled (see `json.ts`). */
 export function buildLiveState(live: LiveInput): JsonObject {
   const location: JsonObject = {
@@ -47,6 +56,7 @@ export function buildLiveState(live: LiveInput): JsonObject {
       hpPercent: mob.hpPercent,
       distanceTiles: mob.distanceTiles,
     })),
+    keys: live.keys.map(keyJson),
     combatInProgress: live.combatInProgress,
     bossFightActive: live.bossFightActive,
     isPaused: live.isPaused,

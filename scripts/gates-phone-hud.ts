@@ -65,6 +65,7 @@ const REQUIRED_PIECES: readonly string[] = [
   'summon',
   'chip',
   'journal',
+  'keys',
   'hotbar',
   'minimap',
 ];

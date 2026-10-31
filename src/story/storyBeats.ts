@@ -17,9 +17,51 @@
  */
 
 import { crawlerDisplayName } from '../characters/characters';
+import { stairwellKey, stairwellKeyName, type FragmentSourceKind } from '../core/keys/floorKeys';
+import { capitalisedCountWord, countedNoun, countWord } from '../core/text/countWords';
 import { carolineLines } from '../dialog/caroline';
+import type { LevelId } from '../levels/levelIds';
 import { type DaveLines, defineStoryBeats } from './storyTypes';
 import type { StoryBeatId } from './storyBeatIds';
+
+/** How `levelId`'s stairwell key is split, as Caroline states it: "two fragments". */
+function stairwellKeyFragments(levelId: LevelId): string {
+  return countedNoun(stairwellKey(levelId).fragments.length, 'fragment', 'fragments');
+}
+
+/** The pronoun standing for every fragment of `levelId`'s stairwell key. */
+function allFragmentsPronoun(levelId: LevelId): string {
+  return stairwellKey(levelId).fragments.length === 1 ? 'it' : 'them';
+}
+
+/** How a holder of a fragment is named, singular and plural. */
+interface HolderNoun {
+  readonly one: string;
+  readonly many: string;
+}
+
+const GUARDIANS: HolderNoun = { one: 'guardian', many: 'guardians' };
+
+const FLOOR_REQUESTS: HolderNoun = { one: 'request on this floor', many: 'requests on this floor' };
+
+/**
+ * Who holds `levelId`'s stairwell key's fragments, counted from the fragments
+ * whose source is `source`: "Two guardians hold them." Empty when none is.
+ */
+function holdersSentence(levelId: LevelId, source: FragmentSourceKind, noun: HolderNoun): string {
+  const fragments = stairwellKey(levelId).fragments;
+  const holders = fragments.filter((fragment) => fragment.source.kind === source).length;
+  if (holders === 0) return '';
+  const holder = holders === 1 ? `${noun.one} holds` : `${noun.many} hold`;
+  const held =
+    holders === fragments.length ? allFragmentsPronoun(levelId) : `${countWord(holders)} of them`;
+  return `${capitalisedCountWord(holders)} ${holder} ${held}.`;
+}
+
+/** `sentences` as one message, leaving out any that came out empty. */
+function joinSentences(...sentences: readonly string[]): string {
+  return sentences.filter((sentence) => sentence !== '').join(' ');
+}
 
 export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
   // Tutorial
@@ -30,9 +72,9 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     requires: [],
     lines: [
       "There you are. Easy. You're safe in here. I'm Dave.",
-      "You've got questions. Everybody does, the first day. Short version: none of this is real. The walls, the goblins, the floor you're standing on. All of it's made up.",
-      "Made up doesn't mean safe, though. Something kills you out there, you don't wake up from it. Keep that in your head and we'll get along fine.",
-      "Nothing can hurt you in a room like this, and walking in saves where you are. Die out there and you're back at the last one. Now. There's a reward chest waiting. Go open it.",
+      "Short version: none of this is real. The walls, the goblins, the floor. All of it's made up. Doesn't make it safe. Something kills you out there, you don't wake up from it.",
+      `Every way down is locked. You leave a floor with a ${stairwellKeyName('tutorial')}, and the key comes in pieces. You earn them, and when you've got them all, they make the key.`,
+      "Here. That's your first piece. I'll have more once your partner's with you. Nothing hurts you in a room like this, and walking in saved you. Die out there and you're back here. Now go open that reward chest.",
     ],
   },
 
@@ -52,7 +94,8 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     lines: [
       'Good. Both of you, in one piece.',
       "Those messages you've been getting, the ones that read like a machine wrote them? A machine did. Her name's Caroline. She runs this place. All of it.",
-      "I'll tell you the rest when you've had a chance to breathe. The stairwell's just below this room. I'll find you at the next safe room. I always do.",
+      "Here's the last piece. Hold them together and see what happens.",
+      "The stairwell's just below this room. Take the key to it. I'll tell you the rest when you've had a chance to breathe. I'll find you at the next safe room. I always do.",
     ],
   },
 
@@ -66,8 +109,8 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     lines: [
       "There you are. I'm Dave. Stand still a second and listen.",
       "None of this is real. The walls, the goblins, the floor. All of it's made up. Doesn't make it safe. Something kills you out here, you don't wake up from it.",
-      "Find the safe rooms. Nothing can hurt you inside one, and walking in saves where you are. Die out there and you're back at the last one you walked into.",
-      "You'll get messages that read like a machine wrote them. A machine did. Her name's Caroline. She runs all of this. The rest can wait. I'll be in the next safe room.",
+      "Find the safe rooms. Nothing can hurt you inside one, and walking in saves. Die out there and you're back at the last one.",
+      `Every stairwell down is locked. You need a ${stairwellKeyName('level1')}, and it comes in pieces. You'll get messages that read like a machine wrote them. A machine did. Her name's Caroline. She hands the pieces out. I'll be in the next safe room.`,
     ],
   },
 
@@ -77,8 +120,13 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     speaker: 'caroline',
     trigger: { kind: 'floorArrival', floor: 1 },
     requires: [],
-    message: carolineLines.message(
-      'Floor 1. The exits are stairwells. Two guardians stand between you and the nearest one. I will give you their locations when you need them.',
+    message: carolineLines.deferredMessage(() =>
+      joinSentences(
+        'Floor 1. The stairwells are sealed.',
+        `A ${stairwellKeyName('level1')} opens them. It is issued in ${stairwellKeyFragments('level1')}.`,
+        holdersSentence('level1', 'bossDefeated', GUARDIANS),
+        'I will give you their locations when you need them.',
+      ),
     ),
   },
 
@@ -110,7 +158,7 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     trigger: { kind: 'bossDefeated', boss: 'kraken' },
     requires: [],
     message: carolineLines.message(
-      'The Kraken is terminated. The flood was not there to protect her. It was there to measure whether you would find the pumps before you fought. You did. The route to the stairwell is open.',
+      'The Kraken is terminated. The flood was not there to protect it. It was there to measure whether you would find the pumps before you fought. You did.',
     ),
   },
 
@@ -143,9 +191,12 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     speaker: 'caroline',
     trigger: { kind: 'floorArrival', floor: 2 },
     requires: [],
-    message: carolineLines.deferredMessage(
-      () =>
+    message: carolineLines.deferredMessage(() =>
+      joinSentences(
         `Floor 2. Threat density is higher. ${crawlerDisplayName('human')}, ${crawlerDisplayName('cat')}: your survival probability on this floor is below my target. Raise it.`,
+        `The key is in ${stairwellKeyFragments('level2')}.`,
+        holdersSentence('level2', 'bossDefeated', GUARDIANS),
+      ),
     ),
   },
 
@@ -195,8 +246,12 @@ export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
     speaker: 'caroline',
     trigger: { kind: 'floorArrival', floor: 3 },
     requires: [],
-    message: carolineLines.message(
-      'Floor 3. Taloncrest. Population present. Allies are available here. Acquire them.',
+    message: carolineLines.deferredMessage(() =>
+      joinSentences(
+        'Floor 3. Taloncrest. Population present. Allies are available here. Acquire them.',
+        `The stairwell in the town square is sealed. Its key is in ${stairwellKeyFragments('level3')}.`,
+        holdersSentence('level3', 'questCompleted', FLOOR_REQUESTS),
+      ),
     ),
   },
 

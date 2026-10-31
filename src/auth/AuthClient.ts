@@ -16,6 +16,7 @@ import type { StoryBeatId } from '../story/storyBeatIds';
 import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { SavedPetNames } from '../core/party/petNames';
 import type { PlayerIdentity } from '../characters/playerIdentity';
+import type { NewGameCarry } from '../core/save/newGameCarry';
 import { parseGameProgress } from '../core/save/saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/save/progressPersistence';
 import { wipeOwed } from '../core/save/wipeMarker';
@@ -110,6 +111,12 @@ export interface GameProgress {
   petNames: SavedPetNames;
   /** The name, body and complexion the player chose for their human crawler. */
   playerIdentity: PlayerIdentity;
+  /**
+   * The world-held pieces the run carries across floor changes: a hire on a
+   * carried contract and the Wayfinder's Anchor's repair. Top level because a
+   * floor change carries no `world`.
+   */
+  carried: NewGameCarry;
   savedAt: string;
 }
 

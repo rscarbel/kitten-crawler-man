@@ -40,13 +40,13 @@ function fixed(text: string): Intel {
 
 export const CAROLINE_OBJECTIVE_INTEL = {
   trash_gremlin: intel(
-    'Classification: guardian. It holds the route to the nearest stairwell. It is not optional.',
+    "Classification: guardian. It holds a fragment of this floor's key. It is not optional.",
     (direction) => `The Trash Gremlin occupies the chamber through the hallway ${direction}.`,
     'The Trash Gremlin occupies the chamber ahead.',
   ),
 
   big_rooster: intel(
-    'Two lesser roosters guard the door. The gym is equipped with dumbbells, kettlebells and exercise balls; he uses all three. The route to the stairwell passes through him. It is not optional.',
+    "Two lesser roosters guard the door. The gym is equipped with dumbbells, kettlebells and exercise balls; he uses all three. He holds a fragment of this floor's key. It is not optional.",
     (direction) => `Big Rooster occupies the gym ${direction} of this room.`,
     'Big Rooster occupies the gym ahead.',
   ),
@@ -58,25 +58,25 @@ export const CAROLINE_OBJECTIVE_INTEL = {
   ),
 
   kraken: intel(
-    'Classification: guardian. A deep-water cephalopod, submerged at the centre of a flooded pump room. While the room is flooded it cannot be harmed. Three pumps keep it flooded. A shark patrols the water between the rafts. It holds the route to the stairwell. It is not optional.',
+    "Classification: guardian. A deep-water cephalopod, submerged at the centre of a flooded pump room. While the room is flooded it cannot be harmed. Three pumps keep it flooded. A shark patrols the water between the rafts. It holds a fragment of this floor's key. It is not optional.",
     (direction) => `The Kraken is ${direction} of this room.`,
     'The Kraken is ahead.',
   ),
 
   electric_goblin: intel(
-    'Classification: guardian. A goblin in insulated armour with a generator on his back, occupying an abandoned power lab. The lab floor holds standing water. It conducts. He holds the route to the stairwell. It is not optional.',
+    "Classification: guardian. A goblin in insulated armour with a generator on his back, occupying an abandoned power lab. The lab floor holds standing water. It conducts. He holds a fragment of this floor's key. It is not optional.",
     (direction) => `The Current Goblin is ${direction} of this room.`,
     'The Current Goblin is ahead.',
   ),
 
   stealth_gate: intel(
-    'Its guard will not open it without the key. The key is held in the goblin prison beside it.',
+    'Its guard will not open it without the gate key. The gate key is held in the goblin prison beside it.',
     (direction) => `A locked gate on the route forward stands ${direction} of this room.`,
     'A locked gate stands on the route forward.',
   ),
 
   spider_lab: intel(
-    'He is offering a contract. It is optional. The route to the stairwell does not require it.',
+    'He is offering a contract. It is optional. The key does not require it.',
     (direction) => `A scientist waits at a sealed hallway ${direction} of this room.`,
     'A scientist waits at a sealed hallway on this floor.',
   ),
@@ -96,7 +96,7 @@ export const CAROLINE_OBJECTIVE_INTEL = {
   ),
 
   anchor_offer: intel(
-    'A fortune teller in the plaza sells a faster way back than walking. It is optional.',
+    "A fortune teller in the plaza sells a faster way back than walking. Completing her request issues a fragment of this floor's key.",
     (direction) => `Her table is ${direction} of here.`,
   ),
 
@@ -110,7 +110,7 @@ export const CAROLINE_OBJECTIVE_INTEL = {
   ),
 
   missing_cats_notices: intel(
-    'Every cat in Taloncrest but one is missing. Each has a notice on the board. The town has not connected them.',
+    "Every cat in Taloncrest but one is missing. Each has a notice on the board. The town has not connected them. Finding them issues a fragment of this floor's key.",
     (direction) => `The Market Plaza notice board is ${direction} of this room.`,
     'The notices are on the Market Plaza board.',
   ),

@@ -92,6 +92,8 @@ export class DaveWhereabouts {
   room: SafeRoomId | null = null;
   /** The objectives he has given his tactics for, so his `!` stands down once he has. */
   readonly tacticsGiven = new Set<AdviceObjectiveId>();
+  /** Whether he has told a party with nothing left to do that the floor's key is whole. */
+  toldKeyWhole = false;
 }
 
 /** Keeps boss kills and the players' bags out of this system. */

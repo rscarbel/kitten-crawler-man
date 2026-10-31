@@ -5,6 +5,14 @@ const DEBRIEF_BOSS_TYPES = ['trash_gremlin', 'kraken', 'electric_goblin', 'big_r
 
 export type DebriefBossType = (typeof DEBRIEF_BOSS_TYPES)[number];
 
+/** Must match each mob's `displayName`; `verify:dave-guide` checks it. */
+export const BOSS_DISPLAY_NAMES = {
+  trash_gremlin: 'The Trash Gremlin',
+  big_rooster: 'Big Rooster',
+  kraken: 'The Kraken',
+  electric_goblin: 'The Current Goblin',
+} as const satisfies Record<DebriefBossType, string>;
+
 export const ALL_DEBRIEF_BOSS_TYPES: ReadonlyArray<DebriefBossType> = DEBRIEF_BOSS_TYPES;
 
 export function debriefBossType(bossType: string | undefined): DebriefBossType | null {

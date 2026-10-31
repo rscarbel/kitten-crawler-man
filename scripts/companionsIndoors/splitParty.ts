@@ -304,7 +304,7 @@ function checkHireStaysWithGroup(check: Check, fault: SplitPartyFault | null): v
     id: HIRE,
     name: getMercenaryTemplate(HIRE).name,
     terms: 'paid',
-    contractLevelId: HIRE_FLOOR,
+    contract: { kind: 'floor', levelId: HIRE_FLOOR },
     introduced: true,
   };
   const presence =
@@ -389,7 +389,7 @@ function checkHireBodyPutAwayWithGroup(check: Check, fault: SplitPartyFault | nu
     id: HIRE,
     name: getMercenaryTemplate(HIRE).name,
     terms: 'paid',
-    contractLevelId: HIRE_FLOOR,
+    contract: { kind: 'floor', levelId: HIRE_FLOOR },
     introduced: true,
   };
   const presence =

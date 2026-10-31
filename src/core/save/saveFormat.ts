@@ -20,13 +20,14 @@ import { isLevelId } from '../../levels/levelIds';
 import { parseObjectivesBriefed, parseStoryBeatsSeen } from '../../story/storySave';
 import { parseSavedPetNames } from '../party/petNames';
 import { parseSavedPlayerIdentity } from './playerIdentitySave';
+import { parseNewGameCarry } from './newGameCarry';
 
 /**
  * The fields of a save that belong to the whole run rather than to the floor it
  * was written on. Every save carries all of them — a save that leaves one out
  * wipes it, because a save replaces the stored one whole.
  */
-type RunSaveFieldKey =
+export type RunSaveFieldKey =
   | 'abilityStates'
   | 'crafts'
   | 'gameStats'
@@ -48,7 +49,8 @@ type RunSaveFieldKey =
   | 'storyBeatsSeen'
   | 'objectivesBriefed'
   | 'petNames'
-  | 'playerIdentity';
+  | 'playerIdentity'
+  | 'carried';
 
 /**
  * Run fields whose absence means something, so their keys must be written but
@@ -67,6 +69,63 @@ export type RunSaveFields = Required<
 };
 
 /**
+ * What a new game does with each run field of the run it replaces: `carry`
+ * keeps it, `reset` starts it fresh. A new run field cannot compile until it
+ * is classified here.
+ *
+ * A new game keeps the party: the player's character, both crawlers'
+ * abilities, achievements, tools, pets and their names, and the wheel's
+ * one-time prizes already won, which the party still holds and so must not
+ * win again. The world starts again: the run's tallies, the wheel's pending
+ * spins and quest-earned free spins, the songs heard, the story and its
+ * briefings. Double damage is the wheel's curse, left with the old world.
+ * `carried` is reset because the new run's is built afresh from the old run's
+ * world, by `newGameCarryOf`, rather than copied from its last save.
+ */
+export const NEW_GAME_CARRY = {
+  abilityStates: 'carry',
+  crafts: 'carry',
+  gameStats: 'reset',
+  humanAchievements: 'carry',
+  catAchievements: 'carry',
+  deinonychusUnlocked: 'carry',
+  deinonychusPetHp: 'carry',
+  deinonychusPetResting: 'carry',
+  wheelPrizesWon: 'carry',
+  pendingWheelOutcome: 'reset',
+  wheelFreeSpinBet: 'reset',
+  wheelOwedFreeze: 'reset',
+  wheelQuestFreeSpins: 'reset',
+  doubleDamageRemaining: 'reset',
+  attackCowOwned: 'carry',
+  attackCowHp: 'carry',
+  attackCowResting: 'carry',
+  musicLibrary: 'reset',
+  storyBeatsSeen: 'reset',
+  objectivesBriefed: 'reset',
+  petNames: 'carry',
+  playerIdentity: 'carry',
+  carried: 'reset',
+} as const satisfies Record<RunSaveFieldKey, 'carry' | 'reset'>;
+
+type NewGameResetKey = {
+  [K in RunSaveFieldKey]: (typeof NEW_GAME_CARRY)[K] extends 'reset' ? K : never;
+}[RunSaveFieldKey];
+
+/** The fresh value of every run field a new game resets, as {@link NEW_GAME_CARRY} lists them. */
+export type NewGameResetFields = Pick<RunSaveFields, NewGameResetKey>;
+
+/**
+ * The run fields a new game starts with: the old run's where
+ * {@link NEW_GAME_CARRY} says carry, `fresh`'s where it says reset. `fresh`
+ * holds exactly the reset fields, so laying it over the old run's replaces
+ * every one of them and nothing else.
+ */
+export function newGameRunFields(current: RunSaveFields, fresh: NewGameResetFields): RunSaveFields {
+  return { ...current, ...fresh };
+}
+
+/**
  * A stored save screened into a `GameProgress`, or `null` when any part of it
  * is missing or is not something this build writes. Used for both the
  * device's own save and the one the server hands back, which arrives as it
@@ -82,6 +141,9 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
   const catSnap = parsePlayerSnapshot(raw.catSnap, 'cat');
   const world = raw.world === undefined ? undefined : parseSavedWorld(raw.world);
   if (raw.world !== undefined && world === undefined) return null;
+  // A key ring holds the fragments of the floor it was begun on, so a ring
+  // saved for another floor than the save resumes on is not this run's.
+  if (world !== undefined && world.persisted.keyRing.levelId !== levelId) return null;
   const abilityStates = parseSerializedAbilityStates(raw.abilityStates);
   const humanAchievements = parseSerializedAchievements(raw.humanAchievements);
   const catAchievements = parseSerializedAchievements(raw.catAchievements);
@@ -98,6 +160,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
   const objectivesBriefed = parseObjectivesBriefed(raw.objectivesBriefed);
   const petNames = parseSavedPetNames(raw.petNames);
   const playerIdentity = parseSavedPlayerIdentity(raw.playerIdentity);
+  const carried = parseNewGameCarry(raw.carried);
   const {
     deinonychusUnlocked,
     deinonychusPetHp,
@@ -125,6 +188,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     objectivesBriefed === undefined ||
     petNames === undefined ||
     playerIdentity === undefined ||
+    carried === undefined ||
     typeof deinonychusUnlocked !== 'boolean' ||
     !isNonNegativeFinite(deinonychusPetHp) ||
     typeof deinonychusPetResting !== 'boolean' ||
@@ -161,6 +225,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     objectivesBriefed,
     petNames,
     playerIdentity,
+    carried,
     savedAt,
   };
 }

@@ -35,6 +35,8 @@ import { NO_INSETS, type ViewportInput } from '../src/ui/core/viewport.js';
 import { PAUSE_CONFIRM_SURFACE_IDS, PauseScreen } from '../src/ui/screens/pause/PauseScreen.js';
 import { gameContext } from './nodeGameContext.js';
 import { PetNameBook } from '../src/core/party/petNames.js';
+import { KeyRing } from '../src/core/keys/KeyRing.js';
+import type { LevelId } from '../src/levels/levelIds.js';
 
 /** Faults a run can inject to prove the checks can fail. */
 export type DifficultyGuardFault = 'unguarded-difficulty';
@@ -90,11 +92,14 @@ const menu = new PauseScreen({
 menu.skipAudioPause = () => true;
 /** The pause menu's stats differ by floor; the difficulty guard is floor-independent, so floor 1 stands in. */
 const GUARD_CHECK_FLOOR = 1;
+/** The level whose key ring the menu shows: the first floor, matching `GUARD_CHECK_FLOOR`. */
+const GUARD_CHECK_LEVEL = 'level1' satisfies LevelId;
 const frameData = {
   humanAchievements: new AchievementManager(),
   catAchievements: new AchievementManager(),
   gameStats: new GameStats(),
   floorNumber: GUARD_CHECK_FLOOR,
+  keyRing: new KeyRing(GUARD_CHECK_LEVEL).view(),
 };
 root.mount(
   menu.surface({

@@ -70,7 +70,7 @@ const DAVE_GREETING = 'Hey.';
 const DAVE_REPLY_TIMEOUT_MS = 30_000;
 const DAVE_FALLBACK_LINE =
   'Drink the potion before you need it, not after. Red ground means move. ' +
-  "And find the stairs. That's most of it, really.";
+  "And get the key. That's most of it, really.";
 const NO_SCENE_DETAIL = 'no gameplay scene is running';
 
 /** The part of the SDK client the adapter uses, so the gates can hand it a fake. */

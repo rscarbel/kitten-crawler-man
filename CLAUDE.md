@@ -38,6 +38,10 @@ Read the `add-ui` skill before touching any menu, dialog, HUD element or on-scre
 
 `npm run check:ui-style` (part of `npm run lint`) fails on colour literals, font strings, direct `fillText`/`strokeText` and platform branches in UI code; `npm run verify:ui-input` is the click-through gate; `npm run render:ui-gallery` renders every widget and screen for review — open the PNGs.
 
+## Art in Motion
+
+**A turn in depth is drawn, never transformed.** This is a 2D game. Anything that rotates out of the screen plane (a lid tipping up, a hatch swinging open, a gate folding back, a key turning, a body turning from east-west to north-south) changes its perspective, so it needs differently drawn frames or a renderer that genuinely models the depth (extruded layers, per-angle shading). Scaling, skewing or rotating a flat sprite to fake a new viewing angle always looks wrong, and so does rotating art drawn east-west to stand in for north-south. A canvas transform is only fine for motion within the screen plane: sliding, in-plane spinning, squash and stretch.
+
 ## Code Clarity
 
 **Comments explain _why_, never _what_.** Well-named identifiers already say what code does — a comment restating that is noise. Only write a comment when something would surprise a reader: a hidden constraint, a subtle invariant, a non-obvious workaround, or a reason that can't be inferred from the names alone. If removing a comment wouldn't confuse a future reader, don't write it. When you encounter a pre-existing "what" comment while editing, remove it.

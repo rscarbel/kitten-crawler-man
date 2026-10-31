@@ -38,6 +38,10 @@ import type { Rarity } from './items/defs/rarity';
 import type { ChallengeSummary } from '../ai/interactions/challenges';
 import type { ExplosionVariant } from '../sprites/dynamiteExplosion';
 import type { ConveyorEndId } from '../map/interiorMechanisms';
+import type { LevelId } from '../levels/levelIds';
+import type { StoryBeatId } from '../story/storyBeatIds';
+import type { FragmentId } from './keys/fragmentIds';
+import type { KeyKind } from './keys/keyKinds';
 import type { ExchangeFlagId } from './party/partySplit';
 import type { TowerMoment } from '../systems/tower/towerMoments';
 
@@ -207,6 +211,24 @@ export interface GameEvents {
 
   /** Player descended to the next floor via a stairwell. */
   levelComplete: Record<string, never>;
+
+  /**
+   * A story beat's conversation has ended and marked it seen for the first
+   * time. Not fired for the beats it covers.
+   */
+  storyBeatFinished: { beat: StoryBeatId };
+
+  /**
+   * A key fragment was awarded live, with a ceremony to follow. A fragment
+   * recognised silently when a floor is rebuilt from a save fires nothing.
+   */
+  keyFragmentClaimed: { fragmentId: FragmentId; kind: KeyKind; held: number; needed: number };
+
+  /** A key's fragments fused into the key, as its forge ceremony began. */
+  keyForged: { kind: KeyKind; levelId: LevelId };
+
+  /** A stairwell's seal was opened; `tileX`/`tileY` is its footprint's top-left tile. */
+  stairwellUnsealed: { kind: KeyKind; tileX: number; tileY: number };
 
   /**
    * A game-progress save was written — a checkpoint, a safe room, or a floor

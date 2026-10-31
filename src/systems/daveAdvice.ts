@@ -19,7 +19,7 @@ import { cardinalDirection } from '../utils';
 import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { DialogLine } from '../dialog/line';
 import type { CarolineMessage } from '../dialog/caroline';
-import { DAVE_ADVICE } from '../dialog/scripts/dave';
+import { DAVE_ADVICE, DAVE_KEY_PROGRESS } from '../dialog/scripts/dave';
 import { CAROLINE_OBJECTIVE_INTEL } from '../dialog/scripts/caroline';
 
 export interface AdviceObjective {
@@ -66,6 +66,15 @@ export function nextAdviceObjective(
 /** Dave's tactics for an objective. */
 export function adviceTactics(objective: AdviceObjective): DialogLine {
   return DAVE_ADVICE[objective.id];
+}
+
+/**
+ * What Dave says tapped with no objective left to raise: that the floor's key
+ * is whole, once every piece is held and until he has said so on this floor. Null
+ * hands him on to the AI chat, so a cleared floor still gets its flavour.
+ */
+export function keyWholeNote(keyForged: boolean, alreadyTold: boolean): DialogLine | null {
+  return keyForged && !alreadyTold ? DAVE_KEY_PROGRESS.whole : null;
 }
 
 /**

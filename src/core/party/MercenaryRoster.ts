@@ -1,3 +1,4 @@
+import type { LevelId } from '../../levels/levelIds';
 import { getMercenaryTemplate, type MercenaryTemplateId } from './mercenaryTemplates';
 
 /**
@@ -9,7 +10,9 @@ import { getMercenaryTemplate, type MercenaryTemplateId } from './mercenaryTempl
  * returning to the overworld.
  *
  * A contract runs to the end of the floor it was signed on, or until the
- * mercenary dies, whichever comes first: that is how the desk sells them.
+ * mercenary dies, whichever comes first: that is how the desk sells them. A
+ * hire brought into a new game is the exception: it walks with the party for
+ * the whole run (see {@link HireContract}).
  * There is one contract slot; `active` is a single field rather than a list
  * only because nothing yet lets two hires walk together.
  */
@@ -20,12 +23,19 @@ import { getMercenaryTemplate, type MercenaryTemplateId } from './mercenaryTempl
 export const MERCENARY_CONTRACT_TERMS = ['paid', 'tower_loan'] as const;
 export type MercenaryContractTerms = (typeof MERCENARY_CONTRACT_TERMS)[number];
 
+/**
+ * How long a contract runs. `floor`: signed at the desk, it ends the moment
+ * the party is on any other floor. `carried`: the hire came into a new game
+ * with the party and walks with it through every floor change of the run.
+ */
+export type HireContract =
+  { readonly kind: 'floor'; readonly levelId: LevelId } | { readonly kind: 'carried' };
+
 export interface HiredMercenary {
   id: MercenaryTemplateId;
   name: string;
   terms: MercenaryContractTerms;
-  /** The floor the contract was signed on. It ends the moment the party is anywhere else. */
-  contractLevelId: string;
+  contract: HireContract;
   /** Set once the hire has said hello, so walking out of a shop does not repeat it. */
   introduced: boolean;
   /**
@@ -50,7 +60,7 @@ export interface MercenaryRoster {
    * read, not what it holds. The desk signs contracts against it, and a
    * restore reads it to refuse a contract signed on another floor.
    */
-  floorLevelId: string | null;
+  floorLevelId: LevelId | null;
   /**
    * The name of a hire that died for good and has not yet been announced.
    *
@@ -91,8 +101,9 @@ export function hirelingStartingHp(hired: HiredMercenary): number {
   return Math.min(maxHp, Math.max(1, Math.round(hired.hp)));
 }
 
-function copyHire(hired: HiredMercenary | null): HiredMercenary | null {
-  return hired === null ? null : { ...hired };
+/** A hire copied deep enough that editing the copy never reaches the original. */
+export function copyHire(hired: HiredMercenary | null): HiredMercenary | null {
+  return hired === null ? null : { ...hired, contract: { ...hired.contract } };
 }
 
 /** The hire itself is copied, not shared: one snapshot is restored many times. */
@@ -110,15 +121,51 @@ export function captureMercenaryRoster(roster: MercenaryRoster): MercenaryRoster
  * harness builds one without a scene around it.
  */
 export function contractIsCurrent(roster: MercenaryRoster, hired: HiredMercenary): boolean {
-  return roster.floorLevelId === null || hired.contractLevelId === roster.floorLevelId;
+  const { contract } = hired;
+  switch (contract.kind) {
+    case 'floor':
+      return roster.floorLevelId === null || contract.levelId === roster.floorLevelId;
+    case 'carried':
+      return true;
+    default: {
+      const unhandled: never = contract;
+      return unhandled;
+    }
+  }
+}
+
+/** Whether a floor's end finishes this hire's contract: true for a desk hire, false for one carried into the run. */
+export function contractEndsWithFloor(hired: HiredMercenary): boolean {
+  const { contract } = hired;
+  switch (contract.kind) {
+    case 'floor':
+      return true;
+    case 'carried':
+      return false;
+    default: {
+      const unhandled: never = contract;
+      return unhandled;
+    }
+  }
+}
+
+/**
+ * The hire as a new game takes it over: on a carried contract, which no floor
+ * change ends, and on plain paid terms. A tower loan belonged to the missing
+ * cats questline, which a new game starts again, so the Warden's death must
+ * not end it.
+ */
+export function carriedHire(hired: HiredMercenary): HiredMercenary {
+  return { ...hired, terms: 'paid', contract: { kind: 'carried' } };
 }
 
 /**
  * Rewinds the roster in place — it is threaded by reference through every scene
  * and held by `MercenarySystem`, so replacing it would leave them on the old one.
  *
- * A snapshot taken on an earlier floor can name a contract that has since run
- * out; restoring it would hand back a hire the floor change already ended.
+ * A snapshot taken on an earlier floor can name a floor contract that has
+ * since run out; restoring it would hand back a hire the floor change already
+ * ended. A carried contract never runs out that way, so it is kept.
  */
 export function restoreMercenaryRoster(
   roster: MercenaryRoster,

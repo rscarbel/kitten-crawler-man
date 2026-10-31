@@ -424,7 +424,7 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
         id: hire.id,
         name: hire.name,
         terms: 'paid',
-        contractLevelId: CONTRACT_FLOOR,
+        contract: { kind: 'floor', levelId: CONTRACT_FLOOR },
         introduced: true,
       };
       const desk = new MercenaryGuildSystem(roster, null, () => false);

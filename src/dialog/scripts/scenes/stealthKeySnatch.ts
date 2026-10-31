@@ -26,24 +26,24 @@ export const GATE_GUARD_LINES: {
       "Halt. Nobody goes through this gate. It's locked. I'm the gate guard. It's a very important job. They gave me a hat.",
     ),
     gateGuard.line(
-      "Gate needs the key. No key, no gate. The key's locked up in the Goblin High Security Prison. Nobody's ever got anything out of there. Well. Not since Tuesday.",
+      "Gate needs a key. No key, no gate. The gate key's locked up in the Goblin High Security Prison. Nobody's ever got anything out of there. Well. Not since Tuesday.",
     ),
     gateGuard.line(
-      "Prison's through the big door on the side, there. Prison rules: no pets, no hired muscle. They wait out here with me. Bring me the key and I'll open the gate. Probably.",
+      "Prison's through the big door on the side, there. Prison rules: no pets, no hired muscle. They wait out here with me. Bring me the gate key and I'll open the gate. Probably.",
     ),
   ],
   briefedPool: [
     gateGuard.line(
-      "Key's in the prison. Prison's through the side door. Gate's locked. Same as before.",
+      "Gate key's in the prison. Prison's through the side door. Gate's locked. Same as before.",
     ),
     gateGuard.line(
-      "Nobody gets out of that prison. Except on Tuesday. We don't talk about Tuesday. Go get the key.",
+      "Nobody gets out of that prison. Except on Tuesday. We don't talk about Tuesday. Go get the gate key.",
     ),
     gateGuard.line('No key, no gate. I could say it slower.'),
   ],
   handOver: [
     gateGuard.line(
-      "Is that... that's the key. Out of the prison? Huh. That's a first. Since Tuesday.",
+      "Is that... that's the gate key. Out of the prison? Huh. That's a first. Since Tuesday.",
     ),
     gateGuard.line(
       "Fine. Rules are rules. Key opens gate. Don't tell the warden. He thinks his record is perfect.",
@@ -60,7 +60,7 @@ export const GATE_LOCKED_BARK: BarkLine = gateGuard.bark('Key. No key, no gate.'
 
 /** The bark over the gate guard when a crawler unlocks the gate with the key himself. */
 export const GATE_UNLOCKED_BARK: BarkLine = gateGuard.bark(
-  "Hey, that's the key! ...Fine. Gate's open. I'm calling it a drill.",
+  "Hey, that's the gate key! ...Fine. Gate's open. I'm calling it a drill.",
 );
 
 /** Speech-bubble reactions to a blow, in each guard's own voice. */

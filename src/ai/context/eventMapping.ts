@@ -15,6 +15,8 @@ import type { JsonObject } from './json';
 import type { PlayerProfileTracker } from './playerProfile';
 import type { AIContextSource } from './types';
 import type { ThrownItemId } from '../../systems/DynamiteSystem';
+import { fragmentDef } from '../../core/keys/floorKeys';
+import { keyKindDef } from '../../core/keys/keyKinds';
 
 /** `playerIdle` fires every few seconds of idling; only these marks are worth telling the AI about. */
 const IDLE_FIRST_MARK_MS = 30_000;
@@ -460,6 +462,40 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         data: {},
         summary: 'The crawlers found the stairwell down to the next floor.',
         importance: EVENT_IMPORTANCE.stairwellFound,
+        witness: 'never',
+      });
+    }),
+    bus.on('keyFragmentClaimed', (e) => {
+      progress();
+      const fragment = fragmentDef(e.fragmentId).name;
+      const key = keyKindDef(e.kind).name;
+      emit({
+        type: 'keyFragmentClaimed',
+        data: { fragment, key, held: e.held, needed: e.needed },
+        summary: `Caroline issued the party a key fragment, ${fragment}: ${e.held} of the ${e.needed} that make this floor's ${key}.`,
+        importance: EVENT_IMPORTANCE.keyFragmentClaimed,
+        witness: 'always',
+      });
+    }),
+    bus.on('keyForged', (e) => {
+      progress();
+      const key = keyKindDef(e.kind).name;
+      emit({
+        type: 'keyForged',
+        data: { key },
+        summary: `The party's fragments fused into this floor's ${key}. The floor's sealed stairwells will open for them now.`,
+        importance: EVENT_IMPORTANCE.keyForged,
+        witness: 'always',
+      });
+    }),
+    bus.on('stairwellUnsealed', (e) => {
+      progress();
+      const key = keyKindDef(e.kind).name;
+      emit({
+        type: 'stairwellUnsealed',
+        data: { key },
+        summary: `The crawlers broke a stairwell's seal with the ${key}. The way down is open.`,
+        importance: EVENT_IMPORTANCE.stairwellUnsealed,
         witness: 'never',
       });
     }),

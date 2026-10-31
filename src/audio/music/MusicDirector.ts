@@ -58,6 +58,7 @@ type MusicStemsSelection = {
 export type MusicClaimOwner =
   | 'title'
   | 'floor'
+  | 'floor_intro'
   | 'overworld_zone'
   | 'interior'
   | 'pipe_board'

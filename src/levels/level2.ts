@@ -357,7 +357,7 @@ export const level2: LevelDef = {
   worldGearDrops: true,
   nightmareTimeLimitFrames: LEVEL2_NIGHTMARE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,
-  nextLevelId: 'level3',
+  exit: { kind: 'descend', nextLevelId: 'level3' },
   numStairwells: 2,
   xpDiminishingTiers: [
     { minPlayerLevel: LEVEL2_XP_HALF_LEVEL, multiplier: LEVEL2_XP_HALF_MULTIPLIER },

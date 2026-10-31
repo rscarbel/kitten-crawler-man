@@ -9,7 +9,7 @@
  * not drawn yet.
  *
  * The order down the right-hand column is fixed: Pause, Bag, Build, the
- * rewards chip, the Journal, then whatever a scene adds of its own. A
+ * rewards chip, the Journal, Keys, then whatever a scene adds of its own. A
  * touch screen puts the Follower button ahead of Pause, all of it packed into
  * whatever room the screen leaves (see `hudPacking.ts`); a pointer screen
  * stands the Follower button at the bottom right, above the hotbar.
@@ -76,6 +76,8 @@ export interface HudButtonRects {
   /** The rewards chip's slot, held whether or not a reward is waiting. */
   readonly chip: Rect;
   readonly journal: Rect;
+  /** The key ring, under the Journal. */
+  readonly keys: Rect;
   /** The crawler switch, on a touch screen; a keyboard switches with its key. */
   readonly switchButton: Rect | null;
   readonly summon: Rect;
@@ -187,8 +189,9 @@ function packedLayout(input: HudButtonLayoutInput): HudButtonRects {
   const build = input.build ? one(square) : null;
   const chip = one(square);
   const journal = one(square);
+  const keys = one(square);
   const extras = input.extras.map(one);
-  return { follower, pause, bag, build, chip, journal, switchButton, summon, extras };
+  return { follower, pause, bag, build, chip, journal, keys, switchButton, summon, extras };
 }
 
 /** The crawler switch on a touch screen: bottom left, above the hotbar. */
@@ -218,7 +221,7 @@ function summonRect(input: HudButtonLayoutInput, switchButton: Rect | null): Rec
 /**
  * A pointer screen's right-hand column: Pause under the minimap, Bag under
  * it, then the Build button (where it is reserved), the rewards chip's
- * slot, the Journal and a scene's extras.
+ * slot, the Journal, Keys and a scene's extras.
  *
  * Each takes the next slot down the column while that slot is clear of the
  * rest of the HUD and of the bottom of the screen. Once one piece has had to
@@ -285,6 +288,18 @@ function columnLayout(input: HudButtonLayoutInput): HudButtonRects {
   const build = input.build ? place(square) : null;
   const chip = place(square);
   const journal = place(square);
+  const keys = place(square);
   const extras = input.extras.map(place);
-  return { pause, bag, follower, build, chip, journal, switchButton: null, summon, extras };
+  return {
+    pause,
+    bag,
+    follower,
+    build,
+    chip,
+    journal,
+    keys,
+    switchButton: null,
+    summon,
+    extras,
+  };
 }

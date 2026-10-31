@@ -202,7 +202,7 @@ export class PrisonGoblin extends Mob {
     this.displayName = role === 'gateGuard' ? 'Snorgle, Gate Guard' : 'Prison Guard';
     this.description =
       role === 'gateGuard'
-        ? 'Guards the gate. Has the key ring. Does not have the key.'
+        ? 'Guards the gate. Has a key ring. Does not have the gate key.'
         : 'Baton in one hand, flashlight in the other. Takes the job very seriously.';
   }
 

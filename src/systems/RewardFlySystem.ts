@@ -13,6 +13,8 @@
  */
 
 import { ITEM_DEF } from '../core/items/defs/ItemDefs';
+import type { KeyKind } from '../core/keys/keyKinds';
+import { paintKey } from '../sprites/art/keyArt';
 import type { ItemId } from '../core/items/defs/ItemDefs';
 import { drawItemIcon } from '../ui/icons/drawItemIcon';
 import type { Rect } from '../ui/core/geom';
@@ -22,6 +24,8 @@ export interface FlyTargets {
   coinX: number;
   coinY: number;
   bagRect: Rect;
+  /** The Keys button as last drawn; null where the dock shows none, and a forged key flies to the bag. */
+  keysRect: Rect | null;
 }
 
 /** How many coin sprites a single grant spawns, before capping. */
@@ -59,6 +63,13 @@ const COIN_EDGE_WIDTH = 1.5;
 /** How much a flying item shrinks over its final fade, as a fraction of its size. */
 const ITEM_LANDING_SHRINK = 0.4;
 
+const KEY_FLY_DURATION_FRAMES = 30;
+const KEY_ARC_HEIGHT = 40;
+/** How long the Keys button keeps its squash-bounce after a forged key lands in it. */
+const KEYS_BOUNCE_DECAY_FRAMES = 20;
+/** A key lands this share of its button's width across. */
+const KEY_LANDING_WIDTH_SHARE = 0.9;
+
 /** What arrived at the HUD during one `update()`, for the owning scene to voice. */
 export interface RewardLandings {
   coins: number;
@@ -81,6 +92,14 @@ interface FlyingItem {
   fromY: number;
   age: number;
   delay: number;
+}
+
+interface FlyingKey {
+  kind: KeyKind;
+  fromX: number;
+  fromY: number;
+  fromWidth: number;
+  age: number;
 }
 
 interface RisingLabel {
@@ -120,6 +139,7 @@ interface HeldBucket {
 export class RewardFlySystem {
   private coins: FlyingCoin[] = [];
   private items: FlyingItem[] = [];
+  private keys: FlyingKey[] = [];
   private labels: RisingLabel[] = [];
 
   private nextHoldId = 1;
@@ -139,6 +159,7 @@ export class RewardFlySystem {
   private pendingCoinTotal = 0;
   private coinPulseFrames = 0;
   private bagBounceFrames = 0;
+  private keysBounceFrames = 0;
 
   /**
    * Queue every grant made until the matching `release()`/`cancel()`, rather
@@ -218,6 +239,16 @@ export class RewardFlySystem {
   }
 
   /**
+   * Flies a forged key from where its ceremony showed it, `fromWidth` CSS
+   * pixels wide with its middle at (`fromX`, `fromY`), shrinking into the
+   * Keys button, which bounces as it lands. Never held: the ceremony that
+   * sends it has already closed.
+   */
+  flyKey(kind: KeyKind, fromX: number, fromY: number, fromWidth: number): void {
+    this.keys.push({ kind, fromX, fromY, fromWidth, age: 0 });
+  }
+
+  /**
    * Drops every in-flight and held animation without paying out or clawing
    * back anything — coins/items are already applied the instant they're
    * earned, so this only ever discards a picture in progress. Called on a
@@ -227,6 +258,7 @@ export class RewardFlySystem {
   reset(): void {
     this.coins = [];
     this.items = [];
+    this.keys = [];
     this.labels = [];
     this.activeHolds = [];
     this.heldGrants.clear();
@@ -234,6 +266,7 @@ export class RewardFlySystem {
     this.pendingCoinTotal = 0;
     this.coinPulseFrames = 0;
     this.bagBounceFrames = 0;
+    this.keysBounceFrames = 0;
   }
 
   private spawnCoins(amount: number, fromX: number, fromY: number): void {
@@ -303,6 +336,13 @@ export class RewardFlySystem {
       }
     }
 
+    for (const key of this.keys) key.age++;
+    const landedKeys = this.keys.filter((key) => key.age >= KEY_FLY_DURATION_FRAMES);
+    if (landedKeys.length > 0) {
+      this.keysBounceFrames = KEYS_BOUNCE_DECAY_FRAMES;
+      this.keys = this.keys.filter((key) => key.age < KEY_FLY_DURATION_FRAMES);
+    }
+
     for (let i = this.labels.length - 1; i >= 0; i--) {
       this.labels[i].age++;
       if (this.labels[i].age >= LABEL_RISE_DURATION_FRAMES) {
@@ -313,6 +353,7 @@ export class RewardFlySystem {
 
     if (this.coinPulseFrames > 0) this.coinPulseFrames--;
     if (this.bagBounceFrames > 0) this.bagBounceFrames--;
+    if (this.keysBounceFrames > 0) this.keysBounceFrames--;
     return landings;
   }
 
@@ -329,6 +370,11 @@ export class RewardFlySystem {
   /** 0 (settled) to 1 (just landed) — drive a squash-bounce on the bag button. */
   bagBouncePulse(): number {
     return this.bagBounceFrames / BAG_BOUNCE_DECAY_FRAMES;
+  }
+
+  /** 0 (settled) to 1 (just landed) — drive a squash-bounce on the Keys button. */
+  keysBouncePulse(): number {
+    return this.keysBounceFrames / KEYS_BOUNCE_DECAY_FRAMES;
   }
 
   render(ctx: CanvasRenderingContext2D, targets: FlyTargets): void {
@@ -378,6 +424,18 @@ export class RewardFlySystem {
         { ...ITEM_DEF[item.itemId], quantity: 1 },
       );
       ctx.restore();
+    }
+
+    const keysRect = targets.keysRect ?? targets.bagRect;
+    for (const key of this.keys) {
+      const t = Math.min(1, key.age / KEY_FLY_DURATION_FRAMES);
+      const eased = 1 - (1 - t) * (1 - t);
+      const x = lerp(key.fromX, keysRect.x + keysRect.w / 2, eased);
+      const y =
+        lerp(key.fromY, keysRect.y + keysRect.h / 2, eased) -
+        Math.sin(t * Math.PI) * KEY_ARC_HEIGHT;
+      const width = lerp(key.fromWidth, keysRect.w * KEY_LANDING_WIDTH_SHARE, eased);
+      paintKey(ctx, x, y, width, key.kind, t, key.fromWidth);
     }
 
     for (const label of this.labels) {

@@ -43,6 +43,12 @@ when it is shown.
   it runs out she ends them herself: everything stops, she gives her verdict
   (`CAROLINE_TIME_LIMIT_VERDICT`), both crawlers burst, and they start the
   floor over. No floor falls apart; the limit is hers.
+- She seals every stairwell on every floor. A seal opens only for a party
+  holding that floor's Golden Key, and she breaks each floor's key into
+  fragments and issues them herself, one for each deed she sets on the floor
+  (`FLOOR_KEYS` in `src/core/keys/floorKeys.ts`: a guardian killed, a
+  request answered, a talk with Dave finished). Her line for each is the
+  fragment's `issueLine`.
 
 ## Dave
 
@@ -84,6 +90,9 @@ when it is shown.
   lizardman's tongue. Survival tactics are his.
 - He does **not** know exactly which bosses are ahead or where. That is
   Caroline's.
+- He knows how Caroline's keys and seals work, because he carried them: a
+  floor's stairwells stay sealed until its Golden Key is forged from every
+  fragment. He never knows which boss holds a fragment.
 - He never changes form.
 
 ## Voice rules
@@ -149,6 +158,31 @@ holds only `<text>`; never type either into a line.
   key dismisses them. A boss message missed in a fight is caught up at the
   next safe room on that floor. Her first-achievement message belongs to the
   tutorial; past it, Dave's skipped-tutorial intro tells it.
+- **Key moments.** Every fragment Caroline issues takes the whole screen in
+  its own ceremony, and the fragment that completes a key flows straight
+  into the forge, where the fragments fuse into the Golden Key. This is the
+  one reward that interrupts play, so it waits for calm: no conversation,
+  cutscene, boss intro or other halting screen, and no kill loot in the air.
+  After a boss's death the order is fixed: the death plays out, the loot
+  falls and lands, the key moment opens, and only once it has closed does
+  Caroline's boss message follow. A quest's reward plaque comes before its
+  fragment. Achievement chests and hints wait while a key moment is queued
+  or open. A fragment recognised silently when a floor is rebuilt from a
+  save plays no ceremony.
+- **Opening a stairwell.** Stepping onto a sealed stairwell with the floor's
+  key forged plays the unseal: the key flies from the Keys button to the
+  seal, turns, and the seal breaks and drags itself off the stairs. Without
+  the key the seal rattles and stays shut, its note counting the fragments
+  held of the key.
+- **Each floor opens with "Find the Key".** Arriving on a floor plays its
+  intro: the floor's name and the key's silhouette, one socket per fragment.
+- **Floor 3's ending.** Floor 3 has one stairwell, in Taloncrest's town
+  square, sealed like the rest. Going down it ends the run: the run's record
+  comes up with a choice to stay in Taloncrest and keep playing, or to begin
+  a new game on floor 1 carrying the crawlers' levels, stats, gear, pets, a
+  hired mercenary and the repaired Wayfinder's Anchor. The world, the quests
+  and the story begin again; the anchor sleeps until the party reaches floor
+  3 again, then wakes and issues its fragment with a full ceremony.
 - **Boss intel belongs to Caroline; tactics belong to Dave.** For every advice
   objective, Caroline says where it is (its bearing from the room), what it is
   and whether it is optional, once per objective, the first time the party
@@ -161,8 +195,12 @@ holds only `<text>`; never type either into a line.
   moment it ends, outside the checkpoint, so dying or reloading never plays
   it again.
 - **The tutorial.** Dave meets the human in the tutorial's safe room
-  (`tutorial_meets_dave`) and talks to both once the cat arrives
-  (`tutorial_dave_farewell`). The tutorial advances when each talk ends.
+  (`tutorial_meets_dave`), explains the seal and the key, and hands over
+  the key's first fragment as the talk ends; only then is the human sent to
+  the reward chest. He talks to both once the cat arrives
+  (`tutorial_dave_farewell`) and hands over the second, which forges the
+  Golden Key that opens the tutorial's one sealed stairwell. The tutorial
+  advances when each talk ends.
 - **Skipping the tutorial.** Dave is already standing in floor 1's start
   room, gives `skipped_tutorial_dave_intro` at once, and teleports out; he
   is absent until the party walks into a safe room. That beat covers the

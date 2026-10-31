@@ -258,7 +258,13 @@ export interface AudioManagerOptions {
  * only comes back once every reason that asked for silence has let go.
  */
 export type MusicPauseReason =
-  'menu' | 'background' | 'slots_big_win' | 'wheel' | 'permanent_death' | 'siege_victory';
+  | 'menu'
+  | 'background'
+  | 'slots_big_win'
+  | 'wheel'
+  | 'permanent_death'
+  | 'siege_victory'
+  | 'key_ceremony';
 
 /**
  * The pause reasons that also freeze the music where it is, once the bus has
@@ -272,7 +278,7 @@ const MUSIC_HOLD_REASONS: ReadonlySet<MusicPauseReason> = new Set(['menu', 'back
  * Why the sound-effects bus is held silent. A set, like the pause reasons, so
  * one moment letting go cannot bring back effects another still wants quiet.
  */
-export type EffectsHushReason = 'siege_victory';
+export type EffectsHushReason = 'siege_victory' | 'key_ceremony';
 
 /**
  * Why the music bus is held below the player's level without being silenced.
@@ -1274,6 +1280,11 @@ export class AudioManager {
     const buffer = this.buffers.get(id);
     if (!buffer || this.backgrounded || this.ctx.state !== 'running') return null;
     return this.startSource(id, buffer, opts, null);
+  }
+
+  /** How long `id`'s decoded recording runs, in seconds, or null while it is not decoded. */
+  decodedDurationS(id: SoundId): number | null {
+    return this.buffers.get(id)?.duration ?? null;
   }
 
   /**

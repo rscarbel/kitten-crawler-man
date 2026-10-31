@@ -25,6 +25,7 @@ export type GameAction =
   | 'companionFollow'
   | 'toggleMiniMap'
   | 'toggleQuestTracker'
+  | 'toggleKeyRing'
   | 'buildSummon'
   | 'construction'
   | 'structureMenu'
@@ -71,6 +72,7 @@ const DEFAULT_BINDINGS: Record<GameAction, readonly string[]> = {
   companionFollow: ['f'],
   toggleMiniMap: ['m'],
   toggleQuestTracker: ['j'],
+  toggleKeyRing: ['k'],
   buildSummon: ['r'],
   construction: ['u'],
   structureMenu: ['e'],
@@ -105,6 +107,7 @@ export const ACTION_ORDER: readonly GameAction[] = [
   'companionFollow',
   'toggleMiniMap',
   'toggleQuestTracker',
+  'toggleKeyRing',
   'buildSummon',
   'construction',
   'structureMenu',
@@ -128,6 +131,7 @@ export const ACTION_LABELS: Record<GameAction, string> = {
   companionFollow: 'Follower Orders',
   toggleMiniMap: 'Mini-Map',
   toggleQuestTracker: 'Quest Journal',
+  toggleKeyRing: 'Keys',
   buildSummon: 'Build / Summon Pet',
   construction: 'Construction',
   structureMenu: 'Structure Menu',

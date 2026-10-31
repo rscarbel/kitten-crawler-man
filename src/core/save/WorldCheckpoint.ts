@@ -31,6 +31,7 @@ import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState
 import type { JournalProgressCheckpoint } from '../quests/JournalProgress';
 import type { BriarHollowStateSnapshot } from '../quests/briarHollowState';
 import type { PartySplitSnapshot } from '../party/partySplit';
+import type { KeyRingState } from '../keys/keyRingState';
 
 /**
  * Everything about the floor — and the run — that a safe-room checkpoint has to
@@ -100,6 +101,12 @@ export interface WorldCheckpoint {
   partySplit: PartySplitSnapshot;
   /** Briar Hollow's quest, structures and soldier orders. Empty on every floor but 3. */
   briarHollow: BriarHollowStateSnapshot;
+  /**
+   * The floor's key fragments, forged keys and opened seals. Rewound by a
+   * death, so a fragment from a boss killed after the save goes back with the
+   * boss.
+   */
+  keyRing: KeyRingState;
 
   /**
    * One-time kill latches the scene owns directly rather than through a system.

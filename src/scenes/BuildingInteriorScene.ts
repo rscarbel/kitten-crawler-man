@@ -87,13 +87,14 @@ import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { SafeRoomRegroupSystem } from '../systems/SafeRoomRegroupSystem';
 import { DaveGuideSystem } from '../systems/DaveGuideSystem';
 import { prewarmDaveSprite } from '../sprites/daveSprite';
-import { adviceIntel, adviceTactics } from '../systems/daveAdvice';
+import { adviceIntel, adviceTactics, keyWholeNote } from '../systems/daveAdvice';
 import { type AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { CarolineMessage } from '../dialog/caroline';
 import { StoryDelivery, partyIsEngaged } from '../systems/StoryDelivery';
 import { walkUpTo } from '../systems/cutscene/walkUp';
 import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
 import type { DebriefBossType } from '../core/mobs/debriefBossTypes';
+import { playKeyCue } from '../audio/keySoundCues';
 import { bodyActor, townspersonActor } from '../systems/cutscene/cutsceneActors';
 import {
   residentActorId,
@@ -224,7 +225,12 @@ import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
 import { AIInteractionStage } from '../ai/interactions/AIInteractionStage';
 import type { AIContextSource, SessionInput } from '../ai/context/types';
-import { readActiveQuests, readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
+import {
+  readActiveQuests,
+  readCrawler,
+  readKeys,
+  readNearbyMobs,
+} from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
 import { getLevelDef } from '../levels';
 import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
@@ -510,6 +516,9 @@ import {
   type DeinonychusPetState,
 } from '../core/state/DeinonychusPetState';
 import { detachedPartyRun, type InteriorPartyRun } from './interiorPartyRun';
+import { KeyFragmentSystem } from '../systems/keys/KeyFragmentSystem';
+import { KeyCeremonySystem } from '../systems/keys/KeyCeremonySystem';
+import { isCarriedAnchorMoment } from '../systems/keys/CarriedAnchorWake';
 import { reloadPage, type SaveWriteOutcome } from '../core/save/progressPersistence';
 import { settings } from '../core/input/Settings';
 import {
@@ -1235,6 +1244,13 @@ export class BuildingInteriorScene extends GameplayScene {
   /** The run's story, told in this building's safe room as on the floor outside. */
   private readonly story: StoryDelivery;
   /**
+   * Awards the fragments of deeds done indoors onto the floor outside's ring.
+   * It does not reconcile: the floor outside is built before every visit and
+   * after it, and reconciles there.
+   */
+  private readonly keyFragments: KeyFragmentSystem;
+  private readonly keyCeremony: KeyCeremonySystem;
+  /**
    * The safe room Dave last teleported into here, whose talk has not started
    * yet: it starts once the active crawler is in there with him and nothing
    * is fighting the party.
@@ -1392,7 +1408,7 @@ export class BuildingInteriorScene extends GameplayScene {
      * The run's party state held by the floor outside, and its save. The club's
      * wheel reads and writes the ledger and commits a save through it.
      */
-    readonly partyRun: InteriorPartyRun = detachedPartyRun(),
+    readonly partyRun: InteriorPartyRun = detachedPartyRun(floor.levelId),
   ) {
     super(input, sceneManager);
     this.overworldJournal = overworldJournal ?? null;
@@ -1668,11 +1684,20 @@ export class BuildingInteriorScene extends GameplayScene {
             audio: this.audio,
             partyIsHeld: () => this.scriptOwnsParty,
           });
+    this.keyFragments = new KeyFragmentSystem(this.bus, partyRun.keyRing);
+    this.keyCeremony = new KeyCeremonySystem({
+      keys: this.keyFragments,
+      audio: this.audio,
+      calm: () => this.keyCeremonyMayOpen(),
+      flyKey: ({ moment, at, keyWidth }) =>
+        this.rewardFly.flyKey(moment.keyKind, at.x, at.y, keyWidth),
+    });
     this.story = new StoryDelivery({
       director: partyRun.story.director,
       cutscenes: this.cutscenes.director,
       persist: partyRun.story.persist,
       calm: () => this.carolineMaySpeak(),
+      bus: this.bus,
     });
 
     if (entry.hasSafeRoom === true) {
@@ -1911,6 +1936,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.catAchievements,
       this.audio,
     );
+    this.achievementUI.presentationGate = () => !this.keyCeremony.holdsPresentations;
     this.achievementUI.onPresentationOpened = (presentation) =>
       joinDeinonychusOnOpen(presentation, this.deinonychusSystem);
     this.achievementUI.onPresentationClosed = (presentation) => {
@@ -3154,6 +3180,7 @@ export class BuildingInteriorScene extends GameplayScene {
       toggleQuestTracker: () => {
         if (this.openQuestJournal()) this.audio?.play('menu_open');
       },
+      toggleKeyRing: () => void this.openKeyRing(),
       deinonychusSummon: () => this.toggleDeinonychusSummon(),
       openChat: () => this.openChat(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
@@ -3236,6 +3263,16 @@ export class BuildingInteriorScene extends GameplayScene {
     return true;
   }
 
+  /** Pauses into the key ring: the Keys button's action and its key's. */
+  private openKeyRing(): boolean {
+    if (this.gameOver) return false;
+    if (this.conversation.isOpen) this.conversation.dismiss();
+    this.pauseScreen.open('keys');
+    this.menus.closePanels();
+    playKeyCue(this.audio, 'keyRingOpen', null, 'ui');
+    return true;
+  }
+
   /** The dynamite in his hand waiting to be thrown, which the hotbars mark in use. */
   private readiedDynamiteId(): ItemId | null {
     return this.destruction.dynamite.readiedItem;
@@ -3281,6 +3318,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // See the matching note in DungeonScene.onExit: defensive, since a fresh
     // scene already starts with a fresh RewardFlySystem.
     this.rewardFly.reset();
+    this.keyCeremony.dispose();
+    this.keyFragments.dispose();
     // Backstop for any teardown that does not route through `doExit`, which
     // closes the club's panels itself while the coins can still reach the
     // player. Idempotent, so running twice costs nothing.
@@ -3365,6 +3404,7 @@ export class BuildingInteriorScene extends GameplayScene {
           catAchievements: this.catAchievements,
           gameStats: this.gameStats,
           floorNumber: getLevelDef(this.floor.levelId).floorNumber,
+          keyRing: this.keyFragments.keyRingView(),
         }),
         togglePause: () => this.togglePause(),
       }),
@@ -3377,6 +3417,7 @@ export class BuildingInteriorScene extends GameplayScene {
         };
       }),
       this.achievementUI.surface(),
+      ...this.keyCeremony.surfaces(),
       this.chestKit.surface(),
       screenFadeSurface(EXIT_FIXTURE_FADE_SURFACE_ID, {
         alpha: () => this.exitFixtures.fadeAlpha,
@@ -3882,6 +3923,7 @@ export class BuildingInteriorScene extends GameplayScene {
     postMusicLibraryNotices(activeMusicLibrary()?.drainNotices() ?? [], this.menus);
     this.tickSaveIndicator();
     this.achievementUI.tick();
+    this.keyCeremony.update();
     this.chestKit.tick();
     playRewardLandingCues(this.audio, this.rewardFly.update());
     // Every frame, as in the dungeon: it drains actions held over a pause and ticks timed AI effects.
@@ -4698,6 +4740,7 @@ export class BuildingInteriorScene extends GameplayScene {
             inBossArena: false,
           },
           nearbyMobs,
+          keys: readKeys(this.keyFragments.keyRingView()),
           combatInProgress: nearbyMobs.length > 0,
           bossFightActive: this.activeEncounter !== null && this.aiHostilesAlive(),
           isPaused: this.gameOver || this.pauseScreen.isOpen || menuOpen,
@@ -5473,8 +5516,8 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Dave's tactics for what the floor outside wants raised next, and once
-   * nothing is left, his AI chat. Every objective is out there, so the floor
-   * outside ranks them.
+   * nothing is left, his word that the key is whole if he owes it, then his
+   * AI chat. Every objective is out there, so the floor outside ranks them.
    */
   private talkToDave(active: { x: number; y: number }): void {
     if (this.story.tellHeldArrival()) return;
@@ -5484,6 +5527,16 @@ export class BuildingInteriorScene extends GameplayScene {
       this.bus.emit('daveAdviceGiven', { objectiveId: objective.id });
       this.partyRun.daveWhereabouts.tacticsGiven.add(objective.id);
       this.dave?.openLine(active, adviceTactics(objective));
+      return;
+    }
+    const { daveWhereabouts } = this.partyRun;
+    const keyNote = keyWholeNote(
+      this.keyFragments.stairwellKeyKnownWhole(),
+      daveWhereabouts.toldKeyWhole,
+    );
+    if (keyNote !== null) {
+      daveWhereabouts.toldKeyWhole = true;
+      this.dave?.openLine(active, keyNote);
       return;
     }
     this.dave?.openChat(active, aiAdapter.chatWithDave());
@@ -5522,9 +5575,11 @@ export class BuildingInteriorScene extends GameplayScene {
       sameSafeRoom(daveState.room, owed) &&
       crawlerRoom !== null &&
       sameSafeRoom(crawlerRoom, owed);
+    // A key ceremony owed goes first: Dave's talk follows the deed's fragment, never cuts ahead of it.
     const free =
       !this.cutscenes.isActive &&
       !this.story.isTellingDaveMoment &&
+      !this.keyCeremony.holdsPresentations &&
       !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
     if (!together || !free) return;
     this.daveArrivalOwed = null;
@@ -5579,9 +5634,26 @@ export class BuildingInteriorScene extends GameplayScene {
     return walkUpTo(this.map, tile, { x: pixelToTile(active.x), y: pixelToTile(active.y) });
   }
 
-  /** Caroline speaks only while nothing hostile is fighting the party, nothing halts the world and no box is open. */
+  /**
+   * Whether a key ceremony may take the screen: nothing else holds it, no
+   * cutscene is playing, a quest's reward plaque has gone up and come down
+   * first, any kill loot has landed, and nothing is still fighting the party.
+   * The carried anchor's ceremony never opens indoors: it follows the
+   * anchor's wake, which plays only on the floor outside.
+   */
+  private keyCeremonyMayOpen(): boolean {
+    if (isCarriedAnchorMoment(this.keyFragments.nextMoment())) return false;
+    if (this.gameOver || this.ui.worldHalted() || this.conversation.isOpen) return false;
+    if (this.cutscenes.isActive) return false;
+    if (this.menus.questReward.isOpen || this.menus.questReward.queuedCount > 0) return false;
+    if (this.destruction.loot.hasLootFalling()) return false;
+    return !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
+  }
+
+  /** Caroline speaks only while nothing hostile is fighting the party, nothing halts the world and no box is open or key ceremony owed. */
   private carolineMaySpeak(): boolean {
     if (this.gameOver || this.ui.worldHalted() || this.conversation.isOpen) return false;
+    if (this.keyCeremony.holdsPresentations) return false;
     return !partyIsEngaged(this.world.roster.mobs, this.pm.presentCrawlers());
   }
 
@@ -6143,6 +6215,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.roomStatusLayer !== 'overPanel') this.renderEncounterStatus(ctx);
 
     this.ui.frame(ctx);
+    this.ui.measureIn(ctx, (target) => this.keyCeremony.prepare(target));
 
     const mouse = sceneMouse(this.ui);
     const showTooltip =
@@ -6338,6 +6411,16 @@ export class BuildingInteriorScene extends GameplayScene {
         onTap: () => void this.openQuestJournal(),
       });
     }
+    dock.push({
+      id: 'keys',
+      icon: 'keyRound',
+      label: 'Keys',
+      key: keybindings.labelFor('toggleKeyRing'),
+      bounce: this.rewardFly.keysBouncePulse(),
+      // Silent: opening the ring plays its own cue, on the key path as well as the tap.
+      sound: null,
+      onTap: () => void this.openKeyRing(),
+    });
     // Hidden rather than merely inert where the room refuses the command: a
     // button that answers every press with an error sound is a control the
     // player keeps trying.

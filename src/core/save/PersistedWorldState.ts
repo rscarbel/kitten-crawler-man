@@ -24,9 +24,11 @@ import { isRegularId } from '../../systems/casino/poker/npc/regularIds';
 import { normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
 import {
   MERCENARY_CONTRACT_TERMS,
+  type HireContract,
   type HiredMercenary,
   type MercenaryRosterCheckpoint,
 } from '../party/MercenaryRoster';
+import { isLevelId } from '../../levels/levelIds';
 import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState';
 import {
   VISITED_PLACE_IDS,
@@ -61,6 +63,7 @@ import {
   type BriarHollowStateSnapshot,
 } from '../quests/briarHollowState';
 import { parsePartySplitSnapshot, type PartySplitSnapshot } from '../party/partySplit';
+import { parseKeyRingState, type KeyRingState } from '../keys/keyRingState';
 
 /**
  * The subset of `WorldCheckpoint` that survives a page reload.
@@ -105,6 +108,8 @@ export interface PersistedWorldState {
   stealthKeySnatch: StealthKeySnatchCheckpoint;
   /** A split party survives a reload: its groups, where each stands, and what they left each other. */
   partySplit: PartySplitSnapshot;
+  /** The floor's key fragments, forged keys and opened seals. */
+  keyRing: KeyRingState;
 
   krakenKilled: boolean;
   bigRoosterKilled: boolean;
@@ -236,12 +241,14 @@ function parseQuestStatuses(value: unknown): Array<[string, QuestStatus]> | unde
 
 function parseDebriefMemory(value: unknown): DebriefMemory | undefined {
   if (!isRecord(value)) return undefined;
-  const { congratulated, namedItemIds } = value;
+  const { congratulated, keyNoted, namedItemIds } = value;
   const parsedItemIds = parseArray(namedItemIds, (item) =>
     isItemIdValue(item) ? item : undefined,
   );
-  if (!isBoolean(congratulated) || parsedItemIds === undefined) return undefined;
-  return { congratulated, namedItemIds: parsedItemIds };
+  if (!isBoolean(congratulated) || !isBoolean(keyNoted) || parsedItemIds === undefined) {
+    return undefined;
+  }
+  return { congratulated, keyNoted, namedItemIds: parsedItemIds };
 }
 
 function parseDaveDebriefCheckpoint(value: unknown): DaveDebriefCheckpoint | undefined {
@@ -814,19 +821,28 @@ export function parseCasinoStateCheckpoint(value: unknown): CasinoStateCheckpoin
   };
 }
 
-function parseHiredMercenary(value: unknown): HiredMercenary | undefined {
+function parseHireContract(value: unknown): HireContract | undefined {
   if (!isRecord(value)) return undefined;
-  const { id, name, terms, contractLevelId, introduced, hp } = value;
+  const { kind, levelId } = value;
+  if (kind === 'carried') return levelId === undefined ? { kind } : undefined;
+  if (kind !== 'floor' || !isString(levelId) || !isLevelId(levelId)) return undefined;
+  return { kind, levelId };
+}
+
+export function parseHiredMercenary(value: unknown): HiredMercenary | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, name, terms, contract, introduced, hp } = value;
   const parsedId = stringUnion(id, MERCENARY_TEMPLATE_IDS);
   const parsedTerms = stringUnion(terms, MERCENARY_CONTRACT_TERMS);
+  const parsedContract = parseHireContract(contract);
   if (parsedId === undefined || parsedTerms === undefined) return undefined;
-  if (!isString(name) || !isString(contractLevelId)) return undefined;
+  if (!isString(name) || parsedContract === undefined) return undefined;
   if (!isBoolean(introduced)) return undefined;
   const hire: HiredMercenary = {
     id: parsedId,
     name,
     terms: parsedTerms,
-    contractLevelId,
+    contract: parsedContract,
     introduced,
   };
   if (hp === undefined) return hire;
@@ -1010,6 +1026,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const cloggedBathroom = parseCloggedBathroomCheckpoint(value.cloggedBathroom);
   const stealthKeySnatch = parseStealthKeySnatchCheckpoint(value.stealthKeySnatch);
   const partySplit = parsePartySplitSnapshot(value.partySplit);
+  const keyRing = parseKeyRingState(value.keyRing);
   const { krakenKilled, bigRoosterKilled, bigRoosterBossRoomIdx } = value;
 
   if (
@@ -1035,6 +1052,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     cloggedBathroom === undefined ||
     stealthKeySnatch === undefined ||
     partySplit === undefined ||
+    keyRing === undefined ||
     !isBoolean(krakenKilled) ||
     !isBoolean(bigRoosterKilled) ||
     !isNumber(bigRoosterBossRoomIdx)
@@ -1065,6 +1083,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     cloggedBathroom,
     stealthKeySnatch,
     partySplit,
+    keyRing,
     krakenKilled,
     bigRoosterKilled,
     bigRoosterBossRoomIdx,

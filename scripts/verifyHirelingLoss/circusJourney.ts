@@ -19,6 +19,7 @@
  * hireling system at all.
  */
 
+import type { LevelId } from '../../src/levels/levelIds';
 import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
 import { AbilityManager } from '../../src/core/skills/AbilityManager';
@@ -123,7 +124,7 @@ function makePlace(
   map: GameMap,
   party: Party,
   roster: MercenaryRoster,
-  levelId: string | null,
+  levelId: LevelId | null,
   hostsHire: boolean,
 ): Place {
   const spells = new SpellSystem();
@@ -305,7 +306,7 @@ function journey(worldSeed: number, options: JourneyOptions): StepReading[] {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
     terms: 'paid',
-    contractLevelId: level3.id,
+    contract: { kind: 'floor', levelId: level3.id },
     introduced: true,
   };
 

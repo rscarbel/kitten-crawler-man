@@ -288,6 +288,7 @@ function buildRig(): Rig {
     },
     location: { kind: 'corridor', label: 'dark corridor', inSafeRoom: false, inBossArena: false },
     nearbyMobs: [],
+    keys: [],
     combatInProgress: false,
     bossFightActive: false,
     isPaused: rig.world.paused,

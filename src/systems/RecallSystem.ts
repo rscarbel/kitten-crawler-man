@@ -62,6 +62,12 @@ const RECALL_ENEMY_BLOCK_RADIUS_PX = RECALL_ENEMY_BLOCK_RADIUS_TILES * TILE_SIZE
 const TILE_CENTRE_FRACTION = 0.5;
 
 const INERT_UNDERGROUND_TOAST = 'The stone is inert underground.';
+/**
+ * Off the overworld, a repaired anchor can only be one a new game carried down
+ * from Taloncrest, so its holder is told where it will answer again.
+ */
+const CARRIED_ANCHOR_WAKES_LINE = 'It will wake again in Taloncrest.';
+const CARRIED_ANCHOR_INERT_TOAST = `${INERT_UNDERGROUND_TOAST} ${CARRIED_ANCHOR_WAKES_LINE}`;
 const BOSS_FIGHT_TOAST = 'The stone will not answer mid-fight.';
 const ENEMIES_NEARBY_TOAST = 'Too dangerous — enemies nearby.';
 const NO_LANDING_TOAST = 'The stone can find no ground to set you on.';
@@ -228,7 +234,10 @@ export class RecallSystem implements GameSystem {
 
   /** The one reason this press cannot use the stone at all, or null if it can. */
   private pressRefusal(caster: HumanPlayer | CatPlayer): string | null {
-    if (this.levelDef.isOverworld !== true) return INERT_UNDERGROUND_TOAST;
+    if (this.levelDef.isOverworld !== true) {
+      const anchorRepaired = this.travelState.anchor.status === 'completed';
+      return anchorRepaired ? CARRIED_ANCHOR_INERT_TOAST : INERT_UNDERGROUND_TOAST;
+    }
     const partyRefusal = this.partyRefusal();
     if (partyRefusal !== null) return partyRefusal;
     if (this.isBossFightActive()) return BOSS_FIGHT_TOAST;

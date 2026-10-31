@@ -42,6 +42,6 @@ export const tutorialLevel: LevelDef = {
   interiorSpriteGroups: [],
   roomMobs: [],
   hallwayMobs: [],
-  nextLevelId: 'level1',
+  exit: { kind: 'descend', nextLevelId: 'level1' },
   suppressDescentAdvice: true,
 };

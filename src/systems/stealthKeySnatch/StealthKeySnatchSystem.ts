@@ -82,9 +82,9 @@ const REWARD_COINS_MAX = 30;
 /** The floor-2 consumables the reward picks one of. */
 const REWARD_GEAR = 'prowler_mantle' as const satisfies GearId;
 
-const GET_KEY_OBJECTIVE = 'Get the key from the Goblin High Security Prison';
-const HAND_OVER_OBJECTIVE = 'Bring the key to the gate guard';
-const KEY_RETURNED_TOAST = 'The Key slipped away. It is back on its pedestal in the prison.';
+const GET_KEY_OBJECTIVE = 'Get the gate key from the Goblin High Security Prison';
+const HAND_OVER_OBJECTIVE = 'Bring the gate key to the gate guard';
+const KEY_RETURNED_TOAST = 'The Gate Key slipped away. It is back on its pedestal in the prison.';
 
 /** How close, in tiles, the party must stand to talk to the guard, try the gate or read the sign. */
 export const STEALTH_GATE_TALK_RANGE_TILES = 1.6;

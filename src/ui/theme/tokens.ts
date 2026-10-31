@@ -308,6 +308,8 @@ export const motion = {
   carolineDotPulse: 1600,
   /** Her scanlines drift down by one step over this long: slow enough to sense rather than watch. */
   carolineScanlineDrift: 2400,
+  /** One slow pass of light across the key ring's held fragments, with the rest before the next. */
+  keyShimmer: 4200,
 } as const;
 
 /** The shape of a Caroline frame, in UI units. */

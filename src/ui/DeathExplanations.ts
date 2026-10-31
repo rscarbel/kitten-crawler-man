@@ -107,7 +107,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   ],
   levelTimerRanOut: [
     'Caroline ran out of patience before you ran out of floor.',
-    'You took too long, and Caroline does not wait. Find the stairs faster.',
+    'You took too long, and Caroline does not wait. Find the key faster.',
   ],
   goblin: [
     'You were clubbed to death by a goblin. Gruesome.',

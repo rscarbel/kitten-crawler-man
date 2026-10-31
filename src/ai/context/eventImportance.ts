@@ -65,6 +65,10 @@ export const EVENT_IMPORTANCE = {
   rewardChestOpened: IMPORTANCE.SIGNIFICANT,
   equipmentChanged: IMPORTANCE.LOW,
   stairwellFound: IMPORTANCE.MAJOR,
+  keyFragmentClaimed: IMPORTANCE.MAJOR,
+  /** A forged key ranks with a boss kill: it is what lets the party leave the floor. */
+  keyForged: IMPORTANCE.LANDMARK,
+  stairwellUnsealed: IMPORTANCE.MAJOR,
   levelComplete: IMPORTANCE.LANDMARK,
   floorEntered: IMPORTANCE.LANDMARK,
   safeRoomEntered: IMPORTANCE.NOTABLE,

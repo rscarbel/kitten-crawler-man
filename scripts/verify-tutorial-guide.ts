@@ -202,6 +202,7 @@ function baseRenderContext(overrides: Partial<RenderContext>): RenderContext {
     characterSectionOpen: false,
     statSpendButtonRect: null,
     menuCloseRect: null,
+    keyMomentPending: false,
     ...overrides,
   };
 }
@@ -445,6 +446,15 @@ section('the step after Dave names the reward chest and points at the rewards ch
   );
   const hidden = draw(DESKTOP, 'HUMAN_TALKED_TO_DAVE', baseRenderContext({}));
   check(hidden.arrowTips.length === 0, 'no arrow while the chip is not shown');
+  const fragmentOwed = draw(
+    DESKTOP,
+    'HUMAN_TALKED_TO_DAVE',
+    baseRenderContext({ rewardsChipRect: chip, keyMomentPending: true }),
+  );
+  check(
+    fragmentOwed.arrowTips.length === 0 && fragmentOwed.texts.length === 0,
+    "while Dave's fragment is owed or on screen, the chest's hint waits",
+  );
 }
 
 section('a card with a single OK, or its own “continue”, is left to speak for itself');
@@ -688,10 +698,7 @@ section('the doorway, the chest and the stairwell are lit only during their step
   const expectedPlaces: Partial<Record<TutorialState, { x: number; y: number }>> = {
     USED_HEALTH_POTION: TUTORIAL_CHEST_POS,
     CAT_INSIDE_TREASURE_ROOM: TUTORIAL_CHEST_POS,
-    TALKED_TO_DAVE_AGAIN: {
-      x: TUTORIAL_STAIR_FOOTPRINT.x,
-      y: TUTORIAL_STAIR_FOOTPRINT.y + TUTORIAL_STAIR_FOOTPRINT.h - 1,
-    },
+    TALKED_TO_DAVE_AGAIN: { x: TUTORIAL_STAIR_FOOTPRINT.x, y: TUTORIAL_STAIR_FOOTPRINT.y },
   };
   let mismatches = 0;
   for (const state of STEPPED_STATES) {
@@ -727,20 +734,19 @@ section('the doorway, the chest and the stairwell are lit only during their step
 
   const stairStep = TutorialController.createForTutorial();
   advanceTo(stairStep, 'TALKED_TO_DAVE_AGAIN');
-  const stairBeam = firstOf(stairStep.objectiveBeacons());
-  if (stairBeam === null) {
+  const stairMark = firstOf(stairStep.objectiveBeacons());
+  if (stairMark === null) {
     check(false, 'the stairwell is lit on the last step');
   } else {
-    const widthTiles = stairBeam.widthTiles ?? 1;
-    const beamCentreX = stairBeam.x + widthTiles / 2;
-    const beamGroundY = stairBeam.y + 1 - (stairBeam.backsetTiles ?? 0);
-    const holeCentreX = TUTORIAL_STAIR_FOOTPRINT.x + TUTORIAL_STAIR_FOOTPRINT.w / 2;
-    const holeCentreY = TUTORIAL_STAIR_FOOTPRINT.y + TUTORIAL_STAIR_FOOTPRINT.h / 2;
+    const framesHole =
+      stairMark.kind === 'frame' &&
+      stairMark.x === TUTORIAL_STAIR_FOOTPRINT.x &&
+      stairMark.y === TUTORIAL_STAIR_FOOTPRINT.y &&
+      stairMark.widthTiles === TUTORIAL_STAIR_FOOTPRINT.w &&
+      stairMark.depthTiles === TUTORIAL_STAIR_FOOTPRINT.h;
     check(
-      widthTiles === TUTORIAL_STAIR_FOOTPRINT.w &&
-        beamCentreX === holeCentreX &&
-        beamGroundY === holeCentreY,
-      `the stairwell's beam spans its ${TUTORIAL_STAIR_FOOTPRINT.w}×${TUTORIAL_STAIR_FOOTPRINT.h} hole, centred on it (beam ${widthTiles} wide at ${beamCentreX},${beamGroundY}; hole centre ${holeCentreX},${holeCentreY})`,
+      framesHole,
+      `the stairwell's mark frames its whole ${TUTORIAL_STAIR_FOOTPRINT.w}×${TUTORIAL_STAIR_FOOTPRINT.h} seal (got ${JSON.stringify(stairMark)})`,
     );
   }
 }
@@ -1376,6 +1382,7 @@ section('meeting Dave and his farewell are story cutscenes the step waits on');
       persisted++;
     },
     calm: () => true,
+    bus: { emit: () => undefined },
   });
   const standingStill = {
     kind: 'walkTo',

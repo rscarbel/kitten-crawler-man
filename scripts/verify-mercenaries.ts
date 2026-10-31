@@ -37,6 +37,7 @@
 
 import { TILE_SIZE } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
+import type { LevelId } from '../src/levels/levelIds';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -120,24 +121,24 @@ function checkCatches(ruleHolds: boolean, message: string): void {
   check(!ruleHolds, `negative: ${message}`);
 }
 
-const FLOOR = 'level3';
-const OTHER_FLOOR = 'level2';
+const FLOOR = 'level3' as const satisfies LevelId;
+const OTHER_FLOOR = 'level2' as const satisfies LevelId;
 /** A template id that names no hire. */
 const UNKNOWN_TEMPLATE_ID = 'bruiser';
 const DECEASED_NAME = 'Somebody Earlier';
 
-function rosterOn(floorLevelId: string): MercenaryRoster {
+function rosterOn(floorLevelId: LevelId): MercenaryRoster {
   const roster = createMercenaryRoster();
   roster.floorLevelId = floorLevelId;
   return roster;
 }
 
-function hireOf(id: MercenaryTemplateId, contractLevelId = FLOOR): HiredMercenary {
+function hireOf(id: MercenaryTemplateId, contractLevelId: LevelId = FLOOR): HiredMercenary {
   return {
     id,
     name: getMercenaryTemplate(id).name,
     terms: 'paid',
-    contractLevelId,
+    contract: { kind: 'floor', levelId: contractLevelId },
     introduced: true,
   };
 }
@@ -204,7 +205,7 @@ function unknownIdIsRejected(parse: Parser): boolean {
 }
 
 function malformedHireIsRejected(parse: Parser): boolean {
-  const { contractLevelId: _dropped, ...withoutFloor } = hireOf('hammer_hands');
+  const { contract: _dropped, ...withoutFloor } = hireOf('hammer_hands');
   return parse(savedRosterWith(withoutFloor)) === undefined;
 }
 
@@ -232,7 +233,10 @@ const hireDroppingParser: Parser = (value) =>
 const floorForgettingParser: Parser = (value) => {
   const parsed = parseMercenaryRosterCheckpoint(value);
   if (!parsed?.active) return parsed;
-  return { ...parsed, active: { ...parsed.active, contractLevelId: OTHER_FLOOR } };
+  return {
+    ...parsed,
+    active: { ...parsed.active, contract: { kind: 'floor', levelId: OTHER_FLOOR } },
+  };
 };
 
 /** A restore that ignores which floor the party is on. */
@@ -787,7 +791,7 @@ function checkDismissAsksFirst(): void {
     id: hire.id,
     name: hire.name,
     terms: 'paid',
-    contractLevelId: FLOOR,
+    contract: { kind: 'floor', levelId: FLOOR },
     introduced: true,
   };
   // Read through a call so the desk's own writes to the roster are seen,

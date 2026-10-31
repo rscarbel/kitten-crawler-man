@@ -386,11 +386,8 @@ export interface CarolineSkin {
   readonly unfoldMs: number;
 }
 
-/** The floor's arrival banner: the shade under its card and the line asking for a first gesture. */
+/** The floor's arrival intro: the line asking for a first gesture before the audio can start. */
 export interface ArrivalBannerSkin {
-  readonly shade: string;
-  /** The shade's opacity while the card is fully shown; it fades with the card. */
-  readonly shadeOpacity: number;
   readonly prompt: TextSkin;
   readonly promptHalo: string;
 }
@@ -447,8 +444,6 @@ export interface Skins {
   readonly arrivalBanner: ArrivalBannerSkin;
 }
 
-/** Dark enough to set the card off the floor, light enough that the floor still reads behind it. */
-const ARRIVAL_BANNER_SHADE_OPACITY = 0.52;
 const HOVER_LIGHTEN = 0.08;
 /** The mercenary plate's darker face needs a stronger highlight than a hover to read as polished. */
 const MERCENARY_HIGHLIGHT_LIGHTEN = 0.16;
@@ -1070,8 +1065,6 @@ function buildSkins(theme: Theme): Skins {
       halo: palette.surface.sunken,
     },
     arrivalBanner: {
-      shade: palette.surface.blackout,
-      shadeOpacity: ARRIVAL_BANNER_SHADE_OPACITY,
       prompt: { style: type.prompt, color: palette.text.bright },
       promptHalo: palette.surface.blackout,
     },

@@ -346,6 +346,16 @@ Entry shape:
 
 ## Shared types
 
+### The party's "is anything fighting us" test lives in the story pacing module
+
+- **Where:** `partyIsEngaged` in `src/systems/StoryDelivery.ts`, read by `DungeonScene`, `BuildingInteriorScene` and `partyIsInDanger` in `src/systems/interactionPromptGate.ts`.
+- **Problem:** a combat-state predicate sits in the module that decides when Caroline and Dave speak, so the interaction gate and the key ceremonies' calm checks import story pacing to ask whether the party is fighting. It also scans the whole roster every call rather than the mob grid, and tests `isHostile` where the rest of the combat code passes over a boss still waiting for its fight with `isHostileTarget`.
+- **Cost:** a gate module depends on story delivery, and an awaiting boss that has picked a target reads as a fight to every caller.
+- **Better shape:** move it beside `enemiesNear` and `partyIsInDanger` in `interactionPromptGate.ts`, test `isHostileTarget`, and let callers that have the grid pass it.
+- **Until then:** import it from `StoryDelivery.ts` rather than writing a second copy; put any new combat-state test in `interactionPromptGate.ts`.
+- **Size:** S
+- **Found:** 2026-10-31, gating the stairwell unseal scene on danger.
+
 ### Tile geometry types are declared five times, and the shared one lives in the town plan
 
 - **Where:** `TileRect` in `src/map/town/townPlan.ts`, `src/map/pastSafeRoom.ts`, `src/systems/briarHollow/questGuidance.ts`, `src/creatures/fairies/fairyRefuge.ts` and `src/systems/bossRooms/bossRoomLayout.ts`; `TilePoint` in `townPlan.ts`, `bossRoomLayout.ts`, `src/map/starlightTentMazeDecor.ts`, `src/systems/dungeon/dungeonEmitters.ts`, `src/core/save/SavedWorld.ts`, `src/ai/actions/world.ts` and `src/dev/perfWalk.ts`.

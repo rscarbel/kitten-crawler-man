@@ -320,7 +320,7 @@ function partyOnLine(): LineParty | null {
     id: LINE_HIRE,
     name: getMercenaryTemplate(LINE_HIRE).name,
     terms: 'paid',
-    contractLevelId: LINE_HIRE_FLOOR,
+    contract: { kind: 'floor', levelId: LINE_HIRE_FLOOR },
     introduced: true,
   };
   const hireSystem = new MercenarySystem(hireRoster, null);

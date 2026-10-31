@@ -149,7 +149,7 @@ function hireOf(id: MercenaryTemplateId): HiredMercenary {
     id,
     name: getMercenaryTemplate(id).name,
     terms: 'paid',
-    contractLevelId: FLOOR,
+    contract: { kind: 'floor', levelId: FLOOR },
     introduced: true,
   };
 }

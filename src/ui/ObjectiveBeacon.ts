@@ -1,5 +1,6 @@
 import type { Camera } from '../core/rendering/camera';
 import { drawLightBeam, lightBeamBounds, type LightBeamPlacement } from '../sprites/lightBeam';
+import { drawObjectiveFrame } from '../sprites/objectiveFrame';
 
 /**
  * A standing column of light over the tracked objective's tile.
@@ -35,6 +36,16 @@ const BEAM_STRENGTH = 0.95;
  */
 const OFFSCREEN_MARGIN_TILES = 1;
 
+interface BeaconFootprintBase {
+  /** Tiles the thing spans east from the anchor tile. */
+  readonly widthTiles?: number;
+  /**
+   * Multiplier on the light's strength, 1 being full. For a dim floor where
+   * full strength glares against the darkness around it.
+   */
+  readonly brightness?: number;
+}
+
 /**
  * How much of the marked thing the beam has to cover.
  *
@@ -44,9 +55,8 @@ const OFFSCREEN_MARGIN_TILES = 1;
  * them. Every field is optional and defaults to the single-tile beam, so a
  * target that really is one tile — a seated fortune teller — says nothing.
  */
-export interface ObjectiveBeaconFootprint {
-  /** Tiles the thing spans east from the anchor tile. */
-  readonly widthTiles?: number;
+export interface ObjectiveBeamFootprint extends BeaconFootprintBase {
+  readonly kind?: 'beam';
   /**
    * Tiles north of the anchor tile's south edge to stand the beam's base on.
    *
@@ -58,12 +68,22 @@ export interface ObjectiveBeaconFootprint {
   readonly backsetTiles?: number;
   /** Beam height, for a target tall enough that the default stops partway up it. */
   readonly heightTiles?: number;
-  /**
-   * Multiplier on the beam's strength, 1 being the full beam. For a dim floor
-   * where the full beam glares against the darkness around it.
-   */
-  readonly brightness?: number;
 }
+
+/**
+ * A lit frame round a patch of floor, anchored at its north-west tile, in
+ * place of the beam. For a flat target whose own face is what the player has
+ * to read: a beam's pool and hot core land on the middle of the thing and
+ * wash it out, where a frame lights only its edges.
+ */
+export interface ObjectiveFrameFootprint extends BeaconFootprintBase {
+  readonly kind: 'frame';
+  readonly widthTiles: number;
+  /** Tiles the patch spans south from the anchor tile. */
+  readonly depthTiles: number;
+}
+
+export type ObjectiveBeaconFootprint = ObjectiveBeamFootprint | ObjectiveFrameFootprint;
 
 const DEFAULT_WIDTH_TILES = 1;
 const DEFAULT_BACKSET_TILES = 0;
@@ -81,7 +101,7 @@ function placementFor(
   tileSize: number,
   color: string,
   nowMs: number,
-  footprint: ObjectiveBeaconFootprint,
+  footprint: ObjectiveBeamFootprint,
 ): LightBeamPlacement {
   const spanTiles = footprint.widthTiles ?? DEFAULT_WIDTH_TILES;
   const backsetTiles = footprint.backsetTiles ?? DEFAULT_BACKSET_TILES;
@@ -112,7 +132,8 @@ function isOffScreen(
 }
 
 /**
- * The beam: ground pool, shaft and rising motes. Draw it before the Y-sorted
+ * The beam (ground pool, shaft and rising motes), or the frame for a
+ * frame footprint. Draw it before the Y-sorted
  * world, so the marked place and anyone near it stand in front of it.
  *
  * Skips itself entirely when the beam falls outside the camera's view, so the
@@ -137,6 +158,19 @@ export function drawObjectiveBeacon(
   nowMs: number,
   footprint: ObjectiveBeaconFootprint = {},
 ): void {
+  if (footprint.kind === 'frame') {
+    drawObjectiveFrame(ctx, view, {
+      left: screenX,
+      top: screenY,
+      width: tileSize * footprint.widthTiles,
+      height: tileSize * footprint.depthTiles,
+      tileSize,
+      color,
+      strength: footprint.brightness ?? FULL_BRIGHTNESS,
+      timeMs: nowMs,
+    });
+    return;
+  }
   const placement = placementFor(screenX, screenY, tileSize, color, nowMs, footprint);
   if (isOffScreen(placement, tileSize, view)) return;
   drawLightBeam(ctx, placement);

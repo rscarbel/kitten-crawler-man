@@ -37,8 +37,11 @@ import { CONSTRUCTION_FIXTURES } from '../src/dev/uiGallery/construction.js';
 import { PAUSE_FIXTURES } from '../src/dev/uiGallery/pause.js';
 import { HUD_FIXTURES } from '../src/dev/uiGallery/hud.js';
 import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { bakeKeyArtWhole } from '../src/sprites/art/keyArt.js';
 
 useDevPlayerIdentity();
+// Each fixture is captured from a single frame, which must show finished key art, not its stand-in.
+bakeKeyArtWhole();
 
 interface ReviewViewport {
   readonly w: number;

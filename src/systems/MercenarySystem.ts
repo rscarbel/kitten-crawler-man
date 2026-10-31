@@ -17,6 +17,7 @@ import {
   type TrailStance,
 } from './partyTrail';
 import {
+  contractEndsWithFloor,
   contractIsCurrent,
   hirelingStartingHp,
   type MercenaryRoster,
@@ -35,6 +36,7 @@ import { companionLeader, type CarriedCompanion } from './companionCarry';
 import { hirelingShouldCatchUp } from '../creatures/mercenaries/hirelingCatchUp';
 import type { Camera } from '../core/rendering/camera';
 import type { TowerErrandLeg } from '../core/quests/missingCatsProgress';
+import type { LevelId } from '../levels/levelIds';
 import {
   WHOLE_PARTY_PRESENT,
   type CompanionRef,
@@ -148,7 +150,7 @@ export class MercenarySystem implements GameSystem, TrailFollowSwitch {
    */
   constructor(
     private readonly roster: MercenaryRoster,
-    levelId: string | null,
+    levelId: LevelId | null,
     private readonly isInSafeRoom: (entity: {
       readonly x: number;
       readonly y: number;
@@ -492,10 +494,13 @@ export class MercenarySystem implements GameSystem, TrailFollowSwitch {
   }
 
   /**
-   * The floor is won, and the contract signed for it is over. The hireling says
+   * The floor is won, and a contract signed for it is over. The hireling says
    * goodbye; it is dismissed with the rest of the scene when the party leaves.
+   * A hire carried into the run walks on down the stairs with the party.
    */
   endContractForFloor(): void {
+    const hired = this.roster.active;
+    if (hired === null || !contractEndsWithFloor(hired)) return;
     this.merc?.bark('floor_end');
     this.roster.active = null;
   }
@@ -634,6 +639,7 @@ export class MercenarySystem implements GameSystem, TrailFollowSwitch {
 
     const merc = new Mercenary(tile.x, tile.y, TILE_SIZE, active, hired.id, hired.name);
     merc.hp = hirelingStartingHp(hired);
+    merc.setContract(hired.contract);
     // The desk warms the figure when the contract is signed, but a hire loaded
     // from a save, or walking back out of a building whose visit let its idle
     // cells go, arrives here cold: every spawn warms it again. Warming only

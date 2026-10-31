@@ -68,7 +68,7 @@ function caughtUpWith(hostileColumn: number): boolean {
     id: HIRE_ID,
     name: getMercenaryTemplate(HIRE_ID).name,
     terms: 'paid',
-    contractLevelId: level3.id,
+    contract: { kind: 'floor', levelId: level3.id },
     introduced: true,
   };
   const system = new MercenarySystem(roster, level3.id);

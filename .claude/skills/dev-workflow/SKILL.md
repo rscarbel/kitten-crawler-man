@@ -154,6 +154,26 @@ the station with Dr. Moult already at his terminal; `spider-hallway` starts in t
 host room short of the lab hallway's mouth with him still waiting there. Presets are data in
 `src/dev/playtestPresets.ts`; add one there.
 
+**The end of each floor.** `stairwell-tutorial`, `stairwell-floor1` (also `stairwell`),
+`stairwell-floor2` and `stairwell-floor3` stand the party a few tiles short of that floor's
+first stairwell with every deed its key's fragments come from already done, so the Golden
+Key is forged on arrival without a ceremony. The first step onto the seal plays the unseal
+scene, then the descent prompt, or on floor 3 the run's end. Each party is the one that
+walks onto the next floor: the `level2` and `level3` presets' parties for floors 1 and 2.
+On the tutorial, the lessons are done and Dave's farewell has been heard
+(`TutorialController.createFinished`). Floor 3's party is some levels past `level3`'s,
+wearing the Quartermaster's armour, with the Plea, the missing cats and the anchor all
+finished, a hire along and the deinonychus out. `stairwell-sealed` is floor 1's stairwell
+with the Kraken alive, so the seal rattles and shows its fragment count.
+
+**Key ceremonies.** `?keymoment=fragment|forge|unseal` lands a step before each key
+ceremony, so any of them can be watched without playing to it. `fragment` and `forge`
+replay the tutorial talk whose end hands Dave's first or last fragment over (the beats are
+read from the tutorial's entry in `FLOOR_KEYS`): close the talk and the fragment's ceremony
+opens; on `forge` it flows into the forge. `unseal` boots the `stairwell` preset: walk onto
+the seal. A preset whose bosses or beats are already done claims their fragments silently on
+arrival, so only a live award plays a ceremony.
+
 **Story and characters.** `?story=<beatId>` (any key of `STORY_BEATS`, e.g. `?story=floor1_dave_chosen`) boots the floor a story beat belongs to with every earlier beat already heard and plays that beat at once, so any of Dave's talks or Caroline's messages can be read without playing to it; the tutorial's beats open in the tutorial. `?deinonychus` is the pet's preview (every growth stage and row), `?demonliaison` the unplaced Demon Liaison figure, `?ratkin` the ratkin cast. The headless gates beside them:
 
 ```bash
@@ -173,7 +193,7 @@ clobber your own run. Add `&save` (e.g. `?playtest=spider&save`) to persist its
 saves. Without it, saves still happen in memory, so a death still respawns at the
 last save point.
 
-**All dev-only routes are release-stripped.** `?playtest=`, `?level=`, and the
+**All dev-only routes are release-stripped.** `?playtest=`, `?level=`, `?story=`, `?keymoment=`, and the
 art preview routes (`?goblins`, `?tiles`, `?human`, `?cat`, `?slots` and `?wheel` for the casino's slot machine and Wheel of Fortune harnesses, …) and `?prison=<layout>&difficulty=<d>` (straight into the Goblin High Security Prison) live in `src/dev/devBoot.ts`, which
 `scripts/build.js` resolves to an inert stub unless the build passed
 `--dev-boot` (`serve` implies it). Plain `npm run build` — what `build:site`

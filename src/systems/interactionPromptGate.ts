@@ -16,6 +16,7 @@ import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { InteractionStance } from '../ui/interactionFocus';
 import { CAT_ATTACK_RANGE_TILES, HUMAN_ATTACK_RANGE_TILES } from './GameLoopPhases';
+import { partyIsEngaged } from './StoryDelivery';
 
 const TILE_CENTRE_FRACTION = 0.5;
 
@@ -61,6 +62,27 @@ export function enemiesNear(
   for (const mob of mobGrid.queryCircle(px, py, TILE_SIZE * ENEMIES_NEAR_RADIUS_TILES)) {
     if (!mob.isHostileTarget) continue;
     if (party.some((crawler) => mob.hasNoticed(crawler))) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether the party is in danger around `at` (world pixels): something is
+ * already fighting a crawler, or a hostile within `radiusPx` of `at` has
+ * picked a target and is on the hunt. A moment that holds the party still
+ * waits until this is false. A boss still waiting for its fight is passed
+ * over, as everywhere else, or its room's seal would never open.
+ */
+export function partyIsInDanger(
+  mobs: ReadonlyArray<Mob>,
+  mobGrid: SpatialGrid<Mob>,
+  party: ReadonlyArray<Player>,
+  at: { readonly x: number; readonly y: number },
+  radiusPx: number,
+): boolean {
+  if (partyIsEngaged(mobs, party)) return true;
+  for (const mob of mobGrid.queryCircle(at.x, at.y, radiusPx)) {
+    if (mob.isHostileTarget && mob.currentTarget !== null) return true;
   }
   return false;
 }

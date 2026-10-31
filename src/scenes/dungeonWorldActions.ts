@@ -1,6 +1,7 @@
 import type { TileRect } from '../map/town/townPlan';
 import type { FloodedPumpRoomIntroBeat } from '../systems/bossRooms/floodedPumpRoom/floodedPumpRoomState';
 import type { CaptureScriptActorId } from '../systems/missingCats/captureCutscene';
+import type { UnsealBeat } from '../systems/stairwellUnseal';
 
 /**
  * Who a dungeon's scripts can name besides the active crawler: either crawler,
@@ -22,6 +23,8 @@ interface DungeonWorldActionPayloads {
   readonly gatherParty: { readonly target: TileRect };
   /** One beat of the Kraken's flooded pump room's intro, carried out by the room. */
   readonly floodedPumpRoom: { readonly beat: FloodedPumpRoomIntroBeat };
+  /** The unseal scene has reached `beat`; the opening stairwell's seal follows it. */
+  readonly stairwellUnseal: { readonly beat: UnsealBeat };
 }
 
 type DungeonWorldActionKind = keyof DungeonWorldActionPayloads;

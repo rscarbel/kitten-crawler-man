@@ -92,6 +92,9 @@ const { floorTwoPropVariantSheetPlans } =
   await import('../src/sprites/sheets/propVariantSheets.js');
 const { remainsSheetPlans } = await import('../src/sprites/sheets/remainsSheets.js');
 const { stairwellSheetPlans } = await import('../src/sprites/sheets/stairwellSheets.js');
+const { stairwellSealLockedPlan, stairwellSealOpenPlan } =
+  await import('../src/sprites/sheets/stairwellSealSheets.js');
+const { STAIRWELL_STYLE_IDS } = await import('../src/sprites/art/stairwellArt.js');
 const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurnitureSheets.js');
 const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
 const { bathroomSheetPlans } = await import('../src/sprites/sheets/bathroomSheets.js');
@@ -202,6 +205,10 @@ const PROP_FAMILIES = [
   ...floorTwoPropVariantSheetPlans(),
   ...remainsSheetPlans(),
   ...stairwellSheetPlans(),
+  ...STAIRWELL_STYLE_IDS.flatMap((style) => [
+    stairwellSealLockedPlan(style),
+    stairwellSealOpenPlan(style),
+  ]),
   ...clubFurnitureSheetPlans(0),
   ...allBossRoomSheetPlans(0),
   ...bathroomSheetPlans(),
@@ -685,10 +692,21 @@ check(
   hasEnvironmentSheet(FACADE_KEY),
   'a facade drawn on every frame from its cached overlay entry was evicted over the budget',
 );
+const missesBeforeEvictedLookups = new Map(
+  idleKeys.map((key) => [key, getSpriteMissCounts().get(key) ?? 0] as const),
+);
 for (const key of idleKeys) {
   check(!hasEnvironmentSheet(key), `"${key}" sat undrawn past the window but was not evicted`);
   check(getSpriteDefByKey(key) === undefined, `"${key}" was evicted but is still published`);
+  check(getSpriteDefByKey(key) === undefined, `"${key}" was published before its repaint ran`);
 }
+const reportedEvicted = idleKeys.filter(
+  (key) => (getSpriteMissCounts().get(key) ?? 0) !== missesBeforeEvictedLookups.get(key),
+);
+check(
+  reportedEvicted.length === 0,
+  `an evicted sheet owed its repaint was reported as a missing sprite (${reportedEvicted.join(', ')})`,
+);
 const evictionsAfter = environmentSheetEvictionStats();
 check(
   evictionsAfter.evictions - evictionsBefore.evictions === idleKeys.length,

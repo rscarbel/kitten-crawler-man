@@ -13,6 +13,8 @@ import type { TownBuildingId, BriarHollowBuildingId, STORM_DRAIN_ID } from '../m
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/items/gathering/toolTiers';
 import { buyPrice } from '../economy/pricing';
 import { createShopStock } from '../economy/shopStock';
+import { STAT_POINTS_PER_LEVEL } from '../core/party/crawlerFormulas';
+import { TUTORIAL_REWARD_POTIONS } from '../core/progression/AchievementManager';
 import type { RunMilestone } from './playtestProgress';
 
 /**
@@ -150,6 +152,8 @@ export interface PlaytestPreset {
    * everything an earlier phase leaves behind already done.
    */
   readonly missingCatsPhase?: MissingCatsPhase;
+  /** The Wayfinder's Anchor already repaired: its questline complete, as Madame Voss's weld leaves it. */
+  readonly anchorRepaired?: true;
   /** The party put down on the circus grounds instead of at `spawn`. */
   readonly spawnAtCircus?: boolean;
   /**
@@ -980,13 +984,167 @@ const LEVEL1: PlaytestPreset = {
   spawn: { kind: 'mapStart' },
 };
 
-/** Floor 1 a few steps short of its stairwell, both bosses down, with the `kraken` preset's party, for watching a descent. */
+/**
+ * The end of each floor: a few tiles short of its first stairwell, with every
+ * deed its key's fragments come from already done, so the Golden Key is
+ * forged on arrival without a ceremony and the first step onto the seal plays
+ * the unseal scene. Each party is the one that walks down onto the next floor,
+ * which is the next floor's start preset where there is one.
+ */
+const STAIRWELL_APPROACH = { kind: 'stairwellApproach' } as const satisfies PlaytestSpawn;
+
+/** Both abilities the tutorial teaches, as its tomes leave them. */
+const TUTORIAL_ABILITY_LEVEL = 1;
+/** The tutorial's goblins and the level-up lesson they pay for take the human up one level. */
+const TUTORIAL_END_HUMAN_LEVEL = 2;
+const TUTORIAL_END_CAT_LEVEL = 1;
+/** The First Kill kit hands the cat one batch of potions and the treasure chest another. */
+const TUTORIAL_END_CAT_POTIONS = TUTORIAL_REWARD_POTIONS * 2;
+
+/** The tutorial with Dave's farewell heard, both crawlers kitted as its lessons left them. */
+const STAIRWELL_TUTORIAL: PlaytestPreset = {
+  id: 'stairwell-tutorial',
+  description:
+    "A few tiles short of the tutorial's stairwell, every lesson done, the Golden Key forged",
+  progress: 'tutorial_end',
+  spawn: STAIRWELL_APPROACH,
+  abilityLevels: { seismic_stomp: TUTORIAL_ABILITY_LEVEL, magic_missile: TUTORIAL_ABILITY_LEVEL },
+  human: {
+    level: TUTORIAL_END_HUMAN_LEVEL,
+    xpProgress: 0,
+    coins: 0,
+    baseStats: {},
+    skillLevels: {},
+    hotbar: [
+      { id: 'seismic_stomp_tome', quantity: 1 },
+      { id: 'health_potion', quantity: TUTORIAL_REWARD_POTIONS },
+    ],
+    bag: [],
+  },
+  cat: {
+    level: TUTORIAL_END_CAT_LEVEL,
+    xpProgress: 0,
+    coins: 0,
+    baseStats: {},
+    skillLevels: {},
+    hotbar: [
+      { id: 'magic_missile_tome', quantity: 1 },
+      { id: 'health_potion', quantity: TUTORIAL_END_CAT_POTIONS },
+    ],
+    bag: [],
+  },
+};
+
+/**
+ * Floor 1's end with both bosses down, the party the `level2` preset carries
+ * onto floor 2, for watching the seal open and the descent after it.
+ */
 const STAIRWELL: PlaytestPreset = {
-  ...KRAKEN,
+  ...LEVEL2,
   progress: 'floor1_past_kraken',
   id: 'stairwell',
-  description: "A few tiles short of the first floor's stairwell, the kraken preset's party",
-  spawn: { kind: 'stairwellApproach' },
+  description:
+    "A few tiles short of the first floor's sealed stairwell, both bosses down, the Golden Key forged",
+  spawn: STAIRWELL_APPROACH,
+};
+
+/** The same, under the name the other floors' ends follow. */
+const STAIRWELL_FLOOR1: PlaytestPreset = { ...STAIRWELL, id: 'stairwell-floor1' };
+
+/**
+ * Floor 1's stairwell with the Kraken still alive and so its fragment still
+ * out: the seal refuses the party, for its rattle and its fragment count.
+ */
+const STAIRWELL_SEALED: PlaytestPreset = {
+  ...KRAKEN,
+  id: 'stairwell-sealed',
+  description:
+    "A few tiles short of the first floor's sealed stairwell, the Kraken's fragment still out",
+  spawn: STAIRWELL_APPROACH,
+};
+
+/** Floor 2's end with both bosses down, the party the `level3` preset carries into town. */
+const STAIRWELL_FLOOR2: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor2_past_big_rooster',
+  id: 'stairwell-floor2',
+  description:
+    "A few tiles short of the second floor's sealed stairwell, both bosses down, the Golden Key forged",
+  spawn: STAIRWELL_APPROACH,
+};
+
+/**
+ * Levels a party gains across floor 3 on top of the `level3` arrival party:
+ * the siege, the missing cats' tower and the circus all pay well.
+ */
+const FLOOR3_LEVELS_GAINED = 6;
+const FLOOR3_POINTS_GAINED = FLOOR3_LEVELS_GAINED * STAT_POINTS_PER_LEVEL;
+/** The human splits his floor-3 points between hitting harder and lasting longer. */
+const FLOOR3_HUMAN_MELEE_POINTS = Math.floor(FLOOR3_POINTS_GAINED / 2);
+const FLOOR3_HUMAN_HEALTH_POINTS = FLOOR3_POINTS_GAINED - FLOOR3_HUMAN_MELEE_POINTS;
+/** Each ability one level past the arrival party's, from a floor of using them. */
+const FLOOR3_ABILITY_LEVELS_GAINED = 1;
+
+function levelledBy(level: number | undefined, gained: number): number {
+  return (level ?? 0) + gained;
+}
+
+const LEVEL3_HUMAN_STATS = LEVEL3.human.baseStats;
+const LEVEL3_CAT_STATS = LEVEL3.cat.baseStats;
+
+/**
+ * Floor 3 finished: Briar Hollow's Plea won (and with it the Borrowed
+ * Blueprints and Wendell's contracts open), A Cat Always Comes Back closed,
+ * the Wayfinder's Anchor repaired and on both hotbars, a Barracks hire at the
+ * party's side and the deinonychus out. Both crawlers are some levels past
+ * the arrival party with the points spent and the Quartermaster's armour
+ * worn, on top of the quest gear the run pays. Stepping onto the town
+ * square's stairwell plays the unseal, then the run's end.
+ */
+const STAIRWELL_FLOOR3: PlaytestPreset = {
+  ...LEVEL3,
+  progress: 'floor3_complete',
+  id: 'stairwell-floor3',
+  description:
+    "Beside the town square's sealed stairwell, every floor-3 quest done, the Golden Key forged, a hire along",
+  spawn: STAIRWELL_APPROACH,
+  deinonychusOut: true,
+  hire: 'brother_anselm',
+  missingCatsPhase: 'complete',
+  constructionContracts: {},
+  anchorRepaired: true,
+  abilityLevels: {
+    seismic_stomp: levelledBy(LEVEL3.abilityLevels.seismic_stomp, FLOOR3_ABILITY_LEVELS_GAINED),
+    magic_missile: levelledBy(LEVEL3.abilityLevels.magic_missile, FLOOR3_ABILITY_LEVELS_GAINED),
+    energy_shield: levelledBy(LEVEL3.abilityLevels.energy_shield, FLOOR3_ABILITY_LEVELS_GAINED),
+  },
+  human: {
+    ...LEVEL3.human,
+    level: LEVEL3.human.level + FLOOR3_LEVELS_GAINED,
+    baseStats: {
+      ...LEVEL3_HUMAN_STATS,
+      melee: levelledBy(LEVEL3_HUMAN_STATS.melee, FLOOR3_HUMAN_MELEE_POINTS),
+      health: levelledBy(LEVEL3_HUMAN_STATS.health, FLOOR3_HUMAN_HEALTH_POINTS),
+    },
+    hotbar: [...LEVEL3.human.hotbar, { id: 'wayfinders_anchor', quantity: 1 }],
+    bag: [
+      ...LEVEL3.human.bag,
+      { id: 'hearthguard_cap', quantity: 1, equipped: true },
+      { id: 'hearthguard_quilted_vest', quantity: 1, equipped: true },
+      { id: 'hearthguard_bracers', quantity: 1, equipped: true },
+      { id: 'hearthguard_boots', quantity: 1, equipped: true },
+    ],
+  },
+  cat: {
+    ...LEVEL3.cat,
+    level: LEVEL3.cat.level + FLOOR3_LEVELS_GAINED,
+    baseStats: {
+      ...LEVEL3_CAT_STATS,
+      magic: levelledBy(LEVEL3_CAT_STATS.magic, FLOOR3_POINTS_GAINED),
+    },
+    hotbar: [...LEVEL3.cat.hotbar, { id: 'wayfinders_anchor', quantity: 1 }],
+    bag: [...LEVEL3.cat.bag, { id: 'nimble_bangle', quantity: 1, equipped: true }],
+  },
 };
 
 /** The circus grounds and the floor-3 party to walk into the Starlight Tent's maze. */
@@ -1128,7 +1286,12 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   RESOURCING_THRALLS,
   STORMCALLER,
   LEVEL1,
+  STAIRWELL_TUTORIAL,
   STAIRWELL,
+  STAIRWELL_FLOOR1,
+  STAIRWELL_SEALED,
+  STAIRWELL_FLOOR2,
+  STAIRWELL_FLOOR3,
   STARLIGHT_TENT,
   CASINO_FLOOR,
   SEWER,

@@ -18,7 +18,7 @@ description: Add or modify a sprite in Kitten Crawler World — sprite sheets (P
 > in `src/sprites/sheets/`. See "Environment art is painted, not fetched" below
 > before adding or changing any of it.
 
-Runtime rendering uses **sprite sheets described by JSON manifests** under `src/images/<category>/` (`effects/`, `environment/`, `interfaces/`, `website/`). Most are PNGs, produced offline by procedural generator scripts in `scripts/` or hand-drawn; the environment ones are painted by the game itself and have no file at all.
+Runtime rendering uses **sprite sheets described by JSON manifests** under `src/images/<category>/` (`effects/`, `environment/`, `website/`). Most are PNGs, produced offline by procedural generator scripts in `scripts/` or hand-drawn; the environment ones are painted by the game itself and have no file at all.
 
 ## Environment art is painted, not fetched
 

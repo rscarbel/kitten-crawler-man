@@ -63,6 +63,16 @@ export interface NearbyMobState {
   distanceTiles: number;
 }
 
+/** One key on the floor and how much of it the party holds. */
+export interface KeyState {
+  /** On-screen name of the kind of key, e.g. "Golden Key". */
+  name: string;
+  /** On-screen names of the fragments held, in the floor table's order. */
+  fragmentsHeld: string[];
+  fragmentsNeeded: number;
+  forged: boolean;
+}
+
 export interface QuestSummary {
   id: string;
   name: string;
@@ -102,6 +112,8 @@ export interface LiveInput {
   crawlers: Record<CrawlerKind, CrawlerState>;
   location: SemanticLocation;
   nearbyMobs: NearbyMobState[];
+  /** The keys this floor holds, in the floor table's order. */
+  keys: KeyState[];
   combatInProgress: boolean;
   bossFightActive: boolean;
   /** The world is halted: pause screen, a menu, a dialog, the death screen. */

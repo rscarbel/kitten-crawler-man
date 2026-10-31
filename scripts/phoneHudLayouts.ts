@@ -159,6 +159,7 @@ export function hudPieces(geometry: HudGeometry): HudPiece[] {
     { name: 'chip', kind: 'button', rect: buttons.chip },
     { name: 'summon', kind: 'button', rect: buttons.summon },
     { name: 'journal', kind: 'button', rect: buttons.journal },
+    { name: 'keys', kind: 'button', rect: buttons.keys },
   ];
   if (buttons.build !== null) pieces.push({ name: 'build', kind: 'button', rect: buttons.build });
   if (buttons.switchButton !== null) {

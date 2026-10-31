@@ -66,7 +66,7 @@ const MS_PER_SECOND = 1000;
 const TILE_CENTRE = 0.5;
 /** Where in its tile the pedestal's base stands, so its shadow sits on the tile rather than the wall above. */
 const PEDESTAL_BASE_IN_TILE = 0.85;
-/** How far above the key's centre the "THE KEY" caption sits, in tiles. */
+/** How far above the key's centre the "THE GATE KEY" caption sits, in tiles. */
 const LABEL_ABOVE_KEY_TILES = 1.35;
 /** Chebyshev tiles from the pedestal within which a crawler walking up lifts the key. */
 const REACH_TILES = 1;
@@ -83,16 +83,16 @@ const ARROW_SUPPRESS_TILES = 5;
 /** How far the pedestal figure's art reaches above its tile, for culling. */
 const PEDESTAL_CULL_MARGIN_TILES = 4;
 
-const OBJECTIVE_FIND = 'Find the key';
-const HELD_TITLE = 'Key in hand';
+const OBJECTIVE_FIND = 'Find the gate key';
+const HELD_TITLE = 'Gate key in hand';
 const HELD_DETAIL = 'Bring it to the gate guard';
 const CELEBRATION_OVERLINE = 'Prison key';
 const CELEBRATION_TITLE = 'Key snatched!';
 const CELEBRATION_SUBTITLE = 'It is yours. Now sneak it out to the gate guard.';
 const CELEBRATION_SURFACE_ID = 'prison-key-celebration';
-const TOAST_TAKE_OUT = 'Take the key to the gate guard.';
-const TOAST_KEY_RETURNED = 'The key went back to its pedestal in the prison vault.';
-const LABEL_TEXT = 'THE KEY';
+const TOAST_TAKE_OUT = 'Take the gate key to the gate guard.';
+const TOAST_KEY_RETURNED = 'The gate key went back to its pedestal in the prison vault.';
+const LABEL_TEXT = 'THE GATE KEY';
 const LABEL_STYLE = 'prizeLabel' as const satisfies WorldTextStyleId;
 const OBJECTIVE_BAND_ID = 'prison-objective';
 
@@ -355,18 +355,18 @@ export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationMo
     });
   }
 
-  /** The world y of the middle of the "THE KEY" caption. */
+  /** The world y of the middle of the "THE GATE KEY" caption. */
   private labelCentreY(): number {
     return this.keyCentre().y - LABEL_ABOVE_KEY_TILES * TILE_SIZE;
   }
 
-  /** The world y of the top of the "THE KEY" caption, which the objective mark's `!` clears. */
+  /** The world y of the top of the "THE GATE KEY" caption, which the objective mark's `!` clears. */
   private labelTop(): number {
     return this.labelCentreY() - worldLineHeight({ style: LABEL_STYLE }) / 2;
   }
 
   /**
-   * What draws over the prison's darkness: the "THE KEY" caption over the
+   * What draws over the prison's darkness: the "THE GATE KEY" caption over the
    * pedestal and the exit's frame. `active` sets the beacon's nearness fade.
    */
   renderOverDarkness(ctx: CanvasRenderingContext2D, camera: Camera, active: Player): void {

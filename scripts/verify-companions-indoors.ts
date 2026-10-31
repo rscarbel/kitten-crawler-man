@@ -596,7 +596,7 @@ function hireRoster(id: MercenaryTemplateId, hp?: number): MercenaryRoster {
     id,
     name: getMercenaryTemplate(id).name,
     terms: 'paid',
-    contractLevelId: HIRE_FLOOR,
+    contract: { kind: 'floor', levelId: HIRE_FLOOR },
     introduced: true,
     hp,
   };

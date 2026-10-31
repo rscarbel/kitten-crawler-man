@@ -27,6 +27,15 @@ export function releaseIdleRecentSurfaces(): void {
 }
 
 /**
+ * Runs `release` with every frame's idle sweep, for a cache of something other
+ * than surfaces (plain arrays a bake is painted from) that should empty on the
+ * same clock as the surfaces painted from it.
+ */
+export function onIdleSweep(release: () => void): void {
+  idleSweptCaches.push({ releaseIdle: release });
+}
+
+/**
  * Baked surfaces under a byte budget, let go least recently drawn first.
  *
  * Nothing drawn within `protectedFrames` render frames is ever let go, so the
